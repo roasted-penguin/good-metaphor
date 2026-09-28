@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>비유 도우미</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #ffffff; --sunken: #eceef2;
+    --ink: #1c2230; --muted: #5d6574; --faint: #8a91a0; --line: #dde1e7;
+    --accent: #d9650a; --accent-soft: #fdeede; --hl: rgba(255, 190, 40, .32);
+    --user: #1f63c7; --user-soft: #e5eefb;
+    /* 메이플 테마 말풍선은 인게임 툴팁처럼 항상 어둡다 */
+    --tip-bg: #161c2b; --tip-line: #46506a; --tip-ink: #eef1f7; --tip-muted: #9ba5bd;
+    --unique: #ffcc33; --legend: #b9ef5a; --legend-bg: rgba(160, 230, 60, .14);
+    --epic: #d2b1ff; --epic-bg: rgba(190, 140, 255, .16); --rare: #8fdcff; --rare-bg: rgba(90, 200, 255, .15);
+    --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101318; --surface: #181c23; --sunken: #1f242d;
+      --ink: #e8ebf0; --muted: #a2aab8; --faint: #7a8291; --line: #2c323c;
+      --accent: #ff9a2e; --accent-soft: #3a2816; --hl: rgba(255, 190, 40, .24);
+      --user: #7fb2ff; --user-soft: #1b2c47;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101318; --surface: #181c23; --sunken: #1f242d;
+    --ink: #e8ebf0; --muted: #a2aab8; --faint: #7a8291; --line: #2c323c;
+    --accent: #ff9a2e; --accent-soft: #3a2816; --hl: rgba(255, 190, 40, .24);
+    --user: #7fb2ff; --user-soft: #1b2c47;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--sans); padding-inline: 20px; padding-block: 0 72px; }
+  .wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 56px; }
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  .label { font: 500 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+
+  /* 머리 */
+  header { padding-top: 56px; display: grid; gap: 14px; }
+  header .brand { display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: clamp(30px, 5vw, 40px); font-weight: 700; letter-spacing: -.02em; line-height: 1.25; }
+  header h1 em { font-style: normal; color: var(--accent); }
+  header .lede { color: var(--muted); max-width: 60ch; font-size: 17px; }
+
+  /* 데모 */
+  .demo { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: visible; }
+  .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .demo-bar .hint { font-size: 13px; color: var(--muted); }
+  kbd { font: 500 12px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; background: var(--sunken); color: var(--ink); }
+  .seg { display: inline-flex; background: var(--sunken); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { all: unset; cursor: pointer; font-size: 13px; font-weight: 500; padding: 5px 12px; border-radius: 7px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); }
+  .article { position: relative; padding: 24px 22px 200px; display: grid; gap: 14px; }
+  .article h3 { font-size: 19px; font-weight: 700; }
+  .article p { font-size: 16px; line-height: 1.95; }
+  .s { cursor: help; border-radius: 3px; transition: background-color .12s; }
+  .s:hover, .s:focus-visible, .s.on { background: var(--hl); outline: none; }
+  .demo-foot { padding: 10px 16px 12px; border-top: 1px dashed var(--line); font-size: 12.5px; color: var(--faint); }
+
+  .tip { position: absolute; z-index: 5; width: min(360px, calc(100% - 24px)); padding: 12px 14px 10px; font-size: 14px; line-height: 1.55; border-radius: 6px;
+    background: var(--tip-bg); color: var(--tip-ink); border: 1px solid var(--tip-line); box-shadow: 0 12px 32px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255,255,255,.06); }
+  .tip[hidden] { display: none; }
+  .tip .t-l { display: block; font-size: 11px; font-weight: 700; color: var(--unique); margin-bottom: 1px; }
+  .tip .t-row { margin-bottom: 8px; }
+  .tip .t-a { font-weight: 600; color: #fff; }
+  .tip .t-none { color: var(--tip-muted); font-size: 13px; }
+  .tip .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tip .chip { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--legend-bg); color: var(--legend); }
+  .tip .chip.tag { background: var(--epic-bg); color: var(--epic); }
+  .tip .chip.user { background: var(--rare-bg); color: var(--rare); }
+  /* 로그인 후 내 관심사: 중립 테마 */
+  .tip.neutral { background: var(--surface); color: var(--ink); border-color: var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(15, 20, 30, .16); }
+  .tip.neutral .t-l { color: var(--user); }
+  .tip.neutral .t-a { color: var(--ink); }
+  .tip.neutral .t-none { color: var(--muted); }
+  .tip.neutral .chip { background: var(--user-soft); color: var(--user); }
+  .tip.neutral .chip.tag { background: var(--sunken); color: var(--muted); }
+
+  /* 섹션 */
+  section { display: grid; gap: 18px; }
+  section > h2 { font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+  section > .intro { color: var(--muted); max-width: 62ch; }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: step; }
+  .steps li { counter-increment: step; display: grid; grid-template-columns: 44px 1fr; gap: 4px 12px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: 1px solid var(--line); }
+  .steps li::before { content: counter(step, decimal-leading-zero); font: 500 13px/1.9 var(--mono); color: var(--accent); grid-row: span 2; }
+  .steps b { font-weight: 600; }
+  .steps span { color: var(--muted); font-size: 15px; }
+
+  .figure { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px 14px; overflow-x: auto; }
+  .figure svg { display: block; width: 100%; min-width: 620px; height: auto; }
+  .figure figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .f-ink { fill: var(--ink); } .f-muted { fill: var(--muted); } .f-accent { fill: var(--accent); }
+  .f-box { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; }
+  .f-tag { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  .f-node { fill: var(--tip-bg); stroke: var(--tip-line); stroke-width: 1.25; }
+  .f-line { stroke: var(--muted); stroke-width: 1.25; fill: none; }
+  .f-strong { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .f-dash { stroke: var(--faint); stroke-width: 1.25; stroke-dasharray: 4 4; fill: none; }
+
+  .layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .layer { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 8px; align-content: start; }
+  .layer h3 { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .badge { font-size: 11.5px; font-weight: 600; padding: 1px 9px; border-radius: 999px; border: 1px solid currentColor; }
+  .badge.common { color: var(--accent); } .badge.mine { color: var(--user); }
+  .layer ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 15px; display: grid; gap: 4px; }
+  .layer.mine { border-style: dashed; }
+
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .rules li { display: grid; gap: 2px; padding-left: 16px; border-left: 2px solid var(--line); }
+  .rules b { font-weight: 600; }
+  .rules span { color: var(--muted); font-size: 15px; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 520px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--sunken); }
+  td code, .mono { font: 13px var(--mono); }
+  .free { color: var(--accent); font-weight: 600; }
+
+  .status { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .status div { display: grid; gap: 6px; }
+  .status h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.ok { background: #2e9d52; } .dot.wait { background: #d4a106; } .dot.todo { background: var(--faint); }
+  .status ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; display: grid; gap: 3px; }
+
+  footer { color: var(--faint); font-size: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* 인프라 구성도 */
+  :root { --zone: #eceff3; --line-strong: #c3c9d3; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --zone: #141920; --line-strong: #3b4350; } }
+  :root[data-theme="dark"] { --zone: #141920; --line-strong: #3b4350; }
+  .bleed { position: relative; width: min(1040px, calc(100vw - 40px)); left: 50%; margin-left: calc(min(1040px, calc(100vw - 40px)) / -2); }
+  .infra { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 12px; }
+  .infra-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 16px; }
+  .infra-top h3 { font-size: 16px; font-weight: 600; }
+  .scroll-x { overflow-x: auto; }
+  .scroll-x svg { display: block; width: 100%; min-width: 780px; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--muted); }
+  .legend i.dash { border-top: 2px dashed var(--faint); }
+  .legend i.dot { width: 9px; height: 9px; border: 0; border-radius: 50%; background: var(--accent); }
+
+  .i-zone { fill: var(--zone); stroke: var(--line); stroke-width: 1; }
+  .i-zone-plan { fill: none; stroke: var(--faint); stroke-width: 1.25; stroke-dasharray: 6 5; }
+  .i-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.25; }
+  .i-core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  .i-chip { fill: var(--sunken); stroke: var(--line); stroke-width: 1; }
+  .i-name { fill: var(--ink); font-size: 14px; font-weight: 600; }
+  .i-sub { fill: var(--muted); font-size: 12px; }
+  .i-mono { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+  .i-zlabel { fill: var(--muted); font-family: var(--mono); font-size: 11.5px; letter-spacing: .05em; }
+  .i-zlabel.accent { fill: var(--accent); }
+  .i-edge { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+  .i-edge-plan { stroke: var(--faint); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .i-elabel { fill: var(--muted); font-size: 11.5px; }
+  .i-arrow { fill: var(--muted); } .i-arrow-plan { fill: var(--faint); }
+  .i-dot { fill: var(--accent); }
+  .plan { transition: opacity .25s; }
+  .infra[data-mode="now"] .plan { opacity: .32; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><rect x="5" y="6" width="54" height="42" rx="12" fill="#161c2b"/><path d="M16 46 L15 59 L29 47 Z" fill="#161c2b"/><path d="M17 22 q7.5 -6 15 0 t15 0" stroke="#ff9a2e" stroke-width="5.5" fill="none" stroke-linecap="round"/><path d="M17 34 q7.5 -6 15 0 t15 0" stroke="#ff9a2e" stroke-width="5.5" fill="none" stroke-linecap="round"/></svg>
+      <span class="label">비유 도우미 · 크롬 확장 PoC</span>
+    </div>
+    <h1>모르는 문장에 커서를 올리면,<br><em>내가 아는 세계</em>로 풀어 줘요</h1>
+    <p class="lede">관심사를 그래프로 저장해 두고, 문장과 구조가 같은 개념을 찾아 그 사실만 근거로 한 줄 비유를 만듭니다. 기본 관심사는 메이플스토리예요.</p>
+  </header>
+
+  <!-- 데모 -->
+  <div class="demo" id="demo">
+    <div class="demo-bar">
+      <span class="hint">문장에 커서를 올리거나 눌러 보세요. 실제 확장에서는 <kbd>Alt</kbd> 누른 채 올려요.</span>
+      <div class="seg" role="group" aria-label="관심사">
+        <button type="button" id="mode-maple" aria-pressed="true">공통 · 메이플스토리</button>
+        <button type="button" id="mode-soccer" aria-pressed="false">로그인 · 내 관심사(축구)</button>
+      </div>
+    </div>
+    <div class="article" id="article">
+      <h3>경제 기사 한 대목</h3>
+      <p>
+        <span class="s" tabindex="0" data-k="lev">레버리지는 이익과 손실을 모두 키워서 작은 가격 하락에도 원금을 잃을 수 있다.</span>
+        <span class="s" tabindex="0" data-k="inf">중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.</span>
+      </p>
+      <p>
+        <span class="s" tabindex="0" data-k="api">한편 API 서버는 분당 요청 수에 상한을 두어 한 사용자가 자원을 독점하지 못하게 한다.</span>
+        <span class="s" tabindex="0" data-k="shoe">한정판 운동화는 구하기 어려워 되팔 때 가격이 크게 오른다.</span>
+      </p>
+      <div class="tip" id="tip" role="status" aria-live="polite" hidden></div>
+    </div>
+    <p class="demo-foot">예시 답변은 설명을 위해 미리 작성한 것이에요. 근거 칩은 실제 공통 그래프의 노드와 태그 이름입니다.</p>
+  </div>
+
+  <!-- 작동 방식 -->
+  <section>
+    <span class="label">작동 방식</span>
+    <h2>커서 한 번에 일어나는 일</h2>
+    <ol class="steps">
+      <li><b>문장 찾기</b><span>커서 아래 글자를 찾아 문장과 단어, 앞 문장까지 잘라 냅니다. 페이지는 건드리지 않고 강조만 겹쳐 그려요.</span></li>
+      <li><b>구조가 같은 개념 찾기</b><span>문장을 벡터로 바꿔 관심사 그래프와 비교합니다. 개념을 직접 비교하는 것에 더해, 추상 태그를 한 번 거쳐 같은 구조를 가진 개념으로 이동해요.</span></li>
+      <li><b>근거로 비유 만들기</b><span>상위 3개 개념의 사실만 AI에 건네고, 그중 가장 잘 맞는 하나로 쉬운 뜻과 비유를 쓰게 합니다.</span></li>
+      <li><b>검증 후 보여 주기</b><span>AI가 후보에 없는 개념을 댔으면 비유를 숨기고 뜻만 보여 줘요. 말풍선에는 근거 개념과 태그를 늘 함께 표시합니다.</span></li>
+    </ol>
+
+    <figure class="figure" style="margin:0">
+      <svg viewBox="0 0 720 232" role="img" aria-label="문장이 추상 태그를 거쳐 메이플 개념에 닿는 경로">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="f-accent"/></marker>
+          <marker id="arm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="f-muted"/></marker>
+        </defs>
+        <text x="16" y="22" font-size="12" class="f-muted" font-family="IBM Plex Mono, monospace">웹페이지 문장</text>
+        <rect x="16" y="34" width="210" height="96" rx="10" class="f-box"/>
+        <text x="32" y="62" font-size="14" class="f-ink">API 서버는 분당 요청 수에</text>
+        <text x="32" y="84" font-size="14" class="f-ink">상한을 두어 한 사용자가</text>
+        <text x="32" y="106" font-size="14" class="f-ink">자원을 독점하지 못하게 한다.</text>
+
+        <text x="268" y="22" font-size="12" class="f-muted" font-family="IBM Plex Mono, monospace">추상 태그</text>
+        <rect x="268" y="52" width="184" height="60" rx="10" class="f-tag"/>
+        <text x="284" y="78" font-size="14.5" font-weight="600" class="f-ink">기간당 한도</text>
+        <text x="284" y="99" font-size="12" class="f-muted">기간 안의 횟수·양에 상한</text>
+
+        <text x="494" y="22" font-size="12" class="f-muted" font-family="IBM Plex Mono, monospace">메이플 개념 노드</text>
+        <rect x="494" y="40" width="210" height="84" rx="8" class="f-node"/>
+        <text x="510" y="66" font-size="14.5" font-weight="600" fill="#eef1f7">주간 보스와 결정석</text>
+        <text x="510" y="88" font-size="12" fill="#9ba5bd">한 주에 팔 수 있는</text>
+        <text x="510" y="105" font-size="12" fill="#9ba5bd">결정석 개수에 상한이 있다</text>
+
+        <path d="M226 82 H264" class="f-strong" marker-end="url(#ar)"/>
+        <path d="M452 82 H490" class="f-strong" marker-end="url(#ar)"/>
+        <path d="M121 130 V176 H599 V128" class="f-dash" marker-end="url(#arm)"/>
+        <text x="360" y="168" font-size="12" text-anchor="middle" class="f-muted">직접 비교: 겹치는 단어가 적어 약함</text>
+        <text x="360" y="208" font-size="13" text-anchor="middle" class="f-accent" font-weight="600">점수 = 0.45 × 직접 유사도 + 0.55 × 태그 유사도</text>
+      </svg>
+      <figcaption>단어가 하나도 겹치지 않아도, "기간당 한도"라는 구조를 공유하면 비유 대상으로 찾아집니다.</figcaption>
+    </figure>
+  </section>
+
+
+  <!-- 인프라 -->
+  <section>
+    <span class="label">인프라 구성</span>
+    <h2>서버 없이 브라우저 안에서 돌아요</h2>
+    <p class="intro">지금은 사용자 크롬 안에서 거의 모든 일이 끝나고, 밖으로 나가는 건 모델 가중치 다운로드(처음 한 번)와 비유 생성 호출뿐이에요. 로그인과 공통 저장소 배포는 Phase 2에서 붙습니다.</p>
+
+    <div class="bleed">
+      <div class="infra" id="infra" data-mode="now">
+        <div class="infra-top">
+          <h3>런타임 구성</h3>
+          <div class="seg" role="group" aria-label="보기">
+            <button type="button" id="infra-now" aria-pressed="true">지금 (PoC)</button>
+            <button type="button" id="infra-next" aria-pressed="false">Phase 2 포함</button>
+          </div>
+        </div>
+        <div class="scroll-x">
+          <svg id="infra-svg" viewBox="0 44 1040 552" role="img" aria-label="크롬 안의 콘텐츠 스크립트, 서비스 워커, 오프스크린 문서, 저장소와 외부의 Hugging Face, LLM 제공자, Phase 2 서버 구성">
+            <defs>
+              <marker id="ia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow"/></marker>
+              <marker id="iap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow-plan"/></marker>
+            </defs>
+
+            <!-- 영역 -->
+            <rect x="16" y="56" width="660" height="524" rx="16" class="i-zone"/>
+            <text x="36" y="84" class="i-zlabel">사용자 컴퓨터 · 크롬 브라우저</text>
+            <rect x="700" y="56" width="324" height="290" rx="16" class="i-zone"/>
+            <text x="720" y="84" class="i-zlabel">외부 서비스 · 지금</text>
+            <g class="plan">
+              <rect x="700" y="366" width="324" height="214" rx="16" class="i-zone-plan"/>
+              <text x="720" y="390" class="i-zlabel accent">PHASE 2 계획</text>
+            </g>
+
+            <!-- 연결선: 지금 -->
+            <g>
+              <path d="M216 150 H250" class="i-edge" marker-end="url(#ia)"/>
+              <path d="M252 186 H218" class="i-edge" marker-end="url(#ia)"/>
+              <path d="M216 295 H250" class="i-edge" marker-end="url(#ia)"/>
+              <path d="M452 140 H486" class="i-edge" marker-end="url(#ia)"/>
+              <path d="M488 176 H454" class="i-edge" marker-end="url(#ia)"/>
+              <path d="M454 375 H486" class="i-edge" marker-start="url(#ia)" marker-end="url(#ia)"/>
+              <path d="M352 452 V474" class="i-edge" marker-end="url(#ia)"/>
+              <path d="M656 144 H718" class="i-edge" marker-end="url(#ia)"/>
+              <path d="M452 280 H718" class="i-edge" marker-end="url(#ia)"/>
+              <path d="M720 302 H454" class="i-edge" marker-end="url(#ia)"/>
+            </g>
+            <text x="234" y="142" text-anchor="middle" class="i-elabel">문장</text>
+            <text x="234" y="203" text-anchor="middle" class="i-elabel">결과</text>
+            <text x="234" y="287" text-anchor="middle" class="i-elabel">설정</text>
+            <text x="470" y="132" text-anchor="middle" class="i-elabel">문장</text>
+            <text x="470" y="193" text-anchor="middle" class="i-elabel">벡터</text>
+            <text x="362" y="468" class="i-elabel">읽기</text>
+            <text x="688" y="136" text-anchor="middle" class="i-elabel">처음 1회</text>
+            <text x="586" y="271" text-anchor="middle" class="i-elabel">문장 + 후보 3개 · 호버당 1회</text>
+            <text x="586" y="319" text-anchor="middle" class="i-elabel">쉬운 뜻 · 비유 JSON</text>
+
+            <!-- 연결선: Phase 2 -->
+            <g class="plan">
+              <path d="M454 444 H718" class="i-edge-plan" marker-start="url(#iap)" marker-end="url(#iap)"/>
+              <text x="586" y="437" text-anchor="middle" class="i-elabel">내 오버레이 · 로그인 시</text>
+              <path d="M720 532 H658" class="i-edge-plan" marker-end="url(#iap)"/>
+              <text x="678" y="524" text-anchor="middle" class="i-elabel">새 버전</text>
+            </g>
+
+            <!-- 브라우저 안 -->
+            <g>
+              <rect x="36" y="104" width="180" height="110" rx="10" class="i-box"/>
+              <text x="52" y="130" class="i-name">웹페이지</text>
+              <text x="52" y="152" class="i-sub">콘텐츠 스크립트</text>
+              <text x="52" y="170" class="i-sub">문장 찾기 · 강조</text>
+              <text x="52" y="188" class="i-sub">말풍선 (Shadow DOM)</text>
+            </g>
+            <g>
+              <rect x="36" y="250" width="180" height="90" rx="10" class="i-box"/>
+              <text x="52" y="276" class="i-name">설정 · 팝업</text>
+              <text x="52" y="298" class="i-sub">제공자 · 키 · 트리거</text>
+              <text x="52" y="316" class="i-sub">시험해 보기(점수 표시)</text>
+            </g>
+            <g>
+              <rect x="252" y="104" width="200" height="348" rx="12" class="i-core"/>
+              <text x="268" y="130" class="i-name">서비스 워커</text>
+              <text x="268" y="148" class="i-sub">호버 한 번의 지휘자</text>
+              <line x1="268" y1="164" x2="436" y2="164" stroke="var(--accent)" stroke-opacity=".35"/>
+              <text x="268" y="188" class="i-sub" style="fill:var(--ink)">공통 + 내 오버레이 병합</text>
+              <text x="268" y="214" class="i-sub" style="fill:var(--ink)">벡터 캐시 확인</text>
+              <text x="268" y="240" class="i-sub" style="fill:var(--ink)">그래프 검색 (태그 한 홉)</text>
+              <text x="268" y="266" class="i-sub" style="fill:var(--ink)">LLM 호출</text>
+              <text x="268" y="292" class="i-sub" style="fill:var(--ink)">근거 밖 답 숨기기</text>
+              <text x="268" y="318" class="i-sub" style="fill:var(--ink)">결과 캐시</text>
+            </g>
+            <g>
+              <rect x="488" y="104" width="168" height="110" rx="10" class="i-box"/>
+              <text x="504" y="130" class="i-name">오프스크린 문서</text>
+              <text x="504" y="152" class="i-sub">transformers.js</text>
+              <text x="504" y="170" class="i-sub">ONNX wasm</text>
+              <text x="504" y="188" class="i-sub">e5-small 임베딩</text>
+            </g>
+            <g>
+              <rect x="488" y="330" width="168" height="90" rx="10" class="i-box"/>
+              <text x="504" y="356" class="i-name">chrome.storage</text>
+              <text x="504" y="378" class="i-sub">설정 · 키 · 벡터 캐시</text>
+              <text x="504" y="396" class="i-sub">결과 캐시 (세션)</text>
+            </g>
+            <g>
+              <rect x="36" y="476" width="620" height="84" rx="10" class="i-box" style="stroke-dasharray:0"/>
+              <text x="52" y="499" class="i-zlabel">확장에 포함 · 관리자가 정함</text>
+              <rect x="52" y="512" width="150" height="32" rx="7" class="i-chip"/>
+              <text x="127" y="532" text-anchor="middle" class="i-mono">config/admin.json</text>
+              <rect x="212" y="512" width="204" height="32" rx="7" class="i-chip"/>
+              <text x="314" y="532" text-anchor="middle" class="i-mono">공통 그래프 · maplestory.json</text>
+              <rect x="426" y="512" width="100" height="32" rx="7" class="i-chip"/>
+              <text x="476" y="532" text-anchor="middle" class="i-mono">ONNX wasm</text>
+              <rect x="536" y="512" width="104" height="32" rx="7" class="i-chip"/>
+              <text x="588" y="532" text-anchor="middle" class="i-mono">조직 정책</text>
+            </g>
+
+            <!-- 외부: 지금 -->
+            <g>
+              <rect x="720" y="104" width="288" height="80" rx="10" class="i-box"/>
+              <text x="736" y="130" class="i-name">Hugging Face</text>
+              <text x="736" y="152" class="i-sub">모델 가중치 약 120MB</text>
+              <text x="736" y="170" class="i-sub">받은 뒤 브라우저 캐시에서 재사용</text>
+            </g>
+            <g>
+              <rect x="720" y="232" width="288" height="96" rx="10" class="i-box"/>
+              <text x="736" y="258" class="i-name">LLM 제공자 (교체형)</text>
+              <text x="736" y="280" class="i-sub">Gemini 기본 · Groq 무료 티어</text>
+              <text x="736" y="298" class="i-sub">OpenAI · Anthropic</text>
+              <text x="736" y="316" class="i-sub">OpenAI 호환 주소 (Ollama 등)</text>
+            </g>
+
+            <!-- 외부: Phase 2 -->
+            <g class="plan">
+              <rect x="720" y="404" width="288" height="80" rx="10" class="i-box" style="stroke-dasharray:5 4"/>
+              <text x="736" y="430" class="i-name">사용자 저장소 서버</text>
+              <text x="736" y="452" class="i-sub">로그인 · Postgres 행 단위 권한</text>
+              <text x="736" y="470" class="i-sub">GET · PUT /v1/overlay</text>
+              <rect x="720" y="500" width="138" height="64" rx="10" class="i-box" style="stroke-dasharray:5 4"/>
+              <text x="734" y="525" class="i-name" style="font-size:13.5px">공통 그래프 배포</text>
+              <text x="734" y="546" class="i-sub">URL · 버전 확인</text>
+              <rect x="870" y="500" width="138" height="64" rx="10" class="i-box" style="stroke-dasharray:5 4"/>
+              <text x="884" y="525" class="i-name" style="font-size:13.5px">API 키 프록시</text>
+              <text x="884" y="546" class="i-sub">키를 서버에 보관</text>
+            </g>
+
+            <!-- 호버 한 번의 흐름 -->
+            <g class="flow" aria-hidden="true">
+              <circle r="4.5" class="i-dot"><animateMotion dur="3.6s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;0.15;1" calcMode="linear" path="M216 150 H250"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="3.6s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.15;0.3;1" calcMode="linear" path="M452 140 H486"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="3.6s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.35;0.6;1" calcMode="linear" path="M452 280 H718"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="3.6s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.65;0.85;1" calcMode="linear" path="M720 302 H454"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="3.6s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.87;1;1" calcMode="linear" path="M252 186 H218"/></circle>
+            </g>
+          </svg>
+        </div>
+        <div class="legend">
+          <span><i></i>지금 동작</span>
+          <span><i class="dash"></i>Phase 2 계획</span>
+          <span><i class="dot"></i>호버 한 번의 흐름: 문장 → 임베딩 → LLM → 말풍선</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bleed">
+      <div class="infra">
+        <div class="infra-top"><h3>개발 흐름</h3></div>
+        <div class="scroll-x">
+          <svg viewBox="0 12 1040 140" role="img" aria-label="작업 브랜치에서 PR로 dev에 병합하고, 사람이 dev를 main에 병합하는 흐름">
+            <defs><marker id="da" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow"/></marker></defs>
+            <rect x="16" y="36" width="196" height="72" rx="10" class="i-box"/>
+            <text x="32" y="64" class="i-mono" style="font-weight:500">task/&lt;ID&gt;-슬러그</text>
+            <text x="32" y="88" class="i-sub">/next-task 가 만들고 구현</text>
+
+            <path d="M212 72 H276" class="i-edge" marker-end="url(#da)"/>
+            <text x="244" y="62" text-anchor="middle" class="i-elabel">/ship</text>
+
+            <rect x="278" y="24" width="336" height="96" rx="12" class="i-core"/>
+            <text x="296" y="50" class="i-name">PR → dev</text>
+            <text x="372" y="50" class="i-sub">GitHub Actions가 모두 통과해야 병합</text>
+            <rect x="296" y="70" width="70" height="30" rx="7" class="i-chip"/><text x="331" y="90" text-anchor="middle" class="i-sub" style="fill:var(--ink)">단위 17</text>
+            <rect x="374" y="70" width="64" height="30" rx="7" class="i-chip"/><text x="406" y="90" text-anchor="middle" class="i-sub" style="fill:var(--ink)">e2e 6</text>
+            <rect x="446" y="70" width="78" height="30" rx="7" class="i-chip"/><text x="485" y="90" text-anchor="middle" class="i-sub" style="fill:var(--ink)">빌드 일치</text>
+            <rect x="532" y="70" width="66" height="30" rx="7" class="i-chip"/><text x="565" y="90" text-anchor="middle" class="i-sub" style="fill:var(--ink)">평가</text>
+
+            <path d="M614 72 H678" class="i-edge" marker-end="url(#da)"/>
+            <text x="646" y="62" text-anchor="middle" class="i-elabel">병합</text>
+
+            <rect x="680" y="36" width="150" height="72" rx="10" class="i-box"/>
+            <text x="696" y="64" class="i-mono" style="font-weight:500">dev</text>
+            <text x="696" y="88" class="i-sub">작업이 모이는 곳</text>
+
+            <path d="M830 72 H872" class="i-edge" marker-end="url(#da)"/>
+            <text x="851" y="62" text-anchor="middle" class="i-elabel">사람</text>
+
+            <rect x="874" y="36" width="150" height="72" rx="10" class="i-box"/>
+            <text x="890" y="64" class="i-mono" style="font-weight:500">main</text>
+            <text x="890" y="88" class="i-sub">배포 기준</text>
+
+            <text x="16" y="140" class="i-elabel">main · dev 직접 push 금지. 작업 하나 = 브랜치 하나 = PR 하나.</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 저장소 -->
+  <section>
+    <span class="label">저장소</span>
+    <h2>로그인 없이 바로, 로그인하면 내 것까지</h2>
+    <div class="layers">
+      <div class="layer">
+        <h3><span class="badge common">공통</span>메이플스토리 그래프</h3>
+        <ul>
+          <li>누구나 로그인 없이 사용</li>
+          <li>개념 18개 · 추상 태그 18개 · 연결 12개</li>
+          <li>운영자만 수정, 패치로 바뀌는 수치는 넣지 않음</li>
+        </ul>
+      </div>
+      <div class="layer mine">
+        <h3><span class="badge mine">내 저장소</span>로그인한 사용자 전용</h3>
+        <ul>
+          <li>내 개념·태그 추가, 공통 개념 숨기기</li>
+          <li>관심사 자체를 바꾸기 (예: 축구)</li>
+          <li>공통 그래프 위에 겹쳐서 함께 검색</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 규칙 -->
+  <section>
+    <span class="label">틀린 비유 막기</span>
+    <h2>억지 비유보다 비유 없음이 낫다</h2>
+    <ul class="rules">
+      <li><b>관심사 쪽 내용은 그래프 사실만</b><span>AI가 게임 수치나 규칙을 지어내지 못하게, 검색된 개념의 사실만 건넵니다.</span></li>
+      <li><b>근거 밖 답은 숨김</b><span>AI가 고른 개념이 후보 목록에 없으면 비유를 보여 주지 않아요.</span></li>
+      <li><b>맞는 게 없으면 비움</b><span>구조가 맞는 개념이 없으면 쉬운 뜻만 보여 줍니다. 위 데모에서 축구로 바꿔 보면 확인할 수 있어요.</span></li>
+    </ul>
+  </section>
+
+  <!-- AI 제공자 -->
+  <section>
+    <span class="label">AI 제공자</span>
+    <h2>관리자가 바꿔 끼우는 구조</h2>
+    <p class="intro">임베딩(검색)은 브라우저 안에서 돌고, 밖으로 나가는 호출은 비유 생성 한 번뿐이에요. 제공자는 설정 파일이나 조직 정책으로 정하고 잠글 수 있습니다.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>제공자</th><th>기본 모델</th><th>비용</th></tr></thead>
+        <tbody>
+          <tr><td>Google Gemini <span class="free">기본값</span></td><td><code>gemini-3.8-flash</code></td><td>무료 티어 있음</td></tr>
+          <tr><td>Groq</td><td><code>openai/gpt-oss-120b</code></td><td>무료 티어 있음</td></tr>
+          <tr><td>OpenAI</td><td><code>gpt-6-luna</code></td><td>유료</td></tr>
+          <tr><td>Anthropic</td><td><code>claude-haiku-4-5-20251001</code></td><td>유료</td></tr>
+          <tr><td>OpenAI 호환 주소</td><td>OpenRouter, Ollama 등</td><td>제공자에 따름</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 현재 상태 -->
+  <section>
+    <span class="label">현재 상태 · 2026년 9월 28일</span>
+    <h2>PoC 완료, 다음은 품질 검증</h2>
+    <div class="status">
+      <div>
+        <h3><span class="dot ok"></span>동작 확인</h3>
+        <ul><li>Alt·자동 호버, 강조, 말풍선</li><li>저장소 두 층, 관심사 변경</li><li>제공자 교체, 정밀 모드</li></ul>
+      </div>
+      <div>
+        <h3><span class="dot wait"></span>아직 미확인</h3>
+        <ul><li>실제 AI 키로 비유 품질</li><li>실제 임베딩 모델의 검색 품질</li></ul>
+      </div>
+      <div>
+        <h3><span class="dot todo"></span>다음 단계</h3>
+        <ul><li>로그인 서버와 편집 화면</li><li>AI로 관심사 그래프 초안 만들기</li><li>웹스토어 공개</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>비유 도우미 PoC · 메이플스토리는 넥슨의 게임이며, 이 프로젝트는 넥슨과 관련이 없습니다.</footer>
+</div>
+
+<script>
+  // 미리 작성한 예시 답변. 근거는 공통 그래프(메이플)와 데모용 내 저장소(축구)의 실제 노드·태그 이름.
+  const DATA = {
+    maple: {
+      domain: '메이플스토리로 보면',
+      lev: { m: '빌린 돈으로 규모를 키우면 벌 때도 크게 벌지만, 조금만 떨어져도 가진 돈까지 잃을 수 있다는 뜻이에요.', a: '메이플로 치면 높은 단계 스타포스처럼, 더 올리려고 시도하다 실패하면 이미 가진 장비까지 파괴될 수 있는 구조예요.', n: '스타포스 강화', t: '보유 자산 손실 위험' },
+      inf: { m: '돈이 너무 많이 풀리면 같은 돈으로 살 수 있는 게 줄어든다는 뜻이에요.', a: '메이플로 치면 게임 안에 메소가 많이 풀려서 아이템 가격이 오르고 메소 가치가 떨어지는 것과 같아요.', n: '메소 인플레이션', t: '화폐 가치 하락' },
+      api: { m: '한 사람이 너무 많이 쓰지 못하게, 정해진 시간에 보낼 수 있는 요청 수를 막아 둔다는 뜻이에요.', a: '메이플로 치면 한 주에 팔 수 있는 결정석 개수에 상한이 있는 것처럼, 기간 안에 할 수 있는 양이 정해져 있는 거예요.', n: '주간 보스와 결정석', t: '기간당 한도' },
+      shoe: { m: '구하기 어려운 물건은 사려는 사람이 많아 비싸게 거래된다는 뜻이에요.', a: '메이플로 치면 경매장에서 찾는 사람이 많은 아이템일수록 가격이 오르는 것과 같아요.', n: '경매장', t: '희소성 가치' }
+    },
+    soccer: {
+      domain: '축구로 보면',
+      user: true,
+      lev: { m: '빌린 돈으로 규모를 키우면 벌 때도 크게 벌지만, 조금만 떨어져도 가진 돈까지 잃을 수 있다는 뜻이에요.', a: null },
+      inf: { m: '돈이 너무 많이 풀리면 같은 돈으로 살 수 있는 게 줄어든다는 뜻이에요.', a: null },
+      api: { m: '한 사람이 너무 많이 쓰지 못하게, 정해진 시간에 보낼 수 있는 요청 수를 막아 둔다는 뜻이에요.', a: null },
+      shoe: { m: '구하기 어려운 물건은 사려는 사람이 많아 비싸게 거래된다는 뜻이에요.', a: '축구로 치면 인기 선수는 원하는 구단이 많아서 이적료가 오르는 것과 같아요.', n: '이적 시장', t: '수요와 공급 가격' }
+    }
+  };
+
+  const article = document.getElementById('article');
+  const tip = document.getElementById('tip');
+  const btnMaple = document.getElementById('mode-maple');
+  const btnSoccer = document.getElementById('mode-soccer');
+  let mode = 'maple';
+  let current = null;
+
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function show(el) {
+    const d = DATA[mode], r = d[el.dataset.k];
+    document.querySelectorAll('.s.on').forEach(x => x.classList.remove('on'));
+    el.classList.add('on');
+    current = el;
+    tip.className = 'tip' + (mode === 'soccer' ? ' neutral' : '');
+    tip.innerHTML =
+      `<div class="t-row"><span class="t-l">쉬운 뜻</span>${esc(r.m)}</div>` +
+      (r.a
+        ? `<div class="t-row"><span class="t-l">${esc(d.domain)}</span><span class="t-a">${esc(r.a)}</span></div>
+           <div class="chips"><span class="chip${d.user ? ' user' : ''}">근거: ${esc(r.n)}</span><span class="chip tag">${esc(r.t)}</span></div>`
+        : `<div class="t-row t-none">내 관심사에서 구조가 맞는 개념을 찾지 못했어요. 억지로 만들지 않았어요.</div>`);
+    tip.hidden = false;
+    // 강조한 문장의 마지막 줄 아래에 붙인다
+    const rects = el.getClientRects();
+    const last = rects[rects.length - 1] || el.getBoundingClientRect();
+    const box = article.getBoundingClientRect();
+    const w = tip.offsetWidth;
+    let left = Math.min(Math.max(12, last.left - box.left), box.width - w - 12);
+    tip.style.left = left + 'px';
+    tip.style.top = (last.bottom - box.top + 8) + 'px';
+  }
+  function hide() {
+    tip.hidden = true;
+    document.querySelectorAll('.s.on').forEach(x => x.classList.remove('on'));
+    current = null;
+  }
+
+  article.querySelectorAll('.s').forEach(el => {
+    el.addEventListener('mouseenter', () => show(el));
+    el.addEventListener('focus', () => show(el));
+    el.addEventListener('click', () => show(el));
+  });
+  article.addEventListener('mouseleave', hide);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+  document.addEventListener('click', e => { if (!article.contains(e.target)) hide(); });
+
+  function setMode(m) {
+    mode = m;
+    btnMaple.setAttribute('aria-pressed', String(m === 'maple'));
+    btnSoccer.setAttribute('aria-pressed', String(m === 'soccer'));
+    if (current) show(current);
+  }
+  btnMaple.addEventListener('click', () => setMode('maple'));
+  btnSoccer.addEventListener('click', () => setMode('soccer'));
+
+  // 첫 화면에서 바로 보이도록 한 문장을 펼쳐 둔다
+  const first = () => show(article.querySelector('[data-k="shoe"]'));
+  if (document.readyState === 'complete') first(); else window.addEventListener('load', first);
+
+  // 인프라 구성도: 지금 / Phase 2 보기 전환, 움직임 줄이기 설정 존중
+  const infra = document.getElementById('infra');
+  const infraSvg = document.getElementById('infra-svg');
+  const bNow = document.getElementById('infra-now');
+  const bNext = document.getElementById('infra-next');
+  function setInfra(m) {
+    infra.dataset.mode = m;
+    bNow.setAttribute('aria-pressed', String(m === 'now'));
+    bNext.setAttribute('aria-pressed', String(m === 'next'));
+  }
+  bNow.addEventListener('click', () => setInfra('now'));
+  bNext.addEventListener('click', () => setInfra('next'));
+  const rm = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const applyMotion = () => {
+    const flow = infraSvg.querySelector('.flow');
+    if (rm.matches) { infraSvg.pauseAnimations(); flow.style.display = 'none'; }
+    else { flow.style.display = ''; infraSvg.unpauseAnimations(); }
+  };
+  applyMotion();
+  rm.addEventListener?.('change', applyMotion);
+</script>
+
+</body>
+</html>
