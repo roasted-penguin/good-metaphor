@@ -1,0 +1,38 @@
+{
+  "_comment": "관리자(배포자) 설정. 확장을 배포하기 전에 이 파일을 고치거나, 크롬 엔터프라이즈 정책(chrome.storage.managed)으로 같은 키를 덮어쓴다. 정책 값이 이 파일보다 우선한다.",
+
+  "defaultProvider": "gemini",
+  "defaultModels": {
+    "gemini": "gemini-3.8-flash",
+    "groq": "openai/gpt-oss-120b",
+    "openai": "gpt-6-luna",
+    "anthropic": "claude-haiku-4-5-20251001"
+  },
+  "allowedProviders": ["gemini", "groq", "openai", "anthropic", "custom", "demo"],
+  "lockProvider": false,
+  "sharedApiKeys": {},
+
+  "commonStore": {
+    "bundled": "data/common/maplestory.json",
+    "url": ""
+  },
+
+  "userStore": {
+    "adapter": "local-dev",
+    "baseUrl": ""
+  },
+
+  "embedding": {
+    "model": "Xenova/multilingual-e5-small",
+    "dtype": "q8",
+    "queryPrefix": "query: ",
+    "passagePrefix": "passage: ",
+    "fallbackOnError": true
+  },
+
+  "retrieval": {
+    "topK": 3,
+    "directWeight": 0.45,
+    "tagWeight": 0.55
+  }
+}

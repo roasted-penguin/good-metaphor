@@ -1,0 +1,25 @@
+{
+  "name": "analogy-helper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "관심사 그래프 기반 비유 설명 크롬 확장 (PoC)",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test \"tests/unit/*.test.mjs\"",
+    "test:e2e": "node scripts/prepare-e2e.mjs && playwright test",
+    "eval": "node tools/eval.mjs",
+    "eval:fallback": "node tools/eval.mjs --fallback"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "esbuild": "^0.28.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

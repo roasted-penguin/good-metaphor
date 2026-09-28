@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>비유 도우미 설정</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <header>
+    <img src="icons/128.png" alt="">
+    <div>
+      <h1>비유 도우미</h1>
+      <p>모르는 문장에 커서를 올리면, 내가 잘 아는 분야에 빗대 한 줄로 풀어 드려요.</p>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. 사용 방식 -->
+    <section id="sec-trigger">
+      <h2>사용 방식</h2>
+      <p class="desc">커서를 올렸을 때 언제 설명을 띄울지 정해요.</p>
+      <div class="grid">
+        <label>켜기</label>
+        <div class="row"><input type="checkbox" id="enabled"> <span class="hint">끄면 모든 페이지에서 반응하지 않아요.</span></div>
+
+        <label>띄우는 방법</label>
+        <div class="seg" id="triggerMode">
+          <label><input type="radio" name="triggerMode" value="modifier"><span>보조키 누른 채 올리기</span></label>
+          <label><input type="radio" name="triggerMode" value="auto"><span>머무르면 자동</span></label>
+        </div>
+
+        <label for="modifierKey">보조키</label>
+        <select id="modifierKey">
+          <option value="Alt">Alt (맥: Option)</option>
+          <option value="Shift">Shift</option>
+          <option value="Control">Ctrl</option>
+          <option value="Meta">Cmd / Win</option>
+        </select>
+
+        <label for="dwellMs">머무름 시간</label>
+        <div class="row"><input type="number" id="dwellMs" min="300" max="3000" step="100" style="width:110px"> <span class="hint">밀리초. 자동 모드에서만 써요.</span></div>
+
+        <label>정밀 모드</label>
+        <div class="row"><input type="checkbox" id="preciseMode"> <span class="hint">AI가 문장의 추상 구조를 먼저 뽑고 검색해요. 더 정확하지만 호출이 2번이라 느려요.</span></div>
+      </div>
+    </section>
+
+    <!-- 2. AI 제공자 -->
+    <section id="sec-provider">
+      <h2>AI 제공자</h2>
+      <p class="desc">비유 문장을 만드는 모델이에요. 키는 이 브라우저에만 저장돼요.</p>
+      <div id="lockedNote" class="locked" hidden>관리자가 제공자와 모델을 고정했어요.</div>
+      <div class="grid" style="margin-top:8px">
+        <label for="provider">제공자</label>
+        <select id="provider"></select>
+
+        <label for="model">모델</label>
+        <div><input type="text" id="model" list="modelList"><datalist id="modelList"></datalist></div>
+
+        <label for="apiKey">API 키</label>
+        <div>
+          <input type="password" id="apiKey" autocomplete="off" placeholder="키를 붙여 넣으세요">
+          <div class="hint" id="keyHint"></div>
+        </div>
+
+        <label for="customBaseUrl" class="custom-only">주소</label>
+        <div class="custom-only"><input type="text" id="customBaseUrl" placeholder="예: https://openrouter.ai/api/v1 또는 http://localhost:11434/v1"></div>
+
+        <span></span>
+        <div class="row"><button class="primary" id="saveProvider">저장</button><button id="testProvider">연결 테스트</button><span class="status" id="providerStatus"></span></div>
+      </div>
+    </section>
+
+    <!-- 3. 관심사 저장소 -->
+    <section id="sec-store">
+      <h2>관심사 저장소</h2>
+      <p class="desc">공통 저장소는 로그인 없이 모두가 함께 써요. 내 노드를 더하거나 관심사를 바꾸려면 로그인하세요.</p>
+
+      <div class="layer">
+        <h3><span class="badge legend">공통</span> <span id="commonTitle">불러오는 중…</span></h3>
+        <div class="stats" id="commonStats"></div>
+        <details><summary>노드와 태그 보기</summary><div id="commonList" class="hint" style="margin-top:8px"></div></details>
+      </div>
+
+      <div class="layer">
+        <h3><span class="badge rare">내 저장소</span> <span id="userTitle">로그인이 필요해요</span></h3>
+        <div id="loggedOut">
+          <p class="hint" id="adapterHint"></p>
+          <div class="row"><input type="text" id="nickname" placeholder="닉네임 (개발용 로그인)" style="max-width:220px"><button class="primary" id="login">로그인</button><span class="status" id="loginStatus"></span></div>
+        </div>
+        <div id="loggedIn" hidden>
+          <div class="row" style="margin-bottom:10px"><span class="hint" id="whoami"></span><button id="logout">로그아웃</button></div>
+          <div class="grid">
+            <label>관심사</label>
+            <div class="seg" id="useCommonSeg">
+              <label><input type="radio" name="useCommon" value="true"><span>공통(메이플) + 내 노드</span></label>
+              <label><input type="radio" name="useCommon" value="false"><span>내 관심사만</span></label>
+            </div>
+          </div>
+          <p class="hint">오버레이 JSON을 고쳐 저장하세요. 내 노드 id는 <code>u:</code>로 시작하고, 공통 태그 id(예: <code>prob_upgrade</code>)를 그대로 쓸 수 있어요.</p>
+          <textarea id="overlay" spellcheck="false"></textarea>
+          <div class="row" style="margin-top:8px"><button class="primary" id="saveOverlay">저장</button><button id="insertSample">예시 노드 넣기</button><span class="status" id="overlayStatus"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 임베딩 모델 -->
+    <section id="sec-embed">
+      <h2>검색 모델</h2>
+      <p class="desc">문장과 관심사 노드를 비교하는 다국어 임베딩 모델이에요. 브라우저 안에서 돌아가고, 처음 한 번 약 120MB를 받아요.</p>
+      <div class="row"><button id="warmup">지금 준비하기</button><button id="clearCache">캐시 비우기</button><span class="status" id="embedStatus"></span></div>
+    </section>
+
+    <!-- 5. 시험해 보기 -->
+    <section id="sec-try">
+      <h2>시험해 보기</h2>
+      <p class="desc">문장을 넣으면 검색 후보와 점수까지 보여 줘요. RAG가 어떻게 고르는지 확인할 때 쓰세요.</p>
+      <textarea id="trySentence" style="min-height:70px">변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.</textarea>
+      <div class="row" style="margin-top:8px"><button class="primary" id="tryRun">비유 만들기</button><span class="status" id="tryStatus"></span></div>
+      <div id="tryOut"></div>
+    </section>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

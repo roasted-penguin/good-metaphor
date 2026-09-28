@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "id": "maplestory",
+  "version": "2026.09.28-1",
+  "domain": "메이플스토리",
+  "analogyPrefix": "메이플로 치면",
+  "theme": "maple",
+  "note": "공통 저장소 샘플. 사실(facts)은 시스템의 일반적인 구조만 적고, 수치·확률표처럼 자주 바뀌는 값은 넣지 않는다.",
+  "tags": [
+    { "id": "prob_upgrade", "label": "확률형 강화", "desc": "비용을 내고 시도하면 성공과 실패가 확률로 갈리고, 성공이 쌓일수록 좋아지는 구조" },
+    { "id": "escalating_cost", "label": "단계별 비용 증가", "desc": "단계가 오를수록 한 번 시도하는 데 드는 비용이 커지는 구조" },
+    { "id": "loss_risk", "label": "보유 자산 손실 위험", "desc": "더 얻으려고 시도하다가 이미 가진 것을 잃을 수 있는 위험" },
+    { "id": "threshold_req", "label": "최소 요구 조건", "desc": "일정 수치를 넘지 못하면 참여할 수 없거나 효과가 크게 줄어드는 조건" },
+    { "id": "progression_gate", "label": "단계적 해금", "desc": "앞 단계를 끝내야 다음 단계의 기능이나 기회가 열리는 구조" },
+    { "id": "market_price", "label": "수요와 공급 가격", "desc": "거래 가격이 사려는 사람과 팔려는 사람의 양에 따라 오르내리는 구조" },
+    { "id": "inflation", "label": "화폐 가치 하락", "desc": "돈이 많이 풀려 같은 돈으로 살 수 있는 것이 줄어드는 현상" },
+    { "id": "scarcity_value", "label": "희소성 가치", "desc": "구하기 어려울수록 가치와 가격이 높아지는 구조" },
+    { "id": "periodic_cap", "label": "기간당 한도", "desc": "일정 기간 안에 할 수 있는 횟수나 얻을 수 있는 양에 상한을 두는 규칙" },
+    { "id": "daily_accumulation", "label": "꾸준한 누적 성장", "desc": "매일 조금씩 쌓아야 목표에 도달하고, 한 번에 몰아서 할 수 없는 구조" },
+    { "id": "diminishing_returns", "label": "수확 체감", "desc": "같은 노력을 들여도 단계가 오를수록 얻는 성과가 점점 작아지는 구조" },
+    { "id": "temporary_multiplier", "label": "한시적 배율 효과", "desc": "정해진 시간이나 기간에만 효율이나 혜택이 커지는 효과" },
+    { "id": "cooldown", "label": "재사용 대기", "desc": "한 번 쓰면 일정 시간이 지나야 다시 쓸 수 있는 제약" },
+    { "id": "random_reroll", "label": "무작위 재추첨", "desc": "비용을 내고 결과를 무작위로 다시 뽑아 원하는 조합을 노리는 구조" },
+    { "id": "expected_value", "label": "기댓값 판단", "desc": "확률과 비용을 함께 따져 평균적으로 얼마가 들고 얼마를 얻는지 계산하는 판단" },
+    { "id": "shared_bonus", "label": "공유되는 누적 혜택", "desc": "한쪽에서 쌓은 성장이 다른 쪽에도 혜택으로 이어지는 구조" },
+    { "id": "role_division", "label": "역할 분담", "desc": "여러 참여자가 서로 다른 역할을 맡아 함께 목표를 이루는 구조" },
+    { "id": "efficiency_metric", "label": "시간당 효율", "desc": "같은 시간이나 비용으로 얻는 성과를 비교해 선택하는 기준" }
+  ],
+  "nodes": [
+    {
+      "id": "starforce", "label": "스타포스 강화",
+      "facts": [
+        "메소를 내고 장비에 별(스타)을 붙여 능력치를 올리는 강화 시스템이다.",
+        "별이 높아질수록 성공 확률은 낮아지고 한 번 시도하는 메소 비용은 커진다.",
+        "높은 단계에서는 실패하면 장비가 파괴될 수 있다."
+      ],
+      "tags": ["prob_upgrade", "escalating_cost", "loss_risk", "expected_value"]
+    },
+    {
+      "id": "starforce_event", "label": "샤이닝 스타포스 이벤트",
+      "facts": [
+        "이벤트 기간에는 스타포스 강화 비용 할인이나 확률 혜택이 붙는다.",
+        "그래서 많은 플레이어가 이벤트 때까지 강화를 미뤘다가 몰아서 한다."
+      ],
+      "tags": ["temporary_multiplier", "expected_value"]
+    },
+    {
+      "id": "cube", "label": "큐브(잠재능력 재설정)",
+      "facts": [
+        "큐브를 쓰면 장비의 잠재능력 옵션이 무작위로 다시 정해진다.",
+        "원하는 옵션 조합이 나올 때까지 여러 번 돌리는 경우가 많다.",
+        "옵션별 등장 확률이 공개되어 있어 평균 몇 개가 드는지 계산하기도 한다."
+      ],
+      "tags": ["random_reroll", "expected_value", "prob_upgrade"]
+    },
+    {
+      "id": "arcane_symbol", "label": "아케인 심볼",
+      "facts": [
+        "아케인리버 지역의 일일 퀘스트 등으로 모아 성장시키는 장비이다.",
+        "심볼을 키우면 아케인포스(ARC) 수치가 오른다.",
+        "하루에 얻을 수 있는 양이 정해져 있어 매일 꾸준히 해야 성장한다."
+      ],
+      "tags": ["daily_accumulation", "periodic_cap"]
+    },
+    {
+      "id": "arcane_force", "label": "아케인포스 요구치",
+      "facts": [
+        "아케인리버 지역의 몬스터에는 요구 아케인포스가 정해져 있다.",
+        "내 아케인포스가 요구치보다 낮으면 몬스터에게 주는 피해가 크게 줄어든다."
+      ],
+      "tags": ["threshold_req", "progression_gate"]
+    },
+    {
+      "id": "boss_entry", "label": "보스 입장 조건과 난이도",
+      "facts": [
+        "보스마다 입장할 수 있는 최소 레벨이 정해져 있다.",
+        "같은 보스라도 난이도에 따라 필요한 스펙과 받는 보상이 다르다."
+      ],
+      "tags": ["threshold_req", "progression_gate"]
+    },
+    {
+      "id": "weekly_boss", "label": "주간 보스와 결정석",
+      "facts": [
+        "강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있다.",
+        "보스를 잡으면 나오는 결정석을 상점에 팔아 메소를 번다.",
+        "한 주에 팔 수 있는 결정석 개수에는 상한이 있다."
+      ],
+      "tags": ["periodic_cap", "cooldown", "efficiency_metric"]
+    },
+    {
+      "id": "meso", "label": "메소",
+      "facts": [
+        "메이플스토리의 게임 내 화폐이다.",
+        "사냥과 보스로 벌고, 강화와 거래 등에 쓴다."
+      ],
+      "tags": ["market_price", "inflation"]
+    },
+    {
+      "id": "meso_inflation", "label": "메소 인플레이션",
+      "facts": [
+        "게임 안에 메소가 많이 풀리면 아이템 가격이 오르고 메소의 가치가 떨어진다.",
+        "강화 비용처럼 메소를 소모시키는 곳이 풀린 메소를 회수하는 역할을 한다."
+      ],
+      "tags": ["inflation", "market_price"]
+    },
+    {
+      "id": "auction", "label": "경매장",
+      "facts": [
+        "플레이어끼리 아이템을 메소로 사고파는 거래소이다.",
+        "찾는 사람이 많은 아이템은 가격이 오르고, 흔한 아이템은 가격이 내려간다."
+      ],
+      "tags": ["market_price", "scarcity_value"]
+    },
+    {
+      "id": "level_exp", "label": "레벨업 요구 경험치",
+      "facts": [
+        "레벨이 오를수록 다음 레벨까지 필요한 경험치가 크게 늘어난다.",
+        "고레벨에서는 같은 시간을 사냥해도 레벨이 오르는 속도가 느려진다."
+      ],
+      "tags": ["diminishing_returns", "escalating_cost"]
+    },
+    {
+      "id": "hunting", "label": "사냥 효율과 재획",
+      "facts": [
+        "사냥터마다 시간당 얻는 경험치와 메소가 다르다.",
+        "재물 획득의 비약을 먹고 정해진 시간 동안 사냥하는 것을 흔히 '재획'이라고 부른다."
+      ],
+      "tags": ["efficiency_metric", "temporary_multiplier"]
+    },
+    {
+      "id": "exp_coupon", "label": "경험치 쿠폰",
+      "facts": [
+        "경험치 쿠폰 같은 아이템은 정해진 시간 동안 얻는 경험치를 늘려 준다.",
+        "효과가 켜진 동안 사냥을 몰아서 하면 효율이 좋다."
+      ],
+      "tags": ["temporary_multiplier"]
+    },
+    {
+      "id": "skill_cooldown", "label": "스킬 쿨타임과 극딜",
+      "facts": [
+        "강한 스킬은 한 번 쓰면 일정 시간이 지나야 다시 쓸 수 있다.",
+        "그래서 보스전에서는 강한 스킬을 한 타이밍에 모아 쓰는 '극딜'을 한다."
+      ],
+      "tags": ["cooldown"]
+    },
+    {
+      "id": "union_link", "label": "유니온과 링크 스킬",
+      "facts": [
+        "같은 월드의 여러 캐릭터를 키우면 유니온을 통해 본캐에 능력치 보너스가 붙는다.",
+        "링크 스킬은 다른 캐릭터가 가진 효과를 본캐가 빌려 쓰는 기능이다."
+      ],
+      "tags": ["shared_bonus"]
+    },
+    {
+      "id": "party", "label": "파티 플레이",
+      "facts": [
+        "여러 명이 파티를 맺어 함께 보스를 잡는다.",
+        "파티원마다 딜, 버프, 보조처럼 맡는 역할이 다르다."
+      ],
+      "tags": ["role_division"]
+    },
+    {
+      "id": "sixth_job", "label": "6차 전직과 HEXA 매트릭스",
+      "facts": [
+        "6차 전직은 일정 레벨에 도달하고 선행 퀘스트를 끝내야 할 수 있다.",
+        "전직하면 HEXA 매트릭스라는 새 스킬 성장 시스템이 열린다."
+      ],
+      "tags": ["progression_gate", "threshold_req"]
+    },
+    {
+      "id": "sol_erda", "label": "솔 에르다",
+      "facts": [
+        "HEXA 매트릭스의 스킬을 강화하려면 솔 에르다와 솔 에르다 조각이 필요하다.",
+        "솔 에르다는 사냥하며 게이지를 채워 얻고, 한 번에 보유할 수 있는 양에 한도가 있다."
+      ],
+      "tags": ["daily_accumulation", "scarcity_value"]
+    }
+  ],
+  "edges": [
+    { "from": "starforce", "to": "meso", "rel": "비용으로 메소를 씀" },
+    { "from": "starforce_event", "to": "starforce", "rel": "비용·확률 혜택을 줌" },
+    { "from": "cube", "to": "starforce", "rel": "함께 쓰는 장비 강화 수단" },
+    { "from": "arcane_symbol", "to": "arcane_force", "rel": "아케인포스를 올림" },
+    { "from": "weekly_boss", "to": "meso", "rel": "결정석으로 메소를 벎" },
+    { "from": "meso", "to": "meso_inflation", "rel": "많이 풀리면 가치가 떨어짐" },
+    { "from": "auction", "to": "meso", "rel": "메소로 거래함" },
+    { "from": "level_exp", "to": "hunting", "rel": "사냥으로 경험치를 채움" },
+    { "from": "exp_coupon", "to": "hunting", "rel": "사냥 효율을 높임" },
+    { "from": "party", "to": "weekly_boss", "rel": "함께 보스를 잡음" },
+    { "from": "sixth_job", "to": "sol_erda", "rel": "강화 재료로 씀" },
+    { "from": "boss_entry", "to": "weekly_boss", "rel": "입장 조건을 정함" }
+  ]
+}
