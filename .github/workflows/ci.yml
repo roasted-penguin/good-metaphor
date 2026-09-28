@@ -1,0 +1,25 @@
+name: test
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: 빌드 산출물이 커밋과 같은지 확인
+        run: git diff --exit-code -- extension/offscreen.js extension/vendor
+      - run: npm run test:unit
+      - run: npm run test:e2e
+      - run: npm run eval:fallback

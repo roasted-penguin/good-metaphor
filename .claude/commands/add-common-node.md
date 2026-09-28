@@ -3,7 +3,7 @@ description: 공통 저장소(메이플스토리) 그래프에 개념 노드를 
 argument-hint: "<개념 이름, 예: 에디셔널 잠재능력>"
 ---
 
-공통 그래프 `extension/data/common/maplestory.json`에 "$ARGUMENTS" 노드를 추가해. 이 파일은 모든 사용자가 보는 사실 근거라서 아래 규칙을 지켜.
+먼저 `git fetch origin && git switch -c task/data-<영문-슬러그> origin/dev`로 브랜치를 만든 뒤, 공통 그래프 `extension/data/common/maplestory.json`에 "$ARGUMENTS" 노드를 추가해. 이 파일은 모든 사용자가 보는 사실 근거라서 아래 규칙을 지켜.
 
 1. **사실 확인** 나무위키나 공식 가이드 같은 출처를 찾아 읽고, facts는 2~3개 문장으로 쓴다.
    - 시스템의 구조만 쓴다. 확률표, 최대 단계, 가격, 이벤트 날짜처럼 패치로 바뀌는 수치는 넣지 않는다.
@@ -14,3 +14,4 @@ argument-hint: "<개념 이름, 예: 에디셔널 잠재능력>"
 4. `version`의 날짜·번호를 올린다.
 5. `npm run test:unit`(그래프 무결성 검사 포함)과 `npm run eval:fallback`을 돌린다. 실제 모델을 쓸 수 있으면 `npm run eval`.
 6. 커밋 메시지: `data: 공통 그래프에 <개념> 추가`. 사용한 출처 링크를 커밋 본문에 남긴다.
+7. `/ship` 절차로 push 후 dev로 PR. PR 본문에 출처 링크와 추가한 facts 전문을 넣어 검수자가 바로 확인할 수 있게 한다.

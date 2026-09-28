@@ -72,10 +72,31 @@ scripts/                     build, prepare-e2e
 - 모델 ID·가격은 2026-09-28에 각 사 문서로 확인한 값이다. 바뀌면 `config/admin.json`의 `defaultModels`와 `lib/providers.js`를 함께 고친다.
 - Gemini 3.x는 `thinkingConfig`를 받지 않는 모델이 있어 400이면 빼고 재시도한다.
 
-## 작업 방식
+## 원격 저장소 처음 연결 (한 번만)
 
-1. `docs/TASKS.md`에서 상태가 `대기`이고 의존 작업이 끝난 것 중 가장 위의 것을 고른다(`/next-task`). `결정 필요` 항목은 사용자에게 먼저 묻는다.
-2. 구현 전에 완료 기준을 다시 읽고, 필요하면 테스트부터 쓴다. 순수 로직은 `tests/unit`, 확장 동작은 `tests/e2e`.
-3. `npm test` 통과 → `docs/TASKS.md`의 상태와 작업 로그 갱신 → 커밋. 커밋 메시지는 `feat(T-105): 공통 그래프 벡터 사전 계산`처럼 작업 ID를 붙인다.
-4. 설계를 바꾸는 결정은 `docs/decisions/`에 ADR로 남긴다(번호 이어서).
-5. 검색·생성 품질에 영향을 주는 변경은 `npm run eval` 결과를 `docs/EVAL_LOG.md`에 한 줄 추가한다.
+```bash
+git remote add origin <원격 주소>
+git push -u origin main dev        # dev는 main과 같은 커밋에서 시작
+gh auth login                      # GitHub. GitLab이면 glab auth login
+```
+GitHub이라면 `dev`를 기본 PR 대상으로 두고, `main`·`dev`에 브랜치 보호(직접 push 금지, `test` 체크 필수)를 걸어 둔다. CI는 `.github/workflows/ci.yml`.
+
+## 작업 방식 (브랜치 → push → dev로 PR)
+
+작업 하나 = 브랜치 하나 = PR 하나. `main`과 `dev`에는 직접 커밋·push하지 않는다.
+
+```
+origin/dev ──┬── task/T-101-provider-smoke ── PR → dev
+             └── task/T-102-embedding-load ── PR → dev
+(dev → main 병합은 사람이 한다)
+```
+
+1. **시작** (`/next-task`가 전부 대신한다) `git fetch origin` → `git switch -c task/<ID>-<영문-슬러그> origin/dev`. 작업 트리가 깨끗하지 않으면 멈추고 묻는다.
+2. **고르기** `docs/TASKS.md`에서 상태가 `대기`이고 "먼저 끝나야 할 것"이 모두 `완료`(= dev에 병합됨)인 작업 중 가장 위의 것(`/next-task`). `결정 필요` 항목은 사용자에게 먼저 묻는다. 의존 작업이 `리뷰`(PR 열림, 미병합)면 그 위에 쌓지 말고 다른 작업을 고른다.
+3. **구현** 완료 기준을 다시 읽고, 필요하면 테스트부터. 순수 로직은 `tests/unit`, 확장 동작은 `tests/e2e`. 커밋은 작게 여러 번 해도 된다: `feat(T-105): ...`, `fix(T-105): ...`, `test(T-105): ...`, `docs(T-105): ...`.
+4. **확인** `npm test` 통과. 검색·생성 품질에 영향을 주면 `npm run eval` 결과를 `docs/EVAL_LOG.md`에 한 줄. 설계를 바꾸면 `docs/decisions/`에 ADR.
+5. **기록** `docs/TASKS.md`: 상태를 `리뷰`로, 작업 로그에 한 줄. 새로 발견한 문제는 새 T-번호로 추가.
+6. **올리기** `git push -u origin <브랜치>` → `gh pr create --base dev --head <브랜치> --title "<ID> <작업 제목>" --body-file <본문>`(본문은 `.github/pull_request_template.md` 형식). 그다음 작업 로그의 PR 칸에 링크를 넣어 한 번 더 커밋·push. `gh`가 없으면 GitLab은 `glab mr create --target-branch dev`, 둘 다 없으면 브라우저에서 열 PR 주소를 알려 준다.
+7. **병합 후** 다음 작업을 시작할 때, dev에 병합된 PR의 작업은 새 브랜치의 첫 커밋에서 `완료`로 바꾼다(`chore: 병합된 작업 상태 갱신`). 병합 여부는 `gh pr list --base dev --state merged`로 확인.
+
+금지: `main`·`dev`로 push, `--force` push(`origin/dev`로 리베이스한 자기 작업 브랜치에만 `--force-with-lease` 허용), 남의 브랜치 수정, 테스트가 실패한 상태로 PR 열기(열어야 하면 Draft로 열고 본문에 실패 내용을 적는다).

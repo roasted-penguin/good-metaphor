@@ -4,13 +4,32 @@
       "Bash(npm test)",
       "Bash(npm run test:*)",
       "Bash(npm run build)",
-      "Bash(npm run eval:*)",
       "Bash(npm run eval)",
+      "Bash(npm run eval:*)",
       "Bash(node --test:*)",
       "Bash(npx playwright test:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(git fetch:*)",
+      "Bash(git switch -c task/:*)",
+      "Bash(git switch task/:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git rebase origin/dev)",
+      "Bash(git push -u origin HEAD)",
+      "Bash(git push -u origin task/:*)",
+      "Bash(gh pr create --base dev:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)"
+    ],
+    "deny": [
+      "Bash(git push origin main:*)",
+      "Bash(git push origin dev:*)",
+      "Bash(git push -u origin main:*)",
+      "Bash(git push -u origin dev:*)",
+      "Bash(git push --force origin:*)",
+      "Bash(git push -f:*)"
     ]
   }
 }
