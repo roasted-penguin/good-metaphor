@@ -176,6 +176,20 @@
   .i-dot { fill: var(--accent); }
   .plan { transition: opacity .25s; }
   .infra[data-mode="now"] .plan { opacity: .32; }
+
+  /* 다음 아키텍처 (LightRAG) */
+  .facts3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .facts3 div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 4px; align-content: start; }
+  .facts3 b { font-size: 15px; font-weight: 600; }
+  .facts3 span { color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .i-edge-ts { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; fill: none; }
+  .i-arrow-acc { fill: var(--accent); }
+  .lr .x { transition: opacity .25s; }
+  .lr[data-mode="hover"] .x:not(.h), .lr[data-mode="index"] .x:not(.i) { opacity: .14; }
+  .lr .dots-i { display: none; }
+  .lr[data-mode="index"] .dots-i { display: inline; }
+  .lr[data-mode="index"] .dots-h { display: none; }
+  .legend i.ts { border-top: 2px dashed var(--accent); }
 </style>
 </head>
 <body>
@@ -463,6 +477,143 @@
     </div>
   </section>
 
+
+  <!-- 다음 아키텍처 -->
+  <section>
+    <span class="label">다음 아키텍처 · 설계</span>
+    <h2>LightRAG로 그래프를 키우고, 추출은 내 맥에서</h2>
+    <p class="intro">손으로 쓴 개념 18개 대신 가이드 문서에서 그래프가 자라게 해요. 가장 비싼 일인 엔티티·관계 추출은 내 M2 맥의 로컬 모델이 Tailscale 너머로 맡고, 호버 경로에는 맥이 없어서 맥이 꺼져 있어도 비유는 나옵니다.</p>
+    <div class="facts3">
+      <div><b>추출은 맥, 호버는 클라우드</b><span>맥(Ollama gemma4:12b)은 점심·밤 시간창에만 추출 큐를 비워요. 호버 때는 Gemini가 키워드와 비유를 만들어요.</span></div>
+      <div><b>추상 태그 = high-level 키워드</b><span>관계에 붙는 주제 키워드를 통제 어휘 18개로 고정해서, 금융 문장과 메이플 개념이 "기간당 한도" 같은 같은 말로 만나요.</span></div>
+      <div><b>월 약 $31</b><span>EC2 t4g.medium 한 대, Tailscale 무료, Gemini 무료 티어. 로그인을 열면 t4g.large + Postgres로 약 $55.</span></div>
+    </div>
+
+    <div class="bleed">
+      <div class="infra lr" id="lr" data-mode="all">
+        <div class="infra-top">
+          <h3>LightRAG 전환 후 구성</h3>
+          <div class="seg" role="group" aria-label="경로 강조">
+            <button type="button" data-lr="all" aria-pressed="true">전체</button>
+            <button type="button" data-lr="hover" aria-pressed="false">호버 경로</button>
+            <button type="button" data-lr="index" aria-pressed="false">인덱싱 경로</button>
+          </div>
+        </div>
+        <div class="scroll-x">
+          <svg id="lr-svg" viewBox="0 44 1040 424" role="img" aria-label="크롬 확장이 EC2의 analogy-api를 부르고, analogy-api는 Gemini로 비유를 만들며, 추출 큐 워커만 Tailscale로 M2 맥의 Ollama를 부르는 구성">
+            <defs>
+              <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow"/></marker>
+              <marker id="laa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow-acc"/></marker>
+            </defs>
+
+            <rect x="236" y="56" width="440" height="400" rx="16" class="i-zone"/>
+            <text x="256" y="82" class="i-zlabel">AWS EC2 · t4g.medium</text>
+
+            <!-- 연결선 -->
+            <g class="x h"><path d="M200 112 H250" class="i-edge" marker-end="url(#la)"/><path d="M252 128 H202" class="i-edge" marker-end="url(#la)"/><text x="226" y="104" text-anchor="middle" class="i-elabel">HTTPS</text></g>
+            <g class="x h"><path d="M454 140 V154" class="i-edge" marker-end="url(#la)"/></g>
+            <g class="x h"><path d="M656 172 H754" class="i-edge" marker-end="url(#la)"/><path d="M756 192 H658" class="i-edge" marker-end="url(#la)"/><text x="706" y="164" text-anchor="middle" class="i-elabel">호버당 2회</text></g>
+            <g class="x h i"><path d="M350 340 V354" class="i-edge" marker-end="url(#la)"/><path d="M558 340 V354" class="i-edge" marker-end="url(#la)"/></g>
+            <g class="x i"><path d="M640 290 H754" class="i-edge-ts" marker-end="url(#laa)"/><path d="M756 308 H642" class="i-edge-ts" marker-end="url(#laa)"/><text x="716" y="282" text-anchor="middle" class="i-elabel" style="fill:var(--ink)">Tailscale</text><text x="716" y="326" text-anchor="middle" class="i-elabel">11434만</text></g>
+            <g class="x i"><path d="M200 320 H250" class="i-edge-ts" marker-end="url(#laa)"/><text x="226" y="312" text-anchor="middle" class="i-elabel">테일넷</text></g>
+
+            <!-- 바깥 -->
+            <g class="x h">
+              <rect x="16" y="96" width="184" height="96" rx="10" class="i-box"/>
+              <text x="32" y="120" class="i-name">크롬 확장</text>
+              <text x="32" y="142" class="i-sub">문장 찾기 · 말풍선</text>
+              <text x="32" y="160" class="i-sub">서버 장애 시 로컬 대체</text>
+            </g>
+            <g class="x i">
+              <rect x="16" y="300" width="184" height="96" rx="10" class="i-box"/>
+              <text x="32" y="324" class="i-name">나 (관리자)</text>
+              <text x="32" y="346" class="i-sub">가이드 문서 넣기</text>
+              <text x="32" y="364" class="i-sub">그래프 검수</text>
+            </g>
+            <g class="x h">
+              <rect x="756" y="96" width="268" height="112" rx="10" class="i-box"/>
+              <text x="772" y="120" class="i-name">Gemini API (클라우드)</text>
+              <text x="772" y="142" class="i-sub">Flash-Lite · 키워드 추출</text>
+              <text x="772" y="160" class="i-sub">Flash · 비유 생성</text>
+              <text x="772" y="178" class="i-sub">무료 티어</text>
+            </g>
+            <g class="x i">
+              <rect x="756" y="260" width="268" height="136" rx="10" class="i-core"/>
+              <text x="772" y="284" class="i-name">내 M2 맥 · 16GB</text>
+              <text x="772" y="306" class="i-sub" style="fill:var(--ink)">Ollama · gemma4:12b</text>
+              <text x="772" y="324" class="i-sub">tailscale serve · 11434</text>
+              <text x="772" y="342" class="i-sub">점심·밤 시간창에만</text>
+              <text x="772" y="360" class="i-sub">엔티티·관계 추출</text>
+              <text x="772" y="378" class="i-sub">+ 설명 병합 요약</text>
+            </g>
+
+            <!-- EC2 안 -->
+            <g class="x h">
+              <rect x="252" y="96" width="404" height="44" rx="10" class="i-box"/>
+              <text x="454" y="123" text-anchor="middle" class="i-sub" style="fill:var(--ink);font-size:13px">Caddy · HTTPS 443만 공개</text>
+            </g>
+            <g class="x h i">
+              <rect x="252" y="156" width="404" height="184" rx="10" class="i-box"/>
+              <text x="268" y="180" class="i-name">analogy-api · FastAPI + LightRAG 라이브러리</text>
+            </g>
+            <g class="x h i">
+              <rect x="268" y="196" width="180" height="60" rx="8" class="i-box"/>
+              <text x="358" y="221" text-anchor="middle" class="i-name" style="font-size:13px">공통 워크스페이스</text>
+              <text x="358" y="241" text-anchor="middle" class="i-mono" style="fill:var(--muted);font-size:11px">common_maplestory</text>
+            </g>
+            <g class="x h i">
+              <rect x="460" y="196" width="180" height="60" rx="8" class="i-box"/>
+              <text x="550" y="221" text-anchor="middle" class="i-name" style="font-size:13px">내 워크스페이스</text>
+              <text x="550" y="241" text-anchor="middle" class="i-sub">u_&lt;id&gt; · 로그인 시</text>
+            </g>
+            <g class="x h">
+              <rect x="268" y="268" width="180" height="60" rx="8" class="i-box"/>
+              <text x="358" y="293" text-anchor="middle" class="i-name" style="font-size:13px">결과 캐시</text>
+              <text x="358" y="313" text-anchor="middle" class="i-sub">문장 해시 · 버전</text>
+            </g>
+            <g class="x i">
+              <rect x="460" y="268" width="180" height="60" rx="8" class="i-core"/>
+              <text x="550" y="293" text-anchor="middle" class="i-name" style="font-size:13px">추출 큐 워커</text>
+              <text x="550" y="313" text-anchor="middle" class="i-sub">맥 헬스체크 · 재시도</text>
+            </g>
+            <g class="x h i">
+              <rect x="252" y="356" width="196" height="84" rx="10" class="i-box"/>
+              <text x="268" y="380" class="i-name" style="font-size:13.5px">Ollama · bge-m3</text>
+              <text x="268" y="400" class="i-sub">임베딩 (CPU)</text>
+              <text x="268" y="418" class="i-sub">인덱싱·질의 공통</text>
+            </g>
+            <g class="x h i">
+              <rect x="460" y="356" width="196" height="84" rx="10" class="i-box"/>
+              <text x="476" y="380" class="i-name" style="font-size:13.5px">저장소</text>
+              <text x="476" y="400" class="i-sub">A: 파일 (JSON · Nano)</text>
+              <text x="476" y="418" class="i-sub">B: Postgres + AGE</text>
+            </g>
+
+            <!-- 흐름 점 -->
+            <g class="dots-h" aria-hidden="true">
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;0.12;1" calcMode="linear" path="M200 112 H250"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.13;0.2;1" calcMode="linear" path="M454 140 V154"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.25;0.45;1" calcMode="linear" path="M656 172 H754"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.55;0.75;1" calcMode="linear" path="M756 192 H658"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.85;0.98;1" calcMode="linear" path="M252 128 H202"/></circle>
+            </g>
+            <g class="dots-i" aria-hidden="true">
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;0.15;1" calcMode="linear" path="M200 320 H250"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.25;0.5;1" calcMode="linear" path="M640 290 H754"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.6;0.85;1" calcMode="linear" path="M756 308 H642"/></circle>
+            </g>
+          </svg>
+        </div>
+        <div class="legend">
+          <span><i></i>인터넷 (HTTPS)</span>
+          <span><i class="ts"></i>테일넷 안에서만, 공개 포트 없음</span>
+          <span><i class="dot"></i>선택한 경로의 요청 흐름</span>
+        </div>
+      </div>
+    </div>
+    <p class="intro" style="font-size:14.5px">호버 한 번: 확장 → analogy-api → Gemini가 키워드를 뽑고 → LightRAG가 두 워크스페이스를 검색 → Gemini가 근거 안에서만 비유를 써요. 자세한 설계는 <a href="architecture-lightrag.md"><code class="mono">docs/architecture-lightrag.md</code></a>에 있어요.</p>
+  </section>
+
   <!-- 저장소 -->
   <section>
     <span class="label">저장소</span>
@@ -532,7 +683,7 @@
       </div>
       <div>
         <h3><span class="dot todo"></span>다음 단계</h3>
-        <ul><li>로그인 서버와 편집 화면</li><li>AI로 관심사 그래프 초안 만들기</li><li>웹스토어 공개</li></ul>
+        <ul><li>LightRAG 서버 전환 (L0)</li><li>맥 추출 노드 연결 (L1)</li><li>로그인과 내 워크스페이스</li></ul>
       </div>
     </div>
   </section>
@@ -639,6 +790,20 @@
   };
   applyMotion();
   rm.addEventListener?.('change', applyMotion);
+
+  // LightRAG 구성도: 경로 강조 전환
+  const lr = document.getElementById('lr');
+  const lrSvg = document.getElementById('lr-svg');
+  lr.querySelectorAll('[data-lr]').forEach(b => b.addEventListener('click', () => {
+    lr.dataset.mode = b.dataset.lr;
+    lr.querySelectorAll('[data-lr]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+  const applyLrMotion = () => {
+    if (rm.matches) { lrSvg.pauseAnimations(); lrSvg.querySelectorAll('.dots-h, .dots-i').forEach(g => g.style.visibility = 'hidden'); }
+    else { lrSvg.querySelectorAll('.dots-h, .dots-i').forEach(g => g.style.visibility = ''); lrSvg.unpauseAnimations(); }
+  };
+  applyLrMotion();
+  rm.addEventListener?.('change', applyLrMotion);
 </script>
 
 </body>
