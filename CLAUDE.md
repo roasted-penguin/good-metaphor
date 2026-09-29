@@ -7,7 +7,7 @@
 - 설계 결정 기록: `docs/decisions/`
 - 검색 품질 기록: `docs/EVAL_LOG.md`
 - 작동 방식·인프라 소개 페이지: `docs/intro.html` (구조가 바뀌면 이 페이지의 구성도도 함께 고친다)
-- 다음 아키텍처(LightRAG 서버 + 맥 추출 노드): `docs/architecture-lightrag.md`, ADR 0006
+- 다음 아키텍처(LightRAG 서버 + 맥 추출 노드): `docs/architecture-lightrag.md`(원본, Mermaid 그림), `docs/architecture-lightrag.html`(시각화 버전), ADR 0006. 설계를 바꾸면 세 곳을 함께 고친다
 
 ## 현재 상태 (2026-09-28)
 

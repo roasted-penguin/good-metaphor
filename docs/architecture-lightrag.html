@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>LightRAG 아키텍처</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #ffffff; --sunken: #eceef2;
+    --ink: #1c2230; --muted: #5d6574; --faint: #8a91a0; --line: #dde1e7;
+    --accent: #d9650a; --accent-soft: #fdeede; --hl: rgba(255, 190, 40, .32);
+    --user: #1f63c7; --user-soft: #e5eefb;
+    /* 메이플 테마 말풍선은 인게임 툴팁처럼 항상 어둡다 */
+    --tip-bg: #161c2b; --tip-line: #46506a; --tip-ink: #eef1f7; --tip-muted: #9ba5bd;
+    --unique: #ffcc33; --legend: #b9ef5a; --legend-bg: rgba(160, 230, 60, .14);
+    --epic: #d2b1ff; --epic-bg: rgba(190, 140, 255, .16); --rare: #8fdcff; --rare-bg: rgba(90, 200, 255, .15);
+    --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101318; --surface: #181c23; --sunken: #1f242d;
+      --ink: #e8ebf0; --muted: #a2aab8; --faint: #7a8291; --line: #2c323c;
+      --accent: #ff9a2e; --accent-soft: #3a2816; --hl: rgba(255, 190, 40, .24);
+      --user: #7fb2ff; --user-soft: #1b2c47;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101318; --surface: #181c23; --sunken: #1f242d;
+    --ink: #e8ebf0; --muted: #a2aab8; --faint: #7a8291; --line: #2c323c;
+    --accent: #ff9a2e; --accent-soft: #3a2816; --hl: rgba(255, 190, 40, .24);
+    --user: #7fb2ff; --user-soft: #1b2c47;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--sans); padding-inline: 20px; padding-block: 0 72px; }
+  .wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 56px; }
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  .label { font: 500 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+
+  /* 머리 */
+  header { padding-top: 56px; display: grid; gap: 14px; }
+  header .brand { display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: clamp(30px, 5vw, 40px); font-weight: 700; letter-spacing: -.02em; line-height: 1.25; }
+  header h1 em { font-style: normal; color: var(--accent); }
+  header .lede { color: var(--muted); max-width: 60ch; font-size: 17px; }
+
+  /* 데모 */
+  .demo { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: visible; }
+  .demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .demo-bar .hint { font-size: 13px; color: var(--muted); }
+  kbd { font: 500 12px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; background: var(--sunken); color: var(--ink); }
+  .seg { display: inline-flex; background: var(--sunken); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { all: unset; cursor: pointer; font-size: 13px; font-weight: 500; padding: 5px 12px; border-radius: 7px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); }
+  .article { position: relative; padding: 24px 22px 200px; display: grid; gap: 14px; }
+  .article h3 { font-size: 19px; font-weight: 700; }
+  .article p { font-size: 16px; line-height: 1.95; }
+  .s { cursor: help; border-radius: 3px; transition: background-color .12s; }
+  .s:hover, .s:focus-visible, .s.on { background: var(--hl); outline: none; }
+  .demo-foot { padding: 10px 16px 12px; border-top: 1px dashed var(--line); font-size: 12.5px; color: var(--faint); }
+
+  .tip { position: absolute; z-index: 5; width: min(360px, calc(100% - 24px)); padding: 12px 14px 10px; font-size: 14px; line-height: 1.55; border-radius: 6px;
+    background: var(--tip-bg); color: var(--tip-ink); border: 1px solid var(--tip-line); box-shadow: 0 12px 32px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255,255,255,.06); }
+  .tip[hidden] { display: none; }
+  .tip .t-l { display: block; font-size: 11px; font-weight: 700; color: var(--unique); margin-bottom: 1px; }
+  .tip .t-row { margin-bottom: 8px; }
+  .tip .t-a { font-weight: 600; color: #fff; }
+  .tip .t-none { color: var(--tip-muted); font-size: 13px; }
+  .tip .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tip .chip { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--legend-bg); color: var(--legend); }
+  .tip .chip.tag { background: var(--epic-bg); color: var(--epic); }
+  .tip .chip.user { background: var(--rare-bg); color: var(--rare); }
+  /* 로그인 후 내 관심사: 중립 테마 */
+  .tip.neutral { background: var(--surface); color: var(--ink); border-color: var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(15, 20, 30, .16); }
+  .tip.neutral .t-l { color: var(--user); }
+  .tip.neutral .t-a { color: var(--ink); }
+  .tip.neutral .t-none { color: var(--muted); }
+  .tip.neutral .chip { background: var(--user-soft); color: var(--user); }
+  .tip.neutral .chip.tag { background: var(--sunken); color: var(--muted); }
+
+  /* 섹션 */
+  section { display: grid; gap: 18px; }
+  section > h2 { font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+  section > .intro { color: var(--muted); max-width: 62ch; }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: step; }
+  .steps li { counter-increment: step; display: grid; grid-template-columns: 44px 1fr; gap: 4px 12px; padding: 16px 0; border-top: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: 1px solid var(--line); }
+  .steps li::before { content: counter(step, decimal-leading-zero); font: 500 13px/1.9 var(--mono); color: var(--accent); grid-row: span 2; }
+  .steps b { font-weight: 600; }
+  .steps span { color: var(--muted); font-size: 15px; }
+
+  .figure { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px 14px; overflow-x: auto; }
+  .figure svg { display: block; width: 100%; min-width: 620px; height: auto; }
+  .figure figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .f-ink { fill: var(--ink); } .f-muted { fill: var(--muted); } .f-accent { fill: var(--accent); }
+  .f-box { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; }
+  .f-tag { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  .f-node { fill: var(--tip-bg); stroke: var(--tip-line); stroke-width: 1.25; }
+  .f-line { stroke: var(--muted); stroke-width: 1.25; fill: none; }
+  .f-strong { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .f-dash { stroke: var(--faint); stroke-width: 1.25; stroke-dasharray: 4 4; fill: none; }
+
+  .layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .layer { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 8px; align-content: start; }
+  .layer h3 { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .badge { font-size: 11.5px; font-weight: 600; padding: 1px 9px; border-radius: 999px; border: 1px solid currentColor; }
+  .badge.common { color: var(--accent); } .badge.mine { color: var(--user); }
+  .layer ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 15px; display: grid; gap: 4px; }
+  .layer.mine { border-style: dashed; }
+
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .rules li { display: grid; gap: 2px; padding-left: 16px; border-left: 2px solid var(--line); }
+  .rules b { font-weight: 600; }
+  .rules span { color: var(--muted); font-size: 15px; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 520px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--sunken); }
+  td code, .mono { font: 13px var(--mono); }
+  .free { color: var(--accent); font-weight: 600; }
+
+  .status { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .status div { display: grid; gap: 6px; }
+  .status h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.ok { background: #2e9d52; } .dot.wait { background: #d4a106; } .dot.todo { background: var(--faint); }
+  .status ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; display: grid; gap: 3px; }
+
+  footer { color: var(--faint); font-size: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* 인프라 구성도 */
+  :root { --zone: #eceff3; --line-strong: #c3c9d3; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --zone: #141920; --line-strong: #3b4350; } }
+  :root[data-theme="dark"] { --zone: #141920; --line-strong: #3b4350; }
+  .bleed { position: relative; width: min(1040px, calc(100vw - 40px)); left: 50%; margin-left: calc(min(1040px, calc(100vw - 40px)) / -2); }
+  .infra { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 12px; }
+  .infra-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 16px; }
+  .infra-top h3 { font-size: 16px; font-weight: 600; }
+  .scroll-x { overflow-x: auto; }
+  .scroll-x svg { display: block; width: 100%; min-width: 780px; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--muted); }
+  .legend i.dash { border-top: 2px dashed var(--faint); }
+  .legend i.dot { width: 9px; height: 9px; border: 0; border-radius: 50%; background: var(--accent); }
+
+  .i-zone { fill: var(--zone); stroke: var(--line); stroke-width: 1; }
+  .i-zone-plan { fill: none; stroke: var(--faint); stroke-width: 1.25; stroke-dasharray: 6 5; }
+  .i-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.25; }
+  .i-core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  .i-chip { fill: var(--sunken); stroke: var(--line); stroke-width: 1; }
+  .i-name { fill: var(--ink); font-size: 14px; font-weight: 600; }
+  .i-sub { fill: var(--muted); font-size: 12px; }
+  .i-mono { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+  .i-zlabel { fill: var(--muted); font-family: var(--mono); font-size: 11.5px; letter-spacing: .05em; }
+  .i-zlabel.accent { fill: var(--accent); }
+  .i-edge { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+  .i-edge-plan { stroke: var(--faint); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .i-elabel { fill: var(--muted); font-size: 11.5px; }
+  .i-arrow { fill: var(--muted); } .i-arrow-plan { fill: var(--faint); }
+  .i-dot { fill: var(--accent); }
+  .plan { transition: opacity .25s; }
+  .infra[data-mode="now"] .plan { opacity: .32; }
+
+  /* 다음 아키텍처 (LightRAG) */
+  .facts3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .facts3 div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 4px; align-content: start; }
+  .facts3 b { font-size: 15px; font-weight: 600; }
+  .facts3 span { color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .i-edge-ts { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; fill: none; }
+  .i-arrow-acc { fill: var(--accent); }
+  .lr .x { transition: opacity .25s; }
+  .lr[data-mode="hover"] .x:not(.h), .lr[data-mode="index"] .x:not(.i) { opacity: .14; }
+  .lr .dots-i { display: none; }
+  .lr[data-mode="index"] .dots-i { display: inline; }
+  .lr[data-mode="index"] .dots-h { display: none; }
+  .legend i.ts { border-top: 2px dashed var(--accent); }
+
+  /* 설계 문서 전용 */
+  .status-chip { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+  .doclinks { font-size: 14px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .doclinks a { color: var(--accent); }
+  .toc { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .toc a { color: var(--muted); text-decoration: none; }
+  .toc a:hover, .toc a:focus-visible { color: var(--ink); text-decoration: underline; }
+  section { scroll-margin-top: 16px; }
+  .hint { font-size: 12.5px; color: var(--muted); }
+  .note { color: var(--muted); font-size: 15px; max-width: 68ch; }
+  tr.hl-row td { background: var(--accent-soft); }
+  tr.total td { font-weight: 700; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  pre.code { margin: 0; background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 13px/1.6 var(--mono); color: var(--ink); }
+  code { font-family: var(--mono); font-size: .88em; }
+  .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .checks li { display: grid; grid-template-columns: 18px 1fr; gap: 10px; color: var(--muted); font-size: 15px; }
+  .checks li::before { content: ""; width: 14px; height: 14px; margin-top: 5px; border: 1.5px solid var(--faint); border-radius: 4px; }
+  .i-gate { fill: var(--sunken); stroke: var(--muted); stroke-width: 1.25; }
+  .sources { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--muted); font-size: 14.5px; }
+  .sources a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><rect x="5" y="6" width="54" height="42" rx="12" fill="#161c2b"/><path d="M16 46 L15 59 L29 47 Z" fill="#161c2b"/><path d="M17 22 q7.5 -6 15 0 t15 0" stroke="#ff9a2e" stroke-width="5.5" fill="none" stroke-linecap="round"/><path d="M17 34 q7.5 -6 15 0 t15 0" stroke="#ff9a2e" stroke-width="5.5" fill="none" stroke-linecap="round"/></svg>
+      <span class="label">비유 도우미 · 설계 문서</span>
+      <span class="status-chip">제안 · ADR 0006</span>
+    </div>
+    <h1>LightRAG 아키텍처</h1>
+    <p class="lede">EC2 한 대에 LightRAG를 라이브러리로 감싼 <code class="mono">analogy-api</code>를 두고, 엔티티·관계 추출만 Tailscale로 내 M2 맥의 Ollama에 맡겨요. 호버 경로에는 맥이 없어서 맥이 꺼져 있어도 비유는 나와요. PoC 월 비용은 약 $31이에요.</p>
+    <p class="doclinks"><a href="intro.html">← 소개 페이지</a><a href="architecture-lightrag.md">원본 마크다운</a><a href="decisions/0006-lightrag-server.md">ADR 0006</a><a href="TASKS.md">작업 T-401~T-431</a><a href="https://claude.ai/code/artifact/af5b42e7-dd31-4b10-a409-5775f83e2e3e">살아 있는 설계 문서</a></p>
+    <nav class="toc" aria-label="목차">
+      <a href="#summary">결론</a><a href="#changes">바뀌는 것</a><a href="#overview">전체 구성</a><a href="#query">질의 흐름</a><a href="#indexing">인덱싱 흐름</a><a href="#storage">저장소</a><a href="#mac">맥 추출 노드</a><a href="#network">네트워크·보안</a><a href="#cost">비용</a><a href="#risks">리스크</a><a href="#rollout">이행 단계</a><a href="#sources">출처</a>
+    </nav>
+  </header>
+
+  <section id="summary">
+    <span class="label">결론</span>
+    <h2>무엇을 어디서 돌리나</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>역할</th><th>어디서</th><th>무엇으로</th><th>언제</th></tr></thead>
+      <tbody>
+        <tr class="hl-row"><td>엔티티·관계 추출, 설명 병합 요약</td><td>M2 맥 (Tailscale 너머)</td><td><code>gemma4:12b</code>, 비교 <code>qwen3.5:9b</code></td><td>점심·밤 시간창</td></tr>
+        <tr><td>임베딩 (인덱싱·질의 공통)</td><td>EC2</td><td>Ollama <code>bge-m3</code> (CPU)</td><td>항상</td></tr>
+        <tr><td>그래프·벡터 검색</td><td>EC2</td><td>LightRAG 라이브러리, 워크스페이스별 인스턴스</td><td>항상</td></tr>
+        <tr><td>키워드 추출·비유 생성</td><td>클라우드</td><td>Gemini Flash-Lite / Flash</td><td>호버마다</td></tr>
+        <tr><td>확장</td><td>사용자 크롬</td><td>얇은 클라이언트 + 로컬 대체 경로</td><td>항상</td></tr>
+      </tbody>
+    </table></div>
+    <div class="facts3">
+      <div><b>커뮤니티 요약이 없다</b><span>패치로 문서가 바뀌어도 새 문서만 추출해 합치면 돼요. 느린 로컬 모델로 추출해도 감당되는 이유예요.</span></div>
+      <div><b>질의 비용이 작다</b><span>키워드 생성 LLM 1회와 벡터 검색뿐이라, 호버당 비용이 지금 PoC와 비슷해요.</span></div>
+      <div><b>high-level 키워드 = 추상 태그</b><span>관계의 주제 키워드를 통제 어휘 18개로 고정하면, 구조가 같은 비유 검색이 LightRAG의 global 검색 그 자체가 돼요.</span></div>
+    </div>
+  </section>
+
+  <section id="changes">
+    <span class="label">바뀌는 것</span>
+    <h2>지금 PoC와 무엇이 달라지나</h2>
+    <p class="intro">검색과 그래프가 브라우저에서 서버로 옮겨 가고, 손으로 쓴 그래프가 문서에서 자라는 그래프로 바뀌어요. 근거 밖 비유 금지, 저장소 두 층, 관심사별 테마, 확장의 결과 형식은 그대로예요.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>항목</th><th>지금 PoC</th><th>LightRAG 설계</th></tr></thead>
+      <tbody>
+        <tr><td>관심사 그래프</td><td>손으로 쓴 노드 18 · 태그 18</td><td>가이드 문서에서 LLM이 추출 + 기존 JSON을 시드로 주입</td></tr>
+        <tr><td>추상 태그</td><td>노드의 <code>tags</code> 필드</td><td>"추상구조" 엔티티 + 관계의 high-level 키워드</td></tr>
+        <tr><td>검색</td><td>브라우저 e5-small</td><td>EC2 LightRAG hybrid (엔티티 + 관계 + 1-hop), bge-m3</td></tr>
+        <tr><td>LLM 키</td><td>사용자 브라우저에 보관</td><td>서버에 보관 (키 프록시를 겸함)</td></tr>
+        <tr><td>호버당 LLM 호출</td><td>1회 (정밀 모드 2회)</td><td>2회: 키워드 + 비유</td></tr>
+        <tr><td>사용자 저장소</td><td>오버레이 JSON (개발용 로컬)</td><td>사용자별 LightRAG 워크스페이스 + 설정 표</td></tr>
+        <tr><td>오프라인</td><td>항상 동작</td><td>서버 장애 시 기존 브라우저 파이프라인으로 대체</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="overview">
+    <span class="label">전체 구성</span>
+    <h2>맥으로 가는 선은 하나, 그것도 테일넷 안에서만</h2>
+    <p class="intro">호버 경로(확장 → Caddy → analogy-api → Gemini)에는 맥이 없어요. 맥이 꺼져 있으면 새 문서의 추출만 다음 시간창으로 미뤄져요.</p>
+    <div class="bleed">
+      <div class="infra lr" id="lr" data-mode="all">
+        <div class="infra-top">
+          <h3>LightRAG 전환 후 구성</h3>
+          <div class="seg" role="group" aria-label="경로 강조">
+            <button type="button" data-lr="all" aria-pressed="true">전체</button>
+            <button type="button" data-lr="hover" aria-pressed="false">호버 경로</button>
+            <button type="button" data-lr="index" aria-pressed="false">인덱싱 경로</button>
+          </div>
+        </div>
+        <div class="scroll-x">
+          <svg id="lr-svg" viewBox="0 44 1040 424" role="img" aria-label="크롬 확장이 EC2의 analogy-api를 부르고, analogy-api는 Gemini로 비유를 만들며, 추출 큐 워커만 Tailscale로 M2 맥의 Ollama를 부르는 구성">
+            <defs>
+              <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow"/></marker>
+              <marker id="laa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow-acc"/></marker>
+            </defs>
+
+            <rect x="236" y="56" width="440" height="400" rx="16" class="i-zone"/>
+            <text x="256" y="82" class="i-zlabel">AWS EC2 · t4g.medium</text>
+
+            <!-- 연결선 -->
+            <g class="x h"><path d="M200 112 H250" class="i-edge" marker-end="url(#la)"/><path d="M252 128 H202" class="i-edge" marker-end="url(#la)"/><text x="226" y="104" text-anchor="middle" class="i-elabel">HTTPS</text></g>
+            <g class="x h"><path d="M454 140 V154" class="i-edge" marker-end="url(#la)"/></g>
+            <g class="x h"><path d="M656 172 H754" class="i-edge" marker-end="url(#la)"/><path d="M756 192 H658" class="i-edge" marker-end="url(#la)"/><text x="706" y="164" text-anchor="middle" class="i-elabel">호버당 2회</text></g>
+            <g class="x h i"><path d="M350 340 V354" class="i-edge" marker-end="url(#la)"/><path d="M558 340 V354" class="i-edge" marker-end="url(#la)"/></g>
+            <g class="x i"><path d="M640 290 H754" class="i-edge-ts" marker-end="url(#laa)"/><path d="M756 308 H642" class="i-edge-ts" marker-end="url(#laa)"/><text x="716" y="282" text-anchor="middle" class="i-elabel" style="fill:var(--ink)">Tailscale</text><text x="716" y="326" text-anchor="middle" class="i-elabel">11434만</text></g>
+            <g class="x i"><path d="M200 320 H250" class="i-edge-ts" marker-end="url(#laa)"/><text x="226" y="312" text-anchor="middle" class="i-elabel">테일넷</text></g>
+
+            <!-- 바깥 -->
+            <g class="x h">
+              <rect x="16" y="96" width="184" height="96" rx="10" class="i-box"/>
+              <text x="32" y="120" class="i-name">크롬 확장</text>
+              <text x="32" y="142" class="i-sub">문장 찾기 · 말풍선</text>
+              <text x="32" y="160" class="i-sub">서버 장애 시 로컬 대체</text>
+            </g>
+            <g class="x i">
+              <rect x="16" y="300" width="184" height="96" rx="10" class="i-box"/>
+              <text x="32" y="324" class="i-name">나 (관리자)</text>
+              <text x="32" y="346" class="i-sub">가이드 문서 넣기</text>
+              <text x="32" y="364" class="i-sub">그래프 검수</text>
+            </g>
+            <g class="x h">
+              <rect x="756" y="96" width="268" height="112" rx="10" class="i-box"/>
+              <text x="772" y="120" class="i-name">Gemini API (클라우드)</text>
+              <text x="772" y="142" class="i-sub">Flash-Lite · 키워드 추출</text>
+              <text x="772" y="160" class="i-sub">Flash · 비유 생성</text>
+              <text x="772" y="178" class="i-sub">무료 티어</text>
+            </g>
+            <g class="x i">
+              <rect x="756" y="260" width="268" height="136" rx="10" class="i-core"/>
+              <text x="772" y="284" class="i-name">내 M2 맥 · 16GB</text>
+              <text x="772" y="306" class="i-sub" style="fill:var(--ink)">Ollama · gemma4:12b</text>
+              <text x="772" y="324" class="i-sub">tailscale serve · 11434</text>
+              <text x="772" y="342" class="i-sub">점심·밤 시간창에만</text>
+              <text x="772" y="360" class="i-sub">엔티티·관계 추출</text>
+              <text x="772" y="378" class="i-sub">+ 설명 병합 요약</text>
+            </g>
+
+            <!-- EC2 안 -->
+            <g class="x h">
+              <rect x="252" y="96" width="404" height="44" rx="10" class="i-box"/>
+              <text x="454" y="123" text-anchor="middle" class="i-sub" style="fill:var(--ink);font-size:13px">Caddy · HTTPS 443만 공개</text>
+            </g>
+            <g class="x h i">
+              <rect x="252" y="156" width="404" height="184" rx="10" class="i-box"/>
+              <text x="268" y="180" class="i-name">analogy-api · FastAPI + LightRAG 라이브러리</text>
+            </g>
+            <g class="x h i">
+              <rect x="268" y="196" width="180" height="60" rx="8" class="i-box"/>
+              <text x="358" y="221" text-anchor="middle" class="i-name" style="font-size:13px">공통 워크스페이스</text>
+              <text x="358" y="241" text-anchor="middle" class="i-mono" style="fill:var(--muted);font-size:11px">common_maplestory</text>
+            </g>
+            <g class="x h i">
+              <rect x="460" y="196" width="180" height="60" rx="8" class="i-box"/>
+              <text x="550" y="221" text-anchor="middle" class="i-name" style="font-size:13px">내 워크스페이스</text>
+              <text x="550" y="241" text-anchor="middle" class="i-sub">u_&lt;id&gt; · 로그인 시</text>
+            </g>
+            <g class="x h">
+              <rect x="268" y="268" width="180" height="60" rx="8" class="i-box"/>
+              <text x="358" y="293" text-anchor="middle" class="i-name" style="font-size:13px">결과 캐시</text>
+              <text x="358" y="313" text-anchor="middle" class="i-sub">문장 해시 · 버전</text>
+            </g>
+            <g class="x i">
+              <rect x="460" y="268" width="180" height="60" rx="8" class="i-core"/>
+              <text x="550" y="293" text-anchor="middle" class="i-name" style="font-size:13px">추출 큐 워커</text>
+              <text x="550" y="313" text-anchor="middle" class="i-sub">맥 헬스체크 · 재시도</text>
+            </g>
+            <g class="x h i">
+              <rect x="252" y="356" width="196" height="84" rx="10" class="i-box"/>
+              <text x="268" y="380" class="i-name" style="font-size:13.5px">Ollama · bge-m3</text>
+              <text x="268" y="400" class="i-sub">임베딩 (CPU)</text>
+              <text x="268" y="418" class="i-sub">인덱싱·질의 공통</text>
+            </g>
+            <g class="x h i">
+              <rect x="460" y="356" width="196" height="84" rx="10" class="i-box"/>
+              <text x="476" y="380" class="i-name" style="font-size:13.5px">저장소</text>
+              <text x="476" y="400" class="i-sub">A: 파일 (JSON · Nano)</text>
+              <text x="476" y="418" class="i-sub">B: Postgres + AGE</text>
+            </g>
+
+            <!-- 흐름 점 -->
+            <g class="dots-h" aria-hidden="true">
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;0.12;1" calcMode="linear" path="M200 112 H250"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.13;0.2;1" calcMode="linear" path="M454 140 V154"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.25;0.45;1" calcMode="linear" path="M656 172 H754"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.55;0.75;1" calcMode="linear" path="M756 192 H658"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.85;0.98;1" calcMode="linear" path="M252 128 H202"/></circle>
+            </g>
+            <g class="dots-i" aria-hidden="true">
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;0.15;1" calcMode="linear" path="M200 320 H250"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.25;0.5;1" calcMode="linear" path="M640 290 H754"/></circle>
+              <circle r="4.5" class="i-dot"><animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.6;0.85;1" calcMode="linear" path="M756 308 H642"/></circle>
+            </g>
+          </svg>
+        </div>
+        <div class="legend">
+          <span><i></i>인터넷 (HTTPS)</span>
+          <span><i class="ts"></i>테일넷 안에서만, 공개 포트 없음</span>
+          <span><i class="dot"></i>선택한 경로의 요청 흐름</span>
+        </div>
+      </div>
+    </div>
+    
+  </section>
+
+  <section id="query">
+    <span class="label">질의 흐름</span>
+    <h2>호버 한 번은 LLM 2회와 검색 1회</h2>
+    <p class="intro">키워드 추출은 우리가 대신하고, 검색은 LightRAG에, 답변 생성은 다시 우리 프롬프트에 맡겨요. 그래야 추상 태그 통제와 근거 검증을 유지할 수 있어요.</p>
+    <div class="bleed">
+      <div class="infra">
+        <div class="infra-top"><h3>호버 한 번의 순서</h3><span class="hint">주황 = LightRAG 기본 동작 대신 우리가 쥐는 단계 · 시간은 측정 전 예상치</span></div>
+        <div class="scroll-x">
+          <svg viewBox="0 28 1040 392" role="img" aria-label="확장, analogy-api, LightRAG, Gemini 네 줄을 오가는 호버 한 번의 순서">
+            <defs><marker id="qa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow"/></marker></defs>
+            <rect x="16" y="60" width="1008" height="80" rx="10" class="i-zone"/>
+            <rect x="16" y="148" width="1008" height="80" rx="10" class="i-zone"/>
+            <rect x="16" y="236" width="1008" height="80" rx="10" class="i-zone"/>
+            <rect x="16" y="324" width="1008" height="80" rx="10" class="i-zone"/>
+            <text x="28" y="104" class="i-zlabel">크롬 확장</text>
+            <text x="28" y="192" class="i-zlabel">analogy-api</text>
+            <text x="28" y="280" class="i-zlabel">LightRAG</text>
+            <text x="28" y="368" class="i-zlabel">Gemini</text>
+
+            <g fill="none">
+              <path d="M208 100 H218 V188 H226" class="i-edge" marker-end="url(#qa)"/>
+              <path d="M324 188 H334 V364 H342" class="i-edge" marker-end="url(#qa)"/>
+              <path d="M440 364 H450 V276 H458" class="i-edge" marker-end="url(#qa)"/>
+              <path d="M556 276 H566 V188 H574" class="i-edge" marker-end="url(#qa)"/>
+              <path d="M672 188 H682 V364 H690" class="i-edge" marker-end="url(#qa)"/>
+              <path d="M788 364 H798 V188 H806" class="i-edge" marker-end="url(#qa)"/>
+              <path d="M904 188 H914 V100 H922" class="i-edge" marker-end="url(#qa)"/>
+              <path d="M276 166 V46 H972 V76" class="i-edge-plan" marker-end="url(#qa)"/>
+            </g>
+            <text x="624" y="40" text-anchor="middle" class="i-elabel">캐시 적중 시 바로 응답 · 0.1초 안쪽</text>
+
+            <rect x="112" y="78" width="96" height="44" rx="8" class="i-box"/>
+            <text x="160" y="104" text-anchor="middle" class="i-name" style="font-size:12.5px">문장 보내기</text>
+
+            <rect x="228" y="166" width="96" height="44" rx="8" class="i-box"/>
+            <text x="276" y="192" text-anchor="middle" class="i-name" style="font-size:12.5px">캐시 확인</text>
+
+            <rect x="344" y="342" width="96" height="44" rx="8" class="i-core"/>
+            <text x="392" y="361" text-anchor="middle" class="i-name" style="font-size:12.5px">키워드 추출</text>
+            <text x="392" y="377" text-anchor="middle" class="i-sub" style="font-size:10.5px">통제 어휘 18</text>
+            <text x="392" y="400" text-anchor="middle" class="i-elabel">0.5~1초</text>
+
+            <rect x="460" y="254" width="96" height="44" rx="8" class="i-box"/>
+            <text x="508" y="273" text-anchor="middle" class="i-name" style="font-size:12.5px">hybrid 검색</text>
+            <text x="508" y="289" text-anchor="middle" class="i-sub" style="font-size:10.5px">워크스페이스 2개</text>
+            <text x="508" y="312" text-anchor="middle" class="i-elabel">0.3초</text>
+
+            <rect x="576" y="166" width="96" height="44" rx="8" class="i-box"/>
+            <text x="624" y="185" text-anchor="middle" class="i-name" style="font-size:12.5px">후보 3개 병합</text>
+            <text x="624" y="201" text-anchor="middle" class="i-sub" style="font-size:10.5px">오버레이 적용</text>
+
+            <rect x="692" y="342" width="96" height="44" rx="8" class="i-box"/>
+            <text x="740" y="361" text-anchor="middle" class="i-name" style="font-size:12.5px">비유 생성</text>
+            <text x="740" y="377" text-anchor="middle" class="i-sub" style="font-size:10.5px">근거 안에서만</text>
+            <text x="740" y="400" text-anchor="middle" class="i-elabel">1~2초</text>
+
+            <rect x="808" y="166" width="96" height="44" rx="8" class="i-core"/>
+            <text x="856" y="185" text-anchor="middle" class="i-name" style="font-size:12.5px">근거 검증</text>
+            <text x="856" y="201" text-anchor="middle" class="i-sub" style="font-size:10.5px">nodeId 확인</text>
+
+            <rect x="924" y="78" width="96" height="44" rx="8" class="i-box"/>
+            <text x="972" y="104" text-anchor="middle" class="i-name" style="font-size:12.5px">말풍선</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <ol class="steps">
+      <li><b>확장 → <code>POST /v1/analogy</code></b><span>문장, 커서 단어, 앞 문장, 설치 토큰(로그인 시 JWT). 서버는 먼저 결과 캐시(문장 해시 + 워크스페이스 버전)를 봐요.</span></li>
+      <li><b>키워드 (Gemini Flash-Lite)</b><span>한 번의 호출로 <code>ll_keywords</code>(구체 개념)와 <code>hl_keywords</code>(추상 구조)를 뽑아요. <code>hl_keywords</code>는 통제 어휘 18개 중에서만 고르고, 맞는 게 없으면 빈 배열이에요.</span></li>
+      <li><b>검색 (LightRAG)</b><span><code>QueryParam(mode="hybrid", hl_keywords, ll_keywords, only_need_context=True)</code>로 공통·내 워크스페이스를 동시에 검색해요. 키워드를 직접 넘기므로 LightRAG는 키워드 LLM을 부르지 않고 컨텍스트만 돌려줘요.</span></li>
+      <li><b>병합</b><span>내 워크스페이스 결과를 앞에 두고 후보 3개를 골라요. 오버레이 설정(숨김, 가중치, <code>useCommon</code>)을 여기서 적용해요.</span></li>
+      <li><b>비유 (Gemini Flash)</b><span>기존 <code>buildAnalogyPrompt</code>와 같은 규칙으로 한 번 호출해요.</span></li>
+      <li><b>근거 검증 → 응답</b><span><code>nodeId</code>가 후보에 없으면 비유를 숨겨요. 응답은 기존 확장의 결과 형식 그대로라 말풍선 코드는 바뀌지 않아요.</span></li>
+    </ol>
+    <p class="note">통제 어휘가 핵심이에요. 금융 문장의 키워드 LLM과 메이플 문서의 추출 LLM이 같은 목록에서 고르므로 "기간당 한도" 같은 키워드가 양쪽에서 글자 그대로 만나요. 자유 키워드에 맡기면 한쪽은 "API 요청 제한", 다른 쪽은 "결정석 판매 상한"이라 서로 못 만나요.</p>
+  </section>
+
+  <section id="indexing">
+    <span class="label">인덱싱 흐름</span>
+    <h2>맥이 켜져 있을 때만 추출하고, 나머지는 EC2가</h2>
+    <figure class="figure" style="margin:0">
+      <svg viewBox="0 92 760 356" role="img" aria-label="가이드 문서가 청킹되어 큐에 들어가고, 맥이 켜져 있으면 추출, 아니면 다음 시간창까지 대기하는 인덱싱 흐름">
+        <defs><marker id="ia2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="i-arrow"/></marker></defs>
+        <g fill="none">
+          <path d="M164 140H198" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M340 140H370" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M488 140H526" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M430 176V198" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M356 222H270V172" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M648 170V278" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M560 316H526" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M376 316H342" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M200 316H166" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M270 384V354" class="i-edge" marker-end="url(#ia2)"/>
+          <path d="M94 352V409H198" class="i-edge-plan" marker-end="url(#ia2)"/>
+        </g>
+        <rect x="24" y="110" width="140" height="60" rx="8" class="i-box"/>
+        <text x="40" y="134" class="i-name" style="font-size:13px">가이드 문서</text>
+        <text x="40" y="154" class="i-sub">공식 가이드·위키</text>
+        <rect x="200" y="110" width="140" height="60" rx="8" class="i-box"/>
+        <text x="216" y="134" class="i-name" style="font-size:13px">청킹·큐 등록</text>
+        <text x="216" y="154" class="i-sub">EC2 · 800토큰</text>
+        <polygon points="372,140 430,104 488,140 430,176" class="i-box"/>
+        <text x="430" y="144" text-anchor="middle" class="i-sub" style="fill:var(--ink);font-size:12.5px">맥 켜짐?</text>
+        <rect x="528" y="110" width="208" height="60" rx="8" class="i-core"/>
+        <text x="544" y="132" class="i-name" style="font-size:13px">맥: 엔티티·관계 추출</text>
+        <text x="544" y="150" class="i-sub" style="fill:var(--ink)">gemma4:12b · JSON 모드</text>
+        <text x="544" y="165" class="i-sub">통제 어휘 18개 포함</text>
+        <rect x="356" y="200" width="150" height="44" rx="8" class="i-box"/>
+        <text x="431" y="226" text-anchor="middle" class="i-sub" style="fill:var(--ink)">다음 시간창까지 대기</text>
+        <rect x="560" y="280" width="176" height="72" rx="8" class="i-core"/>
+        <text x="576" y="304" class="i-name" style="font-size:13px">병합·설명 요약</text>
+        <text x="576" y="324" class="i-sub">같은 이름 합치기 (맥)</text>
+        <rect x="376" y="280" width="148" height="72" rx="8" class="i-box"/>
+        <text x="392" y="304" class="i-name" style="font-size:13px">임베딩</text>
+        <text x="392" y="324" class="i-sub">EC2 · bge-m3</text>
+        <rect x="200" y="280" width="140" height="72" rx="8" class="i-box"/>
+        <text x="216" y="304" class="i-name" style="font-size:12.5px">워크스페이스 저장</text>
+        <text x="216" y="324" class="i-sub">공통 / 사용자</text>
+        <rect x="24" y="280" width="140" height="72" rx="8" class="i-box"/>
+        <text x="40" y="304" class="i-name" style="font-size:13px">검수 리포트</text>
+        <text x="40" y="324" class="i-sub">추상구조 연결이</text>
+        <text x="40" y="340" class="i-sub">없는 엔티티 목록</text>
+        <rect x="200" y="384" width="200" height="50" rx="8" class="i-box"/>
+        <text x="216" y="405" class="i-name" style="font-size:12.5px">시드: 기존 JSON 그래프</text>
+        <text x="216" y="423" class="i-sub" style="font-size:11px">insert_custom_kg · 추상구조 18</text>
+        <text x="507" y="132" text-anchor="middle" class="i-elabel">예</text>
+        <text x="440" y="192" class="i-elabel">아니오</text>
+        <text x="278" y="212" class="i-elabel">재시도</text>
+        <text x="102" y="380" class="i-elabel">연결 보강</text>
+      </svg>
+      <figcaption>주황 = 맥에서 도는 LLM 단계. 시드는 맥 없이 바로 돌아가는 첫 그래프예요.</figcaption>
+    </figure>
+    <ul class="rules">
+      <li><b>시드 먼저</b><span><code>maplestory.json</code>의 노드 18·태그 18·연결 12를 <code>insert_custom_kg</code>로 넣어요. 태그는 "추상구조" 엔티티, 노드–태그 연결은 관계 키워드에 태그 이름이 들어간 관계가 돼요.</span></li>
+      <li><b>추출 프롬프트</b><span>엔티티 유형은 게임시스템·재화·아이템·보스·지역·추상구조. "목록에 있는 추상구조만 연결하라"고 지시하고 통제 어휘와 메이플 용어 사전을 붙여요.</span></li>
+      <li><b>청크 800토큰</b><span>소형 모델이라 기본 1,200 대신 줄여서, 한 번에 뽑을 개체 수와 누락을 줄여요.</span></li>
+      <li><b>검수 루프</b><span>문서를 넣을 때마다 "추상구조 연결이 없는 게임 개념" 목록을 만들고, 사람이 확인해 연결을 보강해요.</span></li>
+    </ul>
+  </section>
+
+  <section id="storage">
+    <span class="label">저장소</span>
+    <h2>공통과 사용자는 워크스페이스로 나눈다</h2>
+    <p class="intro">LightRAG 서버의 요청별 워크스페이스 라우팅은 아직 설계 검토 단계(#3631)라, 서버 대신 라이브러리를 쓰고 워크스페이스마다 <code class="mono">LightRAG(workspace=...)</code> 인스턴스를 띄워요.</p>
+    <div class="layers">
+      <div class="layer">
+        <h3><span class="badge common">공통</span><code class="mono">common_maplestory</code></h3>
+        <ul><li>추상구조 18개 + 가이드 문서에서 추출한 그래프</li><li>운영자만 쓰기 (추출 큐)</li><li>상시 로드</li></ul>
+      </div>
+      <div class="layer mine">
+        <h3><span class="badge mine">내 것</span><code class="mono">u_&lt;사용자id&gt;</code></h3>
+        <ul><li>내 메모·문서에서 추출한 노드, 손으로 넣은 노드</li><li>로그인한 본인만 쓰기</li><li>요청 때 로드, LRU로 내림</li></ul>
+      </div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>단계</th><th>KV · 문서 상태</th><th>벡터</th><th>그래프</th><th>언제</th></tr></thead>
+      <tbody>
+        <tr><td>A. PoC</td><td><code>JsonKVStorage</code></td><td><code>NanoVectorDBStorage</code></td><td><code>NetworkXStorage</code></td><td>사용자 소수, 프로세스 1개</td></tr>
+        <tr><td>B. 로그인 공개</td><td>PostgreSQL</td><td>pgvector (HNSW)</td><td>Apache AGE</td><td>워크스페이스가 늘고 API와 워커를 나눌 때</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">A 단계의 파일 스토리지는 프로세스 두 개가 동시에 쓰면 위험하므로 추출 워커를 API 프로세스 안의 백그라운드 작업으로 둬요. 문서는 <code>doc_id = 출처 URL + 판본</code>으로 넣고, 패치로 바뀌면 지우고 다시 넣어요.</p>
+  </section>
+
+  <section id="mac">
+    <span class="label">맥 추출 노드</span>
+    <h2>M2 맥 16GB는 추출 전용 배치 일꾼</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>후보</th><th>Ollama 태그 (크기)</th><th>IFBench 추론 켬 / 끔</th><th>역할</th></tr></thead>
+      <tbody>
+        <tr class="hl-row"><td>Gemma 4 12B</td><td><code>gemma4:12b</code> (7.6GB), <code>gemma4:12b-mlx</code> (7.7GB)</td><td>0.735 / 0.452</td><td>기본</td></tr>
+        <tr><td>Qwen3.5 9B</td><td><code>qwen3.5:9b</code> (6.6GB)</td><td>0.667 / 0.378</td><td>비교, 노트북을 같이 쓸 때</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">IFBench는 Artificial Analysis 값(API, 풀 정밀도)이라 로컬 Q4는 이보다 낮아요. thinking은 청크 20개로 네 조합(모델 2 × 켬/끔)을 돌려 파싱 실패율, 트리플 수, 추상구조 연결 수, 청크당 시간을 비교해 정해요. LightRAG의 JSON 출력 모드를 켜면 형식 위반이 줄어 thinking을 꺼도 될 수 있어요.</p>
+    <pre class="code"><code># Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다
+launchctl setenv OLLAMA_HOST 127.0.0.1:11434
+launchctl setenv OLLAMA_NUM_PARALLEL 1      # 동시 요청 1개
+launchctl setenv OLLAMA_KEEP_ALIVE 5m       # 끝나면 5분 뒤 메모리에서 내림
+launchctl setenv OLLAMA_CONTEXT_LENGTH 16384
+ollama pull gemma4:12b
+tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
+    <div class="facts3">
+      <div><b>시간창</b><span>launchd가 점심(12:10~13:00)과 밤(23:00~07:00)에만 Ollama를 켜고 <code>caffeinate -i</code>. 바로 노트북을 써야 하면 Ollama만 끄면 돼요.</span></div>
+      <div><b>처리량 (예상)</b><span>청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩이면 메모리 대역폭이 두 배라 더 빨라요. 첫 실험에서 실측해요.</span></div>
+      <div><b>맥이 오래 꺼져 있으면</b><span>관리자 플래그로 추출만 Gemini Flash-Lite로. 하루 청크 상한을 두고 사용자 워크스페이스에만 써요.</span></div>
+    </div>
+  </section>
+
+  <section id="network">
+    <span class="label">네트워크 · 보안</span>
+    <h2>맥은 포트를 열지 않고, EC2는 443 하나만</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>경로</th><th>허용 범위</th><th>수단</th></tr></thead>
+      <tbody>
+        <tr><td>확장 → EC2 <code>POST /v1/analogy</code></td><td>인터넷, 설치 토큰별 요청 한도</td><td>Caddy (HTTPS 자동 인증서)</td></tr>
+        <tr><td>확장 → 내 워크스페이스 API</td><td>로그인 사용자 본인</td><td>JWT 검사</td></tr>
+        <tr class="hl-row"><td>EC2 → 맥 <code>11434</code></td><td><code>tag:rag-server</code> → <code>tag:llm-node</code>만</td><td>Tailscale grant</td></tr>
+        <tr><td>나 → EC2 SSH · 관리 화면</td><td>내 계정만</td><td>Tailscale SSH, 테일넷 IP에만 바인딩</td></tr>
+        <tr><td>EC2 → Gemini API</td><td>아웃바운드</td><td>키는 SSM Parameter Store</td></tr>
+      </tbody>
+    </table></div>
+    <pre class="code"><code>{
+  "tagOwners": {
+    "tag:rag-server": ["autogroup:admin"],
+    "tag:llm-node":   ["autogroup:admin"]
+  },
+  "grants": [
+    { "src": ["tag:rag-server"],  "dst": ["tag:llm-node"],   "ip": ["11434"] },
+    { "src": ["autogroup:admin"], "dst": ["tag:rag-server"], "ip": ["22", "9621"] },
+    { "src": ["autogroup:admin"], "dst": ["tag:llm-node"],   "ip": ["11434"] }
+  ]
+}</code></pre>
+    <p class="note">맥에 태그를 붙이면 그 기기는 내 사용자 신원을 잃어요. 맥에서 다른 테일넷 기기를 쓸 일이 있으면 태그 대신 내 계정 기기를 <code>dst</code>로 두세요. Tailscale 무료 Personal 플랜은 비상업용이라, 유료화하면 상업 플랜으로 옮겨야 해요.</p>
+  </section>
+
+  <section id="cost">
+    <span class="label">비용</span>
+    <h2>PoC 약 $31, 로그인 공개 후 약 $55 (월)</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>항목</th><th>A. PoC</th><th>B. 로그인 공개</th><th>근거</th></tr></thead>
+      <tbody>
+        <tr><td>EC2 온디맨드</td><td class="num"><code>t4g.medium</code> $24.5</td><td class="num"><code>t4g.large</code> $48.9</td><td>미국 동부 시간당 $0.0336 / $0.067 × 730</td></tr>
+        <tr><td>EBS gp3 30GB</td><td class="num">약 $2.4</td><td class="num">약 $2.4</td><td>대략치</td></tr>
+        <tr><td>공인 IPv4 1개</td><td class="num">약 $3.7</td><td class="num">약 $3.7</td><td>대략치</td></tr>
+        <tr><td>Tailscale · Gemini · 추출 LLM</td><td class="num">$0</td><td class="num">Gemini 사용량</td><td>무료 플랜·티어, 로컬 Ollama</td></tr>
+        <tr class="total"><td>합계</td><td class="num">약 $31</td><td class="num">약 $55</td><td></td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">서울 리전은 조금 더 비싸요(AWS 계산기로 확인). 1년 예약이면 <code>t4g.medium</code>이 시간당 $0.021 수준이에요. Gemini 무료 티어는 입력이 구글 제품 개선에 쓰일 수 있어서, 개인 메모를 다루는 B 단계에서는 유료 티어가 맞아요.</p>
+  </section>
+
+  <section id="risks">
+    <span class="label">리스크</span>
+    <h2>가장 큰 위험은 작은 모델의 추출 품질</h2>
+    <p class="intro">LightRAG 권장은 32B 이상인데 16GB 맥에서는 12B가 한계예요. 그래서 시드 그래프와 통제 어휘로 뼈대를 고정하고, 모델은 그 사이를 채우는 역할만 맡겨요.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>리스크</th><th>영향</th><th>대응</th></tr></thead>
+      <tbody>
+        <tr><td>소형 모델 추출 품질</td><td>관계 누락, 이름 흔들림</td><td>JSON 모드, 용어 사전·예시, 시드로 이름 고정, 20청크 A/B</td></tr>
+        <tr><td>추상구조 연결 누락</td><td>교차 분야 비유가 안 나옴</td><td>검수 리포트, 연결만 다시 추출</td></tr>
+        <tr><td>맥이 꺼져 있음</td><td>인덱싱 지연</td><td>큐 + 시간창, 사용자 워크스페이스만 클라우드 대체</td></tr>
+        <tr><td>호버 지연 2~3초</td><td>체감 느림</td><td>결과 캐시, 키워드와 비유를 한 번에 뽑는 "빠른 모드" 실험</td></tr>
+        <tr><td>LightRAG 버전 변화</td><td>API·저장 형식 변경</td><td>버전 고정, 업그레이드 전 e2e와 평가 재실행</td></tr>
+        <tr><td>맥 사용 중 메모리 압박</td><td>노트북 버벅임</td><td>동시 1, keep-alive 5분, 시간창 운영</td></tr>
+      </tbody>
+    </table></div>
+    <ul class="checks">
+      <li>"M2 mac pro"가 M2 Pro 칩인지 M2 칩의 MacBook Pro인지 (처리량이 두 배 차이)</li>
+      <li>메이플 가이드 문서 출처: 공식 가이드만 쓸지, 위키까지 쓸지 (D-5)</li>
+      <li>서울 리전 정확한 요금과 리전 선택</li>
+      <li>로그인: EC2 Postgres + 자체 JWT로 갈지, 인증만 Supabase Auth를 빌릴지 (D-2)</li>
+    </ul>
+  </section>
+
+  <section id="rollout">
+    <span class="label">이행 단계</span>
+    <h2>시드 그래프로 서버부터 옮기고, 맥 추출은 품질을 확인한 뒤 늘린다</h2>
+    <figure class="figure" style="margin:0">
+      <svg viewBox="0 44 760 272" role="img" aria-label="L0 서버 전환, L1 맥 추출 노드, L2 공통 그래프 확장, L3 내 워크스페이스 네 단계와 관문">
+        <rect x="24" y="56" width="166" height="176" rx="8" class="i-core"/>
+        <rect x="206" y="56" width="166" height="176" rx="8" class="i-box"/>
+        <rect x="388" y="56" width="166" height="176" rx="8" class="i-box"/>
+        <rect x="570" y="56" width="166" height="176" rx="8" class="i-box"/>
+        <text x="38" y="82" class="i-name">L0. 서버 전환</text>
+        <text x="38" y="112" class="i-sub" style="fill:var(--ink)">EC2 · analogy-api</text>
+        <text x="38" y="134" class="i-sub" style="fill:var(--ink)">bge-m3 임베딩</text>
+        <text x="38" y="156" class="i-sub" style="fill:var(--ink)">기존 JSON 시드 주입</text>
+        <text x="38" y="178" class="i-sub" style="fill:var(--ink)">확장 서버 모드</text>
+        <text x="38" y="200" class="i-sub" style="fill:var(--ink)">+ 로컬 대체</text>
+        <text x="220" y="82" class="i-name">L1. 맥 추출 노드</text>
+        <text x="220" y="112" class="i-sub" style="fill:var(--ink)">Tailscale · Ollama</text>
+        <text x="220" y="134" class="i-sub" style="fill:var(--ink)">20청크 A/B 테스트</text>
+        <text x="220" y="156" class="i-sub" style="fill:var(--ink)">모델 × thinking</text>
+        <text x="220" y="178" class="i-sub" style="fill:var(--ink)">추출 큐 · 시간창</text>
+        <text x="402" y="82" class="i-name">L2. 공통 그래프 확장</text>
+        <text x="402" y="112" class="i-sub" style="fill:var(--ink)">가이드 문서 인덱싱</text>
+        <text x="402" y="134" class="i-sub" style="fill:var(--ink)">검수 루프</text>
+        <text x="402" y="156" class="i-sub" style="fill:var(--ink)">평가셋 40문장</text>
+        <text x="584" y="82" class="i-name">L3. 내 워크스페이스</text>
+        <text x="584" y="112" class="i-sub" style="fill:var(--ink)">Postgres 전환</text>
+        <text x="584" y="134" class="i-sub" style="fill:var(--ink)">t4g.large</text>
+        <text x="584" y="156" class="i-sub" style="fill:var(--ink)">로그인 (D-2)</text>
+        <text x="584" y="178" class="i-sub" style="fill:var(--ink)">내 문서 추출</text>
+        <line x1="24" x2="736" y1="262" y2="262" class="i-edge"/>
+        <polygon points="189,262 198,253 207,262 198,271" class="i-gate"/>
+        <polygon points="371,262 380,253 389,262 380,271" class="i-gate"/>
+        <polygon points="553,262 562,253 571,262 562,271" class="i-gate"/>
+        <text x="198" y="290" text-anchor="middle" class="i-elabel" style="fill:var(--ink)">서버 hit@1</text>
+        <text x="198" y="306" text-anchor="middle" class="i-elabel" style="fill:var(--ink)">브라우저 이상</text>
+        <text x="380" y="290" text-anchor="middle" class="i-elabel" style="fill:var(--ink)">파싱 실패 5% 이하</text>
+        <text x="380" y="306" text-anchor="middle" class="i-elabel" style="fill:var(--ink)">추상구조 연결 70%</text>
+        <text x="562" y="290" text-anchor="middle" class="i-elabel" style="fill:var(--ink)">hit@1 75% 이상</text>
+        <text x="562" y="306" text-anchor="middle" class="i-elabel" style="fill:var(--ink)">근거 밖 0건</text>
+      </svg>
+      <figcaption>마름모 = 다음 단계로 가는 관문. L1 관문 수치는 목표치이고 실측 후 조정해요. 작업은 TASKS.md의 T-401~T-431이에요.</figcaption>
+    </figure>
+  </section>
+
+  <section id="sources">
+    <span class="label">출처</span>
+    <ul class="sources">
+      <li>LightRAG: <a href="https://github.com/HKUDS/LightRAG">GitHub</a> · <a href="https://raw.githubusercontent.com/HKUDS/LightRAG/main/env.example">env.example</a> · <a href="https://github.com/HKUDS/LightRAG/issues/3631">멀티 워크스페이스 설계 검토 #3631</a></li>
+      <li>Ollama: <a href="https://ollama.com/library/gemma4">gemma4</a> · <a href="https://ollama.com/library/qwen3.5">qwen3.5</a> · <a href="https://ollama.com/library/bge-m3">bge-m3</a></li>
+      <li>Tailscale: <a href="https://tailscale.com/docs/reference/examples/grants">grant 예제</a> · <a href="https://tailscale.com/pricing">요금</a></li>
+      <li>EC2 요금: <a href="https://cloudprice.net/aws/ec2/instances/t4g.medium">t4g.medium</a> · <a href="https://instances.vantage.sh/aws/ec2/t4g.large">t4g.large</a></li>
+    </ul>
+  </section>
+
+  <footer>비유 도우미 · LightRAG 아키텍처 설계 (2026년 9월 29일) · 메이플스토리는 넥슨의 게임이며, 이 프로젝트는 넥슨과 관련이 없습니다.</footer>
+</div>
+
+<script>
+  // 전체 구성도: 경로 강조 전환, 움직임 줄이기 설정 존중
+  const lr = document.getElementById('lr');
+  const lrSvg = document.getElementById('lr-svg');
+  lr.querySelectorAll('[data-lr]').forEach(b => b.addEventListener('click', () => {
+    lr.dataset.mode = b.dataset.lr;
+    lr.querySelectorAll('[data-lr]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+  const rm = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const applyMotion = () => {
+    const dots = lrSvg.querySelectorAll('.dots-h, .dots-i');
+    if (rm.matches) { lrSvg.pauseAnimations(); dots.forEach(g => g.style.visibility = 'hidden'); }
+    else { dots.forEach(g => g.style.visibility = ''); lrSvg.unpauseAnimations(); }
+  };
+  applyMotion();
+  rm.addEventListener?.('change', applyMotion);
+</script>
+
+</body>
+</html>

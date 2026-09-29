@@ -2,7 +2,8 @@
 
 - 상태: 설계 (2026-09-29). 결정 기록은 [ADR 0006](decisions/0006-lightrag-server.md), 작업은 [TASKS.md](TASKS.md)의 LightRAG 트랙(T-4xx).
 - 살아 있는 문서(그림 포함): https://claude.ai/code/artifact/af5b42e7-dd31-4b10-a409-5775f83e2e3e
-- 그림으로 보기: [`intro.html`](intro.html)의 "다음 아키텍처" 섹션
+- 그림으로 보기: [`architecture-lightrag.html`](architecture-lightrag.html) (이 문서의 시각화 버전, 경로 강조 토글 포함), [`intro.html`](intro.html)의 "다음 아키텍처" 섹션
+- 아래 그림은 Mermaid라 GitHub에서 바로 그려진다. 내용을 바꾸면 HTML 페이지의 그림도 함께 고친다.
 
 ## 결론
 
@@ -36,9 +37,65 @@ LightRAG를 고른 이유 (LightRAG 워크북 기준):
 
 그대로인 것: 근거 밖 비유 금지(`nodeId` 검증), 저장소 두 층(공통 + 로그인 사용자), 관심사별 테마, 확장의 결과 형식.
 
+## 전체 구성
+
+맥으로 가는 선은 하나(추출 큐 워커 → 맥), 그것도 테일넷 안에서만이다. 호버 경로에는 맥이 없다.
+
+```mermaid
+flowchart LR
+  ext["크롬 확장<br/>문장 찾기 · 말풍선<br/>서버 장애 시 로컬 대체"]
+  admin["나 (관리자)<br/>가이드 문서 넣기 · 검수"]
+  subgraph EC2["AWS EC2 · t4g.medium"]
+    caddy["Caddy · HTTPS 443만 공개"]
+    subgraph API["analogy-api · FastAPI + LightRAG 라이브러리"]
+      wsC["공통 워크스페이스<br/>common_maplestory"]
+      wsU["내 워크스페이스<br/>u_&lt;id&gt; · 로그인 시"]
+      cache["결과 캐시"]
+      worker["추출 큐 워커<br/>맥 헬스체크 · 재시도"]
+    end
+    emb["Ollama · bge-m3<br/>임베딩 (CPU)"]
+    store[("저장소<br/>A 파일 → B Postgres·AGE")]
+  end
+  gem["Gemini API<br/>Flash-Lite 키워드 · Flash 비유"]
+  mac["내 M2 맥 16GB<br/>Ollama gemma4:12b<br/>점심·밤 시간창"]
+
+  ext -->|HTTPS| caddy --> API
+  API -->|호버당 2회| gem
+  API --> emb
+  API --> store
+  worker -. "Tailscale · 11434만" .-> mac
+  admin -. 테일넷 .-> API
+
+  classDef local fill:#fdeede,stroke:#d9650a,stroke-width:2px,color:#1c2230
+  class mac,worker local
+```
+
 ## 질의 흐름 (호버 한 번)
 
 키워드 추출은 우리가 대신하고, 검색은 LightRAG에, 답변 생성은 다시 우리 프롬프트에 맡긴다. 그래야 추상 태그 통제와 근거 검증을 유지할 수 있다.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant E as 크롬 확장
+  participant A as analogy-api
+  participant G as Gemini
+  participant R as LightRAG
+  E->>A: POST /v1/analogy (문장, 단어, 앞 문장, 토큰)
+  alt 캐시 적중
+    A-->>E: 결과 (0.1초 안쪽)
+  else 캐시 없음
+    A->>G: 키워드 추출 (Flash-Lite, 통제 어휘 18)
+    G-->>A: ll_keywords · hl_keywords
+    A->>R: hybrid 검색 × 워크스페이스 2개 (only_need_context)
+    R-->>A: 엔티티 · 관계 · 원문 청크
+    A->>A: 후보 3개 병합 · 오버레이 적용
+    A->>G: 비유 생성 (Flash, 근거 안에서만)
+    G-->>A: meaning · analogy · nodeId
+    A->>A: nodeId 검증 (후보 밖이면 비유 숨김)
+    A-->>E: 결과 (기존 확장 형식 그대로)
+  end
+```
 
 1. **확장 → `POST /v1/analogy`**: 문장, 커서 단어, 앞 문장, 설치 토큰(로그인 시 JWT). 서버는 먼저 결과 캐시(문장 해시 + 워크스페이스 버전)를 본다.
 2. **키워드 (Gemini Flash-Lite)**: 한 번의 호출로 `ll_keywords`(구체 개념)와 `hl_keywords`(추상 구조)를 뽑는다. `hl_keywords`는 통제 어휘 18개 중에서만 고르고, 맞는 게 없으면 빈 배열이다.
@@ -55,12 +112,17 @@ LightRAG를 고른 이유 (LightRAG 워크북 기준):
 
 LLM이 필요한 두 단계(추출, 설명 병합 요약)만 맥에서 돈다.
 
-```
-가이드 문서 → 청킹·큐 등록 (EC2, 800토큰) → 맥 켜짐?
-   ├─ 예   → 맥: 엔티티·관계 추출 (gemma4:12b, JSON 모드, 통제 어휘 포함)
-   │         → 병합·설명 요약 (맥) → 임베딩 (EC2 bge-m3) → 워크스페이스 저장 → 검수 리포트
-   └─ 아니오 → 다음 시간창까지 대기 → 큐로 재시도
-시드: 기존 JSON 그래프 → insert_custom_kg → 워크스페이스 저장   (검수 리포트 → 연결 보강 → 시드 경로)
+```mermaid
+flowchart TB
+  docs["가이드 문서<br/>공식 가이드·위키"] --> chunk["청킹·큐 등록<br/>EC2 · 800토큰"] --> q{"맥 켜짐?"}
+  q -->|예| ext["맥: 엔티티·관계 추출<br/>gemma4:12b · JSON 모드<br/>통제 어휘 18개 포함"]
+  q -->|아니오| wait["다음 시간창까지 대기"] -. 재시도 .-> chunk
+  ext --> merge["병합·설명 요약 (맥)"] --> emb["임베딩<br/>EC2 · bge-m3"] --> store["워크스페이스 저장<br/>공통 / 사용자"] --> review["검수 리포트<br/>추상구조 연결 없는 개념"]
+  seed["시드: 기존 JSON 그래프<br/>insert_custom_kg · 추상구조 18"] --> store
+  review -. 연결 보강 .-> seed
+
+  classDef local fill:#fdeede,stroke:#d9650a,stroke-width:2px,color:#1c2230
+  class ext,merge local
 ```
 
 - **시드 먼저**: `maplestory.json`의 노드 18·태그 18·연결 12를 `insert_custom_kg`로 넣는다. 태그는 "추상구조" 유형 엔티티, 노드–태그 연결은 관계 키워드에 태그 이름이 들어간 관계가 된다. 맥 없이 바로 돌아가는 첫 그래프다.
@@ -175,6 +237,20 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434
 - [ ] D-2 로그인: EC2 Postgres + 자체 JWT로 갈지, 인증만 Supabase Auth를 빌릴지
 
 ## 이행 단계
+
+```mermaid
+flowchart LR
+  L0["L0 서버 전환<br/>EC2 · analogy-api · bge-m3<br/>JSON 시드 · 확장 서버 모드"]
+  L1["L1 맥 추출 노드<br/>Tailscale · Ollama<br/>20청크 A/B · 추출 큐"]
+  L2["L2 공통 그래프 확장<br/>가이드 문서 인덱싱<br/>검수 루프 · 평가셋 40"]
+  L3["L3 내 워크스페이스<br/>Postgres · t4g.large<br/>로그인 · 내 문서 추출"]
+  L0 -->|"관문: 서버 hit@1 ≥ 브라우저"| L1
+  L1 -->|"관문: 파싱 실패 ≤ 5%, 추상구조 연결 ≥ 70%"| L2
+  L2 -->|"관문: hit@1 ≥ 75%, 근거 밖 0건"| L3
+
+  classDef now fill:#fdeede,stroke:#d9650a,stroke-width:2px,color:#1c2230
+  class L0 now
+```
 
 | 단계 | 내용 | 다음 단계로 가는 관문 |
 | --- | --- | --- |
