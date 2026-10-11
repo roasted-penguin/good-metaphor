@@ -8,6 +8,7 @@
 | ID | 작업 | 단계 | 우선 | 상태 | 먼저 끝나야 할 것 |
 | --- | --- | --- | --- | --- | --- |
 | D-1 | 기본 트리거를 Alt로 둘지 자동으로 둘지 | 결정 | P0 | 완료 | Alt + 첫 실행 선택 |
+| T-119 | 실제 키 스모크를 CI에서 수동 실행 (Actions 비밀값) | 1 품질 | P1 | 리뷰 | |
 | T-116 | 첫 실행 트리거 선택 화면 (D-1) | 1 품질 | P1 | 대기 | |
 | T-117 | 뜻 먼저 보여 주기: 응답 스트리밍으로 체감 속도 개선 | 1 품질 | P0 | 대기 | |
 | T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 리뷰 | |
@@ -198,6 +199,11 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 **완료 기준** 실제 모델 혼합 hit@1 ≥ 13/16, 금융 문장 5건 중 3건 이상 맞힘. T-103의 확장 평가셋에서도 떨어지지 않을 것.
 **파일** `extension/lib/graph.js`, `extension/lib/retrieval.js`, `extension/data/common/maplestory.json`, `tools/eval.mjs`
 
+### T-119 실제 키 스모크 CI 워크플로
+**왜** 로컬 `~/.zshrc` 말고도 같은 키로 언제든 제공자 형식을 확인할 수 있게 한다. 공개 저장소라 키는 Actions 비밀값에만 둔다(암호화 `.env` 커밋은 검토 후 보류: 무료 키라 위험은 낮지만 개인키 관리 부담이 생기고, 비밀값으로 충분).
+**할 일** `.github/workflows/smoke.yml`: `workflow_dispatch`(입력 `all_models`), `permissions: contents: read`, 비밀값 `GEMINI_API_KEY`·`GROQ_API_KEY`를 env로 넘겨 `npm run smoke:providers`. PR·push에는 돌지 않는다. CLAUDE.md에 키 두는 곳 표.
+**완료 기준** dev 병합 뒤 Actions 탭에서 수동 실행 → Gemini·Groq 모두 통과(로그에 키 값 없음). 결과를 작업 로그에.
+
 ### T-116 첫 실행 트리거 선택 (D-1)
 **할 일** 설치 직후(`chrome.runtime.onInstalled`, reason=install) 여는 설정 화면 맨 위에 한 화면짜리 안내: "Alt 누르고 문장에 올리기(추천) / 머무르면 자동". 기본 선택은 Alt. 고르면 `triggerMode` 저장 후 안내를 접는다. 자동을 고르면 "호출이 많아져 무료 한도를 빨리 써요" 한 줄.
 **완료 기준** e2e: 새 프로필 설치 → 안내 표시 → 자동 선택 → 설정 저장 확인 → 다시 열면 안내 없음.
@@ -324,6 +330,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-11 | T-119 | task/T-119-smoke-workflow | PR 칸은 열고 채움 | 수동 실행 스모크 워크플로 추가, 키는 Actions 비밀값(GEMINI·GROQ 등록 확인). 실행 확인은 dev 병합 뒤(workflow_dispatch는 기본 브랜치에 있어야 버튼이 생김). |
 | 2026-10-11 | T-101 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 무료 Gemini 키로 스모크·실제 확장 확인. 호출 1.9~3.3초, 호버 3.6~9.1초(설계 가정보다 느림 → T-117). 레버리지 문장은 T-113 쏠림으로 비유 없음(빈칸, 규칙대로). T-102 첫 로드 13.9초 확인. |
 | 2026-10-11 | D-1·D-3 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | D-1(기본 Alt + 첫 실행 선택), D-3(본인 승인, 큰 업데이트마다, 출처·검수 날짜, 제보 3건 제외) 결정. D-2는 L3 전에 결정(T-431·T-201 선행 조건). T-116·T-117·T-118 추가. |
 | 2026-10-11 | NAME | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 앱 이름 "좋은비유네용" 확정, 변경 작업 T-115 추가. |

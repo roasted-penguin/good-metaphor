@@ -27,6 +27,7 @@ npm run test:unit                # 순수 함수만, 1초 이내
 npm run test:e2e                 # 확장을 실제 크롬에 로드. CHROMIUM_PATH=... 로 브라우저 지정 가능, HEADED=1 로 화면 보기
 npm run eval                     # 실제 임베딩 모델로 검색 품질(hit@1/@3). -- -v 로 틀린 문장 출력
 npm run eval:fallback            # 모델 없이 같은 평가
+npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
 ```
 
 확장 수동 실행: `chrome://extensions` → 개발자 모드 → 압축해제된 확장 로드 → `extension/`. 코드를 고치면 확장 카드의 새로고침 버튼 + 페이지 새로고침.
@@ -80,6 +81,19 @@ scripts/                     build, prepare-e2e
 - 회사망 등에서 Hugging Face가 막히면 모델 로드가 실패하고 대체 임베더로 조용히 바뀐다(`fallbackOnError`). 품질 비교 때 `debug.embedderId`를 꼭 확인.
 - 모델 ID·가격은 2026-09-28에 각 사 문서로 확인한 값이다. 바뀌면 `config/admin.json`의 `defaultModels`와 `lib/providers.js`를 함께 고친다.
 - Gemini 3.x는 `thinkingConfig`를 받지 않는 모델이 있어 400이면 빼고 재시도한다.
+
+## API 키를 두는 곳
+
+| 어디서 | 어디에 | 비고 |
+| --- | --- | --- |
+| CI (`smoke` 워크플로) | 저장소 Actions 비밀값 `GEMINI_API_KEY`, `GROQ_API_KEY` | 수동 실행 전용. 넣기: 별도 터미널에서 `gh secret set <이름>` |
+| 이 맥의 스크립트 | `~/.zshrc`의 `export ..._API_KEY=` | 별도 터미널에서 편집기로 넣는다 |
+| 확장 | 설정 화면 → 제공자 → API 키 | 그 크롬 프로필에만 저장 |
+| 서버 (L0 이후) | AWS SSM Parameter Store (T-401) | |
+
+- 키 값을 대화·커밋·이슈·로그에 남기지 않는다. 대화의 `!` 명령으로 키를 넣지 말 것(기록에 남는다). 키 존재 여부는 값 없이 "있음/없음"만 확인한다.
+- **저장소는 공개다.** 결제가 연결된 유료 키(OpenAI, Anthropic, AWS)는 암호화하더라도 저장소에 넣지 않는다.
+- `extension/offscreen.js`의 `"Mistral3ForConditionalGeneration"`을 GitHub 비밀 탐지가 Mistral 키로 오인한 적이 있다(오탐으로 허용함). 같은 경고가 다시 뜨면 위치부터 확인한다.
 
 ## 원격 저장소 처음 연결 (한 번만)
 
