@@ -20,6 +20,7 @@
 | T-110 | 벡터 캐시 정리 (모델 바뀌면 삭제, 상한) | 1 품질 | P2 | 대기 | |
 | T-111 | iframe·Shadow DOM 안 문장 지원 | 1 품질 | P2 | 대기 | |
 | T-112 | 윈도우에서 Alt 메뉴 포커스 충돌 확인 | 1 품질 | P2 | 대기 | |
+| T-114 | 메이플 커뮤니티 용어 사전: 은어 aliases + 멸칭 금칙어 필터 | 1 품질 | P1 | 대기 | |
 | T-113 | 금융·경제 문장이 `meso`·`auction`으로 끌려가는 주제 편향 줄이기 | 1 품질 | P0 | 대기 | |
 | D-2 | 로그인 방식과 백엔드 | 결정 | P0 | 결정 필요 | Phase 1 관문 |
 | T-201 | 사용자 저장소 서버 + remote 어댑터 연결 | 2 계정 | P0 | 대기 | D-2 |
@@ -74,7 +75,7 @@ LightRAG 공통 그래프(T-421)에 넣을 문서. 선택지: (a) 공식 가이�
 
 ### D-4 두 번째 공통 관심사
 메이플 밖 사용자 유입용. 후보 예: 축구, 요리, 다른 게임. 추상 태그 사전을 재사용할 수 있는지가 기준.
-**유력 후보 (2026-10-11)** 식당. 앱 이름 후보 "좋은비유네용"이 메이플 인벤의 식당 비유 밈에서 왔고, 식당 운영이 지금 추상 태그 대부분에 대응된다. 배경과 주의점은 [naming-meme.md](naming-meme.md). 하려면 추상 태그를 `maplestory.json`에서 공통 파일로 빼야 한다(규칙 9, ADR 필요).
+**유력 후보 (2026-10-11)** 식당(`analogyPrefix: "식당으로 비유하자면"`, 반영 방안은 naming-meme.md "식당 밈 반영 방안"). 앱 이름 후보 "좋은비유네용"이 메이플 인벤의 식당 비유 밈에서 왔고, 식당 운영이 지금 추상 태그 대부분에 대응된다. 배경과 주의점은 [naming-meme.md](naming-meme.md). 하려면 추상 태그를 `maplestory.json`에서 공통 파일로 빼야 한다(규칙 9, ADR 필요).
 
 ---
 
@@ -155,6 +156,15 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 **할 일** 차례로 시도하고 각각 EVAL_LOG에 기록: (1) 노드 임베딩 텍스트에서 게임 고유 용어 비중 줄이고 구조 설명 비중 늘리기 (2) 태그에 분야가 다른 예문 `examples` 추가(T-103과 공유) (3) 경제 태그(`market_price`, `inflation`)에 일정 감점 또는 태그 점수 상위 2개 평균 (4) 질의를 LLM으로 "추상 구조 한 줄"로 바꾼 뒤 임베딩(정밀 모드와 같음, 무료 키로 시험).
 **완료 기준** 실제 모델 혼합 hit@1 ≥ 13/16, 금융 문장 5건 중 3건 이상 맞힘. T-103의 확장 평가셋에서도 떨어지지 않을 것.
 **파일** `extension/lib/graph.js`, `extension/lib/retrieval.js`, `extension/data/common/maplestory.json`, `tools/eval.mjs`
+
+### T-114 메이플 커뮤니티 용어 사전
+**왜** 인벤 같은 페이지는 은어(재획, 펑, 세금, 메요일)로 쓰여 있어 지금 그래프로는 검색이 안 된다. 또 LLM이 커뮤니티 멸칭(쌀숭이, 리선족 등)을 비유에 섞어 낼 위험이 있다. 용어 분류는 [naming-meme.md](naming-meme.md) "메이플 커뮤니티 용어".
+**할 일**
+- 노드에 `aliases` 필드(A 묶음 은어). `nodeText`에 포함해 임베딩하고, `validateGraph`가 문자열 배열인지 검사.
+- `data/common/blocklist.json`(D 묶음 + 실존 인물 별명). 프롬프트 규칙에 "멸칭·실존 인물 금지" 한 줄, 응답 후처리에서 금칙어가 있으면 그 필드를 비우고 `rejected`에 이유. 서버(T-402)도 같은 파일을 쓴다.
+- 평가셋에 은어 문장 3개 이상 추가.
+**완료 기준** 단위 테스트: aliases 검증, 금칙어 필터(우회 표기 포함). 은어 문장 hit@3.
+**파일** `extension/data/common/*.json`, `extension/lib/graph.js`, `extension/lib/prompt.js`, `extension/background.js`, `tools/eval-set.json`
 ### T-201 사용자 저장소 서버 + remote 어댑터
 **할 일** D-2 결정대로 서버 구현: `GET /auth/start?redirect_uri=`(로그인 후 `redirect_uri#token=&user_id=&name=`), `GET/PUT /v1/overlay`, `GET /v1/common/:id`. `config/admin.json`의 `userStore.adapter`를 `remote`로. 서버 코드는 `server/`에 둔다.
 **완료 기준** e2e: 가짜 인증 서버로 로그인 → 오버레이 저장 → 새 프로필에서 같은 토큰으로 불러오기. `local-dev` 어댑터는 개발 빌드에만 남긴다.

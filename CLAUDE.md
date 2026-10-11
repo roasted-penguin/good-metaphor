@@ -6,7 +6,7 @@
 - 할 일 목록: `docs/TASKS.md` ← **작업은 항상 여기서 시작**
 - 설계 결정 기록: `docs/decisions/`
 - 검색 품질 기록: `docs/EVAL_LOG.md`
-- 앱 이름 후보 "좋은비유네용"의 밈 배경과 식당 모드 주의점: `docs/naming-meme.md`
+- 앱 이름 후보 "좋은비유네용"의 밈 배경, 메이플 커뮤니티 용어 분류, 식당 모드 방안: `docs/naming-meme.md`
 - 작동 방식·인프라 소개 페이지: `docs/intro.html` (구조가 바뀌면 이 페이지의 구성도도 함께 고친다)
 - 다음 아키텍처(LightRAG 서버 + 맥 추출 노드): `docs/architecture-lightrag.md`(원본, Mermaid 그림), `docs/architecture-lightrag.html`(시각화 버전), ADR 0006. 설계를 바꾸면 세 곳을 함께 고친다
 
@@ -69,6 +69,7 @@ scripts/                     build, prepare-e2e
 8. **호버 경로에 맥을 두지 않는다.** 맥(로컬 Ollama)은 인덱싱 추출 전용이고 꺼져 있을 수 있다. 호버 때 부르는 LLM은 클라우드.
 9. **추상 태그는 통제 어휘다.** 원본은 `maplestory.json`의 `tags`. 추출 프롬프트와 질의 키워드 프롬프트가 같은 목록에서 생성돼야 하고, 목록 밖 추상구조는 버린다.
 10. **맥은 인터넷에 포트를 열지 않는다.** Ollama는 127.0.0.1에만, 노출은 `tailscale serve`로 테일넷에만.
+11. **커뮤니티 멸칭·실존 인물을 출력하지 않는다.** 쌀숭이·리선족 같은 멸칭과 신창섭(김창섭 디렉터) 같은 실존 인물은 그래프·프롬프트·UI 어디에도 넣지 않는다. 밈은 앱 말투에만 아껴 쓴다(`docs/naming-meme.md`).
 
 ## 함정 (한 번씩 밟은 것)
 
