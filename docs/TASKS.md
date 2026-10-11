@@ -278,12 +278,12 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
-| 2026-10-11 | D-4 | task/eval-real-model | 원격 연결 후 `/ship` | D-4 결정: 기본 메이플, 두 번째 식당(로그인 없이 선택), 그 외 가입 후 커스텀. 태그 분리 T-304 추가, T-302·T-301 구체화. |
-| 2026-10-11 | DOC | task/eval-real-model | 원격 연결 후 `/ship` | 최신화 설계(ADR 0007): 패치 노트 원문 자동 반영(T-423), 밈 용어 카드 승인 흐름(T-424), 규칙 2 범위 조정. 설계 문서 md·html·ADR 0006 갱신. |
-| 2026-10-11 | DATA | task/eval-real-model | 원격 연결 후 `/ship` | 공통 그래프 사실 검수(공식 패치 노트 update/799·806, 나무위키): 스타포스 파괴 후 흔적 복구(2026-03), 샤이닝 스타포스 타임 이름, 큐브 → 메소 재설정 병행, 심볼·아케인포스·결정석·유니온·솔 에르다 문장 수정. 수치는 넣지 않음. 등급색은 공식 값이 공개돼 있지 않아 유지(ADR 0004 메모 갱신). 그래프 버전 2026.10.11-1. |
-| 2026-10-11 | T-101 | task/eval-real-model | 원격 연결 후 `/ship` | 스모크 스크립트 `npm run smoke:providers` 추가(가짜 서버로 통과). Gemini가 잘못된 키 400을 thinkingConfig 오류로 오인해 한 번 더 호출하던 문제 수정 + 단위 테스트 2개. 실제 무료 키 확인은 남음. |
-| 2026-10-11 | EVAL | task/eval-real-model | 원격 연결 후 `/ship` | 첫 실제 임베딩 모델 평가: e5-small 혼합 hit@1 11/16, hit@3 12/16(대체 임베더 12/16보다 낮음). 주제 편향을 T-113으로 추가. Node 20.8에서는 transformers.js(sharp)가 안 떠서 `engines`를 22 이상으로. |
-| 2026-09-29 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | 설계 문서 시각화: `architecture-lightrag.md`에 Mermaid 그림 4개, `architecture-lightrag.html` 추가. |
-| 2026-09-29 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | LightRAG 아키텍처 설계(`docs/architecture-lightrag.md`, ADR 0006), LightRAG 트랙 작업 T-401~T-431 추가, 소개 페이지에 다음 아키텍처 구성도 추가. |
-| 2026-09-28 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | 작동 방식·인프라 구성 소개 페이지 `docs/intro.html` 추가. |
+| 2026-10-11 | D-4 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | D-4 결정: 기본 메이플, 두 번째 식당(로그인 없이 선택), 그 외 가입 후 커스텀. 태그 분리 T-304 추가, T-302·T-301 구체화. |
+| 2026-10-11 | DOC | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 최신화 설계(ADR 0007): 패치 노트 원문 자동 반영(T-423), 밈 용어 카드 승인 흐름(T-424), 규칙 2 범위 조정. 설계 문서 md·html·ADR 0006 갱신. |
+| 2026-10-11 | DATA | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 공통 그래프 사실 검수(공식 패치 노트 update/799·806, 나무위키): 스타포스 파괴 후 흔적 복구(2026-03), 샤이닝 스타포스 타임 이름, 큐브 → 메소 재설정 병행, 심볼·아케인포스·결정석·유니온·솔 에르다 문장 수정. 수치는 넣지 않음. 등급색은 공식 값이 공개돼 있지 않아 유지(ADR 0004 메모 갱신). 그래프 버전 2026.10.11-1. |
+| 2026-10-11 | T-101 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 스모크 스크립트 `npm run smoke:providers` 추가(가짜 서버로 통과). Gemini가 잘못된 키 400을 thinkingConfig 오류로 오인해 한 번 더 호출하던 문제 수정 + 단위 테스트 2개. 실제 무료 키 확인은 남음. |
+| 2026-10-11 | EVAL | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 첫 실제 임베딩 모델 평가: e5-small 혼합 hit@1 11/16, hit@3 12/16(대체 임베더 12/16보다 낮음). 주제 편향을 T-113으로 추가. Node 20.8에서는 transformers.js(sharp)가 안 떠서 `engines`를 22 이상으로. |
+| 2026-09-29 | DOC | task/docs-architecture | [#1](https://github.com/roasted-penguin/good-metaphor/pull/1) | 설계 문서 시각화: `architecture-lightrag.md`에 Mermaid 그림 4개, `architecture-lightrag.html` 추가. |
+| 2026-09-29 | DOC | task/docs-architecture | [#1](https://github.com/roasted-penguin/good-metaphor/pull/1) | LightRAG 아키텍처 설계(`docs/architecture-lightrag.md`, ADR 0006), LightRAG 트랙 작업 T-401~T-431 추가, 소개 페이지에 다음 아키텍처 구성도 추가. |
+| 2026-09-28 | DOC | task/docs-architecture | [#1](https://github.com/roasted-penguin/good-metaphor/pull/1) | 작동 방식·인프라 구성 소개 페이지 `docs/intro.html` 추가. |
 | 2026-09-28 | PoC | main | 없음(초기 커밋) | 확장·공통 저장소·제공자 레지스트리·두 층 저장소·테마 구현. 단위 17개, e2e 6개 통과(가짜 LLM, 대체 임베더). |
