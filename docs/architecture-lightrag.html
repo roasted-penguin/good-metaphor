@@ -226,7 +226,7 @@
     <p class="lede">EC2 한 대에 LightRAG를 라이브러리로 감싼 <code class="mono">analogy-api</code>를 두고, 엔티티·관계 추출만 Tailscale로 내 M2 맥의 Ollama에 맡겨요. 호버 경로에는 맥이 없어서 맥이 꺼져 있어도 비유는 나와요. PoC 월 비용은 약 $31이에요.</p>
     <p class="doclinks"><a href="intro.html">← 소개 페이지</a><a href="architecture-lightrag.md">원본 마크다운</a><a href="decisions/0006-lightrag-server.md">ADR 0006</a><a href="TASKS.md">작업 T-401~T-431</a><a href="https://claude.ai/code/artifact/af5b42e7-dd31-4b10-a409-5775f83e2e3e">살아 있는 설계 문서</a></p>
     <nav class="toc" aria-label="목차">
-      <a href="#summary">결론</a><a href="#changes">바뀌는 것</a><a href="#overview">전체 구성</a><a href="#query">질의 흐름</a><a href="#indexing">인덱싱 흐름</a><a href="#storage">저장소</a><a href="#mac">맥 추출 노드</a><a href="#network">네트워크·보안</a><a href="#cost">비용</a><a href="#risks">리스크</a><a href="#rollout">이행 단계</a><a href="#sources">출처</a>
+      <a href="#summary">결론</a><a href="#changes">바뀌는 것</a><a href="#overview">전체 구성</a><a href="#query">질의 흐름</a><a href="#indexing">인덱싱 흐름</a><a href="#storage">저장소</a><a href="#freshness">최신화</a><a href="#mac">맥 추출 노드</a><a href="#network">네트워크·보안</a><a href="#cost">비용</a><a href="#risks">리스크</a><a href="#rollout">이행 단계</a><a href="#sources">출처</a>
     </nav>
   </header>
 
@@ -495,7 +495,7 @@
         </g>
         <rect x="24" y="110" width="140" height="60" rx="8" class="i-box"/>
         <text x="40" y="134" class="i-name" style="font-size:13px">가이드 문서</text>
-        <text x="40" y="154" class="i-sub">공식 가이드·위키</text>
+        <text x="40" y="154" class="i-sub">공식 가이드·패치 노트</text>
         <rect x="200" y="110" width="140" height="60" rx="8" class="i-box"/>
         <text x="216" y="134" class="i-name" style="font-size:13px">청킹·큐 등록</text>
         <text x="216" y="154" class="i-sub">EC2 · 800토큰</text>
@@ -560,6 +560,28 @@
       </tbody>
     </table></div>
     <p class="note">A 단계의 파일 스토리지는 프로세스 두 개가 동시에 쓰면 위험하므로 추출 워커를 API 프로세스 안의 백그라운드 작업으로 둬요. 문서는 <code>doc_id = 출처 URL + 판본</code>으로 넣고, 패치로 바뀌면 지우고 다시 넣어요.</p>
+  </section>
+
+  <section id="freshness">
+    <span class="label">최신화</span>
+    <h2>패치는 원문으로, 밈은 승인한 용어 카드로</h2>
+    <p class="intro">메이플은 매주 패치되고 밈도 바뀌어요. 게임 정보와 커뮤니티 말을 두 갈래로 최신화해요(ADR 0007). 커뮤니티 원문은 저장하지 않아요(D-5).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th></th><th>게임 정보</th><th>커뮤니티 밈·은어</th></tr></thead>
+      <tbody>
+        <tr><td>원천</td><td>공식 패치 노트·가이드</td><td>나무위키·인벤 (읽기만)</td></tr>
+        <tr><td>넣는 것</td><td>원문 그대로, <code>doc_id = URL + 판본</code>, 게시 날짜</td><td>우리 말로 쓴 용어 카드 (뜻, 분류 A~D, 연결 시스템, 출처 URL)</td></tr>
+        <tr><td>주기</td><td>정기 점검 다음 날</td><td>주 1회</td></tr>
+        <tr><td>사람 개입</td><td>없음. 감지 실패 시 알림만, 이전 판 유지</td><td>승인한 카드만 반영</td></tr>
+        <tr><td>수치</td><td>날짜와 함께 넣음</td><td>넣지 않음</td></tr>
+      </tbody>
+    </table></div>
+    <ul class="rules">
+      <li><b>A 은어</b><span>재획·펑·세금처럼 게임 시스템을 가리키는 말이에요. 그 시스템의 별칭이 되고, 질의 키워드에도 더해져서 인벤 글도 검색돼요.</span></li>
+      <li><b>B 밈</b><span>"이해가 쏙쏙" 같은 말이에요. 앱 말투에만 쓰고 비유의 근거로는 쓰지 않아요.</span></li>
+      <li><b>C 인물 · D 멸칭</b><span>그래프에 넣지 않고 금칙어 목록으로 가요. 출력 직전에 검사해서, 걸리면 그 문장을 숨겨요. 띄어쓰기나 우회 표기도 잡아요.</span></li>
+      <li><b>최신 우선</b><span>같은 시스템의 근거가 여러 판이면 최신 패치 노트를 앞에 두고, 말풍선에 "2026-10 패치 기준"처럼 날짜와 출처를 보여요.</span></li>
+    </ul>
   </section>
 
   <section id="mac">
@@ -677,6 +699,7 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
         <text x="402" y="112" class="i-sub" style="fill:var(--ink)">가이드 문서 인덱싱</text>
         <text x="402" y="134" class="i-sub" style="fill:var(--ink)">검수 루프</text>
         <text x="402" y="156" class="i-sub" style="fill:var(--ink)">평가셋 40문장</text>
+        <text x="402" y="178" class="i-sub" style="fill:var(--ink)">패치·밈 최신화</text>
         <text x="584" y="82" class="i-name">L3. 내 워크스페이스</text>
         <text x="584" y="112" class="i-sub" style="fill:var(--ink)">Postgres 전환</text>
         <text x="584" y="134" class="i-sub" style="fill:var(--ink)">t4g.large</text>
