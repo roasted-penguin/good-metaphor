@@ -234,6 +234,7 @@ D-5 결정 후. 문서마다 `doc_id = 출처 URL + 판본`, 패치 시 `adelete
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-11 | DATA | task/eval-real-model | 원격 연결 후 `/ship` | 공통 그래프 사실 검수(공식 패치 노트 update/799·806, 나무위키): 스타포스 파괴 후 흔적 복구(2026-03), 샤이닝 스타포스 타임 이름, 큐브 → 메소 재설정 병행, 심볼·아케인포스·결정석·유니온·솔 에르다 문장 수정. 수치는 넣지 않음. 등급색은 공식 값이 공개돼 있지 않아 유지(ADR 0004 메모 갱신). 그래프 버전 2026.10.11-1. |
 | 2026-10-11 | T-101 | task/eval-real-model | 원격 연결 후 `/ship` | 스모크 스크립트 `npm run smoke:providers` 추가(가짜 서버로 통과). Gemini가 잘못된 키 400을 thinkingConfig 오류로 오인해 한 번 더 호출하던 문제 수정 + 단위 테스트 2개. 실제 무료 키 확인은 남음. |
 | 2026-10-11 | EVAL | task/eval-real-model | 원격 연결 후 `/ship` | 첫 실제 임베딩 모델 평가: e5-small 혼합 hit@1 11/16, hit@3 12/16(대체 임베더 12/16보다 낮음). 주제 편향을 T-113으로 추가. Node 20.8에서는 transformers.js(sharp)가 안 떠서 `engines`를 22 이상으로. |
 | 2026-09-29 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | 설계 문서 시각화: `architecture-lightrag.md`에 Mermaid 그림 4개, `architecture-lightrag.html` 추가. |
