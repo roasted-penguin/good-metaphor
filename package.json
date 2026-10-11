@@ -10,7 +10,8 @@
     "test:unit": "node --test \"tests/unit/*.test.mjs\"",
     "test:e2e": "node scripts/prepare-e2e.mjs && playwright test",
     "eval": "node tools/eval.mjs",
-    "eval:fallback": "node tools/eval.mjs --fallback"
+    "eval:fallback": "node tools/eval.mjs --fallback",
+    "smoke:providers": "node tools/smoke-providers.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"
@@ -20,6 +21,6 @@
     "esbuild": "^0.28.2"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

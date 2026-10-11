@@ -226,7 +226,7 @@
     <p class="lede">EC2 한 대에 LightRAG를 라이브러리로 감싼 <code class="mono">analogy-api</code>를 두고, 엔티티·관계 추출만 Tailscale로 내 M2 맥의 Ollama에 맡겨요. 호버 경로에는 맥이 없어서 맥이 꺼져 있어도 비유는 나와요. PoC 월 비용은 약 $31이에요.</p>
     <p class="doclinks"><a href="intro.html">← 소개 페이지</a><a href="architecture-lightrag.md">원본 마크다운</a><a href="decisions/0006-lightrag-server.md">ADR 0006</a><a href="TASKS.md">작업 T-401~T-431</a><a href="https://claude.ai/code/artifact/af5b42e7-dd31-4b10-a409-5775f83e2e3e">살아 있는 설계 문서</a></p>
     <nav class="toc" aria-label="목차">
-      <a href="#summary">결론</a><a href="#changes">바뀌는 것</a><a href="#overview">전체 구성</a><a href="#query">질의 흐름</a><a href="#indexing">인덱싱 흐름</a><a href="#storage">저장소</a><a href="#mac">맥 추출 노드</a><a href="#network">네트워크·보안</a><a href="#cost">비용</a><a href="#risks">리스크</a><a href="#rollout">이행 단계</a><a href="#sources">출처</a>
+      <a href="#summary">결론</a><a href="#changes">바뀌는 것</a><a href="#overview">전체 구성</a><a href="#query">질의 흐름</a><a href="#indexing">인덱싱 흐름</a><a href="#storage">저장소</a><a href="#freshness">최신화</a><a href="#mac">맥 추출 노드</a><a href="#network">네트워크·보안</a><a href="#cost">비용</a><a href="#risks">리스크</a><a href="#rollout">이행 단계</a><a href="#sources">출처</a>
     </nav>
   </header>
 
@@ -495,7 +495,7 @@
         </g>
         <rect x="24" y="110" width="140" height="60" rx="8" class="i-box"/>
         <text x="40" y="134" class="i-name" style="font-size:13px">가이드 문서</text>
-        <text x="40" y="154" class="i-sub">공식 가이드·위키</text>
+        <text x="40" y="154" class="i-sub">공식 가이드·패치 노트</text>
         <rect x="200" y="110" width="140" height="60" rx="8" class="i-box"/>
         <text x="216" y="134" class="i-name" style="font-size:13px">청킹·큐 등록</text>
         <text x="216" y="154" class="i-sub">EC2 · 800토큰</text>
@@ -545,7 +545,7 @@
     <div class="layers">
       <div class="layer">
         <h3><span class="badge common">공통</span><code class="mono">common_maplestory</code></h3>
-        <ul><li>추상구조 18개 + 가이드 문서에서 추출한 그래프</li><li>운영자만 쓰기 (추출 큐)</li><li>상시 로드</li></ul>
+        <ul><li>추상구조 18개 + 가이드 문서에서 추출한 그래프</li><li>운영자만 쓰기 (추출 큐)</li><li>상시 로드</li><li>식당은 <code class="mono">common_restaurant</code>로 따로, 같은 추상구조 목록 (D-4)</li></ul>
       </div>
       <div class="layer mine">
         <h3><span class="badge mine">내 것</span><code class="mono">u_&lt;사용자id&gt;</code></h3>
@@ -560,6 +560,28 @@
       </tbody>
     </table></div>
     <p class="note">A 단계의 파일 스토리지는 프로세스 두 개가 동시에 쓰면 위험하므로 추출 워커를 API 프로세스 안의 백그라운드 작업으로 둬요. 문서는 <code>doc_id = 출처 URL + 판본</code>으로 넣고, 패치로 바뀌면 지우고 다시 넣어요.</p>
+  </section>
+
+  <section id="freshness">
+    <span class="label">최신화</span>
+    <h2>패치는 원문으로, 밈은 승인한 용어 카드로</h2>
+    <p class="intro">메이플은 매주 패치되고 밈도 바뀌어요. 게임 정보와 커뮤니티 말을 두 갈래로 최신화해요(ADR 0007). 커뮤니티 원문은 저장하지 않아요(D-5).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th></th><th>게임 정보</th><th>커뮤니티 밈·은어</th></tr></thead>
+      <tbody>
+        <tr><td>원천</td><td>공식 패치 노트·가이드</td><td>나무위키·인벤 (읽기만)</td></tr>
+        <tr><td>넣는 것</td><td>원문 그대로, <code>doc_id = URL + 판본</code>, 게시 날짜</td><td>우리 말로 쓴 용어 카드 (뜻, 분류 A~D, 연결 시스템, 출처 URL)</td></tr>
+        <tr><td>주기</td><td>정기 점검 다음 날</td><td>주 1회</td></tr>
+        <tr><td>사람 개입</td><td>없음. 감지 실패 시 알림만, 이전 판 유지</td><td>승인한 카드만 반영</td></tr>
+        <tr><td>수치</td><td>날짜와 함께 넣음</td><td>넣지 않음</td></tr>
+      </tbody>
+    </table></div>
+    <ul class="rules">
+      <li><b>A 은어</b><span>재획·펑·세금처럼 게임 시스템을 가리키는 말이에요. 그 시스템의 별칭이 되고, 질의 키워드에도 더해져서 인벤 글도 검색돼요.</span></li>
+      <li><b>B 밈</b><span>"이해가 쏙쏙" 같은 말이에요. 앱 말투에만 쓰고 비유의 근거로는 쓰지 않아요.</span></li>
+      <li><b>C 인물 · D 멸칭</b><span>그래프에 넣지 않고 금칙어 목록으로 가요. 출력 직전에 검사해서, 걸리면 그 문장을 숨겨요. 띄어쓰기나 우회 표기도 잡아요.</span></li>
+      <li><b>최신 우선</b><span>같은 시스템의 근거가 여러 판이면 최신 패치 노트를 앞에 두고, 말풍선에 "2026-10 패치 기준"처럼 날짜와 출처를 보여요.</span></li>
+    </ul>
   </section>
 
   <section id="mac">
@@ -582,7 +604,7 @@ ollama pull gemma4:12b
 tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
     <div class="facts3">
       <div><b>시간창</b><span>launchd가 점심(12:10~13:00)과 밤(23:00~07:00)에만 Ollama를 켜고 <code>caffeinate -i</code>. 바로 노트북을 써야 하면 Ollama만 끄면 돼요.</span></div>
-      <div><b>처리량 (예상)</b><span>청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩이면 메모리 대역폭이 두 배라 더 빨라요. 첫 실험에서 실측해요.</span></div>
+      <div><b>처리량 (예상)</b><span>청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩(메모리 16GB)으로 확인돼서 M2보다 메모리 대역폭이 두 배예요. 첫 실험에서 실측해요.</span></div>
       <div><b>맥이 오래 꺼져 있으면</b><span>관리자 플래그로 추출만 Gemini Flash-Lite로. 하루 청크 상한을 두고 사용자 워크스페이스에만 써요.</span></div>
     </div>
   </section>
@@ -646,10 +668,10 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
       </tbody>
     </table></div>
     <ul class="checks">
-      <li>"M2 mac pro"가 M2 Pro 칩인지 M2 칩의 MacBook Pro인지 (처리량이 두 배 차이)</li>
-      <li>메이플 가이드 문서 출처: 공식 가이드만 쓸지, 위키까지 쓸지 (D-5)</li>
+      <li><s>"M2 mac pro"가 M2 Pro 칩인지 M2 칩의 MacBook Pro인지</s> → M2 Pro, 메모리 16GB로 확인</li>
+      <li><s>메이플 가이드 문서 출처</s> → 원문은 공식 가이드·패치 노트만, 나무위키·인벤은 참고해 직접 쓴 요약만 (D-5)</li>
       <li>서울 리전 정확한 요금과 리전 선택</li>
-      <li>로그인: EC2 Postgres + 자체 JWT로 갈지, 인증만 Supabase Auth를 빌릴지 (D-2)</li>
+      <li>로그인: EC2 Postgres + 자체 JWT로 갈지, 인증만 Supabase Auth를 빌릴지 (D-2) → <b>L3 시작 전에 결정</b></li>
     </ul>
   </section>
 
@@ -677,6 +699,7 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
         <text x="402" y="112" class="i-sub" style="fill:var(--ink)">가이드 문서 인덱싱</text>
         <text x="402" y="134" class="i-sub" style="fill:var(--ink)">검수 루프</text>
         <text x="402" y="156" class="i-sub" style="fill:var(--ink)">평가셋 40문장</text>
+        <text x="402" y="178" class="i-sub" style="fill:var(--ink)">패치·밈 최신화</text>
         <text x="584" y="82" class="i-name">L3. 내 워크스페이스</text>
         <text x="584" y="112" class="i-sub" style="fill:var(--ink)">Postgres 전환</text>
         <text x="584" y="134" class="i-sub" style="fill:var(--ink)">t4g.large</text>
