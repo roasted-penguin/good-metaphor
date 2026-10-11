@@ -265,7 +265,7 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434
 - [x] "M2 mac pro"가 M2 Pro 칩인지 M2 칩의 MacBook Pro인지 → **M2 Pro, 메모리 16GB** (2026-10-11 `sysctl`로 확인)
 - [x] 메이플 가이드 문서 출처 → 원문은 공식 가이드·패치 노트만, 나무위키·인벤은 참고해 직접 쓴 요약만 (D-5, 충돌 시 공식 우선)
 - [ ] 서울 리전 정확한 요금과 리전 선택
-- [ ] D-2 로그인: EC2 Postgres + 자체 JWT로 갈지, 인증만 Supabase Auth를 빌릴지
+- [ ] D-2 로그인: EC2 Postgres + 자체 JWT로 갈지, 인증만 Supabase Auth를 빌릴지 → **L3 시작 전에 결정**(2026-10-11 보류, 추천은 인증만 빌리기, 선택지는 TASKS.md D-2)
 
 ## 이행 단계
 
