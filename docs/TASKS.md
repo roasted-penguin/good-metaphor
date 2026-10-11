@@ -9,10 +9,10 @@
 | --- | --- | --- | --- | --- | --- |
 | D-1 | 기본 트리거를 Alt로 둘지 자동으로 둘지 | 결정 | P0 | 결정 필요 | |
 | T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 대기 | |
-| T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 | 1 품질 | P0 | 대기 | |
-| T-103 | 검색 평가셋 확장(40문장+)과 품질 관문 통과 | 1 품질 | P0 | 대기 | T-102 |
+| T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 (오프라인 대체 경로) | 1 품질 | P2 | 대기 | |
+| T-103 | 검색 평가셋 확장(40문장+)과 품질 관문 통과 | 1 품질 | P0 | 대기 | T-405 |
 | T-104 | 생성 품질 평가 (근거 준수·자연스러움) | 1 품질 | P1 | 대기 | T-101, T-103 |
-| T-105 | 공통 그래프 벡터 사전 계산 | 1 품질 | P1 | 대기 | T-103 |
+| T-105 | 공통 그래프 벡터 사전 계산 | 1 품질 | P2 | 보류 | LightRAG 전환으로 서버가 벡터를 보관 |
 | T-106 | 말풍선 도움됨/어색함 피드백 | 1 품질 | P1 | 대기 | |
 | T-107 | 제외 사이트 목록과 "이 사이트에서 끄기" | 1 품질 | P1 | 대기 | |
 | T-108 | 첫 결과 전 테마 깜빡임 제거 | 1 품질 | P2 | 대기 | |
@@ -24,14 +24,27 @@
 | T-201 | 사용자 저장소 서버 + remote 어댑터 연결 | 2 계정 | P0 | 대기 | D-2 |
 | T-202 | 그래프 편집 화면 (JSON 대신 폼) | 2 계정 | P1 | 대기 | |
 | T-203 | 공통 저장소 원격 배포와 버전 확인 | 2 계정 | P1 | 대기 | T-201 |
-| T-204 | 외부 배포용 API 키 프록시 | 2 계정 | P1 | 대기 | T-201 |
+| T-204 | 외부 배포용 API 키 프록시 | 2 계정 | P1 | 보류 | T-402가 서버에서 키를 보관하며 흡수 |
 | D-3 | 공통 저장소 검수 주체와 갱신 주기 | 결정 | P1 | 결정 필요 | |
+| D-5 | 메이플 가이드 문서 출처 (공식만 / 위키 포함) | 결정 | P1 | 결정 필요 | |
 | D-4 | 두 번째 공통 관심사 | 결정 | P1 | 결정 필요 | |
 | T-301 | AI로 관심사 그래프 초안 만들기 + 사용자 검수 | 3 확장 | P0 | 대기 | T-202 |
 | T-302 | 두 번째 공통 관심사 그래프 | 3 확장 | P1 | 대기 | D-4, D-3 |
-| T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 대기 | T-107, T-204 |
+| T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 대기 | T-107, T-402 |
+| T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
+| T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 대기 | |
+| T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 대기 | T-402 |
+| T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 대기 | T-402 |
+| T-405 | [L0] 평가 도구에 서버 모드 추가, 관문: 서버 hit@1 ≥ 브라우저 | L 서버 | P0 | 대기 | T-403 |
+| T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
+| T-412 | [L1] 추출 프롬프트: 통제 어휘·용어 사전, JSON 모드 | L 서버 | P0 | 대기 | T-403 |
+| T-413 | [L1] 20청크 A/B 하네스 (모델 × thinking) | L 서버 | P0 | 대기 | T-411, T-412 |
+| T-414 | [L1] 추출 큐 워커: 맥 헬스체크, 재시도, 클라우드 대체 플래그 | L 서버 | P1 | 대기 | T-411 |
+| T-421 | [L2] 가이드 문서 수집·인덱싱 | L 서버 | P1 | 대기 | T-413, T-414, D-5 |
+| T-422 | [L2] 검수 리포트: 추상구조 연결 없는 개념 | L 서버 | P1 | 대기 | T-421 |
+| T-431 | [L3] Postgres(pgvector·AGE) 전환, t4g.large | L 서버 | P1 | 대기 | T-421 |
 
-단계 관문 (기획서 로드맵과 같음):
+단계 관문 (기획서 로드맵과 같음). LightRAG 트랙(T-4xx)은 [architecture-lightrag.md](architecture-lightrag.md)의 L0~L3 관문을 따른다. 사용자 워크스페이스(L3)는 Phase 2의 T-201과 함께 진행한다.
 - Phase 0 → 1: 실제 키로 동작 확인 (T-101, T-102)
 - Phase 1 → 2: 검색 hit@1 이 평가셋의 75% 이상 (T-103), 근거 밖 사실 0건 (T-104)
 - Phase 2 → 3: 로그인 사용자의 오버레이가 두 기기에서 동기화
@@ -53,6 +66,9 @@
 
 ### D-3 공통 저장소 검수
 게임 패치로 사실이 틀려진다. 누가 검수하고, 얼마나 자주 갱신하는지, 제보 경로를 정한다.
+
+### D-5 메이플 가이드 문서 출처
+LightRAG 공통 그래프(T-421)에 넣을 문서. 선택지: (a) 공식 가이드만 (b) 나무위키 등 커뮤니티 문서 포함 (c) 직접 요약한 문서만. 라이선스(CC BY-NC-SA 등)와 출처 표기, 패치 주기에 따른 갱신 방법을 함께 정한다. 추천: (a)+(c)로 시작하고 (b)는 라이선스 확인 후.
 
 ### D-4 두 번째 공통 관심사
 메이플 밖 사용자 유입용. 후보 예: 축구, 요리, 다른 게임. 추상 태그 사전을 재사용할 수 있는지가 기준.
@@ -157,8 +173,60 @@ D-4 결정 후 `data/common/<id>.json` 추가, 관심사 선택 UI(로그인 없
 
 ---
 
+## LightRAG 트랙 · 서버 전환 (설계: docs/architecture-lightrag.md, ADR 0006)
+
+### T-401 [L0] EC2 준비
+`t4g.medium`(Graviton, 서울 리전 요금 확인), 보안 그룹 인바운드 443만, Caddy(HTTPS 자동 인증서), Tailscale `tag:rag-server`(`--ssh`), Gemini 키는 SSM Parameter Store, 스왑 2GB, Ollama + `bge-m3`. 인프라 절차는 `infra/README.md`에 명령 그대로 남긴다(콘솔 클릭 금지, 가능하면 스크립트).
+**완료 기준** 테일넷에서만 SSH 가능, 인터넷에서 `https://<도메인>/health` 200, `bge-m3` 임베딩 호출 성공.
+
+### T-402 [L0] analogy-api 골격
+`server/`(Python, FastAPI, `lightrag-hku` 버전 고정). `POST /v1/analogy`는 확장의 `explain()` 결과 형식을 그대로 돌려준다. 키워드(Gemini Flash-Lite) → `QueryParam(mode="hybrid", hl_keywords, ll_keywords, only_need_context=True)` → 후보 3개 → 비유(Gemini Flash) → `nodeId` 검증. 결과 캐시(문장 해시 + 워크스페이스 버전). 설치 토큰별 요청 한도. 프롬프트는 `extension/lib/prompt.js`와 같은 규칙을 Python으로 옮기고, 두 쪽이 같은 규칙인지 확인하는 테스트를 둔다.
+**완료 기준** pytest(가짜 LLM, 작은 시드 그래프)로 응답 형식·근거 검증·캐시 확인. `docker compose up`으로 로컬 실행.
+
+### T-403 [L0] 시드 주입
+`maplestory.json` → `insert_custom_kg` 변환 스크립트. 태그 18개는 `entity_type="추상구조"` 엔티티, 노드는 `게임시스템` 등, 노드–태그 연결은 `keywords`에 태그 라벨이 들어간 관계, 기존 엣지는 `rel`을 설명으로. `source_id`는 `seed:<id>`.
+**완료 기준** 워크스페이스 `common_maplestory`에 엔티티 36개, 관계(노드–태그 + 기존 엣지) 적재 확인. 재실행해도 중복이 생기지 않음.
+
+### T-404 [L0] 확장 서버 모드
+`config/admin.json`에 `analogyServer.url`. 설정되면 background가 서버를 먼저 부르고, 실패(타임아웃 4초, 5xx)하면 기존 브라우저 파이프라인으로 대체. 말풍선 footer에 `서버`/`로컬` 표시. e2e는 가짜 analogy-api(Node)로.
+**완료 기준** e2e: 서버 응답 사용, 서버 다운 시 로컬 대체 모두 통과.
+
+### T-405 [L0] 평가 도구 서버 모드 · L0 관문
+`tools/eval.mjs --server <url>`: 같은 평가셋을 서버 `/v1/analogy`(debug 후보)로 돌려 hit@1·hit@3 비교. 결과를 EVAL_LOG에.
+**완료 기준** 서버 hit@1 ≥ 브라우저 hit@1. 통과하면 ADR 0006 상태를 "채택"으로.
+
+### T-411 [L1] 맥 추출 노드
+`infra/mac/`에 launchd plist 두 개(시간창 시작·끝), Ollama 환경 변수(`OLLAMA_HOST=127.0.0.1:11434`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_KEEP_ALIVE=5m`, `OLLAMA_CONTEXT_LENGTH=16384`), `tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434`, `tag:llm-node`. Tailscale 정책 파일은 `infra/tailscale-policy.json`.
+**완료 기준** EC2에서 `curl http://<맥 테일넷 이름>:11434/api/tags` 성공, 같은 와이파이의 다른 기기에서는 실패.
+
+### T-412 [L1] 추출 프롬프트
+LightRAG 추출 프롬프트 확장: 엔티티 유형 `게임시스템, 재화, 아이템, 보스, 지역, 추상구조`, 통제 어휘 18개(원본 `maplestory.json` tags에서 생성), 메이플 용어 사전, 예시 2개. `ENTITY_EXTRACTION_USE_JSON` 사용. 목록 밖 추상구조를 만들면 후처리에서 버린다.
+**완료 기준** 단위 테스트: 어휘 목록 생성, 목록 밖 추상구조 제거.
+
+### T-413 [L1] 20청크 A/B 하네스 · L1 관문
+`server/tools/ab_extract.py`: 청크 20개 × (gemma4:12b, qwen3.5:9b) × (thinking 켬, 끔). 파싱 실패율, 청크당 엔티티·관계 수, 추상구조 연결률, 청크당 시간, 최대 메모리. 결과표를 `docs/EVAL_LOG.md`에.
+**완료 기준** 파싱 실패 5% 이하, 게임 개념의 추상구조 연결률 70% 이상인 조합을 기본값으로 확정.
+
+### T-414 [L1] 추출 큐 워커
+문서 상태 저장소 기반 큐. 5분마다 맥 헬스체크, 응답하면 `llm_model_max_async=1`로 처리, 연결이 끊기면 해당 청크 실패 표시 후 다음 시간창에 재시도. 관리자 플래그 `extractFallback=cloud`(하루 청크 상한, 사용자 워크스페이스에만).
+**완료 기준** 가짜 Ollama 서버를 켰다 껐다 하는 테스트로 재시도·재개 확인.
+
+### T-421 [L2] 가이드 문서 수집·인덱싱
+D-5 결정 후. 문서마다 `doc_id = 출처 URL + 판본`, 패치 시 `adelete_by_doc_id` 후 재삽입. 출처 URL은 관계 설명과 함께 남아 말풍선 근거에 링크로 보일 수 있게.
+
+### T-422 [L2] 검수 리포트
+"추상구조 연결이 없는 게임 개념" 목록과, 같은 대상을 가리키는 것으로 보이는 이름 쌍(임베딩 유사도 상위)을 뽑아 `/admin/review`(테일넷 전용)에 보여 준다. 보강은 `insert_custom_kg`.
+
+### T-431 [L3] Postgres 전환
+`t4g.large`, PostgreSQL + pgvector(HNSW) + Apache AGE. 파일 스토리지 → Postgres 이전 스크립트. 추출 워커를 별도 프로세스로 분리. 로그인·오버레이 설정 테이블도 같은 DB(D-2와 함께).
+
+---
+
 ## 작업 로그
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-09-29 | DOC | task/docs-architecture | [#1](https://github.com/roasted-penguin/good-metaphor/pull/1) | 설계 문서 시각화: `architecture-lightrag.md`에 Mermaid 그림 4개, `architecture-lightrag.html` 추가. |
+| 2026-09-29 | DOC | task/docs-architecture | [#1](https://github.com/roasted-penguin/good-metaphor/pull/1) | LightRAG 아키텍처 설계(`docs/architecture-lightrag.md`, ADR 0006), LightRAG 트랙 작업 T-401~T-431 추가, 소개 페이지에 다음 아키텍처 구성도 추가. |
+| 2026-09-28 | DOC | task/docs-architecture | [#1](https://github.com/roasted-penguin/good-metaphor/pull/1) | 작동 방식·인프라 구성 소개 페이지 `docs/intro.html` 추가. |
 | 2026-09-28 | PoC | main | 없음(초기 커밋) | 확장·공통 저장소·제공자 레지스트리·두 층 저장소·테마 구현. 단위 17개, e2e 6개 통과(가짜 LLM, 대체 임베더). |
