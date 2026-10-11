@@ -9,9 +9,9 @@
 | --- | --- | --- | --- | --- | --- |
 | D-1 | 기본 트리거를 Alt로 둘지 자동으로 둘지 | 결정 | P0 | 완료 | Alt + 첫 실행 선택 |
 | T-116 | 첫 실행 트리거 선택 화면 (D-1) | 1 품질 | P1 | 대기 | |
-| T-117 | 뜻 먼저 보여 주기: 응답 스트리밍으로 체감 속도 개선 | 1 품질 | P1 | 대기 | T-101 |
-| T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 진행 | 무료 키(Gemini, Groq) |
-| T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 (오프라인 대체 경로) | 1 품질 | P2 | 대기 | |
+| T-117 | 뜻 먼저 보여 주기: 응답 스트리밍으로 체감 속도 개선 | 1 품질 | P0 | 대기 | |
+| T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 리뷰 | |
+| T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 (오프라인 대체 경로) | 1 품질 | P2 | 진행 | 첫 로드 확인됨, 캐시·대체 경로 남음 |
 | T-103 | 검색 평가셋 확장(40문장+)과 품질 관문 통과 | 1 품질 | P0 | 대기 | T-405 |
 | T-104 | 생성 품질 평가 (근거 준수·자연스러움) | 1 품질 | P1 | 대기 | T-101, T-103 |
 | T-105 | 공통 그래프 벡터 사전 계산 | 1 품질 | P2 | 보류 | LightRAG 전환으로 서버가 벡터를 보관 |
@@ -122,6 +122,11 @@ LightRAG 공통 그래프(T-421)에 넣을 문서. 선택지: (a) 공식 가이�
 - `tools/smoke-providers.mjs`: 환경 변수(`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)가 있는 제공자만 `lib/providers.js`의 `complete()`로 비유 프롬프트 1건을 보내고, `parseJSONLoose` 결과와 지연 시간을 출력. `npm run smoke:providers`로 등록.
 - 실패하는 파라미터를 고친다. 의심 지점: Gemini `thinkingConfig`/`responseMimeType`, OpenAI `gpt-6-*`가 chat completions에서 요구하는 인자, Anthropic 브라우저 직접 호출 헤더.
 - 확장에서 설정 → 연결 테스트 → 시험해 보기를 각 제공자로 한 번씩.
+**결과 (2026-10-11)** 무료 Gemini 키로 완료 기준 충족(아래). OpenAI·Anthropic은 키가 없어 건너뜀, Groq는 키를 받으면 같은 스크립트로 확인.
+- 스모크(`gemini-3.8-flash`, thinking low): 추상화 3.3초, 비유 생성 2.6초·1.9초, JSON·`nodeId` 검증 통과.
+- 실제 확장(headless 크롬, 실제 키 + 실제 임베딩): 연결 테스트 통과, 호버 3건 모두 성공. 걸린 시간 3.6초·9.1초·3.6초(캐시 없음, 임베딩 포함). **설계 가정(1~2초)보다 느려서** T-117(뜻 먼저)의 우선순위를 올릴 근거.
+- 레버리지 문장은 검색 후보가 `meso_inflation`·`meso`·`auction`(T-113 쏠림)이라 LLM이 비유를 내지 않았다. 억지 비유 대신 빈칸 = 규칙대로 동작. 검색이 고쳐져야 비유가 나온다.
+- 품질 메모(T-104): API 요청 제한 문장의 뜻풀이가 "한 사용자"를 "서버"로 옮겨 적음.
 **진행 (2026-10-11)** `npm run smoke:providers` 완료. 가짜 서버(custom)로 통과 확인. 유료 키(OpenAI, Anthropic)는 없어서 무료인 Gemini·Groq 키로만 확인하고, 두 제공자는 건너뜀으로 기록한다. 로컬 Ollama는 `CUSTOM_BASE_URL`로 같은 스크립트를 쓴다.
 **완료 기준** 키가 있는 모든 제공자가 유효한 JSON(`meaning`, `analogy`, `nodeId`)을 돌려준다. 결과를 작업 로그에 제공자별 지연 시간과 함께 남긴다.
 **파일** `extension/lib/providers.js`, `tools/`, `package.json`
@@ -133,6 +138,7 @@ LightRAG 공통 그래프(T-421)에 넣을 문서. 선택지: (a) 공식 가이�
 - 두 번째 실행(캐시)에서 3초 안에 준비되는지.
 - 느린 네트워크에서 서비스 워커가 중간에 죽지 않는지(`keepAlive`). 죽으면 오프스크린이 직접 진행 상태를 저장하게 바꾼다.
 - Hugging Face가 막힌 환경에서는 설정 화면에 "대체 검색 사용 중 · 원인"이 보이는지.
+**진행 (2026-10-11)** 실제 확장(headless 크롬)에서 `embed:warmup` → `ready`, `embedderId = Xenova/multilingual-e5-small@q8` 확인. 첫 로드 13.9초(모델 다운로드 포함). 남은 것: 두 번째 실행 캐시 3초, 느린 네트워크에서 서비스 워커 생존, Hugging Face 차단 시 설정 화면 문구, 받은 용량 기록.
 **완료 기준** `debug.embedderId`가 `Xenova/multilingual-e5-small@q8`로 나오는 결과를 시험해 보기에서 확인. 첫 로드 시간·용량을 작업 로그에 기록.
 **파일** `src/offscreen-src.js`(고친 뒤 `npm run build`), `extension/background.js`
 
@@ -318,6 +324,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-11 | T-101 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 무료 Gemini 키로 스모크·실제 확장 확인. 호출 1.9~3.3초, 호버 3.6~9.1초(설계 가정보다 느림 → T-117). 레버리지 문장은 T-113 쏠림으로 비유 없음(빈칸, 규칙대로). T-102 첫 로드 13.9초 확인. |
 | 2026-10-11 | D-1·D-3 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | D-1(기본 Alt + 첫 실행 선택), D-3(본인 승인, 큰 업데이트마다, 출처·검수 날짜, 제보 3건 제외) 결정. D-2는 L3 전에 결정(T-431·T-201 선행 조건). T-116·T-117·T-118 추가. |
 | 2026-10-11 | NAME | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 앱 이름 "좋은비유네용" 확정, 변경 작업 T-115 추가. |
 | 2026-10-11 | D-4 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | D-4 결정: 기본 메이플, 두 번째 식당(로그인 없이 선택), 그 외 가입 후 커스텀. 태그 분리 T-304 추가, T-302·T-301 구체화. |
