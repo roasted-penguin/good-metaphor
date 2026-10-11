@@ -20,6 +20,7 @@
 | T-110 | 벡터 캐시 정리 (모델 바뀌면 삭제, 상한) | 1 품질 | P2 | 대기 | |
 | T-111 | iframe·Shadow DOM 안 문장 지원 | 1 품질 | P2 | 대기 | |
 | T-112 | 윈도우에서 Alt 메뉴 포커스 충돌 확인 | 1 품질 | P2 | 대기 | |
+| T-115 | 앱 이름을 "좋은비유네용"으로 바꾸기 | 1 품질 | P1 | 대기 | |
 | T-114 | 메이플 커뮤니티 용어 사전: 은어 aliases + 멸칭 금칙어 필터 | 1 품질 | P1 | 대기 | |
 | T-113 | 금융·경제 문장이 `meso`·`auction`으로 끌려가는 주제 편향 줄이기 | 1 품질 | P0 | 대기 | |
 | D-2 | 로그인 방식과 백엔드 | 결정 | P0 | 결정 필요 | Phase 1 관문 |
@@ -170,6 +171,11 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 **완료 기준** 실제 모델 혼합 hit@1 ≥ 13/16, 금융 문장 5건 중 3건 이상 맞힘. T-103의 확장 평가셋에서도 떨어지지 않을 것.
 **파일** `extension/lib/graph.js`, `extension/lib/retrieval.js`, `extension/data/common/maplestory.json`, `tools/eval.mjs`
 
+### T-115 앱 이름 변경: 좋은비유네용
+**왜** 2026-10-11 사용자가 확정. 배경과 주의점은 [naming-meme.md](naming-meme.md)(원래 반어였던 밈이라 비유 품질과 이름이 묶인다).
+**할 일** `extension/manifest.json`의 `name`·`default_title`(PoC 표시는 유지), 팝업·설정 화면 제목, 말풍선 표시 이름(`content.js`, `content.css`의 주석 포함), `package.json` `name`(영문 슬러그 `good-metaphor`), README, CLAUDE.md 제목, `docs/intro.html`·`architecture-lightrag.html` 제목, 기획서. 피드백 버튼 문구는 T-106에서.
+**완료 기준** 코드·문서에서 "비유 도우미"·"비유 설명 도우미"·`analogy-helper`가 남지 않음(빌드 산출물 제외), e2e 통과(제목을 확인하는 테스트가 있으면 함께 수정).
+
 ### T-114 메이플 커뮤니티 용어 사전
 **왜** 인벤 같은 페이지는 은어(재획, 펑, 세금, 메요일)로 쓰여 있어 지금 그래프로는 검색이 안 된다. 또 LLM이 커뮤니티 멸칭(쌀숭이, 리선족 등)을 비유에 섞어 낼 위험이 있다. 용어 분류는 [naming-meme.md](naming-meme.md) "메이플 커뮤니티 용어".
 **할 일**
@@ -278,6 +284,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-11 | NAME | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 앱 이름 "좋은비유네용" 확정, 변경 작업 T-115 추가. |
 | 2026-10-11 | D-4 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | D-4 결정: 기본 메이플, 두 번째 식당(로그인 없이 선택), 그 외 가입 후 커스텀. 태그 분리 T-304 추가, T-302·T-301 구체화. |
 | 2026-10-11 | DOC | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 최신화 설계(ADR 0007): 패치 노트 원문 자동 반영(T-423), 밈 용어 카드 승인 흐름(T-424), 규칙 2 범위 조정. 설계 문서 md·html·ADR 0006 갱신. |
 | 2026-10-11 | DATA | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 공통 그래프 사실 검수(공식 패치 노트 update/799·806, 나무위키): 스타포스 파괴 후 흔적 복구(2026-03), 샤이닝 스타포스 타임 이름, 큐브 → 메소 재설정 병행, 심볼·아케인포스·결정석·유니온·솔 에르다 문장 수정. 수치는 넣지 않음. 등급색은 공식 값이 공개돼 있지 않아 유지(ADR 0004 메모 갱신). 그래프 버전 2026.10.11-1. |
