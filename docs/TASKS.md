@@ -8,7 +8,7 @@
 | ID | 작업 | 단계 | 우선 | 상태 | 먼저 끝나야 할 것 |
 | --- | --- | --- | --- | --- | --- |
 | D-1 | 기본 트리거를 Alt로 둘지 자동으로 둘지 | 결정 | P0 | 결정 필요 | |
-| T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 대기 | |
+| T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 진행 | 무료 키(Gemini, Groq) |
 | T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 (오프라인 대체 경로) | 1 품질 | P2 | 대기 | |
 | T-103 | 검색 평가셋 확장(40문장+)과 품질 관문 통과 | 1 품질 | P0 | 대기 | T-405 |
 | T-104 | 생성 품질 평가 (근거 준수·자연스러움) | 1 품질 | P1 | 대기 | T-101, T-103 |
@@ -84,6 +84,7 @@ LightRAG 공통 그래프(T-421)에 넣을 문서. 선택지: (a) 공식 가이�
 - `tools/smoke-providers.mjs`: 환경 변수(`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)가 있는 제공자만 `lib/providers.js`의 `complete()`로 비유 프롬프트 1건을 보내고, `parseJSONLoose` 결과와 지연 시간을 출력. `npm run smoke:providers`로 등록.
 - 실패하는 파라미터를 고친다. 의심 지점: Gemini `thinkingConfig`/`responseMimeType`, OpenAI `gpt-6-*`가 chat completions에서 요구하는 인자, Anthropic 브라우저 직접 호출 헤더.
 - 확장에서 설정 → 연결 테스트 → 시험해 보기를 각 제공자로 한 번씩.
+**진행 (2026-10-11)** `npm run smoke:providers` 완료. 가짜 서버(custom)로 통과 확인. 유료 키(OpenAI, Anthropic)는 없어서 무료인 Gemini·Groq 키로만 확인하고, 두 제공자는 건너뜀으로 기록한다. 로컬 Ollama는 `CUSTOM_BASE_URL`로 같은 스크립트를 쓴다.
 **완료 기준** 키가 있는 모든 제공자가 유효한 JSON(`meaning`, `analogy`, `nodeId`)을 돌려준다. 결과를 작업 로그에 제공자별 지연 시간과 함께 남긴다.
 **파일** `extension/lib/providers.js`, `tools/`, `package.json`
 
@@ -233,6 +234,7 @@ D-5 결정 후. 문서마다 `doc_id = 출처 URL + 판본`, 패치 시 `adelete
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-11 | T-101 | task/eval-real-model | 원격 연결 후 `/ship` | 스모크 스크립트 `npm run smoke:providers` 추가(가짜 서버로 통과). Gemini가 잘못된 키 400을 thinkingConfig 오류로 오인해 한 번 더 호출하던 문제 수정 + 단위 테스트 2개. 실제 무료 키 확인은 남음. |
 | 2026-10-11 | EVAL | task/eval-real-model | 원격 연결 후 `/ship` | 첫 실제 임베딩 모델 평가: e5-small 혼합 hit@1 11/16, hit@3 12/16(대체 임베더 12/16보다 낮음). 주제 편향을 T-113으로 추가. Node 20.8에서는 transformers.js(sharp)가 안 떠서 `engines`를 22 이상으로. |
 | 2026-09-29 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | 설계 문서 시각화: `architecture-lightrag.md`에 Mermaid 그림 4개, `architecture-lightrag.html` 추가. |
 | 2026-09-29 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | LightRAG 아키텍처 설계(`docs/architecture-lightrag.md`, ADR 0006), LightRAG 트랙 작업 T-401~T-431 추가, 소개 페이지에 다음 아키텍처 구성도 추가. |

@@ -97,8 +97,8 @@ async function callGemini({ baseUrl, model, apiKey }, system, user, { json }) {
   try {
     data = await postJSON(url, { 'x-goog-api-key': apiKey }, body);
   } catch (e) {
-    // 모델에 따라 thinkingConfig 를 받지 않으면 빼고 다시 시도
-    if (e.status !== 400) throw e;
+    // 모델에 따라 thinkingConfig 를 받지 않으면 빼고 다시 시도 (키 오류 같은 다른 400은 그대로 던진다)
+    if (e.status !== 400 || !/think/i.test(e.message)) throw e;
     delete body.generationConfig.thinkingConfig;
     data = await postJSON(url, { 'x-goog-api-key': apiKey }, body);
   }
