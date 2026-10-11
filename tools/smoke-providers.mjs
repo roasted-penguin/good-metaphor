@@ -45,10 +45,12 @@ function targets() {
   return out;
 }
 
+// fn 에 stats 를 넘기고, 걸린 시간과 재시도 횟수를 함께 돌려준다
 async function timed(fn) {
-  const t = Date.now();
-  try { return { ok: true, value: await fn(), ms: Date.now() - t }; }
-  catch (e) { return { ok: false, error: e.message, ms: Date.now() - t }; }
+  const t = Date.now(), stats = {};
+  const tail = () => ({ ms: Date.now() - t, retry: stats.retries ? ` (재시도 ${stats.retries}회)` : '' });
+  try { return { ok: true, value: await fn(stats), ...tail() }; }
+  catch (e) { return { ok: false, error: e.message, ...tail() }; }
 }
 
 function check(answer, candidates) {
@@ -73,18 +75,18 @@ for (const p of runs) {
   console.log(`\n== ${p.id} / ${p.model}`);
   // 정밀 모드 1단계(json 아님)
   const ab = buildAbstractPrompt(SENTENCES[0]);
-  const r0 = await timed(() => complete(p, ab.system, ab.user, { json: false }));
-  console.log(`  추상화    ${r0.ok ? '✓' : '✗'} ${r0.ms}ms  ${r0.ok ? r0.value.trim().slice(0, 80) : r0.error}`);
+  const r0 = await timed(stats => complete(p, ab.system, ab.user, { json: false, stats }));
+  console.log(`  추상화    ${r0.ok ? '✓' : '✗'} ${r0.ms}ms${r0.retry}  ${r0.ok ? r0.value.trim().slice(0, 80) : r0.error}`);
   if (!r0.ok) failed++;
   // 비유 생성(json)
   for (const s of SENTENCES) {
     const candidates = retrieve(hashEmbed(s.sentence), graph, vecs, admin.retrieval);
     const pr = buildAnalogyPrompt({ ...s, domain: graph.domain, analogyPrefix: graph.analogyPrefix, candidates });
-    const r = await timed(() => complete(p, pr.system, pr.user, { json: true }));
+    const r = await timed(stats => complete(p, pr.system, pr.user, { json: true, stats }));
     const answer = r.ok ? parseJSONLoose(r.value) : null;
     const problem = r.ok ? check(answer, candidates) : r.error;
     if (problem) failed++;
-    console.log(`  비유 생성  ${problem ? '✗' : '✓'} ${r.ms}ms  ${s.sentence.slice(0, 24)}…`);
+    console.log(`  비유 생성  ${problem ? '✗' : '✓'} ${r.ms}ms${r.retry}  ${s.sentence.slice(0, 24)}…`);
     if (problem) console.log(`    문제: ${problem}${r.ok ? `\n    원문: ${r.value.slice(0, 200)}` : ''}`);
     else console.log(`    → [${answer.nodeId}] ${answer.analogy || '(비유 없음)'}\n      뜻: ${answer.meaning}`);
   }
