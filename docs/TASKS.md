@@ -330,7 +330,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
-| 2026-10-11 | T-119 | task/T-119-smoke-workflow | PR 칸은 열고 채움 | 수동 실행 스모크 워크플로 추가, 키는 Actions 비밀값(GEMINI·GROQ 등록 확인). 실행 확인은 dev 병합 뒤(workflow_dispatch는 기본 브랜치에 있어야 버튼이 생김). |
+| 2026-10-11 | T-119 | task/T-119-smoke-workflow | [#3](https://github.com/roasted-penguin/good-metaphor/pull/3) | 수동 실행 스모크 워크플로 추가, 키는 Actions 비밀값(GEMINI·GROQ 등록 확인). 실행 확인은 dev 병합 뒤(workflow_dispatch는 기본 브랜치에 있어야 버튼이 생김). |
 | 2026-10-11 | T-101 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 무료 Gemini 키로 스모크·실제 확장 확인. 호출 1.9~3.3초, 호버 3.6~9.1초(설계 가정보다 느림 → T-117). 레버리지 문장은 T-113 쏠림으로 비유 없음(빈칸, 규칙대로). T-102 첫 로드 13.9초 확인. |
 | 2026-10-11 | D-1·D-3 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | D-1(기본 Alt + 첫 실행 선택), D-3(본인 승인, 큰 업데이트마다, 출처·검수 날짜, 제보 3건 제외) 결정. D-2는 L3 전에 결정(T-431·T-201 선행 조건). T-116·T-117·T-118 추가. |
 | 2026-10-11 | NAME | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 앱 이름 "좋은비유네용" 확정, 변경 작업 T-115 추가. |
