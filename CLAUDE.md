@@ -10,11 +10,11 @@
 - 작동 방식·인프라 소개 페이지: `docs/intro.html` (구조가 바뀌면 이 페이지의 구성도도 함께 고친다)
 - 다음 아키텍처(LightRAG 서버 + 맥 추출 노드): `docs/architecture-lightrag.md`(원본, Mermaid 그림), `docs/architecture-lightrag.html`(시각화 버전), ADR 0006. 설계를 바꾸면 세 곳을 함께 고친다
 
-## 현재 상태 (2026-09-28)
+## 현재 상태 (2026-10-11)
 
-PoC 완료. 전체 흐름은 e2e로 검증했지만 **실제 LLM 키와 실제 임베딩 모델로는 아직 한 번도 돌려 보지 않았다**(작성 환경에서 Hugging Face와 LLM API가 막혀 있었음). 테스트는 가짜 LLM 서버와 글자 n-gram 대체 임베더로 돈다.
+PoC 완료. 실제 임베딩 모델(e5-small)로 첫 평가를 했다: 혼합 hit@1 11/16으로 대체 임베더(12/16)보다 낮고, 금융 문장이 `meso`·`auction`으로 쏠린다(T-113). **실제 LLM 키로는 아직 돌려 보지 않았다**(유료 키 없음, 무료 Gemini·Groq 키로 T-101 예정, `npm run smoke:providers`). 테스트는 가짜 LLM 서버와 대체 임베더로 돈다. Node 22 이상 필요(20.8에서 transformers.js가 안 뜸). 공통 그래프 사실은 2026-10 패치 노트로 검수했다(버전 2026.10.11-1).
 
-방향: 검색을 EC2의 LightRAG 서버로 옮기고, 엔티티·관계 추출만 사용자의 M2 맥(Ollama)에 Tailscale로 맡긴다(ADR 0006, 제안 상태). 지금 확장의 브라우저 파이프라인은 서버 장애 시 대체 경로로 남는다. 다음 작업은 T-101과 LightRAG 트랙 L0(T-401~T-405)이다. 서버 코드는 `server/`(Python, FastAPI), 인프라 절차는 `infra/`에 둔다(아직 없음).
+방향: 검색을 EC2의 LightRAG 서버로 옮기고, 엔티티·관계 추출만 사용자의 M2 맥(Ollama)에 Tailscale로 맡긴다(ADR 0006, 제안 상태). 지금 확장의 브라우저 파이프라인은 서버 장애 시 대체 경로로 남는다. 다음 작업은 T-113, T-101 마무리, LightRAG 트랙 L0(T-401~T-405)이다. 서버 코드는 `server/`(Python, FastAPI), 인프라 절차는 `infra/`에 둔다(아직 없음).
 
 ## 명령
 
