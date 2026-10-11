@@ -231,7 +231,7 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434
 | 임베딩 모델 교체 | 전체 재임베딩 | bge-m3 고정 |
 | 맥 사용 중 메모리 압박 | 노트북 버벅임 | 동시 1, keep-alive 5분, 시간창 운영 |
 
-- [ ] "M2 mac pro"가 M2 Pro 칩인지 M2 칩의 MacBook Pro인지 (처리량 추정이 두 배 차이)
+- [x] "M2 mac pro"가 M2 Pro 칩인지 M2 칩의 MacBook Pro인지 → **M2 Pro, 메모리 16GB** (2026-10-11 `sysctl`로 확인)
 - [ ] 메이플 가이드 문서 출처: 공식 가이드만 쓸지, 나무위키까지 쓸지 (라이선스와 인용 표기)
 - [ ] 서울 리전 정확한 요금과 리전 선택
 - [ ] D-2 로그인: EC2 Postgres + 자체 JWT로 갈지, 인증만 Supabase Auth를 빌릴지

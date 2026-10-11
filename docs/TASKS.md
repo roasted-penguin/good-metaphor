@@ -20,6 +20,7 @@
 | T-110 | 벡터 캐시 정리 (모델 바뀌면 삭제, 상한) | 1 품질 | P2 | 대기 | |
 | T-111 | iframe·Shadow DOM 안 문장 지원 | 1 품질 | P2 | 대기 | |
 | T-112 | 윈도우에서 Alt 메뉴 포커스 충돌 확인 | 1 품질 | P2 | 대기 | |
+| T-113 | 금융·경제 문장이 `meso`·`auction`으로 끌려가는 주제 편향 줄이기 | 1 품질 | P0 | 대기 | |
 | D-2 | 로그인 방식과 백엔드 | 결정 | P0 | 결정 필요 | Phase 1 관문 |
 | T-201 | 사용자 저장소 서버 + remote 어댑터 연결 | 2 계정 | P0 | 대기 | D-2 |
 | T-202 | 그래프 편집 화면 (JSON 대신 폼) | 2 계정 | P1 | 대기 | |
@@ -97,7 +98,7 @@ LightRAG 공통 그래프(T-421)에 넣을 문서. 선택지: (a) 공식 가이�
 **파일** `src/offscreen-src.js`(고친 뒤 `npm run build`), `extension/background.js`
 
 ### T-103 검색 평가셋 확장과 품질 관문
-**왜** 지금 평가셋 16문장은 태그 설명과 단어를 공유해서 점수가 낙관적이다(대체 임베더로도 hit@1 12/16이 나옴).
+**왜** 지금 평가셋 16문장은 태그 설명과 단어를 공유해서 점수가 낙관적이다(대체 임베더로도 hit@1 12/16이 나옴). 실제 모델(e5-small)은 오히려 11/16(2026-10-11, EVAL_LOG).
 **할 일**
 - `tools/eval-set.json`을 40문장 이상으로. 태그 설명에 쓰인 단어를 피해서 바꿔 말한 문장, 영어 문장 25% 이상, "맞는 비유가 없어야 하는" 문장 5개(`expectNodes: []`, 이때는 1위 점수가 임계값 아래인지 본다).
 - `npm run eval` 결과를 `docs/EVAL_LOG.md`에 기록.
@@ -145,6 +146,12 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 
 ## Phase 2 · 계정과 내 저장소
 
+
+### T-113 금융·경제 문장의 주제 편향
+**왜** 실제 모델 첫 평가(2026-10-11)에서 틀린 5건이 모두 금융·경제 문장(레버리지, 복권, 누진세, 세일)이었다. 구조(손실 위험, 기댓값, 단계별 비용 증가)와 상관없이 "돈" 주제가 겹치는 `meso_inflation`·`auction`·`meso`가 1위로 올라온다. 직접 유사도가 주제를, 태그 유사도도 경제 태그를 따라간다.
+**할 일** 차례로 시도하고 각각 EVAL_LOG에 기록: (1) 노드 임베딩 텍스트에서 게임 고유 용어 비중 줄이고 구조 설명 비중 늘리기 (2) 태그에 분야가 다른 예문 `examples` 추가(T-103과 공유) (3) 경제 태그(`market_price`, `inflation`)에 일정 감점 또는 태그 점수 상위 2개 평균 (4) 질의를 LLM으로 "추상 구조 한 줄"로 바꾼 뒤 임베딩(정밀 모드와 같음, 무료 키로 시험).
+**완료 기준** 실제 모델 혼합 hit@1 ≥ 13/16, 금융 문장 5건 중 3건 이상 맞힘. T-103의 확장 평가셋에서도 떨어지지 않을 것.
+**파일** `extension/lib/graph.js`, `extension/lib/retrieval.js`, `extension/data/common/maplestory.json`, `tools/eval.mjs`
 ### T-201 사용자 저장소 서버 + remote 어댑터
 **할 일** D-2 결정대로 서버 구현: `GET /auth/start?redirect_uri=`(로그인 후 `redirect_uri#token=&user_id=&name=`), `GET/PUT /v1/overlay`, `GET /v1/common/:id`. `config/admin.json`의 `userStore.adapter`를 `remote`로. 서버 코드는 `server/`에 둔다.
 **완료 기준** e2e: 가짜 인증 서버로 로그인 → 오버레이 저장 → 새 프로필에서 같은 토큰으로 불러오기. `local-dev` 어댑터는 개발 빌드에만 남긴다.
@@ -226,6 +233,7 @@ D-5 결정 후. 문서마다 `doc_id = 출처 URL + 판본`, 패치 시 `adelete
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-11 | EVAL | task/eval-real-model | 원격 연결 후 `/ship` | 첫 실제 임베딩 모델 평가: e5-small 혼합 hit@1 11/16, hit@3 12/16(대체 임베더 12/16보다 낮음). 주제 편향을 T-113으로 추가. Node 20.8에서는 transformers.js(sharp)가 안 떠서 `engines`를 22 이상으로. |
 | 2026-09-29 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | 설계 문서 시각화: `architecture-lightrag.md`에 Mermaid 그림 4개, `architecture-lightrag.html` 추가. |
 | 2026-09-29 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | LightRAG 아키텍처 설계(`docs/architecture-lightrag.md`, ADR 0006), LightRAG 트랙 작업 T-401~T-431 추가, 소개 페이지에 다음 아키텍처 구성도 추가. |
 | 2026-09-28 | DOC | task/docs-architecture | 원격 연결 후 `/ship` | 작동 방식·인프라 구성 소개 페이지 `docs/intro.html` 추가. |

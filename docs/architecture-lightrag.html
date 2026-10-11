@@ -582,7 +582,7 @@ ollama pull gemma4:12b
 tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
     <div class="facts3">
       <div><b>시간창</b><span>launchd가 점심(12:10~13:00)과 밤(23:00~07:00)에만 Ollama를 켜고 <code>caffeinate -i</code>. 바로 노트북을 써야 하면 Ollama만 끄면 돼요.</span></div>
-      <div><b>처리량 (예상)</b><span>청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩이면 메모리 대역폭이 두 배라 더 빨라요. 첫 실험에서 실측해요.</span></div>
+      <div><b>처리량 (예상)</b><span>청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩(메모리 16GB)으로 확인돼서 M2보다 메모리 대역폭이 두 배예요. 첫 실험에서 실측해요.</span></div>
       <div><b>맥이 오래 꺼져 있으면</b><span>관리자 플래그로 추출만 Gemini Flash-Lite로. 하루 청크 상한을 두고 사용자 워크스페이스에만 써요.</span></div>
     </div>
   </section>
@@ -646,7 +646,7 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
       </tbody>
     </table></div>
     <ul class="checks">
-      <li>"M2 mac pro"가 M2 Pro 칩인지 M2 칩의 MacBook Pro인지 (처리량이 두 배 차이)</li>
+      <li><s>"M2 mac pro"가 M2 Pro 칩인지 M2 칩의 MacBook Pro인지</s> → M2 Pro, 메모리 16GB로 확인</li>
       <li>메이플 가이드 문서 출처: 공식 가이드만 쓸지, 위키까지 쓸지 (D-5)</li>
       <li>서울 리전 정확한 요금과 리전 선택</li>
       <li>로그인: EC2 Postgres + 자체 JWT로 갈지, 인증만 Supabase Auth를 빌릴지 (D-2)</li>
