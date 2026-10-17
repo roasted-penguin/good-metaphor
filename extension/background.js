@@ -121,12 +121,13 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   onStage('model');
   const { vecs, embedderId, embedderStatus } = await ensureGraphVectors(graph);
 
+  const llmStats = { retries: 0 };
   let queryText = sentence;
   let abstractText = null;
   if (settings.preciseMode && provider.def.kind !== 'demo') {
     onStage('abstract');
     const p = buildAbstractPrompt({ sentence, word, pageTitle });
-    abstractText = (await complete(provider, p.system, p.user, { json: false })).trim();
+    abstractText = (await complete(provider, p.system, p.user, { json: false, stats: llmStats })).trim();
     if (abstractText) queryText = `${abstractText} ${sentence}`;
   }
 
@@ -141,7 +142,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     answer = demoAnswer({ candidates, analogyPrefix: graph.analogyPrefix });
   } else {
     const p = buildAnalogyPrompt({ sentence, context, word, pageTitle, domain: graph.domain, analogyPrefix: graph.analogyPrefix, candidates });
-    const raw = await complete(provider, p.system, p.user, { json: true });
+    const raw = await complete(provider, p.system, p.user, { json: true, stats: llmStats });
     answer = parseJSONLoose(raw);
     if (!answer) throw new Error('모델 응답을 해석하지 못했어요: ' + raw.slice(0, 120));
   }
@@ -173,6 +174,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       embedderId,
       embedderStatus,
       provider: `${provider.id}/${provider.model}`,
+      llmRetries: llmStats.retries,
       user: session ? session.name : null,
       ms: Date.now() - t0
     }
