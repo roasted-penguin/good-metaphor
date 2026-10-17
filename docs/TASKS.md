@@ -7,7 +7,7 @@
 
 | ID | 작업 | 단계 | 우선 | 상태 | 먼저 끝나야 할 것 |
 | --- | --- | --- | --- | --- | --- |
-| 2026-10-17 | 인계 | task/handoff-status | (열면 채움) | #4 병합 반영(T-121 완료). CLAUDE.md 현재 상태를 10-17 기준으로, 여러 세션 동시 작업 규칙 추가. D-6(에이전트 단 설계 범위, 답 대기) 등록. |
+| 2026-10-17 | 인계 | task/handoff-status | [#5](https://github.com/roasted-penguin/good-metaphor/pull/5) | #4 병합 반영(T-121 완료). CLAUDE.md 현재 상태를 10-17 기준으로, 여러 세션 동시 작업 규칙 추가. D-6(에이전트 단 설계 범위, 답 대기) 등록. |
 | 2026-10-11 | T-121 | task/T-121-provider-retry | [#4](https://github.com/roasted-penguin/good-metaphor/pull/4) | 503·429·네트워크 오류 재시도(최대 2회, 백오프, Retry-After 상한 3초), 키 오류는 즉시. `debug.llmRetries`, 스모크에 재시도 횟수 표시. 단위 5개 추가(24개). 이 브랜치로 `smoke` 수동 실행(run 38127863442): Gemini·Groq 모두 통과 → T-119 완료 기준도 충족. |
 | 2026-10-11 | 상태 | task/T-121-provider-retry | [#4](https://github.com/roasted-penguin/good-metaphor/pull/4) | #1·#2·#3 병합 반영: T-101·T-119 완료. 수동 스모크 첫 실행: Groq 전부 통과(0.4~0.9초), Gemini 503 2건 → T-121로 이어 확인. Groq 존댓말·추상화 문제로 T-122 추가. 노출됐던 Gemini 키 삭제 확인(401). |
 | D-1 | 기본 트리거를 Alt로 둘지 자동으로 둘지 | 결정 | P0 | 완료 | Alt + 첫 실행 선택 |
