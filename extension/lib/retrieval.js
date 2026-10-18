@@ -10,9 +10,11 @@ export function cosine(a, b) {
  * @param {number[]} q        질의 벡터
  * @param {object} graph      mergeGraphs 결과
  * @param {Map} vecs          'tag:<id>' | 'node:<id>' -> 벡터
- * @param {object} opts       { topK, directWeight, tagWeight }
+ * @param {object} opts       { topK, directWeight, tagWeight, tagAgg, tagPenalty }
+ *   tagAgg      'max'(가장 높은 태그) | 'top2mean'(상위 2개 평균, 태그 1개면 그 값)
+ *   tagPenalty  태그 id -> 태그 유사도에서 뺄 값. 주제가 넓은 태그(예: 경제)로 쏠리는 것을 줄인다 (T-113)
  */
-export function retrieve(q, graph, vecs, { topK = 3, directWeight = 0.45, tagWeight = 0.55 } = {}) {
+export function retrieve(q, graph, vecs, { topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {} } = {}) {
   const tagSim = new Map();
   for (const t of graph.tags) {
     const v = vecs.get('tag:' + t.id);
@@ -22,15 +24,17 @@ export function retrieve(q, graph, vecs, { topK = 3, directWeight = 0.45, tagWei
   const scored = graph.nodes.map(n => {
     const v = vecs.get('node:' + n.id);
     const direct = v ? cosine(q, v) : 0;
-    let bestTag = null, bestTagSim = 0;
-    for (const id of n.tags) {
-      const s = tagSim.get(id) ?? 0;
-      if (s > bestTagSim) { bestTagSim = s; bestTag = id; }
-    }
+    // 감점 뒤 점수로 태그 순위를 매기고, 결과에는 감점 전 유사도를 남긴다
+    const ranked = n.tags
+      .map(id => ({ id, sim: tagSim.get(id) ?? 0, adj: (tagSim.get(id) ?? 0) - (tagPenalty[id] || 0) }))
+      .sort((a, b) => b.adj - a.adj);
+    const top = ranked.slice(0, tagAgg === 'top2mean' ? 2 : 1);
+    const tagScore = top.length ? Math.max(0, top.reduce((sum, t) => sum + t.adj, 0) / top.length) : 0;
+    const bestTag = ranked[0]?.sim > 0 ? ranked[0].id : null, bestTagSim = bestTag ? ranked[0].sim : 0;
     const boost = graph.boosts?.[n.id] || 0;
     return {
       node: n,
-      score: directWeight * direct + tagWeight * bestTagSim + boost,
+      score: directWeight * direct + tagWeight * tagScore + boost,
       direct,
       tagId: bestTag,
       tagSim: bestTagSim

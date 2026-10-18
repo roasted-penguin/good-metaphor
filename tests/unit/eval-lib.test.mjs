@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { scoreCases, mixedSetting } from '../../tools/eval-lib.mjs';
+import { scoreCases, mixedSetting, regressions } from '../../tools/eval-lib.mjs';
 
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
 const common = read('extension/data/common/maplestory.json');
@@ -47,4 +47,18 @@ test('검증셋: 10문장 이상, 금융 3개 이상, 그래프에 있는 id만,
 test('mixedSetting: 평가 도구의 혼합 설정은 admin.json retrieval을 그대로 쓴다', () => {
   const s = mixedSetting(admin);
   for (const [k, v] of Object.entries(admin.retrieval)) assert.deepEqual(s[k], v, k);
+});
+
+test('regressions: 지켜야 할 문장 중 hit@1을 놓친 것만 돌려준다', () => {
+  const cases = [{ sentence: '가', expectNodes: ['a'] }, { sentence: '나', expectNodes: ['b'] }, { sentence: '다', expectNodes: ['c'] }];
+  const r = scoreCases(cases, c => ({ 가: ['a'], 나: ['x'], 다: ['x'] })[c.sentence]);
+  assert.deepEqual(regressions(['가', '나'], r), ['나']);
+  assert.deepEqual(regressions([], r), []);
+});
+
+test('회귀 가드 목록의 문장은 모두 평가셋·검증셋에 있다', () => {
+  const guard = read('tools/eval-guard.json');
+  const all = new Set([...evalSet, ...holdout].map(c => c.sentence));
+  assert.ok(guard.length >= 25, `가드 ${guard.length}문장`);
+  for (const s of guard) assert.ok(all.has(s), s);
 });

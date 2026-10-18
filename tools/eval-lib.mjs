@@ -25,3 +25,9 @@ export function scoreCases(cases, rank) {
 export function mixedSetting(admin) {
   return { name: '혼합 (현재 기본값)', ...admin.retrieval };
 }
+
+// 회귀: 지켜야 할 문장(tools/eval-guard.json) 중 hit@1을 놓친 문장
+export function regressions(guard, result) {
+  const missed = new Set(result.misses.map(m => m.sentence));
+  return guard.filter(s => missed.has(s));
+}

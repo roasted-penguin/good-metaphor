@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
 import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
-import { scoreCases, mixedSetting } from './eval-lib.mjs';
+import { scoreCases, mixedSetting, regressions } from './eval-lib.mjs';
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
@@ -19,6 +19,10 @@ const sets = [
 ];
 const useFallback = process.argv.includes('--fallback');
 const verbose = process.argv.includes('-v');
+// 회귀 가드: 한 번이라도 맞힌 문장은 계속 맞혀야 한다. --guard면 하나라도 틀릴 때 종료 코드 1 (T-113)
+const guard = JSON.parse(fs.readFileSync(new URL('./eval-guard.json', here)));
+const failGuard = process.argv.includes('--guard');
+let regressed = 0;
 
 let embed;
 if (useFallback) {
@@ -61,8 +65,14 @@ for (const { name, cases } of sets) {
     const groups = Object.entries(r.groups).map(([g, v]) => `  ${g} ${v.hit1}/${v.n}`).join('');
     console.log(`${s.name.padEnd(18)}  hit@1 ${pct(r.hit1, r.n)}  hit@3 ${pct(r.hit3, r.n)}${groups}`);
     if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);
+    if (s.name === mixedSetting(admin).name) {
+      const reg = regressions(guard, r);
+      regressed += reg.length;
+      console.log(reg.length ? reg.map(x => `  ⚠ 회귀(잘 맞던 문장이 틀림): ${x}`).join('\n') : '  회귀 없음');
+    }
   }
   let t1 = 0;
   cases.forEach((c, i) => { if (topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
   console.log(`\n추상 태그 top-1 정확도: ${pct(t1, cases.length)}`);
 }
+if (failGuard && regressed) { console.log(`\n회귀 ${regressed}건`); process.exit(1); }
