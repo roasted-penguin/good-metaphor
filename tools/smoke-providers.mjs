@@ -7,7 +7,7 @@
 // 검색은 글자 n-gram 대체 임베더로 한다. 여기서 보는 것은 검색 품질이 아니라 요청·응답 형식이다.
 import fs from 'node:fs';
 import { PROVIDERS, complete, parseJSONLoose } from '../extension/lib/providers.js';
-import { buildAbstractPrompt, buildAnalogyPrompt } from '../extension/lib/prompt.js';
+import { buildAbstractPrompt, buildAnalogyPrompt, extractMeaning } from '../extension/lib/prompt.js';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
 import { retrieve } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
@@ -82,11 +82,18 @@ for (const p of runs) {
   for (const s of SENTENCES) {
     const candidates = retrieve(hashEmbed(s.sentence), graph, vecs, admin.retrieval);
     const pr = buildAnalogyPrompt({ ...s, domain: graph.domain, analogyPrefix: graph.analogyPrefix, candidates });
-    const r = await timed(stats => complete(p, pr.system, pr.user, { json: true, stats }));
+    // 확장과 같이 스트리밍으로 받고, 첫 글자·뜻 완성까지 걸린 시간을 잰다(T-117)
+    const t0 = Date.now(), at = {};
+    const onText = text => {
+      at.first ??= Date.now() - t0;
+      if (at.meaning == null && extractMeaning(text)) at.meaning = Date.now() - t0;
+    };
+    const r = await timed(stats => complete(p, pr.system, pr.user, { json: true, stats, onText }));
+    const marks = `첫 글자 ${at.first ?? '-'}ms · 뜻 ${at.meaning ?? '-'}ms · 전체 `;
     const answer = r.ok ? parseJSONLoose(r.value) : null;
     const problem = r.ok ? check(answer, candidates) : r.error;
     if (problem) failed++;
-    console.log(`  비유 생성  ${problem ? '✗' : '✓'} ${r.ms}ms${r.retry}  ${s.sentence.slice(0, 24)}…`);
+    console.log(`  비유 생성  ${problem ? '✗' : '✓'} ${marks}${r.ms}ms${r.retry}  ${s.sentence.slice(0, 24)}…`);
     if (problem) console.log(`    문제: ${problem}${r.ok ? `\n    원문: ${r.value.slice(0, 200)}` : ''}`);
     else console.log(`    → [${answer.nodeId}] ${answer.analogy || '(비유 없음)'}\n      뜻: ${answer.meaning}`);
   }
