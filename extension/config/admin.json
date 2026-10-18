@@ -8,7 +8,7 @@
     "openai": "gpt-6-luna",
     "anthropic": "claude-haiku-4-5-20251001"
   },
-  "_fallbackComment": "fallback 체인(T-124, ADR 0008): 사용자가 고른 제공자 다음에 이 순서로 부른다. 429·503·네트워크 오류면 다음으로, 429를 받은 모델은 cooldown 동안 건너뛴다. 순위 근거는 docs/TASKS.md T-122·T-124.",
+  "_fallbackComment": "fallback 체인(T-124, ADR 0008): 사용자가 고른 제공자 다음에 이 순서로 부른다. 429·503·네트워크 오류면 다음으로, 429를 받은 모델은 cooldown 동안 건너뛴다. 순위는 앞으로 더 붙는다: 배열에 항목만 추가(코드 수정 없음, 절차는 ADR 0008). 순위 근거는 docs/TASKS.md T-122·T-124.",
   "fallbackChain": [
     { "provider": "groq", "model": "openai/gpt-oss-120b" },
     { "provider": "gemini", "model": "gemini-3.8-flash" }
