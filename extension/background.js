@@ -4,7 +4,7 @@ import { complete, parseJSONLoose, PROVIDERS } from './lib/providers.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags } from './lib/retrieval.js';
-import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer } from './lib/prompt.js';
+import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning } from './lib/prompt.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -103,7 +103,8 @@ async function cachePut(key, value) {
   await chrome.storage.session.set({ results });
 }
 
-async function explain({ sentence, context, word, pageTitle, noCache }, onStage = () => {}) {
+// onPartial({ meaning }) 은 스트리밍 중 meaning 이 처음 완성될 때 한 번 불린다. 비유는 넣지 않는다(검증 전이라서)
+async function explain({ sentence, context, word, pageTitle, noCache }, onStage = () => {}, onPartial = null) {
   const t0 = Date.now();
   const settings = await getSettings();
   const admin = await getAdminConfig();
@@ -142,7 +143,13 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     answer = demoAnswer({ candidates, analogyPrefix: graph.analogyPrefix });
   } else {
     const p = buildAnalogyPrompt({ sentence, context, word, pageTitle, domain: graph.domain, analogyPrefix: graph.analogyPrefix, candidates });
-    const raw = await complete(provider, p.system, p.user, { json: true, stats: llmStats });
+    let sentMeaning = false;
+    const onText = onPartial && (text => {
+      if (sentMeaning) return;
+      const meaning = extractMeaning(text);
+      if (meaning) { sentMeaning = true; onPartial({ meaning }); }
+    });
+    const raw = await complete(provider, p.system, p.user, { json: true, stats: llmStats, onText });
     answer = parseJSONLoose(raw);
     if (!answer) throw new Error('모델 응답을 해석하지 못했어요: ' + raw.slice(0, 120));
   }
@@ -190,7 +197,8 @@ chrome.runtime.onConnect.addListener(port => {
   port.onMessage.addListener(async msg => {
     if (msg.type !== 'explain') return;
     try {
-      const result = await explain(msg.payload, stage => { try { port.postMessage({ type: 'stage', id: msg.id, stage }); } catch {} });
+      const post = m => { try { port.postMessage({ id: msg.id, ...m }); } catch {} };
+      const result = await explain(msg.payload, stage => post({ type: 'stage', stage }), partial => post({ type: 'partial', partial }));
       port.postMessage({ type: 'result', id: msg.id, result });
     } catch (e) {
       console.error(e);

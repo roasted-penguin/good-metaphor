@@ -248,7 +248,8 @@
     model: '임베딩 모델 준비 중 (처음 한 번은 1분쯤 걸려요)',
     abstract: '핵심 개념 뽑는 중',
     search: '비슷한 개념 찾는 중',
-    generate: '비유 만드는 중'
+    generate: '비유 만드는 중',
+    analogy: '비유 찾는 중'
   };
 
   let theme = 'maple';
@@ -258,6 +259,7 @@
     box.className = 'box t-' + (theme === 'maple' ? 'maple' : 'neutral') + (box.classList.contains('show') ? ' show' : '');
     let html = '<button class="close" data-act="close" title="닫기 (Esc)">×</button>';
     if (state.loading) {
+      if (state.meaning) html += `<div class="row"><span class="label">쉬운 뜻</span>${esc(state.meaning)}</div>`;
       html += `<div class="muted"><span class="spin"></span>${esc(STAGE_TEXT[state.stage] || '준비 중')}…</div>`;
     } else if (state.error) {
       html += `<div class="row err">${esc(state.error)}</div>
@@ -299,7 +301,9 @@
     port = chrome.runtime.connect({ name: 'explain' });
     port.onMessage.addListener(msg => {
       if (!current || msg.id !== current.reqId) return;
-      if (msg.type === 'stage') render({ loading: true, stage: msg.stage });
+      // 뜻이 먼저 왔으면 이후 단계 표시에서도 뜻을 유지한다
+      if (msg.type === 'partial') { current.meaning = msg.partial.meaning; render({ loading: true, stage: 'analogy', meaning: current.meaning }); }
+      if (msg.type === 'stage') render({ loading: true, stage: msg.stage, meaning: current.meaning });
       if (msg.type === 'result') render({ result: msg.result });
       if (msg.type === 'error') render({ error: msg.error });
     });
