@@ -42,7 +42,7 @@
 
   "retrieval": {
     "topK": 3,
-    "directWeight": 0.45,
-    "tagWeight": 0.55
+    "directWeight": 0.3,
+    "tagWeight": 0.7
   }
 }

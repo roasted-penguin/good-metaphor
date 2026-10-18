@@ -1,0 +1,16 @@
+[
+  { "sentence": "주식 신용거래는 수익을 키우려다 담보로 잡힌 주식까지 강제로 팔릴 수 있다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "finance" },
+  { "sentence": "보험료는 사고 확률과 보상액을 따져 평균적으로 회사가 남도록 정해진다.", "expectNodes": ["cube", "starforce", "starforce_event"], "expectTag": "expected_value", "group": "finance" },
+  { "sentence": "블랙프라이데이에는 할인 폭이 커서 미뤄 둔 가전 구매를 그날 한꺼번에 한다.", "expectNodes": ["starforce_event", "exp_coupon"], "expectTag": "temporary_multiplier", "group": "finance" },
+  { "sentence": "전기 요금은 사용량 구간이 올라갈수록 kWh당 단가가 비싸진다.", "expectNodes": ["starforce", "level_exp"], "expectTag": "escalating_cost", "group": "finance" },
+  { "sentence": "정부가 국채를 대량으로 찍어 돈을 풀자 장바구니 물가가 뛰었다.", "expectNodes": ["meso_inflation", "meso"], "expectTag": "inflation", "group": "finance" },
+  { "sentence": "은행 OTP는 다섯 번 틀리면 일정 시간 동안 다시 입력할 수 없다.", "expectNodes": ["skill_cooldown", "weekly_boss"], "expectTag": "cooldown" },
+  { "sentence": "외국어는 처음엔 금방 늘지만 중급을 넘으면 실력이 잘 안 오른다.", "expectNodes": ["level_exp"], "expectTag": "diminishing_returns" },
+  { "sentence": "축구팀은 공격수, 수비수, 골키퍼가 각자 자리를 맡아 경기한다.", "expectNodes": ["party"], "expectTag": "role_division" },
+  { "sentence": "운전면허 필기에 합격해야 도로주행 시험을 볼 수 있다.", "expectNodes": ["sixth_job", "boss_entry", "arcane_force"], "expectTag": "progression_gate" },
+  { "sentence": "무료 번역 API는 하루에 쓸 수 있는 글자 수가 정해져 있다.", "expectNodes": ["weekly_boss", "arcane_symbol"], "expectTag": "periodic_cap" },
+  { "sentence": "악기 연습은 매일 30분씩 빠지지 않고 해야 실력이 쌓인다.", "expectNodes": ["arcane_symbol", "sol_erda"], "expectTag": "daily_accumulation" },
+  { "sentence": "랜덤 박스 장난감은 원하는 캐릭터가 나올 때까지 계속 사게 된다.", "expectNodes": ["cube"], "expectTag": "random_reroll" },
+  { "sentence": "한 회사에서 쌓은 경력이 이직할 때 다른 회사에서도 인정된다.", "expectNodes": ["union_link"], "expectTag": "shared_bonus" },
+  { "sentence": "콘서트 티켓은 좌석이 적어서 되팔 때 정가의 몇 배가 된다.", "expectNodes": ["auction"], "expectTag": "scarcity_value" }
+]
