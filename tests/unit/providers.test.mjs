@@ -162,3 +162,10 @@ test('스트리밍: 응답 시작 전 503 은 재시도한다', async t => {
   assert.equal(reqs.length, 2);
   assert.equal(stats.retries, 1);
 });
+
+test('NVIDIA: 생각(thinking)을 끄는 chat_template_kwargs 를 보낸다 (켜면 첫 글자까지 14~30초)', async t => {
+  const nvidia = { id: 'nvidia', def: PROVIDERS.nvidia, model: 'nvidia/nemotron-3.5-super-vl-120b-a12b', apiKey: 'k', baseUrl: PROVIDERS.nvidia.baseUrl };
+  const bodies = mockFetch(t, [[200, chat('답')]]);
+  assert.equal(await complete(nvidia, 's', 'u'), '답');
+  assert.deepEqual(bodies[0].chat_template_kwargs, { enable_thinking: false });
+});
