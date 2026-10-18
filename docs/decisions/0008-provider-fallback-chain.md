@@ -6,7 +6,7 @@
 무료 티어 한도(Gemini 일일 할당량, Groq 출력 토큰 분당 한도)에 걸리면 429가 나고, 제공자 하나만 쓰면 그대로 호버가 실패한다. 2026-10-18 측정(T-122 사전 측정, Artificial Analysis 리더보드)에서 무료로 쓸 수 있는 모델 중 Groq `openai/gpt-oss-120b`가 가장 빨랐고(뜻까지 0.5~0.6초), Gemini `gemini-3.8-flash`가 느리지만(1.8~6초) 근거가 없으면 비유를 비우는 보수적 응답을 했다.
 
 ## 결정
-- 체인 길이는 정해 두지 않는다. 처음 판(2026-10-18)은 Groq `openai/gpt-oss-120b`(1순위) → Gemini `gemini-3.8-flash`(2순위)이고, 순위는 앞으로 더 붙을 수 있다. `config/admin.json`의 `fallbackChain` 배열 순서가 곧 순위다.
+- 체인 길이는 정해 두지 않는다. 처음 판(2026-10-18)은 Groq `openai/gpt-oss-120b`(1순위) → Gemini `gemini-3.8-flash`(2순위)였다. 같은 날 재측정에서 3.8 Flash가 느리고(thinking, 스트리밍 이득 없음) `gemini-3.5-flash-lite`가 첫 글자 1초 안팎이라 사용자 결정으로 **Groq → Gemini 3.5 Flash-Lite → NVIDIA Build `nvidia/nemotron-3.5-super-vl-120b-a12b`**로 바꿨다. 순위는 앞으로 더 붙을 수 있다. `config/admin.json`의 `fallbackChain` 배열 순서가 곧 순위다.
 - 호출 순서 = 사용자가 고른 제공자·모델 → `fallbackChain`. 중복, 키 없음, 허용 안 됨은 건너뛴다. 데모는 체인을 타지 않는다.
 - 429·503·네트워크·시간 초과면 다음 순서로. 키 오류(400·401·403)는 사용자가 고쳐야 하므로 넘기지 않고 보여 준다.
 - 429를 받은 모델은 `Retry-After`(없으면 `cooldown.defaultMs` 60초, 상한 `maxMs` 10분) 동안 쿨다운한다. 기록은 `chrome.storage.session`. 쿨다운 중이면 부르지 않고 바로 다음으로 간다. 모두 쿨다운이면 가장 먼저 풀리는 것을 부른다.
@@ -14,6 +14,7 @@
 - 호출 로직은 `lib/fallback.js` 한 곳. 제공자별 분기를 늘리지 않는다(규칙 7).
 
 ## 결과
+- NVIDIA Build 무료 API는 키당 분당 약 40회(전 모델 공유)이고 개발·시험용 약관이다. 웹스토어 공개(T-303) 전에 약관을 다시 확인한다.
 - `debug.provider`는 실제로 답한 모델, `debug.fallbacks`에 건너뛴 모델과 이유가 남는다.
 - 결과 캐시 키는 사용자가 고른 제공자 기준이라, 뒤 순위가 답한 결과도 같은 키로 캐시된다.
 - 두 제공자 키를 모두 넣어야 체인이 동작한다. 키가 하나뿐이면 지금과 같다.

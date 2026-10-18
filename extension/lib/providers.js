@@ -7,8 +7,8 @@ export const PROVIDERS = {
     label: 'Google Gemini (무료 티어)',
     kind: 'gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    models: ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
-    defaultModel: 'gemini-3.8-flash',
+    models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'],
+    defaultModel: 'gemini-3.5-flash-lite',
     keyUrl: 'https://aistudio.google.com/apikey',
     stream: true,
     free: true
@@ -21,6 +21,17 @@ export const PROVIDERS = {
     defaultModel: 'openai/gpt-oss-120b',
     keyUrl: 'https://console.groq.com/keys',
     extraBody: { reasoning_effort: 'low' },
+    stream: true,
+    free: true
+  },
+  nvidia: {
+    label: 'NVIDIA Build (무료, 개발용)',
+    kind: 'openai-compat',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    // 모델 ID는 2026-10-18 freellm.net 목록 기준, 실제 키로 아직 확인 안 함(T-124). 무료는 키당 분당 40회, 개발·시험용 약관
+    models: ['nvidia/nemotron-3.5-super-vl-120b-a12b', 'deepseek-ai/deepseek-v4.1-flash', 'nvidia/nemotron-3.5-lightning-30b-a3b'],
+    defaultModel: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
+    keyUrl: 'https://build.nvidia.com/settings/api-keys',
     stream: true,
     free: true
   },

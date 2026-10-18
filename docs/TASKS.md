@@ -273,6 +273,7 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 - 2026-10-18 구현: `lib/fallback.js`(`buildChain`, `completeWithFallback`), `config.providerFor`, `noRetry429`. 기본 제공자 gemini → groq. 단위 10개(44)·e2e 1개(9) 추가. ADR 0008, CLAUDE.md, intro.html 갱신.
 - 2026-10-18 사용자 안내 "병합 전후로 폴백 체인이 더 추가될 수 있음" → 체인 길이에 기대지 않도록 3개 체인 단위 테스트 추가(45), ADR 0008에 "순위를 더할 때" 절차. CLAUDE.md 규칙 7, `admin.json` 설명, 이 섹션 머리에도 명시.
 - 2026-10-18 사용자 질문 "3.8 Flash는 너무 느리지 않나, 3.5 Flash-Lite가 괜찮다던데" → 로컬 키로 thinking 단계별 재측정(비유 프롬프트 1건 × 2회, 스트리밍): `gemini-3.5-flash-lite` minimal 첫 0.6~1.2초·전체 1.0~1.6초, low 첫 0.9~1.1초·전체 1.4~1.5초 / `gemini-3.1-flash-lite` 2.1~9.2초(들쭉날쭉) / `gemini-3.8-flash` low 2.6초(1건, 나머지 429), minimal은 400(미지원). 아까 CI의 3.5 Flash-Lite 6~7초는 재현 안 됨. 체인 2순위를 3.5 Flash-Lite로 바꾸는 안을 사용자에게 물음.
+- 2026-10-18 사용자 결정 "Groq → 3.5 Flash-Lite → 다른 무료 키(NVIDIA)" → `PROVIDERS.nvidia` 추가(OpenAI 호환 `https://integrate.api.nvidia.com/v1`, 스트리밍), manifest 호스트 권한, 체인 3순위 `nvidia/nemotron-3.5-super-vl-120b-a12b`(리더보드 첫 조각 0.75초), Gemini 기본 모델도 3.5 Flash-Lite로. 3.8 Flash는 체인에서 빠지고 레지스트리에만 남음. 체인 설정 검사 단위 테스트 2개(레지스트리·허용 목록·호스트 권한). smoke 워크플로에 `NVIDIA_API_KEY`. **NVIDIA 모델 ID는 제3자 목록(freellm.net) 기준, 키가 없어 실제 호출 미확인.** 무료는 키당 분당 40회, 개발용 약관 → T-303 전에 확인.
 **파일** `extension/lib/fallback.js`(새), `extension/lib/providers.js`, `extension/background.js`, `extension/config/admin.json`, `scripts/prepare-e2e.mjs`, `tests/unit/fallback.test.mjs`, `tests/e2e/*`
 
 ### T-116 첫 실행 트리거 선택 (D-1)
@@ -401,7 +402,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
-| 2026-10-18 | T-124 | task/T-124-fallback-chain | [#9](https://github.com/roasted-penguin/good-metaphor/pull/9) | **[사용자 추가]** 1순위 Groq `gpt-oss-120b` → 2순위 Gemini `gemini-3.8-flash` fallback 체인, 429 쿨다운(Retry-After, 기본 60초, 상한 10분, session 저장). 다음 순서가 있으면 429 재시도 생략, 키 오류는 체인 안 탐. 기본 제공자 groq. T-117 위에 쌓음. 실제 키로 체인 동작은 미확인(Groq 키가 로컬에 없음). |
+| 2026-10-18 | T-124 | task/T-124-fallback-chain | [#9](https://github.com/roasted-penguin/good-metaphor/pull/9) | **[사용자 추가]** Groq `gpt-oss-120b` → Gemini `gemini-3.5-flash-lite` → NVIDIA `nemotron-3.5-super-vl` fallback 체인(처음 3.8 Flash였다가 재측정 뒤 사용자 결정으로 교체), 429 쿨다운(Retry-After, 기본 60초, 상한 10분, session 저장). 다음 순서가 있으면 429 재시도 생략, 키 오류는 체인 안 탐. 기본 제공자 groq. T-117 위에 쌓음. 실제 키로 체인 동작은 미확인(Groq 키가 로컬에 없음). |
 | 2026-10-18 | 문서 | task/docs-model-reference | [#8](https://github.com/roasted-penguin/good-metaphor/pull/8) | 모델 성능 비교는 Artificial Analysis 리더보드를 먼저 참고하도록 CLAUDE.md 함정·ADR 0005·T-122 할 일에 추가. |
 | 2026-10-18 | T-117 | task/T-117-stream-meaning | [#7](https://github.com/roasted-penguin/good-metaphor/pull/7) | `PROVIDERS`에 `stream`, 종류별 차이는 `KINDS` 표(build·text·chunk) 한 곳. 응답 받기 전까지만 재시도. 뜻이 닫히면 `partial`(meaning만) → 말풍선에 먼저, 비유는 검증 뒤 `result`로만. 단위 10개·e2e 2개 추가(34·8). 실제 키 스모크(run 39099966893): Groq 첫 글자 415~685ms, 뜻 485~717ms, 전체 674~837ms. 로컬 새 Gemini 키(gemini-3.8-flash): 스트리밍 형식 통과, 하지만 첫 글자 4.1·7.9초 ≈ 전체(조각이 사실상 한 번에 옴, 대기는 thinking) → Gemini에선 체감 이득 없음, T-122 기본 제공자 검토 근거. |
 | 2026-10-18 | 도구 | task/test-first-command | [#6](https://github.com/roasted-penguin/good-metaphor/pull/6) | `/test-first` 명령 추가: 테스트 계획을 먼저 보여 주고 승인받은 뒤 실패하는 테스트부터 구현(superpowers 스킬 연결). PR 템플릿에 "테스트 계획" 칸, CLAUDE.md 작업 방식 3단계에 안내. |

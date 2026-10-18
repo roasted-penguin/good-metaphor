@@ -1,7 +1,7 @@
 name: smoke
 
 # 실제 키로 LLM 제공자 호출 확인(T-101). 무료 한도를 쓰므로 PR마다 돌리지 않고 Actions 탭에서 수동 실행한다.
-# 키는 저장소 Actions 비밀값(GEMINI_API_KEY, GROQ_API_KEY)에서만 온다. 키가 없는 제공자는 스크립트가 건너뛴다.
+# 키는 저장소 Actions 비밀값(GEMINI_API_KEY, GROQ_API_KEY, NVIDIA_API_KEY)에서만 온다. 키가 없는 제공자는 스크립트가 건너뛴다.
 on:
   workflow_dispatch:
     inputs:
@@ -28,5 +28,6 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           ALL_MODELS: ${{ inputs.all_models && '--all-models' || '' }}
         run: npm run smoke:providers -- $ALL_MODELS
