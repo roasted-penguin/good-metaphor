@@ -13,6 +13,9 @@
 - 다음 순서가 있으면 429에 같은 모델 재시도(T-121)를 하지 않는다. 마지막 순서에서는 기존 재시도를 그대로 한다.
 - 호출 로직은 `lib/fallback.js` 한 곳. 제공자별 분기를 늘리지 않는다(규칙 7).
 
+- **로컬 Ollama는 최종 방어선**(사용자 결정 2026-10-18, T-127): `PROVIDERS.ollama`(`http://127.0.0.1:11434/v1`, `local: true`, 키 없음). `buildChain`이 `local` 제공자를 사용자가 골랐든 체인 중간에 있든 맨 뒤로 보낸다. 다른 무료 모델이 무조건 먼저다. 꺼져 있으면 네트워크 오류로 끝나고, 앞 순위가 모두 실패했을 때만 그 오류가 보인다.
+- Ollama가 확장 요청을 받으려면 `OLLAMA_ORIGINS=chrome-extension://*`가 필요하다. 포트는 127.0.0.1에만 연다(규칙 10).
+
 ## 결과
 - NVIDIA Nemotron은 기본으로 생각부터 해서 첫 글자까지 14~30초다. `PROVIDERS.nvidia.extraBody`의 `chat_template_kwargs.enable_thinking: false`로 꺼서 0.3초 안팎으로 만든다.
 - NVIDIA Build 무료 API는 키당 분당 약 40회(전 모델 공유)이고 개발·시험용 약관이다. 웹스토어 공개(T-303) 전에 약관을 다시 확인한다.

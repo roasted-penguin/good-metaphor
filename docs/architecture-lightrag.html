@@ -223,7 +223,7 @@
       <span class="status-chip">제안 · ADR 0006</span>
     </div>
     <h1>LightRAG 아키텍처</h1>
-    <p class="lede">EC2 한 대에 LightRAG를 라이브러리로 감싼 <code class="mono">analogy-api</code>를 두고, 엔티티·관계 추출만 Tailscale로 내 M2 맥의 Ollama에 맡겨요. 호버 경로에는 맥이 없어서 맥이 꺼져 있어도 비유는 나와요. PoC 월 비용은 약 $31이에요.</p>
+    <p class="lede">EC2 한 대에 LightRAG를 라이브러리로 감싼 <code class="mono">analogy-api</code>를 두고, 엔티티·관계 추출만 Tailscale로 내 M2 맥의 Ollama에 맡겨요. 호버는 클라우드 무료 모델 체인이 먼저라 맥이 꺼져 있어도 비유가 나와요. 맥은 체인 맨 뒤 최종 방어선이에요. PoC 월 비용은 약 $31이에요.</p>
     <p class="doclinks"><a href="intro.html">← 소개 페이지</a><a href="architecture-lightrag.md">원본 마크다운</a><a href="decisions/0006-lightrag-server.md">ADR 0006</a><a href="TASKS.md">작업 T-401~T-431</a><a href="https://claude.ai/code/artifact/af5b42e7-dd31-4b10-a409-5775f83e2e3e">살아 있는 설계 문서</a></p>
     <nav class="toc" aria-label="목차">
       <a href="#summary">결론</a><a href="#changes">바뀌는 것</a><a href="#overview">전체 구성</a><a href="#query">질의 흐름</a><a href="#indexing">인덱싱 흐름</a><a href="#storage">저장소</a><a href="#freshness">최신화</a><a href="#mac">맥 추출 노드</a><a href="#network">네트워크·보안</a><a href="#cost">비용</a><a href="#risks">리스크</a><a href="#rollout">이행 단계</a><a href="#sources">출처</a>
@@ -271,7 +271,7 @@
   <section id="overview">
     <span class="label">전체 구성</span>
     <h2>맥으로 가는 선은 하나, 그것도 테일넷 안에서만</h2>
-    <p class="intro">호버 경로(확장 → Caddy → analogy-api → Gemini)에는 맥이 없어요. 맥이 꺼져 있으면 새 문서의 추출만 다음 시간창으로 미뤄져요.</p>
+    <p class="intro">호버 경로(확장 → Caddy → analogy-api → 클라우드 무료 모델 체인)에서 맥은 맨 뒤 최종 방어선일 뿐이에요. 맥이 꺼져 있으면 새 문서의 추출만 다음 시간창으로 미뤄져요.</p>
     <div class="bleed">
       <div class="infra lr" id="lr" data-mode="all">
         <div class="infra-top">

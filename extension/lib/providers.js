@@ -56,6 +56,19 @@ export const PROVIDERS = {
     keyUrl: 'https://console.anthropic.com/settings/keys',
     stream: true
   },
+  // 이 컴퓨터의 Ollama. 체인 최종 방어선(local: 항상 맨 뒤, T-127). 꺼져 있으면 네트워크 오류로 끝난다.
+  // 확장에서 부르려면 Ollama 에 OLLAMA_ORIGINS=chrome-extension://* 가 필요하다
+  ollama: {
+    label: '로컬 Ollama (이 컴퓨터, 마지막 방어선)',
+    kind: 'openai-compat',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    models: ['gemma4:12b'],
+    defaultModel: 'gemma4:12b',
+    stream: true,
+    keyOptional: true,
+    local: true,
+    free: true
+  },
   custom: {
     label: 'OpenAI 호환 주소 (OpenRouter, Ollama 등)',
     kind: 'openai-compat',

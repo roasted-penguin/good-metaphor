@@ -19,6 +19,7 @@
 | T-124 | **[사용자 추가]** 모델 순위 fallback 체인(지금 1·2순위, 순위는 더 붙음) + 429 쿨다운 | 1 품질 | P0 | 완료 | T-117 |
 | T-125 | **[사용자 추가]** 체인 2·3순위 교체: Gemini 3.5 Flash-Lite, NVIDIA Build(thinking 끔) | 1 품질 | P0 | 리뷰 | T-124 |
 | T-126 | 하루 한도 429(TPD·RPD)는 리셋 시각까지 쿨다운 (지금은 상한 10분마다 재시도) | 1 품질 | P2 | 대기 | T-125 |
+| T-127 | **[사용자 추가]** 로컬 Ollama를 호버 체인 최종 방어선으로 (다른 무료 모델은 무조건 앞) | 1 품질 | P1 | 리뷰 | T-125 |
 | T-116 | 첫 실행 트리거 선택 화면 (D-1) | 1 품질 | P1 | 대기 | |
 | T-117 | 뜻 먼저 보여 주기: 응답 스트리밍으로 체감 속도 개선 | 1 품질 | P0 | 완료 | |
 | T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 완료 | |
@@ -297,6 +298,14 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 **할 일** 429 응답 본문·헤더로 하루 한도(Groq `tokens per day (TPD)`·`requests per day`, Gemini `PerDay` quota)를 구분해 그때는 `cooldown.dailyMaxMs`(예: 다음 리셋까지, 상한 24시간)를 쓴다. 분당 한도는 지금처럼.
 **완료 기준** 단위: 하루 한도 429는 긴 쿨다운, 분당 429는 기존 상한. 각 제공자의 실제 429 본문 예시를 테스트 입력으로.
 
+### T-127 [사용자 추가] 로컬 Ollama 최종 방어선
+**왜** 2026-10-18 사용자 결정. 로컬 모델은 인덱싱 추출용으로 정했지만(ADR 0006, 그래서 인덱싱 품질이 클라우드 상태에 흔들리지 않는다), 추론(호버)에서도 클라우드 무료 모델이 모두 막혔을 때의 마지막 방어선으로 쓴다. 다른 무료 모델은 무조건 Ollama보다 앞.
+**할 일** `PROVIDERS.ollama`(`http://127.0.0.1:11434/v1`, `local: true`, 키 없음, 스트리밍, `gemma4:12b`), `buildChain`이 `local`을 항상 맨 뒤로, `fallbackChain` 맨 끝, manifest 호스트 권한, smoke가 로컬 서버가 떠 있으면 포함. CLAUDE.md 규칙 8, ADR 0006·0008, `architecture-lightrag.md`·`.html`, intro.html.
+**완료 기준** 단위: 로컬은 사용자가 골라도·체인 중간에 있어도 맨 뒤, 꺼져 있으면 앞 순위가 모두 실패했을 때만 오류. 수동: Ollama 설치 + `OLLAMA_ORIGINS=chrome-extension://*` 뒤 스모크로 첫 글자·뜻 시간.
+**진행 과정**
+- 2026-10-18 사용자 질문 "로컬 모델은 이 파트에서 쓰는 게 아닌가" → 설계상 추출 전용(ADR 0006·규칙 8)이라고 답함.
+- 2026-10-18 사용자 결정 "추론 최종 순위(다른 무료 모델은 무조건 Ollama 앞)로 최종 방어선" → 구현. 단위 3개(50). 이 맥에는 Ollama 미설치라 실제 호출은 미확인. #10에 함께 올림(같은 파일).
+
 ### T-116 첫 실행 트리거 선택 (D-1)
 **할 일** 설치 직후(`chrome.runtime.onInstalled`, reason=install) 여는 설정 화면 맨 위에 한 화면짜리 안내: "Alt 누르고 문장에 올리기(추천) / 머무르면 자동". 기본 선택은 Alt. 고르면 `triggerMode` 저장 후 안내를 접는다. 자동을 고르면 "호출이 많아져 무료 한도를 빨리 써요" 한 줄.
 **완료 기준** e2e: 새 프로필 설치 → 안내 표시 → 자동 선택 → 설정 저장 확인 → 다시 열면 안내 없음.
@@ -423,6 +432,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-18 | T-127 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** 로컬 Ollama `gemma4:12b`를 호버 체인 맨 뒤 최종 방어선으로(`local`은 항상 맨 뒤). 규칙 8과 설계 문서 세 곳 갱신. Ollama 미설치로 실제 호출 미확인. |
 | 2026-10-18 | T-125 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** #9 병합 뒤 커밋 5개가 빠져 따로 올림: 체인 Groq → Gemini 3.5 Flash-Lite → NVIDIA super-vl(thinking 끔, 뜻 0.5~1.0초), `PROVIDERS.nvidia`, 체인 설정 검사 테스트. T-124 완료 반영. |
 | 2026-10-18 | T-124 | task/T-124-fallback-chain | [#9](https://github.com/roasted-penguin/good-metaphor/pull/9) | **[사용자 추가]** Groq `gpt-oss-120b` → Gemini `gemini-3.5-flash-lite` → NVIDIA `nemotron-3.5-super-vl` fallback 체인(처음 3.8 Flash였다가 재측정 뒤 사용자 결정으로 교체), 429 쿨다운(Retry-After, 기본 60초, 상한 10분, session 저장). 다음 순서가 있으면 429 재시도 생략, 키 오류는 체인 안 탐. 기본 제공자 groq. T-117 위에 쌓음. 실제 키로 체인 동작은 미확인(Groq 키가 로컬에 없음). |
 | 2026-10-18 | 문서 | task/docs-model-reference | [#8](https://github.com/roasted-penguin/good-metaphor/pull/8) | 모델 성능 비교는 Artificial Analysis 리더보드를 먼저 참고하도록 CLAUDE.md 함정·ADR 0005·T-122 할 일에 추가. |

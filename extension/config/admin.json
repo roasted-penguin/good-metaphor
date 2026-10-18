@@ -6,6 +6,7 @@
     "gemini": "gemini-3.5-flash-lite",
     "groq": "openai/gpt-oss-120b",
     "nvidia": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "ollama": "gemma4:12b",
     "openai": "gpt-6-luna",
     "anthropic": "claude-haiku-4-5-20251001"
   },
@@ -13,10 +14,11 @@
   "fallbackChain": [
     { "provider": "groq", "model": "openai/gpt-oss-120b" },
     { "provider": "gemini", "model": "gemini-3.5-flash-lite" },
-    { "provider": "nvidia", "model": "nvidia/nemotron-3.5-super-vl-120b-a12b" }
+    { "provider": "nvidia", "model": "nvidia/nemotron-3.5-super-vl-120b-a12b" },
+    { "provider": "ollama", "model": "gemma4:12b" }
   ],
   "cooldown": { "defaultMs": 60000, "maxMs": 600000 },
-  "allowedProviders": ["gemini", "groq", "nvidia", "openai", "anthropic", "custom", "demo"],
+  "allowedProviders": ["gemini", "groq", "nvidia", "ollama", "openai", "anthropic", "custom", "demo"],
   "lockProvider": false,
   "sharedApiKeys": {},
 
