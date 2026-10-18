@@ -92,6 +92,39 @@ test('Alt+호버: 문장 강조, 메이플 테마 말풍선, Esc 닫기, 캐시'
   await expect.poll(() => tooltip(page)).toContain('캐시');
 });
 
+// 말풍선 텍스트를 done(text) 이 참이 될 때까지 50ms마다 기록한다
+async function recordTooltip(page, done, timeout = 15_000) {
+  const seen = [];
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    const t = (await tooltip(page)) || '';
+    seen.push(t);
+    if (done(t)) return seen;
+    await page.waitForTimeout(50);
+  }
+  throw new Error('말풍선이 끝나지 않았어요: ' + seen.at(-1));
+}
+
+test('스트리밍: 뜻이 비유보다 먼저 보인다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  const seen = await recordTooltip(page, t => t.includes('같은 구조예요'));
+  const first = seen.findIndex(t => t.includes('테스트 뜻 풀이예요.'));
+  expect(first, '뜻이 보인 순간이 있어야 함').toBeGreaterThanOrEqual(0);
+  expect(seen[first], '뜻이 처음 보일 때 비유는 아직 없음').not.toContain('같은 구조예요');
+});
+
+test('스트리밍: 후보 밖 nodeId 면 비유가 끝까지 안 보인다 (규칙 1)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p3');
+  const seen = await recordTooltip(page, t => t.includes('근거 목록에 없는 개념'));
+  expect(seen.filter(t => t.includes('같은 구조예요')), '비유 문구가 한 번도 보이면 안 됨').toEqual([]);
+  expect(seen.some(t => t.includes('테스트 뜻 풀이예요.') && !t.includes('근거 목록에 없는')), '검증 전에 뜻은 먼저 보임').toBe(true);
+  expect(seen.at(-1)).toContain('테스트 뜻 풀이예요.');
+});
+
 test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ context, ext }) => {
   await ext.setSettings({ triggerMode: 'auto', dwellMs: 500 });
   const page = await context.newPage();

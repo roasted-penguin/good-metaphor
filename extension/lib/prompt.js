@@ -19,7 +19,7 @@ export function buildAnalogyPrompt({ sentence, context, word, pageTitle, domain,
     '3. 구조가 맞는 후보가 없으면 analogy를 빈 문자열로 두고 nodeId를 null로 둔다. 억지 비유는 틀린 설명보다 나쁘다.',
     `4. analogy는 "${analogyPrefix}" 문구로 시작하는 1~2문장, 120자 안쪽. 원문과 ${domain}의 어떤 부분이 대응하는지 드러나게 쓴다.`,
     '5. meaning은 원문 문장의 뜻을 중학생도 알 쉬운 말로 1문장. 원문이 영어여도 한국어로 쓴다.',
-    '6. 존댓말(~요)을 쓴다. JSON 객체만 출력한다.',
+    '6. 존댓말(~요)을 쓴다. JSON 객체만 출력한다. 필드는 meaning, analogy, nodeId, tagId, mapping 순서로 쓴다.',
     '출력 형식: {"meaning": string, "analogy": string, "nodeId": string|null, "tagId": string|null, "mapping": string}',
     'mapping은 "원문 개념 ↔ 관심사 개념" 형태의 짧은 대응 한 줄이다.'
   ].join('\n');
@@ -44,6 +44,19 @@ export function buildAnalogyPrompt({ sentence, context, word, pageTitle, domain,
   ].filter(s => s !== '').join('\n');
 
   return { system, user };
+}
+
+// 스트리밍 중인 부분 JSON에서 meaning 값이 닫혔으면 돌려준다. 덜 왔거나 비었으면 null
+export function extractMeaning(partial) {
+  const m = /"meaning"\s*:\s*"/.exec(partial || '');
+  if (!m) return null;
+  for (let i = m.index + m[0].length; i < partial.length; i++) {
+    if (partial[i] === '\\') { i++; continue; }
+    if (partial[i] === '"') {
+      try { return JSON.parse(partial.slice(m.index + m[0].length - 1, i + 1)) || null; } catch { return null; }
+    }
+  }
+  return null;
 }
 
 // 받침 유무로 조사 고르기: withJosa('경매장', '과', '와') → '경매장과'
