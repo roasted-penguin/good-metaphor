@@ -16,7 +16,8 @@ export async function getAdminConfig({ fresh = false } = {}) {
   if (adminCache && !fresh) return adminCache;
   const res = await fetch(chrome.runtime.getURL('config/admin.json'));
   let admin = await res.json();
-  delete admin._comment;
+  // _ 로 시작하는 키는 파일 안 설명이다
+  for (const k of Object.keys(admin)) if (k.startsWith('_')) delete admin[k];
   try {
     const managed = await chrome.storage.managed.get(null);
     if (managed && Object.keys(managed).length) {
