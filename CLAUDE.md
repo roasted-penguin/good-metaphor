@@ -68,7 +68,7 @@ tests/e2e/                   Playwright: 가짜 LLM(:8765) + 테스트 페이지
 scripts/                     build, prepare-e2e
 ```
 
-호버 한 번의 흐름: content.js가 문장·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 결과 캐시(session) → 단계별 `stage` 메시지와 `result`를 포트로 돌려줌.
+호버 한 번의 흐름: content.js가 문장·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
 
 ## 지켜야 할 규칙
 
