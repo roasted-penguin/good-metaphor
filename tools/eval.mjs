@@ -28,9 +28,14 @@ if (useFallback) {
   const cfg = admin.embedding;
   console.log(`모델 불러오는 중: ${cfg.model} (${cfg.dtype})`);
   const ex = await pipeline('feature-extraction', cfg.model, { dtype: cfg.dtype });
+  // q8은 같은 문장도 함께 묶인 배치에 따라 벡터가 조금 달라진다(활성값 양자화 스케일이 배치 단위).
+  // 확장과 같게 노드·태그는 한 배치로, 질의는 한 문장씩 임베딩해 결과를 고정한다 (T-113)
+  const run = async texts => (await ex(texts, { pooling: 'mean', normalize: true })).tolist();
   embed = async (texts, kind) => {
-    const prefix = kind === 'query' ? cfg.queryPrefix : cfg.passagePrefix;
-    return (await ex(texts.map(t => prefix + t), { pooling: 'mean', normalize: true })).tolist();
+    if (kind === 'passage') return run(texts.map(t => cfg.passagePrefix + t));
+    const out = [];
+    for (const t of texts) out.push((await run([cfg.queryPrefix + t]))[0]);
+    return out;
   };
 }
 
