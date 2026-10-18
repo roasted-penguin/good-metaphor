@@ -14,6 +14,7 @@
 - 호출 로직은 `lib/fallback.js` 한 곳. 제공자별 분기를 늘리지 않는다(규칙 7).
 
 ## 결과
+- NVIDIA Nemotron은 기본으로 생각부터 해서 첫 글자까지 14~30초다. `PROVIDERS.nvidia.extraBody`의 `chat_template_kwargs.enable_thinking: false`로 꺼서 0.3초 안팎으로 만든다.
 - NVIDIA Build 무료 API는 키당 분당 약 40회(전 모델 공유)이고 개발·시험용 약관이다. 웹스토어 공개(T-303) 전에 약관을 다시 확인한다.
 - `debug.provider`는 실제로 답한 모델, `debug.fallbacks`에 건너뛴 모델과 이유가 남는다.
 - 결과 캐시 키는 사용자가 고른 제공자 기준이라, 뒤 순위가 답한 결과도 같은 키로 캐시된다.
