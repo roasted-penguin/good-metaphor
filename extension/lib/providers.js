@@ -28,9 +28,12 @@ export const PROVIDERS = {
     label: 'NVIDIA Build (무료, 개발용)',
     kind: 'openai-compat',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
-    // 모델 ID는 2026-10-18 freellm.net 목록 기준, 실제 키로 아직 확인 안 함(T-124). 무료는 키당 분당 40회, 개발·시험용 약관
-    models: ['nvidia/nemotron-3.5-super-vl-120b-a12b', 'deepseek-ai/deepseek-v4.1-flash', 'nvidia/nemotron-3.5-lightning-30b-a3b'],
+    // 2026-10-18 실제 키로 확인: /v1/models 에 있음. deepseek-v4.1-flash·nemotron-3.5-lightning 은 20초 넘게 응답 없음이라 뺐다.
+    // 무료는 키당 분당 약 40회(모든 모델 공유), 개발·시험용 약관
+    models: ['nvidia/nemotron-3.5-super-vl-120b-a12b', 'nvidia/nemotron-3-super-120b-a12b'],
     defaultModel: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
+    // Nemotron 은 기본으로 생각부터 해서 첫 글자까지 14~30초. 끄면 0.2~0.4초(2026-10-18 측정)
+    extraBody: { chat_template_kwargs: { enable_thinking: false } },
     keyUrl: 'https://build.nvidia.com/settings/api-keys',
     stream: true,
     free: true
