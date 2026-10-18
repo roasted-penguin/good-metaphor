@@ -7,11 +7,16 @@ import fs from 'node:fs';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
 import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
+import { scoreCases, mixedSetting } from './eval-lib.mjs';
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
 const common = JSON.parse(fs.readFileSync(new URL('../extension/data/common/maplestory.json', here)));
-const cases = JSON.parse(fs.readFileSync(new URL('./eval-set.json', here)));
+const sets = [
+  { name: '평가셋', cases: JSON.parse(fs.readFileSync(new URL('./eval-set.json', here))) },
+  // 검증셋: 가중치·텍스트 조정에 쓰지 않는 문장 (T-113). 과적합 확인용
+  { name: '검증셋', cases: JSON.parse(fs.readFileSync(new URL('./eval-holdout.json', here))) }
+];
 const useFallback = process.argv.includes('--fallback');
 const verbose = process.argv.includes('-v');
 
@@ -35,26 +40,24 @@ const keys = [...graph.tags.map(t => 'tag:' + t.id), ...graph.nodes.map(n => 'no
 const texts = [...graph.tags.map(tagText), ...graph.nodes.map(n => nodeText(n, tagMap))];
 const vs = await embed(texts, 'passage');
 const vecs = new Map(keys.map((k, i) => [k, vs[i]]));
-const qs = await embed(cases.map(c => c.sentence), 'query');
-
 const settings = [
   { name: '노드 직접 비교만', directWeight: 1, tagWeight: 0 },
   { name: '태그 경유만 (그래프 홉)', directWeight: 0, tagWeight: 1 },
-  { name: '혼합 (현재 기본값)', directWeight: admin.retrieval.directWeight, tagWeight: admin.retrieval.tagWeight }
+  mixedSetting(admin)
 ];
+const pct = (a, b) => `${a}/${b} (${Math.round(a / b * 100)}%)`;
 
-console.log(`\n평가 문장 ${cases.length}개 · 임베더: ${useFallback ? 'fallback n-gram' : admin.embedding.model}\n`);
-for (const s of settings) {
-  let h1 = 0, h3 = 0;
-  const misses = [];
-  cases.forEach((c, i) => {
-    const got = retrieve(qs[i], graph, vecs, { topK: 3, ...s }).map(r => r.id);
-    if (c.expectNodes.includes(got[0])) h1++; else misses.push(`  ✗ ${c.sentence.slice(0, 32)}… → ${got.join(', ')} (기대: ${c.expectNodes.join('/')})`);
-    if (got.some(g => c.expectNodes.includes(g))) h3++;
-  });
-  console.log(`${s.name.padEnd(18)}  hit@1 ${h1}/${cases.length} (${Math.round(h1 / cases.length * 100)}%)  hit@3 ${h3}/${cases.length} (${Math.round(h3 / cases.length * 100)}%)`);
-  if (verbose) console.log(misses.join('\n'));
+for (const { name, cases } of sets) {
+  const qs = await embed(cases.map(c => c.sentence), 'query');
+  console.log(`\n[${name}] 문장 ${cases.length}개 · 임베더: ${useFallback ? 'fallback n-gram' : admin.embedding.model}\n`);
+  for (const s of settings) {
+    const { topK, ...opts } = s;
+    const r = scoreCases(cases, (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: 3 }).map(x => x.id));
+    const groups = Object.entries(r.groups).map(([g, v]) => `  ${g} ${v.hit1}/${v.n}`).join('');
+    console.log(`${s.name.padEnd(18)}  hit@1 ${pct(r.hit1, r.n)}  hit@3 ${pct(r.hit3, r.n)}${groups}`);
+    if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);
+  }
+  let t1 = 0;
+  cases.forEach((c, i) => { if (topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
+  console.log(`\n추상 태그 top-1 정확도: ${pct(t1, cases.length)}`);
 }
-let t1 = 0;
-cases.forEach((c, i) => { if (topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
-console.log(`\n추상 태그 top-1 정확도: ${t1}/${cases.length} (${Math.round(t1 / cases.length * 100)}%)`);
