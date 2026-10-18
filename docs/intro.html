@@ -398,7 +398,7 @@
             <g>
               <rect x="720" y="232" width="288" height="96" rx="10" class="i-box"/>
               <text x="736" y="258" class="i-name">LLM 제공자 (교체형)</text>
-              <text x="736" y="280" class="i-sub">Gemini 기본 · Groq 무료 티어</text>
+              <text x="736" y="280" class="i-sub">Groq 1순위 → Gemini 2순위</text>
               <text x="736" y="298" class="i-sub">OpenAI · Anthropic</text>
               <text x="736" y="316" class="i-sub">OpenAI 호환 주소 (Ollama 등)</text>
             </g>
@@ -653,13 +653,13 @@
   <section>
     <span class="label">AI 제공자</span>
     <h2>관리자가 바꿔 끼우는 구조</h2>
-    <p class="intro">임베딩(검색)은 브라우저 안에서 돌고, 밖으로 나가는 호출은 비유 생성 한 번뿐이에요. 제공자는 설정 파일이나 조직 정책으로 정하고 잠글 수 있습니다.</p>
+    <p class="intro">임베딩(검색)은 브라우저 안에서 돌고, 밖으로 나가는 호출은 비유 생성 한 번뿐이에요. 제공자는 설정 파일이나 조직 정책으로 정하고 잠글 수 있어요. 1순위가 한도(429)에 걸리면 잠시 쉬게 하고 2순위로 넘어가요.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>제공자</th><th>기본 모델</th><th>비용</th></tr></thead>
         <tbody>
-          <tr><td>Google Gemini <span class="free">기본값</span></td><td><code>gemini-3.8-flash</code></td><td>무료 티어 있음</td></tr>
-          <tr><td>Groq</td><td><code>openai/gpt-oss-120b</code></td><td>무료 티어 있음</td></tr>
+          <tr><td>Groq <span class="free">1순위</span></td><td><code>openai/gpt-oss-120b</code></td><td>무료 티어 있음</td></tr>
+          <tr><td>Google Gemini <span class="free">2순위</span></td><td><code>gemini-3.8-flash</code></td><td>무료 티어 있음</td></tr>
           <tr><td>OpenAI</td><td><code>gpt-6-luna</code></td><td>유료</td></tr>
           <tr><td>Anthropic</td><td><code>claude-haiku-4-5-20251001</code></td><td>유료</td></tr>
           <tr><td>OpenAI 호환 주소</td><td>OpenRouter, Ollama 등</td><td>제공자에 따름</td></tr>

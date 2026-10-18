@@ -125,13 +125,14 @@ async function postOnce(url, headers, body, timeoutMs, onData) {
 }
 
 // 503·429·네트워크 오류만 재시도한다. 키 오류(400·401·403)는 바로 던진다. 전체 시간은 timeoutMs 안에서.
-async function postJSON(url, headers, body, { timeoutMs = 30000, stats, onData } = {}) {
+async function postJSON(url, headers, body, { timeoutMs = 30000, stats, onData, noRetry429 } = {}) {
   const deadline = Date.now() + timeoutMs;
   for (let attempt = 0; ; attempt++) {
     try {
       return await postOnce(url, headers, body, Math.max(1, deadline - Date.now()), onData);
     } catch (e) {
-      const retryable = e.network || RETRYABLE.has(e.status);
+      // 다음 순서 모델이 있으면(fallback 체인) 429는 기다리지 않고 바로 넘긴다
+      const retryable = e.network || (RETRYABLE.has(e.status) && !(noRetry429 && e.status === 429));
       if (!retryable || attempt >= retryPolicy.delays.length) throw e;
       const base = retryPolicy.delays[attempt];
       let wait = base + base * retryPolicy.jitter * Math.random();
@@ -206,16 +207,18 @@ const KINDS = {
 };
 
 async function send(kind, req, opts, stream) {
-  if (!stream) return kind.text(await postJSON(req.url, req.headers, req.body, { stats: opts.stats }));
+  if (!stream) return kind.text(await postJSON(req.url, req.headers, req.body, { stats: opts.stats, noRetry429: opts.noRetry429 }));
   let acc = '';
   await postJSON(req.url, req.headers, req.body, {
     stats: opts.stats,
+    noRetry429: opts.noRetry429,
     onData: d => { const piece = kind.chunk(d); if (piece) { acc += piece; opts.onText(acc); } }
   });
   return acc;
 }
 
 // provider = resolveProvider() 결과. opts.stats 객체를 넘기면 재시도 횟수(retries)를 채운다.
+// opts.noRetry429 면 429를 재시도하지 않고 바로 던진다(fallback 체인용).
 // opts.onText(지금까지 받은 전체 텍스트) 를 넘기면, 항목이 stream 이면 조각마다, 아니면 끝에 한 번 부른다
 export async function complete(provider, system, user, opts = {}) {
   const { def, apiKey } = provider;

@@ -187,3 +187,21 @@ test('정밀 모드, 데모 제공자, 키 없음 오류', async ({ ext }) => {
   expect(e.ok).toBe(false);
   expect(e.error).toContain('API 키가 없어요');
 });
+
+test('fallback 체인: 429 모델은 다음 순서로 넘기고 쿨다운 동안 다시 부르지 않는다 (T-124)', async ({ ext }) => {
+  const { send, setSettings } = ext;
+  await setSettings({ models: { custom: 'mock-busy' } });
+  const busyCalls = () => calls.filter(c => c.model === 'mock-busy').length;
+  const before = busyCalls();
+  const a = await send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(a.ok).toBe(true);
+  expect(a.data.debug.provider).toBe('custom/mock-model');
+  expect(a.data.debug.fallbacks[0]).toMatchObject({ provider: 'custom/mock-busy' });
+  expect(a.data.analogy).toContain('같은 구조예요');
+  expect(busyCalls() - before, '429는 같은 모델을 재시도하지 않음').toBe(1);
+
+  const b = await send({ type: 'explain', sentence: 'API 서버는 분당 요청 수에 상한을 둔다.', noCache: true });
+  expect(b.data.debug.provider).toBe('custom/mock-model');
+  expect(b.data.debug.fallbacks[0]).toMatchObject({ provider: 'custom/mock-busy', reason: '쿨다운 중' });
+  expect(busyCalls() - before, '쿨다운 중에는 부르지 않음').toBe(1);
+});

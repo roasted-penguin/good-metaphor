@@ -14,7 +14,7 @@
 
 PoC 완료, 실제 키·실제 모델로 확인됨.
 - **검색:** 실제 임베딩(e5-small) 혼합 hit@1 11/16으로 대체 임베더(12/16)보다 낮다. 금융 문장이 `meso`·`auction`으로 쏠려 비유가 안 나온다(T-113, 다음 P0).
-- **LLM:** 무료 Gemini(`gemini-3.8-flash`)·Groq(`openai/gpt-oss-120b`) 키로 스모크 통과(T-101·T-119). 실제 확장 호버는 3.6~9.1초로 느리다(T-117 뜻 먼저, P0). Groq가 5~10배 빠르지만 존댓말·추상화 품질을 다듬어야 한다(T-122). 503·429는 재시도한다(T-121).
+- **LLM:** 무료 Gemini(`gemini-3.8-flash`)·Groq(`openai/gpt-oss-120b`) 키로 스모크 통과(T-101·T-119). 실제 확장 호버는 3.6~9.1초로 느리다(T-117 뜻 먼저, P0). Groq가 5~10배 빠르지만 존댓말·추상화 품질을 다듬어야 한다(T-122). 503·429는 재시도한다(T-121). 기본은 Groq `gpt-oss-120b` → Gemini `gemini-3.8-flash` fallback 체인(순위는 더 붙을 수 있음, `admin.json` `fallbackChain`에 추가만), 429 모델은 쿨다운(T-124, ADR 0008).
 - **데이터:** 공통 그래프 사실은 2026-10 패치 노트로 검수(2026.10.11-1).
 - **결정됨:** 앱 이름 "좋은비유네용"(변경은 T-115), 기본 트리거 Alt + 첫 실행 선택(D-1), 두 번째 관심사 식당·로그인 없이(D-4), 문서 출처(D-5), 검수 방식(D-3), 최신화 설계(ADR 0007). D-2(로그인)는 L3 전에 정한다.
 - **열린 질문:** "에이전트 단" 설계(D-6, `docs/TASKS.md`).
@@ -54,6 +54,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   options.* / popup.*        설정·팝업 UI
   lib/config.js              설정 우선순위: admin.json < chrome.storage.managed < 사용자 설정(잠금 아닐 때)
   lib/providers.js           LLM 제공자 레지스트리 + 호출 (gemini, openai-compat, anthropic, demo)
+  lib/fallback.js            순위 fallback 체인(길이 제한 없음, 순위는 더 붙을 수 있음) + 429 쿨다운 (ADR 0008)
   lib/stores.js              공통 저장소 로더 + 사용자 저장소 어댑터(none / local-dev / remote)
   lib/graph.js               그래프 병합(공통 + 오버레이), 검증, 임베딩 텍스트
   lib/retrieval.js           점수 = 직접 유사도 × w1 + 최고 태그 유사도 × w2 + boost
@@ -79,6 +80,7 @@ scripts/                     build, prepare-e2e
 5. **UI 문구는 한국어 존댓말(~요), 짧고 구체적으로.** 코드 주석도 한국어.
 6. **테마는 관심사에 붙는다.** 메이플 = 인게임 툴팁풍(어두운 남색 + 잠재능력 등급색을 의미별로), 그 외 = 중립 테마. 설정 화면은 중립 + 주황 포인트. 가이드 사이트 UI를 따라 하지 않는다.
 7. 새 제공자는 `PROVIDERS`에 항목 추가로 끝나야 한다. 호출 로직을 제공자별로 흩뜨리지 않는다.
+   LLM 호출 순서는 `config/admin.json`의 `fallbackChain`(ADR 0008)이고 **순위는 앞으로 계속 더 붙는다**(사용자 안내, 2026-10-18). 코드·테스트·문서·UI 문구에 체인 길이나 "1·2순위"를 가정하지 않는다. 순위 추가는 배열에 항목만 넣고 코드는 고치지 않는다(절차는 ADR 0008 "순위를 더할 때").
 8. **호버 경로에 맥을 두지 않는다.** 맥(로컬 Ollama)은 인덱싱 추출 전용이고 꺼져 있을 수 있다. 호버 때 부르는 LLM은 클라우드.
 9. **추상 태그는 통제 어휘다.** 원본은 `maplestory.json`의 `tags`. 추출 프롬프트와 질의 키워드 프롬프트가 같은 목록에서 생성돼야 하고, 목록 밖 추상구조는 버린다.
 10. **맥은 인터넷에 포트를 열지 않는다.** Ollama는 127.0.0.1에만, 노출은 `tailscale serve`로 테일넷에만.
@@ -91,7 +93,7 @@ scripts/                     build, prepare-e2e
 - 확장 페이지는 `eval`이 막혀 있어 Playwright `waitForFunction('문자열')`이 실패한다. `page.evaluate(함수)`나 `expect.poll`을 쓴다.
 - 모델 다운로드처럼 긴 작업 중 서비스 워커가 잠들 수 있다. `keepAlive()`로 감싼다.
 - 회사망 등에서 Hugging Face가 막히면 모델 로드가 실패하고 대체 임베더로 조용히 바뀐다(`fallbackOnError`). 품질 비교 때 `debug.embedderId`를 꼭 확인.
-- 모델 ID·가격은 2026-09-28에 각 사 문서로 확인한 값이다. 바뀌면 `config/admin.json`의 `defaultModels`와 `lib/providers.js`를 함께 고친다.
+- 모델 ID·가격은 2026-09-28에 각 사 문서로 확인한 값이다. 바뀌면 `config/admin.json`의 `defaultModels`·`fallbackChain`과 `lib/providers.js`를 함께 고친다.
 - **모델을 고르거나 바꿀 때 성능 비교는 [Artificial Analysis 리더보드](https://artificialanalysis.ai/leaderboards/models)를 먼저 참고한다**(지능 지수, 출력 속도, 첫 토큰 지연, 가격). 후보를 거기서 추린 뒤 `npm run smoke:providers`(`--all-models`)로 이 앱 기준(뜻까지 시간, 존댓말, 근거 준수, JSON, 무료 한도)을 직접 잰다. 리더보드 수치는 확인한 날짜와 함께 적는다.
 - Gemini 3.x는 `thinkingConfig`를 받지 않는 모델이 있어 400이면 빼고 재시도한다.
 

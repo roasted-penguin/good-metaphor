@@ -13,6 +13,8 @@ admin.embedding.model = '__fallback__';
 admin.defaultProvider = 'custom';
 admin.customBaseUrl = 'http://127.0.0.1:8765/v1';
 admin.defaultModels.custom = 'mock-model';
+// fallback 체인(T-124): 'mock-busy'(가짜 LLM이 429)를 고르면 mock-model 로 넘어간다
+admin.fallbackChain = [{ provider: 'custom', model: 'mock-model' }];
 writeFileSync(p, JSON.stringify(admin, null, 2));
 
 await build({ entryPoints: ['tests/e2e/ort-smoke-src.js'], bundle: true, format: 'esm', platform: 'browser', outfile: `${OUT}/ort-smoke.js`, logLevel: 'warning' });

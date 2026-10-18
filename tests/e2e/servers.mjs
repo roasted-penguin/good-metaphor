@@ -1,5 +1,6 @@
 // e2e용 서버 두 개: 가짜 LLM(OpenAI 호환, :8765)과 테스트 페이지(:8766)
 // 가짜 LLM은 stream:true 면 SSE로, meaning 까지 먼저 보내고 나머지는 STREAM_GAP_MS 뒤에 보낸다.
+// 모델이 'mock-busy'면 429(Retry-After 60)를 낸다(fallback 체인 확인용).
 // 문장에 "Leverage"가 있으면 후보에 없는 nodeId 로 답한다(근거 검증 확인용)
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -13,9 +14,13 @@ function mockLLM(req, res) {
   let body = '';
   req.on('data', c => (body += c));
   req.on('end', () => {
-    const { messages, stream } = JSON.parse(body);
+    const { messages, stream, model } = JSON.parse(body);
     const system = messages[0].content, user = messages.at(-1).content;
-    calls.push({ system, user });
+    calls.push({ system, user, model });
+    if (model === 'mock-busy') {
+      res.writeHead(429, { ...cors, 'content-type': 'application/json', 'retry-after': '60' });
+      return res.end(JSON.stringify({ error: { message: 'Rate limit reached (mock)' } }));
+    }
     let content;
     if (system.includes('추상 구조로')) content = '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
     else if (user.includes('연결 성공')) content = '연결 성공';

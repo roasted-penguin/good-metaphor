@@ -1,6 +1,6 @@
 # 작업 목록
 
-상태: `대기` · `진행`(브랜치 작업 중) · `리뷰`(PR 열림) · `완료`(dev에 병합) · `보류` · `결정 필요`. 우선순위: `P0` 다음에 바로 · `P1` 이 단계 안에 · `P2` 여유 있을 때.
+상태: `대기` · `진행`(브랜치 작업 중) · `리뷰`(PR 열림) · `완료`(dev에 병합) · `보류` · `결정 필요`. 우선순위: `P0` 다음에 바로 · `P1` 이 단계 안에 · `P2` 여유 있을 때. 사용자가 대화 중에 직접 요청해 추가한 작업은 제목 앞에 **[사용자 추가]**를 붙인다.
 작업 하나마다 `task/<ID>-<슬러그>` 브랜치에서 하고, 끝나면 push 후 `dev`로 PR을 연다(CLAUDE.md "작업 방식"). PR을 열면 상태를 `리뷰`로, 병합되면 다음 작업을 시작할 때 `완료`로 바꾼다. 맨 아래 **작업 로그**에 PR 링크와 함께 한 줄 남긴다.
 
 ## 한눈에 보기
@@ -16,8 +16,9 @@
 | T-121 | 제공자 일시 오류(503·429) 재시도 | 1 품질 | P0 | 완료 | |
 | T-122 | Groq 응답 품질 다듬기(존댓말 ~요, 추상화에 원문 용어 금지) + 기본 제공자 검토 | 1 품질 | P1 | 대기 | T-121 |
 | T-123 | 비유가 근거 facts 밖 사실을 쓰는지 검사 (nodeId만으로는 못 잡음) | 1 품질 | P1 | 대기 | |
+| T-124 | **[사용자 추가]** 모델 순위 fallback 체인(지금 1·2순위, 순위는 더 붙음) + 429 쿨다운 | 1 품질 | P0 | 리뷰 | T-117 |
 | T-116 | 첫 실행 트리거 선택 화면 (D-1) | 1 품질 | P1 | 대기 | |
-| T-117 | 뜻 먼저 보여 주기: 응답 스트리밍으로 체감 속도 개선 | 1 품질 | P0 | 리뷰 | |
+| T-117 | 뜻 먼저 보여 주기: 응답 스트리밍으로 체감 속도 개선 | 1 품질 | P0 | 완료 | |
 | T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 완료 | |
 | T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 (오프라인 대체 경로) | 1 품질 | P2 | 진행 | 첫 로드 확인됨, 캐시·대체 경로 남음 |
 | T-103 | 검색 평가셋 확장(40문장+)과 품질 관문 통과 | 1 품질 | P0 | 대기 | T-405 |
@@ -260,6 +261,18 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 **할 일** 방법 후보: (1) 프롬프트에 "비유에 쓴 사실은 facts 문장을 그대로 인용" + `usedFact` 필드로 받아 facts와 대조 (2) 비유 문장과 고른 노드 facts의 임베딩·글자 겹침이 낮으면 숨김 (3) 정밀 모드에서 판정 호출 1회(T-120 판정기와 공유). 호버 지연(T-117)을 늘리지 않는 쪽을 먼저.
 **완료 기준** 가짜 LLM이 facts 밖 수치·규칙을 넣은 비유를 내면 숨김(e2e), 정상 비유는 그대로(오탐 없음). 실제 키 스모크에 검사 결과 표시.
 **파일** `extension/lib/prompt.js`, `extension/background.js`, `tools/smoke-providers.mjs`
+### T-124 [사용자 추가] 모델 순위 fallback 체인 + 429 쿨다운
+> 체인은 1·2순위로 끝나지 않는다. 병합 전후로 순위가 더 붙을 수 있다(사용자 안내, 2026-10-18). 길이를 가정하지 말고 `fallbackChain`에 항목만 추가한다.
+**왜** 2026-10-18 사용자 요청. 등록 모델 전체 측정(smoke run 39100925941)과 Artificial Analysis 리더보드 후보 정리(T-122 섹션, PR #8) 결과, 무료로 쓸 수 있는 모델 중 1순위 Groq `openai/gpt-oss-120b`(뜻까지 0.5~0.6초, 존댓말 지킴), 2순위 Gemini `gemini-3.8-flash`(1.8~6초, 근거 없으면 비유를 비우는 보수적 응답, 할당량이 Groq와 따로)를 남긴다. 무료 한도 429가 잦아(Gemini 일일 할당량, Groq 출력 토큰 분당 한도) 한 제공자만으로는 호버가 실패한다.
+**할 일** `config/admin.json`에 `fallbackChain`(순서 = 순위)과 `cooldown`. 호출 순서 = 사용자가 고른 제공자·모델 → 체인(중복·키 없음·허용 안 됨은 건너뜀). 429·503·네트워크·시간 초과면 다음 순서로. 429를 받은 모델은 `Retry-After`(없으면 기본값) 동안 쿨다운하고 그동안은 바로 다음 순서로 간다(쿨다운 기록은 `chrome.storage.session`, 서비스 워커가 잠들어도 유지). 다음 순서가 있으면 429에 같은 모델 재시도를 하지 않는다. 키 오류(400·401·403)는 체인을 타지 않는다. 모두 쿨다운이면 가장 먼저 풀리는 것을 시도. `debug.provider`는 실제로 답한 모델, `debug.fallbacks`에 건너뛴 이유.
+**완료 기준** 단위: 체인 구성(중복·키 없음·데모), 429 → 다음 모델 + 쿨다운 기록, 쿨다운 중 건너뜀, 풀리면 다시 시도, 401은 체인 안 탐, 모두 쿨다운이면 가장 이른 것. e2e: 가짜 LLM이 429를 내는 모델에서 체인 다음 모델로 답하고, 두 번째 호버는 429 모델을 부르지 않음. 근거 검증(규칙 1)은 그대로.
+**진행 과정**
+- 2026-10-18 사용자 요청 "바로 측정" → 등록 모델 6개 CI 스모크(`--all-models`), 결과는 T-122 사전 측정.
+- 2026-10-18 사용자 요청 "모델 성능은 Artificial Analysis 리더보드 우선 참고" → CLAUDE.md·ADR 0005·T-122에 기록, 후보 정리(PR #8).
+- 2026-10-18 사용자 요청 "1·2순위 + fallback 체인 + 429 쿨다운" → 이 작업. T-117(#7)과 `providers.js`가 겹쳐 그 브랜치 위에 쌓음(#7 먼저 병합).
+- 2026-10-18 구현: `lib/fallback.js`(`buildChain`, `completeWithFallback`), `config.providerFor`, `noRetry429`. 기본 제공자 gemini → groq. 단위 10개(44)·e2e 1개(9) 추가. ADR 0008, CLAUDE.md, intro.html 갱신.
+- 2026-10-18 사용자 안내 "병합 전후로 폴백 체인이 더 추가될 수 있음" → 체인 길이에 기대지 않도록 3개 체인 단위 테스트 추가(45), ADR 0008에 "순위를 더할 때" 절차. CLAUDE.md 규칙 7, `admin.json` 설명, 이 섹션 머리에도 명시.
+**파일** `extension/lib/fallback.js`(새), `extension/lib/providers.js`, `extension/background.js`, `extension/config/admin.json`, `scripts/prepare-e2e.mjs`, `tests/unit/fallback.test.mjs`, `tests/e2e/*`
 
 ### T-116 첫 실행 트리거 선택 (D-1)
 **할 일** 설치 직후(`chrome.runtime.onInstalled`, reason=install) 여는 설정 화면 맨 위에 한 화면짜리 안내: "Alt 누르고 문장에 올리기(추천) / 머무르면 자동". 기본 선택은 Alt. 고르면 `triggerMode` 저장 후 안내를 접는다. 자동을 고르면 "호출이 많아져 무료 한도를 빨리 써요" 한 줄.
@@ -387,6 +400,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-18 | T-124 | task/T-124-fallback-chain | [#9](https://github.com/roasted-penguin/good-metaphor/pull/9) | **[사용자 추가]** 1순위 Groq `gpt-oss-120b` → 2순위 Gemini `gemini-3.8-flash` fallback 체인, 429 쿨다운(Retry-After, 기본 60초, 상한 10분, session 저장). 다음 순서가 있으면 429 재시도 생략, 키 오류는 체인 안 탐. 기본 제공자 groq. T-117 위에 쌓음. 실제 키로 체인 동작은 미확인(Groq 키가 로컬에 없음). |
 | 2026-10-18 | 문서 | task/docs-model-reference | [#8](https://github.com/roasted-penguin/good-metaphor/pull/8) | 모델 성능 비교는 Artificial Analysis 리더보드를 먼저 참고하도록 CLAUDE.md 함정·ADR 0005·T-122 할 일에 추가. |
 | 2026-10-18 | T-117 | task/T-117-stream-meaning | [#7](https://github.com/roasted-penguin/good-metaphor/pull/7) | `PROVIDERS`에 `stream`, 종류별 차이는 `KINDS` 표(build·text·chunk) 한 곳. 응답 받기 전까지만 재시도. 뜻이 닫히면 `partial`(meaning만) → 말풍선에 먼저, 비유는 검증 뒤 `result`로만. 단위 10개·e2e 2개 추가(34·8). 실제 키 스모크(run 39099966893): Groq 첫 글자 415~685ms, 뜻 485~717ms, 전체 674~837ms. 로컬 새 Gemini 키(gemini-3.8-flash): 스트리밍 형식 통과, 하지만 첫 글자 4.1·7.9초 ≈ 전체(조각이 사실상 한 번에 옴, 대기는 thinking) → Gemini에선 체감 이득 없음, T-122 기본 제공자 검토 근거. |
 | 2026-10-18 | 도구 | task/test-first-command | [#6](https://github.com/roasted-penguin/good-metaphor/pull/6) | `/test-first` 명령 추가: 테스트 계획을 먼저 보여 주고 승인받은 뒤 실패하는 테스트부터 구현(superpowers 스킬 연결). PR 템플릿에 "테스트 계획" 칸, CLAUDE.md 작업 방식 3단계에 안내. |

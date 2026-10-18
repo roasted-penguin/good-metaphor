@@ -1,6 +1,7 @@
 // 서비스 워커: 저장소 병합 → 임베딩 → 그래프 검색 → LLM 비유 생성
 import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './lib/config.js';
 import { complete, parseJSONLoose, PROVIDERS } from './lib/providers.js';
+import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags } from './lib/retrieval.js';
@@ -89,6 +90,12 @@ async function ensureGraphVectors(graph) {
 
 /* ───────────── 설명 파이프라인 ───────────── */
 
+// 429 쿨다운 기록. 서비스 워커가 잠들어도 브라우저를 닫기 전까지 유지된다
+const cooldowns = {
+  get: async () => (await chrome.storage.session.get('llmCooldowns')).llmCooldowns || {},
+  set: llmCooldowns => chrome.storage.session.set({ llmCooldowns })
+};
+
 const RESULT_CACHE_MAX = 200;
 async function cacheGet(key) {
   const got = await chrome.storage.session.get('results');
@@ -123,12 +130,22 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const { vecs, embedderId, embedderStatus } = await ensureGraphVectors(graph);
 
   const llmStats = { retries: 0 };
+  // 사용자가 고른 제공자 → 관리자 fallbackChain 순서로 부른다(T-124). 실제로 답한 모델을 debug 에 남긴다
+  const chain = buildChain(provider, admin, settings);
+  let answered = provider;
+  const fallbacks = [];
+  const ask = async (system, user, opts) => {
+    const r = await completeWithFallback(chain, system, user, { ...opts, stats: llmStats }, { cooldowns, cooldown: admin.cooldown });
+    answered = r.provider;
+    fallbacks.push(...r.fallbacks);
+    return r.text;
+  };
   let queryText = sentence;
   let abstractText = null;
   if (settings.preciseMode && provider.def.kind !== 'demo') {
     onStage('abstract');
     const p = buildAbstractPrompt({ sentence, word, pageTitle });
-    abstractText = (await complete(provider, p.system, p.user, { json: false, stats: llmStats })).trim();
+    abstractText = (await ask(p.system, p.user, { json: false })).trim();
     if (abstractText) queryText = `${abstractText} ${sentence}`;
   }
 
@@ -149,7 +166,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       const meaning = extractMeaning(text);
       if (meaning) { sentMeaning = true; onPartial({ meaning }); }
     });
-    const raw = await complete(provider, p.system, p.user, { json: true, stats: llmStats, onText });
+    const raw = await ask(p.system, p.user, { json: true, onText });
     answer = parseJSONLoose(raw);
     if (!answer) throw new Error('모델 응답을 해석하지 못했어요: ' + raw.slice(0, 120));
   }
@@ -180,7 +197,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       abstractText,
       embedderId,
       embedderStatus,
-      provider: `${provider.id}/${provider.model}`,
+      provider: `${answered.id}/${answered.model}`,
+      fallbacks,
       llmRetries: llmStats.retries,
       user: session ? session.name : null,
       ms: Date.now() - t0
