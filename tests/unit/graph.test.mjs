@@ -62,3 +62,16 @@ test('노드 임베딩 텍스트에 태그 라벨이 들어간다', () => {
   const t = nodeText(common.nodes.find(n => n.id === 'starforce'), tagMap);
   assert.match(t, /확률형 강화/);
 });
+
+test('노드 임베딩 텍스트: 태그 설명이 모두 facts보다 앞에 온다 (T-113, 구조 비중 ↑)', () => {
+  const tagMap = new Map(common.tags.map(t => [t.id, t]));
+  const n = common.nodes.find(n => n.id === 'starforce');
+  const t = nodeText(n, tagMap);
+  const firstFact = t.indexOf(n.facts[0]);
+  assert.ok(firstFact > 0, '사실이 빠졌어요');
+  assert.ok(t.includes(n.label));
+  for (const id of n.tags) {
+    const at = t.indexOf(tagMap.get(id).desc);
+    assert.ok(at >= 0 && at < firstFact, `${id} 설명이 사실보다 앞에 있어야 해요`);
+  }
+});

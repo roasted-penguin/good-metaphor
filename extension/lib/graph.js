@@ -78,13 +78,14 @@ export function mergeGraphs(common, overlay) {
   };
 }
 
-// 임베딩할 문자열. 태그는 추상 설명, 노드는 이름+사실+태그 라벨
+// 임베딩할 문자열. 태그는 추상 설명, 노드는 태그 설명(구조)을 앞에 두고 이름+사실
+// 태그 설명을 앞에 두는 이유: 게임 용어(메소 등)가 주제 유사도를 끌어가는 쏠림을 줄인다 (T-113)
 export function tagText(t) {
   return `${t.label}: ${t.desc || ''}`.trim();
 }
 export function nodeText(n, tagMap) {
-  const tagLabels = n.tags.map(id => tagMap.get(id)?.label).filter(Boolean).join(', ');
-  return `${n.label}. ${n.facts.join(' ')} (${tagLabels})`;
+  const structure = n.tags.map(id => tagMap.get(id)).filter(Boolean).map(tagText).join(' ');
+  return `${structure} ${n.label}. ${n.facts.join(' ')}`.trim();
 }
 
 export async function sha1(str) {
