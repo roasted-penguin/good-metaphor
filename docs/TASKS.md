@@ -366,7 +366,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
-| 2026-10-18 | T-117 | task/T-117-stream-meaning | [#7](https://github.com/roasted-penguin/good-metaphor/pull/7) | `PROVIDERS`에 `stream`, 종류별 차이는 `KINDS` 표(build·text·chunk) 한 곳. 응답 받기 전까지만 재시도. 뜻이 닫히면 `partial`(meaning만) → 말풍선에 먼저, 비유는 검증 뒤 `result`로만. 단위 10개·e2e 2개 추가(34·8). 실제 키 스모크(run 39099966893): Groq 첫 글자 415~685ms, 뜻 485~717ms, 전체 674~837ms. Gemini는 503·429(무료 할당량)로 스트리밍 미확인. 이 맥 `~/.zshrc`의 Gemini 키는 401(삭제된 키). |
+| 2026-10-18 | T-117 | task/T-117-stream-meaning | [#7](https://github.com/roasted-penguin/good-metaphor/pull/7) | `PROVIDERS`에 `stream`, 종류별 차이는 `KINDS` 표(build·text·chunk) 한 곳. 응답 받기 전까지만 재시도. 뜻이 닫히면 `partial`(meaning만) → 말풍선에 먼저, 비유는 검증 뒤 `result`로만. 단위 10개·e2e 2개 추가(34·8). 실제 키 스모크(run 39099966893): Groq 첫 글자 415~685ms, 뜻 485~717ms, 전체 674~837ms. 로컬 새 Gemini 키(gemini-3.8-flash): 스트리밍 형식 통과, 하지만 첫 글자 4.1·7.9초 ≈ 전체(조각이 사실상 한 번에 옴, 대기는 thinking) → Gemini에선 체감 이득 없음, T-122 기본 제공자 검토 근거. |
 | 2026-10-18 | 도구 | task/test-first-command | [#6](https://github.com/roasted-penguin/good-metaphor/pull/6) | `/test-first` 명령 추가: 테스트 계획을 먼저 보여 주고 승인받은 뒤 실패하는 테스트부터 구현(superpowers 스킬 연결). PR 템플릿에 "테스트 계획" 칸, CLAUDE.md 작업 방식 3단계에 안내. |
 | 2026-10-11 | T-120·T-121 | task/T-119-smoke-workflow | [#3](https://github.com/roasted-penguin/good-metaphor/pull/3) | T-120(Jev 판정기 실험, 대체는 Gemini 객관식) 등록. 스모크 중 Gemini 503 발견 → T-121(일시 오류 재시도) 등록. |
 | 2026-10-11 | T-119 | task/T-119-smoke-workflow | [#3](https://github.com/roasted-penguin/good-metaphor/pull/3) | 수동 실행 스모크 워크플로 추가, 키는 Actions 비밀값(GEMINI·GROQ 등록 확인). 실행 확인은 dev 병합 뒤(workflow_dispatch는 기본 브랜치에 있어야 버튼이 생김). |
