@@ -398,7 +398,7 @@
             <g>
               <rect x="720" y="232" width="288" height="96" rx="10" class="i-box"/>
               <text x="736" y="258" class="i-name">LLM 제공자 (교체형)</text>
-              <text x="736" y="280" class="i-sub">Groq 1순위 → Gemini 2순위</text>
+              <text x="736" y="280" class="i-sub">Groq → Gemini Lite → NVIDIA → 로컬</text>
               <text x="736" y="298" class="i-sub">OpenAI · Anthropic</text>
               <text x="736" y="316" class="i-sub">OpenAI 호환 주소 (Ollama 등)</text>
             </g>
@@ -659,7 +659,9 @@
         <thead><tr><th>제공자</th><th>기본 모델</th><th>비용</th></tr></thead>
         <tbody>
           <tr><td>Groq <span class="free">1순위</span></td><td><code>openai/gpt-oss-120b</code></td><td>무료 티어 있음</td></tr>
-          <tr><td>Google Gemini <span class="free">2순위</span></td><td><code>gemini-3.8-flash</code></td><td>무료 티어 있음</td></tr>
+          <tr><td>Google Gemini <span class="free">2순위</span></td><td><code>gemini-3.5-flash-lite</code></td><td>무료 티어 있음</td></tr>
+          <tr><td>NVIDIA Build <span class="free">3순위</span></td><td><code>nvidia/nemotron-3.5-super-vl-120b-a12b</code></td><td>무료(개발용, 분당 40회)</td></tr>
+          <tr><td>로컬 Ollama <span class="free">최종 방어선</span></td><td><code>gemma4:12b</code></td><td>무료(이 컴퓨터, 꺼져 있으면 건너뜀)</td></tr>
           <tr><td>OpenAI</td><td><code>gpt-6-luna</code></td><td>유료</td></tr>
           <tr><td>Anthropic</td><td><code>claude-haiku-4-5-20251001</code></td><td>유료</td></tr>
           <tr><td>OpenAI 호환 주소</td><td>OpenRouter, Ollama 등</td><td>제공자에 따름</td></tr>

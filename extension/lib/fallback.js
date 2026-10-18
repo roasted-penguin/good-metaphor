@@ -1,5 +1,6 @@
 // 제공자 fallback 체인(T-124). 순서 = 사용자가 고른 것 → config/admin.json 의 fallbackChain.
 // 429·503·네트워크·시간 초과면 다음 순서로 넘기고, 429를 받은 모델은 쿨다운 동안 건너뛴다.
+// 로컬 제공자(def.local, 맥 Ollama)는 어디에 있든 맨 뒤로 보낸다: 다른 무료 모델이 무조건 먼저(T-127).
 import { PROVIDERS, complete } from './providers.js';
 import { providerFor } from './config.js';
 
@@ -16,7 +17,7 @@ export function buildChain(primary, admin, settings) {
     if (!usable(p) || chain.some(c => keyOf(c) === keyOf(p))) continue;
     chain.push(p);
   }
-  return chain;
+  return [...chain.filter(p => !p.def.local), ...chain.filter(p => p.def.local)];
 }
 
 // 다음 순서로 넘길 오류인가: 일시 오류만. 키 오류(400·401·403)는 그대로 던진다

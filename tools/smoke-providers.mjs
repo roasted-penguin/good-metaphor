@@ -3,6 +3,7 @@
 //   GEMINI_API_KEY=... GROQ_API_KEY=... npm run smoke:providers
 //   OPENAI_API_KEY, ANTHROPIC_API_KEY 도 같은 방식. 모델은 GEMINI_MODEL 처럼 <제공자>_MODEL 로 바꾼다.
 //   OpenAI 호환 주소(Ollama, OpenRouter 등): CUSTOM_BASE_URL=http://127.0.0.1:11434/v1 CUSTOM_MODEL=gemma4:12b [CUSTOM_API_KEY=...]
+//   로컬 Ollama(PROVIDERS.ollama)는 127.0.0.1:11434 가 떠 있으면 자동으로 포함. 모델은 OLLAMA_MODEL
 //   -- --all-models : 레지스트리의 모델 목록을 모두 시험 (무료 한도에 주의)
 // 검색은 글자 n-gram 대체 임베더로 한다. 여기서 보는 것은 검색 품질이 아니라 요청·응답 형식이다.
 import fs from 'node:fs';
@@ -29,10 +30,21 @@ const vecs = new Map([
   ...graph.nodes.map(n => ['node:' + n.id, hashEmbed(nodeText(n, tagMap))])
 ]);
 
-function targets() {
+// 로컬 제공자(Ollama)는 키 대신 서버가 떠 있는지로 판단한다
+async function reachable(baseUrl) {
+  try { const r = await fetch(baseUrl.replace(/\/v1$/, '') + '/api/version', { signal: AbortSignal.timeout(1500) }); return r.ok; } catch { return false; }
+}
+
+async function targets() {
   const out = [];
   for (const [id, def] of Object.entries(PROVIDERS)) {
     if (id === 'demo') continue;
+    if (def.local) {
+      if (!(await reachable(def.baseUrl))) { out.push({ id, skip: true }); continue; }
+      const model = process.env[`${id.toUpperCase()}_MODEL`] || admin.defaultModels?.[id] || def.defaultModel;
+      out.push({ id, def, model, apiKey: '', baseUrl: def.baseUrl });
+      continue;
+    }
     const env = id.toUpperCase();
     const apiKey = process.env[`${env}_API_KEY`] || '';
     const baseUrl = id === 'custom' ? process.env.CUSTOM_BASE_URL || '' : def.baseUrl;
@@ -61,10 +73,10 @@ function check(answer, candidates) {
   return null;
 }
 
-const list = targets();
+const list = await targets();
 const skipped = list.filter(t => t.skip).map(t => t.id);
 const runs = list.filter(t => !t.skip);
-if (skipped.length) console.log(`건너뜀(키 없음): ${skipped.join(', ')}`);
+if (skipped.length) console.log(`건너뜀(키 없음·로컬 서버 꺼짐): ${skipped.join(', ')}`);
 if (!runs.length) {
   console.log('시험할 제공자가 없어요. GEMINI_API_KEY 나 GROQ_API_KEY 를 넣고 다시 실행해 주세요.');
   process.exit(0);

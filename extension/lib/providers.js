@@ -7,8 +7,8 @@ export const PROVIDERS = {
     label: 'Google Gemini (무료 티어)',
     kind: 'gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    models: ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
-    defaultModel: 'gemini-3.8-flash',
+    models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'],
+    defaultModel: 'gemini-3.5-flash-lite',
     keyUrl: 'https://aistudio.google.com/apikey',
     stream: true,
     free: true
@@ -21,6 +21,20 @@ export const PROVIDERS = {
     defaultModel: 'openai/gpt-oss-120b',
     keyUrl: 'https://console.groq.com/keys',
     extraBody: { reasoning_effort: 'low' },
+    stream: true,
+    free: true
+  },
+  nvidia: {
+    label: 'NVIDIA Build (무료, 개발용)',
+    kind: 'openai-compat',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    // 2026-10-18 실제 키로 확인: /v1/models 에 있음. deepseek-v4.1-flash·nemotron-3.5-lightning 은 20초 넘게 응답 없음이라 뺐다.
+    // 무료는 키당 분당 약 40회(모든 모델 공유), 개발·시험용 약관
+    models: ['nvidia/nemotron-3.5-super-vl-120b-a12b', 'nvidia/nemotron-3-super-120b-a12b'],
+    defaultModel: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
+    // Nemotron 은 기본으로 생각부터 해서 첫 글자까지 14~30초. 끄면 0.2~0.4초(2026-10-18 측정)
+    extraBody: { chat_template_kwargs: { enable_thinking: false } },
+    keyUrl: 'https://build.nvidia.com/settings/api-keys',
     stream: true,
     free: true
   },
@@ -41,6 +55,19 @@ export const PROVIDERS = {
     defaultModel: 'claude-haiku-4-5-20251001',
     keyUrl: 'https://console.anthropic.com/settings/keys',
     stream: true
+  },
+  // 이 컴퓨터의 Ollama. 체인 최종 방어선(local: 항상 맨 뒤, T-127). 꺼져 있으면 네트워크 오류로 끝난다.
+  // 확장에서 부르려면 Ollama 에 OLLAMA_ORIGINS=chrome-extension://* 가 필요하다
+  ollama: {
+    label: '로컬 Ollama (이 컴퓨터, 마지막 방어선)',
+    kind: 'openai-compat',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    models: ['gemma4:12b'],
+    defaultModel: 'gemma4:12b',
+    stream: true,
+    keyOptional: true,
+    local: true,
+    free: true
   },
   custom: {
     label: 'OpenAI 호환 주소 (OpenRouter, Ollama 등)',
