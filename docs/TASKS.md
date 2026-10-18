@@ -410,7 +410,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
-| 2026-10-18 | T-125 | task/T-125-chain-nvidia | | **[사용자 추가]** #9 병합 뒤 커밋 5개가 빠져 따로 올림: 체인 Groq → Gemini 3.5 Flash-Lite → NVIDIA super-vl(thinking 끔, 뜻 0.5~1.0초), `PROVIDERS.nvidia`, 체인 설정 검사 테스트. T-124 완료 반영. |
+| 2026-10-18 | T-125 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** #9 병합 뒤 커밋 5개가 빠져 따로 올림: 체인 Groq → Gemini 3.5 Flash-Lite → NVIDIA super-vl(thinking 끔, 뜻 0.5~1.0초), `PROVIDERS.nvidia`, 체인 설정 검사 테스트. T-124 완료 반영. |
 | 2026-10-18 | T-124 | task/T-124-fallback-chain | [#9](https://github.com/roasted-penguin/good-metaphor/pull/9) | **[사용자 추가]** Groq `gpt-oss-120b` → Gemini `gemini-3.5-flash-lite` → NVIDIA `nemotron-3.5-super-vl` fallback 체인(처음 3.8 Flash였다가 재측정 뒤 사용자 결정으로 교체), 429 쿨다운(Retry-After, 기본 60초, 상한 10분, session 저장). 다음 순서가 있으면 429 재시도 생략, 키 오류는 체인 안 탐. 기본 제공자 groq. T-117 위에 쌓음. 실제 키로 체인 동작은 미확인(Groq 키가 로컬에 없음). |
 | 2026-10-18 | 문서 | task/docs-model-reference | [#8](https://github.com/roasted-penguin/good-metaphor/pull/8) | 모델 성능 비교는 Artificial Analysis 리더보드를 먼저 참고하도록 CLAUDE.md 함정·ADR 0005·T-122 할 일에 추가. |
 | 2026-10-18 | T-117 | task/T-117-stream-meaning | [#7](https://github.com/roasted-penguin/good-metaphor/pull/7) | `PROVIDERS`에 `stream`, 종류별 차이는 `KINDS` 표(build·text·chunk) 한 곳. 응답 받기 전까지만 재시도. 뜻이 닫히면 `partial`(meaning만) → 말풍선에 먼저, 비유는 검증 뒤 `result`로만. 단위 10개·e2e 2개 추가(34·8). 실제 키 스모크(run 39099966893): Groq 첫 글자 415~685ms, 뜻 485~717ms, 전체 674~837ms. 로컬 새 Gemini 키(gemini-3.8-flash): 스트리밍 형식 통과, 하지만 첫 글자 4.1·7.9초 ≈ 전체(조각이 사실상 한 번에 옴, 대기는 thinking) → Gemini에선 체감 이득 없음, T-122 기본 제공자 검토 근거. |
