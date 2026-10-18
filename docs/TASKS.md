@@ -366,6 +366,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-18 | 도구 | task/test-first-command | [#6](https://github.com/roasted-penguin/good-metaphor/pull/6) | `/test-first` 명령 추가: 테스트 계획을 먼저 보여 주고 승인받은 뒤 실패하는 테스트부터 구현(superpowers 스킬 연결). PR 템플릿에 "테스트 계획" 칸, CLAUDE.md 작업 방식 3단계에 안내. |
 | 2026-10-11 | T-120·T-121 | task/T-119-smoke-workflow | [#3](https://github.com/roasted-penguin/good-metaphor/pull/3) | T-120(Jev 판정기 실험, 대체는 Gemini 객관식) 등록. 스모크 중 Gemini 503 발견 → T-121(일시 오류 재시도) 등록. |
 | 2026-10-11 | T-119 | task/T-119-smoke-workflow | [#3](https://github.com/roasted-penguin/good-metaphor/pull/3) | 수동 실행 스모크 워크플로 추가, 키는 Actions 비밀값(GEMINI·GROQ 등록 확인). 실행 확인은 dev 병합 뒤(workflow_dispatch는 기본 브랜치에 있어야 버튼이 생김). |
 | 2026-10-11 | T-101 | task/eval-real-model | [#2](https://github.com/roasted-penguin/good-metaphor/pull/2) | 무료 Gemini 키로 스모크·실제 확장 확인. 호출 1.9~3.3초, 호버 3.6~9.1초(설계 가정보다 느림 → T-117). 레버리지 문장은 T-113 쏠림으로 비유 없음(빈칸, 규칙대로). T-102 첫 로드 13.9초 확인. |
