@@ -461,7 +461,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
-| 2026-10-18 | 계획 | task/plan-feedback-loop | | **[사용자 추가]** 말풍선 원클릭 피드백 루프 설계(ADR 0010, 제안): T-106 다시 씀(P0), T-129~T-132 추가, D-7(피드백 저장·공유 범위, 추천 a) 등록. 구현 순서 D-7 → T-129 → T-106 → T-130·T-131·T-132. |
+| 2026-10-18 | 계획 | task/plan-feedback-loop | [#12](https://github.com/roasted-penguin/good-metaphor/pull/12) | **[사용자 추가]** 말풍선 원클릭 피드백 루프 설계(ADR 0010, 제안): T-106 다시 씀(P0), T-129~T-132 추가, D-7(피드백 저장·공유 범위, 추천 a) 등록. 구현 순서 D-7 → T-129 → T-106 → T-130·T-131·T-132. |
 | 2026-10-18 | T-127 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** 로컬 Ollama `gemma4:12b`를 호버 체인 맨 뒤 최종 방어선으로(`local`은 항상 맨 뒤). 규칙 8과 설계 문서 세 곳 갱신. Ollama 미설치로 실제 호출 미확인. |
 | 2026-10-18 | T-125 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** #9 병합 뒤 커밋 5개가 빠져 따로 올림: 체인 Groq → Gemini 3.5 Flash-Lite → NVIDIA super-vl(thinking 끔, 뜻 0.5~1.0초), `PROVIDERS.nvidia`, 체인 설정 검사 테스트. T-124 완료 반영. |
 | 2026-10-18 | T-124 | task/T-124-fallback-chain | [#9](https://github.com/roasted-penguin/good-metaphor/pull/9) | **[사용자 추가]** Groq `gpt-oss-120b` → Gemini `gemini-3.5-flash-lite` → NVIDIA `nemotron-3.5-super-vl` fallback 체인(처음 3.8 Flash였다가 재측정 뒤 사용자 결정으로 교체), 429 쿨다운(Retry-After, 기본 60초, 상한 10분, session 저장). 다음 순서가 있으면 429 재시도 생략, 키 오류는 체인 안 탐. 기본 제공자 groq. T-117 위에 쌓음. 실제 키로 체인 동작은 미확인(Groq 키가 로컬에 없음). |
