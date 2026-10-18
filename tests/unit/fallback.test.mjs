@@ -157,3 +157,29 @@ test('체인 3개 이상: 429 → 503 → 세 번째가 답하고, 다음 호출
   assert.equal(label(b.provider), 'gemini/gemini-3.8-flash');
   assert.equal(calls.filter(m => m === 'openai/gpt-oss-120b').length, 1);
 });
+
+// 체인에 순위를 더할 때 빠뜨리기 쉬운 것: 레지스트리 모델 목록, 허용 목록, manifest 호스트 권한
+import { readFileSync } from 'node:fs';
+import { PROVIDERS } from '../../extension/lib/providers.js';
+const realAdmin = JSON.parse(readFileSync(new URL('../../extension/config/admin.json', import.meta.url)));
+const manifest = JSON.parse(readFileSync(new URL('../../extension/manifest.json', import.meta.url)));
+const covered = url => manifest.host_permissions.some(h => new RegExp('^' + h.replace(/[.]/g, '\\.').replace(/\*/g, '.*') + '$').test(url + '/x'));
+
+test('admin.json 체인: 모든 순위가 레지스트리 모델·허용 목록·호스트 권한 안에 있다', () => {
+  assert.ok(realAdmin.fallbackChain.length >= 1);
+  for (const { provider, model } of realAdmin.fallbackChain) {
+    const def = PROVIDERS[provider];
+    assert.ok(def, `${provider} 가 PROVIDERS 에 없음`);
+    assert.ok(def.models.includes(model), `${provider}/${model} 이 models 목록에 없음`);
+    assert.ok(realAdmin.allowedProviders.includes(provider), `${provider} 가 allowedProviders 에 없음`);
+    assert.ok(covered(def.baseUrl), `${def.baseUrl} 이 manifest host_permissions 에 없음`);
+  }
+});
+
+test('admin.json 체인 (2026-10-18 사용자 결정): Groq → Gemini 3.5 Flash-Lite → NVIDIA', () => {
+  assert.deepEqual(realAdmin.fallbackChain.map(c => c.provider), ['groq', 'gemini', 'nvidia']);
+  assert.equal(realAdmin.fallbackChain[1].model, 'gemini-3.5-flash-lite');
+  assert.equal(PROVIDERS.nvidia.kind, 'openai-compat');
+  assert.equal(PROVIDERS.nvidia.baseUrl, 'https://integrate.api.nvidia.com/v1');
+  assert.equal(PROVIDERS.nvidia.stream, true);
+});
