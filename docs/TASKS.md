@@ -237,7 +237,7 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 
 ### T-122 Groq 응답 품질과 기본 제공자 검토
 **왜** 2026-10-11 수동 스모크에서 Groq(`openai/gpt-oss-120b`)가 Gemini보다 5~10배 빨랐다(0.4~0.9초 대 1.9~5.4초). 호버 지연(T-117)에 크다. 다만 (1) 비유를 "~습니다"로 끝내 규칙 5(~요)를 어겼고 (2) 정밀 모드 추상화에 원문 전문용어("레버리지")를 그대로 썼다.
-**할 일** 프롬프트 규칙 문구를 모델과 무관하게 지켜지도록 다듬고(예시 한 줄, 끝맺음 명시), 생성 후 끝맺음 검사로 "~습니다"체를 잡아 한 번 다시 요청하거나 표시만 한다. 스모크에 존댓말·용어 검사 추가. 평가셋 문장으로 Gemini·Groq의 응답 시간·근거 준수·존댓말을 비교해 기본 제공자(`config/admin.json` `defaultProvider`)를 정한다. 무료 한도(분당·일당)도 함께 적는다.
+**할 일** 프롬프트 규칙 문구를 모델과 무관하게 지켜지도록 다듬고(예시 한 줄, 끝맺음 명시), 생성 후 끝맺음 검사로 "~습니다"체를 잡아 한 번 다시 요청하거나 표시만 한다. 스모크에 존댓말·용어 검사 추가. 후보 모델은 [Artificial Analysis 리더보드](https://artificialanalysis.ai/leaderboards/models)로 먼저 추리고(지능·속도·첫 토큰 지연·가격, 확인 날짜와 함께), 평가셋 문장으로 Gemini·Groq의 응답 시간(뜻까지)·근거 준수·존댓말을 비교해 기본 제공자(`config/admin.json` `defaultProvider`)를 정한다. 무료 한도(분당·일당)도 함께 적는다.
 **완료 기준** 스모크에 문체 검사 통과(두 제공자), 비교표를 작업 로그에, 기본 제공자 결정(바꾸면 ADR 0005 갱신).
 
 ### T-116 첫 실행 트리거 선택 (D-1)
@@ -366,6 +366,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-18 | 문서 | task/docs-model-reference | | 모델 성능 비교는 Artificial Analysis 리더보드를 먼저 참고하도록 CLAUDE.md 함정·ADR 0005·T-122 할 일에 추가. |
 | 2026-10-18 | T-117 | task/T-117-stream-meaning | [#7](https://github.com/roasted-penguin/good-metaphor/pull/7) | `PROVIDERS`에 `stream`, 종류별 차이는 `KINDS` 표(build·text·chunk) 한 곳. 응답 받기 전까지만 재시도. 뜻이 닫히면 `partial`(meaning만) → 말풍선에 먼저, 비유는 검증 뒤 `result`로만. 단위 10개·e2e 2개 추가(34·8). 실제 키 스모크(run 39099966893): Groq 첫 글자 415~685ms, 뜻 485~717ms, 전체 674~837ms. 로컬 새 Gemini 키(gemini-3.8-flash): 스트리밍 형식 통과, 하지만 첫 글자 4.1·7.9초 ≈ 전체(조각이 사실상 한 번에 옴, 대기는 thinking) → Gemini에선 체감 이득 없음, T-122 기본 제공자 검토 근거. |
 | 2026-10-18 | 도구 | task/test-first-command | [#6](https://github.com/roasted-penguin/good-metaphor/pull/6) | `/test-first` 명령 추가: 테스트 계획을 먼저 보여 주고 승인받은 뒤 실패하는 테스트부터 구현(superpowers 스킬 연결). PR 템플릿에 "테스트 계획" 칸, CLAUDE.md 작업 방식 3단계에 안내. |
 | 2026-10-11 | T-120·T-121 | task/T-119-smoke-workflow | [#3](https://github.com/roasted-penguin/good-metaphor/pull/3) | T-120(Jev 판정기 실험, 대체는 Gemini 객관식) 등록. 스모크 중 Gemini 503 발견 → T-121(일시 오류 재시도) 등록. |
