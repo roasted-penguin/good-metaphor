@@ -21,6 +21,9 @@ export function validateGraph(g, { partial = false } = {}) {
   for (const [i, t] of (g.tags || []).entries()) {
     if (!t.id || !t.label) errors.push(`tags[${i}]에 id 또는 label이 없어요.`);
     if (tagIds.has(t.id)) errors.push(`태그 id 중복: ${t.id}`);
+    if (t.examples !== undefined && !(Array.isArray(t.examples) && t.examples.every(e => typeof e === 'string'))) {
+      errors.push(`태그 ${t.id || i}의 examples는 문자열 배열이어야 해요.`);
+    }
     tagIds.add(t.id);
   }
   const nodeIds = new Set();
@@ -78,10 +81,10 @@ export function mergeGraphs(common, overlay) {
   };
 }
 
-// 임베딩할 문자열. 태그는 추상 설명, 노드는 태그 설명(구조)을 앞에 두고 이름+사실
+// 임베딩할 문자열. 태그는 추상 설명 + 다른 분야 예문(examples), 노드는 태그 설명(구조)을 앞에 두고 이름+사실
 // 태그 설명을 앞에 두는 이유: 게임 용어(메소 등)가 주제 유사도를 끌어가는 쏠림을 줄인다 (T-113)
 export function tagText(t) {
-  return `${t.label}: ${t.desc || ''}`.trim();
+  return [`${t.label}: ${t.desc || ''}`.trim(), ...(t.examples || [])].join(' ');
 }
 export function nodeText(n, tagMap) {
   const structure = n.tags.map(id => tagMap.get(id)).filter(Boolean).map(tagText).join(' ');
