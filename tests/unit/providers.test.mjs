@@ -83,3 +83,82 @@ test('재시도: 다 써도 실패하면 마지막 오류를 그대로 던진다
   assert.equal(bodies.length, 3);
   assert.equal(stats.retries, 2);
 });
+
+/* ───── 스트리밍 (T-117) ───── */
+
+// SSE 응답을 흉내 낸다. events = data 줄에 들어갈 문자열 목록. 조각 경계를 일부러 줄 중간에 둔다
+function sse(events) {
+  const raw = events.map(e => `data: ${e}\n\n`).join('');
+  const enc = new TextEncoder();
+  const pieces = [];
+  for (let i = 0; i < raw.length; i += 7) pieces.push(enc.encode(raw.slice(i, i + 7)));
+  return new ReadableStream({ start(c) { pieces.forEach(p => c.enqueue(p)); c.close(); } });
+}
+
+// 순서대로 응답하는 가짜 fetch. [status, json] 또는 { sse: [...] }
+function mockStreamFetch(t, responses) {
+  const reqs = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    reqs.push({ url, body: JSON.parse(init.body) });
+    const next = responses.shift();
+    if (next.sse) return { ok: true, status: 200, headers: new Headers(), body: sse(next.sse), text: async () => '' };
+    const [status, json] = next;
+    return { ok: status < 400, status, headers: new Headers(), text: async () => JSON.stringify(json) };
+  });
+  return reqs;
+}
+
+const delta = text => JSON.stringify({ choices: [{ delta: { content: text } }] });
+
+test('스트리밍: openai-compat 은 stream:true 로 보내고 조각마다 누적 텍스트를 넘긴다', async t => {
+  const reqs = mockStreamFetch(t, [{ sse: [delta('{"meaning": "뜻'), delta('이에요."'), delta(', "analogy": ""}'), '[DONE]'] }]);
+  const seen = [];
+  const text = await complete(groq, 's', 'u', { onText: s => seen.push(s) });
+  assert.equal(reqs[0].body.stream, true);
+  assert.deepEqual(seen, ['{"meaning": "뜻', '{"meaning": "뜻이에요."', '{"meaning": "뜻이에요.", "analogy": ""}']);
+  assert.equal(text, '{"meaning": "뜻이에요.", "analogy": ""}');
+});
+
+test('스트리밍: gemini 는 streamGenerateContent?alt=sse, thought 조각은 뺀다', async t => {
+  const part = (text, thought) => JSON.stringify({ candidates: [{ content: { parts: [{ text, ...(thought ? { thought: true } : {}) }] } }] });
+  const reqs = mockStreamFetch(t, [{ sse: [part('생각 중', true), part('{"meaning"'), part(': "뜻"}')] }]);
+  const seen = [];
+  const text = await complete(gemini, 's', 'u', { json: true, onText: s => seen.push(s) });
+  assert.match(reqs[0].url, /\/models\/m:streamGenerateContent\?alt=sse$/);
+  assert.deepEqual(seen, ['{"meaning"', '{"meaning": "뜻"}']);
+  assert.equal(text, '{"meaning": "뜻"}');
+});
+
+test('스트리밍: anthropic 은 content_block_delta 의 text 만 이어 붙인다', async t => {
+  const anthropic = { id: 'anthropic', def: PROVIDERS.anthropic, model: 'm', apiKey: 'k', baseUrl: PROVIDERS.anthropic.baseUrl };
+  const ev = o => JSON.stringify(o);
+  const reqs = mockStreamFetch(t, [{ sse: [
+    ev({ type: 'message_start', message: {} }),
+    ev({ type: 'content_block_delta', delta: { type: 'text_delta', text: '{"meaning": ' } }),
+    ev({ type: 'ping' }),
+    ev({ type: 'content_block_delta', delta: { type: 'text_delta', text: '"뜻"}' } }),
+    ev({ type: 'message_stop' })
+  ] }]);
+  const seen = [];
+  assert.equal(await complete(anthropic, 's', 'u', { onText: s => seen.push(s) }), '{"meaning": "뜻"}');
+  assert.equal(reqs[0].body.stream, true);
+  assert.deepEqual(seen, ['{"meaning": ', '{"meaning": "뜻"}']);
+});
+
+test('스트리밍: 항목에서 stream:false 면 한 번에 받고 onText 는 전체로 한 번', async t => {
+  const noStream = { ...groq, def: { ...PROVIDERS.groq, stream: false } };
+  const reqs = mockStreamFetch(t, [[200, chat('답')]]);
+  const seen = [];
+  assert.equal(await complete(noStream, 's', 'u', { onText: s => seen.push(s) }), '답');
+  assert.equal(reqs[0].body.stream, undefined);
+  assert.deepEqual(seen, ['답']);
+});
+
+test('스트리밍: 응답 시작 전 503 은 재시도한다', async t => {
+  fastRetry(t);
+  const reqs = mockStreamFetch(t, [[503, { error: { message: 'high demand' } }], { sse: [delta('답'), '[DONE]'] }]);
+  const stats = {};
+  assert.equal(await complete(groq, 's', 'u', { stats, onText: () => {} }), '답');
+  assert.equal(reqs.length, 2);
+  assert.equal(stats.retries, 1);
+});
