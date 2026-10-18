@@ -440,7 +440,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
-| 2026-10-18 | T-113 | task/T-113-finance-bias | | 노드 텍스트에서 태그 설명을 앞에, 태그 예문 3개씩, 가중치 0.3/0.7(ADR 0009). 실제 e5-small 혼합 13/16(금융 3/5), 새 검증셋 10/14(기준선 6/14). eval을 결정적으로(질의 한 문장씩), q8 배치 차이는 T-128. 단위 9개 늘어 59, e2e 9 통과. #10 병합 반영(T-125·T-127 완료). |
+| 2026-10-18 | T-113 | task/T-113-finance-bias | [#11](https://github.com/roasted-penguin/good-metaphor/pull/11) | 노드 텍스트에서 태그 설명을 앞에, 태그 예문 3개씩, 가중치 0.3/0.7(ADR 0009). 실제 e5-small 혼합 13/16(금융 3/5), 새 검증셋 10/14(기준선 6/14). eval을 결정적으로(질의 한 문장씩), q8 배치 차이는 T-128. 단위 9개 늘어 59, e2e 9 통과. #10 병합 반영(T-125·T-127 완료). |
 | 2026-10-18 | T-127 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** 로컬 Ollama `gemma4:12b`를 호버 체인 맨 뒤 최종 방어선으로(`local`은 항상 맨 뒤). 규칙 8과 설계 문서 세 곳 갱신. Ollama 미설치로 실제 호출 미확인. |
 | 2026-10-18 | T-125 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** #9 병합 뒤 커밋 5개가 빠져 따로 올림: 체인 Groq → Gemini 3.5 Flash-Lite → NVIDIA super-vl(thinking 끔, 뜻 0.5~1.0초), `PROVIDERS.nvidia`, 체인 설정 검사 테스트. T-124 완료 반영. |
 | 2026-10-18 | T-124 | task/T-124-fallback-chain | [#9](https://github.com/roasted-penguin/good-metaphor/pull/9) | **[사용자 추가]** Groq `gpt-oss-120b` → Gemini `gemini-3.5-flash-lite` → NVIDIA `nemotron-3.5-super-vl` fallback 체인(처음 3.8 Flash였다가 재측정 뒤 사용자 결정으로 교체), 429 쿨다운(Retry-After, 기본 60초, 상한 10분, session 저장). 다음 순서가 있으면 429 재시도 생략, 키 오류는 체인 안 탐. 기본 제공자 groq. T-117 위에 쌓음. 실제 키로 체인 동작은 미확인(Groq 키가 로컬에 없음). |
