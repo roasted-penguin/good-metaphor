@@ -128,7 +128,7 @@ origin/dev ──┬── task/T-101-provider-smoke ── PR → dev
 
 1. **시작** (`/next-task`가 전부 대신한다) `git fetch origin` → `git switch -c task/<ID>-<영문-슬러그> origin/dev`. 작업 트리가 깨끗하지 않으면 멈추고 묻는다.
 2. **고르기** `docs/TASKS.md`에서 상태가 `대기`이고 "먼저 끝나야 할 것"이 모두 `완료`(= dev에 병합됨)인 작업 중 가장 위의 것(`/next-task`). `결정 필요` 항목은 사용자에게 먼저 묻는다. 의존 작업이 `리뷰`(PR 열림, 미병합)면 그 위에 쌓지 말고 다른 작업을 고른다.
-3. **구현** 완료 기준을 다시 읽고, 필요하면 테스트부터. 순수 로직은 `tests/unit`, 확장 동작은 `tests/e2e`. 커밋은 작게 여러 번 해도 된다: `feat(T-105): ...`, `fix(T-105): ...`, `test(T-105): ...`, `docs(T-105): ...`.
+3. **구현** 완료 기준을 다시 읽고, 필요하면 테스트부터. 테스트 계획을 먼저 확인받고 싶으면 `/test-first <ID>`(계획 → 승인 → 실패하는 테스트부터, superpowers 스킬 사용). 순수 로직은 `tests/unit`, 확장 동작은 `tests/e2e`. 커밋은 작게 여러 번 해도 된다: `feat(T-105): ...`, `fix(T-105): ...`, `test(T-105): ...`, `docs(T-105): ...`.
 4. **확인** `npm test` 통과. 검색·생성 품질에 영향을 주면 `npm run eval` 결과를 `docs/EVAL_LOG.md`에 한 줄. 설계를 바꾸면 `docs/decisions/`에 ADR.
 5. **기록** `docs/TASKS.md`: 상태를 `리뷰`로, 작업 로그에 한 줄. 새로 발견한 문제는 새 T-번호로 추가.
 6. **올리기** `git push -u origin <브랜치>` → `gh pr create --base dev --head <브랜치> --title "<ID> <작업 제목>" --body-file <본문>`(본문은 `.github/pull_request_template.md` 형식). 그다음 작업 로그의 PR 칸에 링크를 넣어 한 번 더 커밋·push. `gh`가 없으면 GitLab은 `glab mr create --target-branch dev`, 둘 다 없으면 브라우저에서 열 PR 주소를 알려 준다.
