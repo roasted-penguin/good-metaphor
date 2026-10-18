@@ -15,6 +15,7 @@
 | T-120 | Jev로 추상 태그 판정 실험 ("판정기" 인터페이스) | 1 품질 | P1 | 대기 | Jev 얼리 액세스 |
 | T-121 | 제공자 일시 오류(503·429) 재시도 | 1 품질 | P0 | 완료 | |
 | T-122 | Groq 응답 품질 다듬기(존댓말 ~요, 추상화에 원문 용어 금지) + 기본 제공자 검토 | 1 품질 | P1 | 대기 | T-121 |
+| T-123 | 비유가 근거 facts 밖 사실을 쓰는지 검사 (nodeId만으로는 못 잡음) | 1 품질 | P1 | 대기 | |
 | T-116 | 첫 실행 트리거 선택 화면 (D-1) | 1 품질 | P1 | 대기 | |
 | T-117 | 뜻 먼저 보여 주기: 응답 스트리밍으로 체감 속도 개선 | 1 품질 | P0 | 리뷰 | |
 | T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 완료 | |
@@ -237,8 +238,28 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 
 ### T-122 Groq 응답 품질과 기본 제공자 검토
 **왜** 2026-10-11 수동 스모크에서 Groq(`openai/gpt-oss-120b`)가 Gemini보다 5~10배 빨랐다(0.4~0.9초 대 1.9~5.4초). 호버 지연(T-117)에 크다. 다만 (1) 비유를 "~습니다"로 끝내 규칙 5(~요)를 어겼고 (2) 정밀 모드 추상화에 원문 전문용어("레버리지")를 그대로 썼다.
-**할 일** 프롬프트 규칙 문구를 모델과 무관하게 지켜지도록 다듬고(예시 한 줄, 끝맺음 명시), 생성 후 끝맺음 검사로 "~습니다"체를 잡아 한 번 다시 요청하거나 표시만 한다. 스모크에 존댓말·용어 검사 추가. 평가셋 문장으로 Gemini·Groq의 응답 시간·근거 준수·존댓말을 비교해 기본 제공자(`config/admin.json` `defaultProvider`)를 정한다. 무료 한도(분당·일당)도 함께 적는다.
+**할 일** 프롬프트 규칙 문구를 모델과 무관하게 지켜지도록 다듬고(예시 한 줄, 끝맺음 명시), 생성 후 끝맺음 검사로 "~습니다"체를 잡아 한 번 다시 요청하거나 표시만 한다. 스모크에 존댓말·용어 검사 추가. 후보 모델은 [Artificial Analysis 리더보드](https://artificialanalysis.ai/leaderboards/models)로 먼저 추리고(지능·속도·첫 토큰 지연·가격, 확인 날짜와 함께), 평가셋 문장으로 Gemini·Groq의 응답 시간(뜻까지)·근거 준수·존댓말을 비교해 기본 제공자(`config/admin.json` `defaultProvider`)를 정한다. 무료 한도(분당·일당)도 함께 적는다.
 **완료 기준** 스모크에 문체 검사 통과(두 제공자), 비교표를 작업 로그에, 기본 제공자 결정(바꾸면 ADR 0005 갱신).
+
+**사전 측정 (2026-10-18, smoke run 39100925941, `--all-models`, 문장 2개라 참고용)** 뜻까지 시간 / 비고
+- `gemini-3.8-flash`: 1.8·6.1초, 첫 글자 ≈ 전체(스트리밍 이득 없음). Rate limit 문장은 비유 없음(보수적).
+- `gemini-3.5-flash-lite`: 7.2·6.4초(재시도 1회). 느림.
+- `gemini-3.1-flash-lite`: 5.7·2.3초. **근거 밖 사실**: "보스 일주일 입장 횟수"는 `boss_entry` facts에 없음(nodeId는 맞아 검증을 통과함 → 사실 단위 검사가 필요).
+- `gpt-oss-120b`: 0.6·0.5초. 존댓말 지킴. 추상화에 "레버리지" 그대로. Rate limit → `arcane_force`(구조는 맞지만 `boss_entry`보다 약함).
+- `gpt-oss-20b`: **0.25·0.57초(가장 빠름)**. 존댓말 지킴. 추상화에 원문 그대로. 뜻에 "초당"(원문은 분당) 오역.
+- `qwen3.8-27b`: 추상화만 통과, 비유는 429(Groq 무료 출력 토큰 분당 1000 한도 초과) → 무료로는 못 씀.
+
+**리더보드 후보 (Artificial Analysis, 2026-10-18 확인)** 열: 지능 지수 / 첫 조각(초) / 전체 응답(초) / 작업당 비용. 첫 조각은 여러 호스트 중앙값이라 Groq 같은 빠른 호스트는 더 짧다. 한국어 품질은 리더보드에 없어서 스모크로 잰다. 이 앱은 출력이 짧은 JSON이라 **첫 조각 1.5초 이하**를 먼저 본다.
+- 지금 쓰는 것: `gpt-oss-120b`(high) 12 / 0.86 / 12.5, `gpt-oss-20b`(high) 9 / 0.70 / 11.6, `Gemini 3.8 Flash`(high) 41 / **22.6** / 26.0(thinking 때문에 느림, low는 지수 33·속도 자료 없음), `Gemini 3.5 Flash-Lite` 22 / 6.85 / 8.0.
+- 첫 조각이 빠르고 지수가 더 높은 것(유료·OpenAI 호환): `DeepSeek V4.1 Flash`(non-reasoning) 25 / 1.27 / 4.3 / $0.15, `Nemotron 3.5 Super VL` 26 / 0.75 / 7.2 / $0.19, `Inkling Small` 26 / 1.68 / 14.0 / $0.09, `GPT-6 Luna`(non-reasoning, 레지스트리에 있음) 18 / 0.94 / 5.4 / $0.01.
+- 지수는 높지만 첫 조각이 느린 것: `Claude Haiku 5.5`(low) 29 / 6.33, `GLM-5.3-Flash` 42 / 2.77, `Qwen3.8-Flash-Next` 40 / 2.16.
+- 다음: 무료로 쓸 수 있는 호스트(Groq·Cerebras·OpenRouter 무료)에 위 후보가 있는지 확인 → `custom`(OpenAI 호환)으로 스모크. Gemini는 `thinkingLevel` 최소로 첫 조각이 줄어드는지 먼저 잰다.
+
+### T-123 근거 facts 밖 사실 검사
+**왜** 2026-10-18 사전 측정에서 `gemini-3.1-flash-lite`가 `boss_entry`를 고르고 facts에 없는 "일주일 입장 횟수"를 지어냈다. 지금 검증(규칙 1)은 `nodeId`가 후보에 있는지만 보므로 통과한다.
+**할 일** 방법 후보: (1) 프롬프트에 "비유에 쓴 사실은 facts 문장을 그대로 인용" + `usedFact` 필드로 받아 facts와 대조 (2) 비유 문장과 고른 노드 facts의 임베딩·글자 겹침이 낮으면 숨김 (3) 정밀 모드에서 판정 호출 1회(T-120 판정기와 공유). 호버 지연(T-117)을 늘리지 않는 쪽을 먼저.
+**완료 기준** 가짜 LLM이 facts 밖 수치·규칙을 넣은 비유를 내면 숨김(e2e), 정상 비유는 그대로(오탐 없음). 실제 키 스모크에 검사 결과 표시.
+**파일** `extension/lib/prompt.js`, `extension/background.js`, `tools/smoke-providers.mjs`
 
 ### T-116 첫 실행 트리거 선택 (D-1)
 **할 일** 설치 직후(`chrome.runtime.onInstalled`, reason=install) 여는 설정 화면 맨 위에 한 화면짜리 안내: "Alt 누르고 문장에 올리기(추천) / 머무르면 자동". 기본 선택은 Alt. 고르면 `triggerMode` 저장 후 안내를 접는다. 자동을 고르면 "호출이 많아져 무료 한도를 빨리 써요" 한 줄.
@@ -366,6 +387,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-18 | 문서 | task/docs-model-reference | [#8](https://github.com/roasted-penguin/good-metaphor/pull/8) | 모델 성능 비교는 Artificial Analysis 리더보드를 먼저 참고하도록 CLAUDE.md 함정·ADR 0005·T-122 할 일에 추가. |
 | 2026-10-18 | T-117 | task/T-117-stream-meaning | [#7](https://github.com/roasted-penguin/good-metaphor/pull/7) | `PROVIDERS`에 `stream`, 종류별 차이는 `KINDS` 표(build·text·chunk) 한 곳. 응답 받기 전까지만 재시도. 뜻이 닫히면 `partial`(meaning만) → 말풍선에 먼저, 비유는 검증 뒤 `result`로만. 단위 10개·e2e 2개 추가(34·8). 실제 키 스모크(run 39099966893): Groq 첫 글자 415~685ms, 뜻 485~717ms, 전체 674~837ms. 로컬 새 Gemini 키(gemini-3.8-flash): 스트리밍 형식 통과, 하지만 첫 글자 4.1·7.9초 ≈ 전체(조각이 사실상 한 번에 옴, 대기는 thinking) → Gemini에선 체감 이득 없음, T-122 기본 제공자 검토 근거. |
 | 2026-10-18 | 도구 | task/test-first-command | [#6](https://github.com/roasted-penguin/good-metaphor/pull/6) | `/test-first` 명령 추가: 테스트 계획을 먼저 보여 주고 승인받은 뒤 실패하는 테스트부터 구현(superpowers 스킬 연결). PR 템플릿에 "테스트 계획" 칸, CLAUDE.md 작업 방식 3단계에 안내. |
 | 2026-10-11 | T-120·T-121 | task/T-119-smoke-workflow | [#3](https://github.com/roasted-penguin/good-metaphor/pull/3) | T-120(Jev 판정기 실험, 대체는 Gemini 객관식) 등록. 스모크 중 Gemini 503 발견 → T-121(일시 오류 재시도) 등록. |
