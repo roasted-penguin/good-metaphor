@@ -52,6 +52,14 @@ export async function saveSettings(patch) {
   return next;
 }
 
+// 제공자 id·모델에 맞는 키·주소를 붙인다(순수 함수, fallback 체인에서도 씀)
+export function providerFor(id, model, admin, s) {
+  const def = PROVIDERS[id];
+  const apiKey = s.apiKeys?.[id] || admin.sharedApiKeys?.[id] || '';
+  const baseUrl = id === 'custom' ? (s.customBaseUrl || admin.customBaseUrl || '') : def.baseUrl;
+  return { id, def, model: model || admin.defaultModels?.[id] || def.defaultModel, apiKey, baseUrl };
+}
+
 // 실제로 호출에 쓸 제공자·모델·키를 결정
 export async function resolveProvider() {
   const admin = await getAdminConfig();
@@ -59,9 +67,6 @@ export async function resolveProvider() {
   const allowed = (admin.allowedProviders || Object.keys(PROVIDERS)).filter(id => PROVIDERS[id]);
   let id = admin.lockProvider ? admin.defaultProvider : (s.provider || admin.defaultProvider);
   if (!allowed.includes(id)) id = allowed[0];
-  const def = PROVIDERS[id];
-  const model = (!admin.lockProvider && s.models?.[id]) || admin.defaultModels?.[id] || def.defaultModel;
-  const apiKey = s.apiKeys?.[id] || admin.sharedApiKeys?.[id] || '';
-  const baseUrl = id === 'custom' ? (s.customBaseUrl || admin.customBaseUrl || '') : def.baseUrl;
-  return { id, def, model, apiKey, baseUrl, locked: !!admin.lockProvider, allowed };
+  const model = (!admin.lockProvider && s.models?.[id]) || null;
+  return { ...providerFor(id, model, admin, s), locked: !!admin.lockProvider, allowed };
 }
