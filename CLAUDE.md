@@ -14,7 +14,7 @@
 
 PoC 완료, 실제 키·실제 모델로 확인됨.
 - **검색:** 실제 임베딩(e5-small) 혼합 hit@1 11/16으로 대체 임베더(12/16)보다 낮다. 금융 문장이 `meso`·`auction`으로 쏠려 비유가 안 나온다(T-113, 다음 P0).
-- **LLM:** 무료 Gemini(`gemini-3.8-flash`)·Groq(`openai/gpt-oss-120b`) 키로 스모크 통과(T-101·T-119). 실제 확장 호버는 3.6~9.1초로 느리다(T-117 뜻 먼저, P0). Groq가 5~10배 빠르지만 존댓말·추상화 품질을 다듬어야 한다(T-122). 503·429는 재시도한다(T-121). 기본은 Groq `gpt-oss-120b` → Gemini `gemini-3.8-flash` fallback 체인, 429 모델은 쿨다운(T-124, ADR 0008).
+- **LLM:** 무료 Gemini(`gemini-3.8-flash`)·Groq(`openai/gpt-oss-120b`) 키로 스모크 통과(T-101·T-119). 실제 확장 호버는 3.6~9.1초로 느리다(T-117 뜻 먼저, P0). Groq가 5~10배 빠르지만 존댓말·추상화 품질을 다듬어야 한다(T-122). 503·429는 재시도한다(T-121). 기본은 Groq `gpt-oss-120b` → Gemini `gemini-3.8-flash` fallback 체인(순위는 더 붙을 수 있음, `admin.json` `fallbackChain`에 추가만), 429 모델은 쿨다운(T-124, ADR 0008).
 - **데이터:** 공통 그래프 사실은 2026-10 패치 노트로 검수(2026.10.11-1).
 - **결정됨:** 앱 이름 "좋은비유네용"(변경은 T-115), 기본 트리거 Alt + 첫 실행 선택(D-1), 두 번째 관심사 식당·로그인 없이(D-4), 문서 출처(D-5), 검수 방식(D-3), 최신화 설계(ADR 0007). D-2(로그인)는 L3 전에 정한다.
 - **열린 질문:** "에이전트 단" 설계(D-6, `docs/TASKS.md`).
@@ -54,7 +54,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   options.* / popup.*        설정·팝업 UI
   lib/config.js              설정 우선순위: admin.json < chrome.storage.managed < 사용자 설정(잠금 아닐 때)
   lib/providers.js           LLM 제공자 레지스트리 + 호출 (gemini, openai-compat, anthropic, demo)
-  lib/fallback.js            1·2순위 fallback 체인 + 429 쿨다운 (ADR 0008)
+  lib/fallback.js            순위 fallback 체인(길이 제한 없음, 순위는 더 붙을 수 있음) + 429 쿨다운 (ADR 0008)
   lib/stores.js              공통 저장소 로더 + 사용자 저장소 어댑터(none / local-dev / remote)
   lib/graph.js               그래프 병합(공통 + 오버레이), 검증, 임베딩 텍스트
   lib/retrieval.js           점수 = 직접 유사도 × w1 + 최고 태그 유사도 × w2 + boost

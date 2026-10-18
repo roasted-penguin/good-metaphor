@@ -270,6 +270,7 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 - 2026-10-18 사용자 요청 "모델 성능은 Artificial Analysis 리더보드 우선 참고" → CLAUDE.md·ADR 0005·T-122에 기록, 후보 정리(PR #8).
 - 2026-10-18 사용자 요청 "1·2순위 + fallback 체인 + 429 쿨다운" → 이 작업. T-117(#7)과 `providers.js`가 겹쳐 그 브랜치 위에 쌓음(#7 먼저 병합).
 - 2026-10-18 구현: `lib/fallback.js`(`buildChain`, `completeWithFallback`), `config.providerFor`, `noRetry429`. 기본 제공자 gemini → groq. 단위 10개(44)·e2e 1개(9) 추가. ADR 0008, CLAUDE.md, intro.html 갱신.
+- 2026-10-18 사용자 안내 "병합 전후로 폴백 체인이 더 추가될 수 있음" → 체인 길이에 기대지 않도록 3개 체인 단위 테스트 추가(45), ADR 0008에 "순위를 더할 때" 절차.
 **파일** `extension/lib/fallback.js`(새), `extension/lib/providers.js`, `extension/background.js`, `extension/config/admin.json`, `scripts/prepare-e2e.mjs`, `tests/unit/fallback.test.mjs`, `tests/e2e/*`
 
 ### T-116 첫 실행 트리거 선택 (D-1)

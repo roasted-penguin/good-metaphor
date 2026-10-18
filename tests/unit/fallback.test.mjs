@@ -133,3 +133,27 @@ test('마지막 순서에서는 429 도 기존처럼 재시도한다', async t =
   assert.equal(r.text, 'openai/gpt-oss-120b 답');
   assert.equal(calls.length, 2);
 });
+
+// 체인은 늘어날 수 있다(사용자 안내, 2026-10-18). 순위 개수에 기대지 않는지 3개로 확인한다
+test('체인 3개 이상: 429 → 503 → 세 번째가 답하고, 다음 호출은 쿨다운된 첫째만 건너뛴다', async t => {
+  fastRetry(t);
+  const admin3 = { ...admin, fallbackChain: [...admin.fallbackChain, { provider: 'openai', model: 'gpt-6-luna' }] };
+  const s3 = { ...settings, apiKeys: { ...settings.apiKeys, openai: 'o' } };
+  const fails = { 'openai/gpt-oss-120b': [429, { error: { message: 'rate' } }], 'gemini-3.8-flash': [503, { error: { message: 'busy' } }] };
+  let gemFails = true;
+  const calls = mockFetch(t, (model, url) => {
+    if (model === 'gemini-3.8-flash' && !gemFails) return ok(model, url);
+    return fails[model] || ok(model, url);
+  });
+  const cd = memCooldowns();
+  const chain = buildChain(providerFor('groq', 'openai/gpt-oss-120b', admin3, s3), admin3, s3);
+  assert.deepEqual(chain.map(label), ['groq/openai/gpt-oss-120b', 'gemini/gemini-3.8-flash', 'openai/gpt-6-luna']);
+  const a = await completeWithFallback(chain, 's', 'u', {}, { cooldowns: cd, cooldown: admin3.cooldown, now: () => 0 });
+  assert.equal(label(a.provider), 'openai/gpt-6-luna');
+  assert.deepEqual(a.fallbacks.map(f => f.provider), ['groq/openai/gpt-oss-120b', 'gemini/gemini-3.8-flash']);
+  assert.deepEqual(Object.keys(cd.peek()), ['groq/openai/gpt-oss-120b'], '503은 쿨다운을 남기지 않음');
+  gemFails = false;
+  const b = await completeWithFallback(chain, 's', 'u', {}, { cooldowns: cd, cooldown: admin3.cooldown, now: () => 1 });
+  assert.equal(label(b.provider), 'gemini/gemini-3.8-flash');
+  assert.equal(calls.filter(m => m === 'openai/gpt-oss-120b').length, 1);
+});
