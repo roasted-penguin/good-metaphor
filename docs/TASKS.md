@@ -475,7 +475,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
-| 2026-11-01 | T-103 | task/T-103-eval-set-expand | | 평가셋 16 → 40문장(새 24: 영어 11, 금융 7, 비유 없음 5, `since: "T-103"`, 결과 보기 전 커밋). 비유 없음 채점(1위 점수 비교), 새 문장만 따로 출력. 실제 e5-small 혼합 23/35(66%), 새 문장 12/19, 금융 4/12. 비유 없음은 점수로 못 가름. 회귀 가드 29문장. #12·#13 병합 반영. |
+| 2026-11-01 | T-103 | task/T-103-eval-set-expand | [#14](https://github.com/roasted-penguin/good-metaphor/pull/14) | 평가셋 16 → 40문장(새 24: 영어 11, 금융 7, 비유 없음 5, `since: "T-103"`, 결과 보기 전 커밋). 비유 없음 채점(1위 점수 비교), 새 문장만 따로 출력. 실제 e5-small 혼합 23/35(66%), 새 문장 12/19, 금융 4/12. 비유 없음은 점수로 못 가름. 회귀 가드 29문장. #12·#13 병합 반영. |
 | 2026-10-18 | T-134 | task/T-134-eval-tooling | [#13](https://github.com/roasted-penguin/good-metaphor/pull/13) | **[사용자 결정]** T-113 평가 도구만 분리. 금융 그룹·검증셋 14문장·회귀 가드 17문장(`--guard`)·질의 한 문장씩 임베딩(q8 배치 차이로 ±2 흔들림)·`--rewrite`. 단위 57, e2e 9 통과, 실제 모델 `--guard` 0, 대체 임베더로 실패 경로 확인. |
 | 2026-10-18 | D-7·T-103 | task/plan-feedback-loop | [#12](https://github.com/roasted-penguin/good-metaphor/pull/12) | D-7 결정: 기기 안 즉시 반영 + 서버 전송 동의는 첫 실행 화면(T-116)에서 한 번. T-103을 평가셋 확장(선행 없음)과 품질 관문 T-133(T-405 선행)으로 분리. |
 | 2026-10-18 | 계획 | task/plan-feedback-loop | [#12](https://github.com/roasted-penguin/good-metaphor/pull/12) | **[사용자 추가]** 말풍선 원클릭 피드백 루프 설계(ADR 0010, 제안): T-106 다시 씀(P0), T-129~T-132 추가, D-7(피드백 저장·공유 범위, 추천 a) 등록. 구현 순서 D-7 → T-129 → T-106 → T-130·T-131·T-132. |
