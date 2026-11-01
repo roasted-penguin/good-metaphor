@@ -5,6 +5,7 @@ import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags } from './lib/retrieval.js';
+import { addRecord, removeRecord, applyFeedback, feedbackKey } from './lib/feedback.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -96,6 +97,13 @@ const cooldowns = {
   set: llmCooldowns => chrome.storage.session.set({ llmCooldowns })
 };
 
+// 말풍선 피드백 층(ADR 0010, T-129). 사용자 크롬 프로필에만 저장한다(D-7)
+const feedbackStore = {
+  get: async () => (await chrome.storage.local.get('feedback')).feedback || [],
+  set: feedback => chrome.storage.local.set({ feedback })
+};
+const sentenceHashOf = sentence => sha1(String(sentence || '').trim());
+
 const RESULT_CACHE_MAX = 200;
 async function cacheGet(key) {
   const got = await chrome.storage.session.get('results');
@@ -120,7 +128,10 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   onStage('graph');
   const { graph, session } = await getMergedGraph();
   const graphKey = JSON.stringify([graph.sources, session?.userId || null, graph.nodes.length]);
-  const cacheKey = await sha1([sentence, word, graphKey, provider.id, provider.model, settings.preciseMode].join('|'));
+  const sentenceHash = await sentenceHashOf(sentence);
+  const feedbackRecords = await feedbackStore.get();
+  // 피드백 지문을 캐시 키에 넣어, 그 문장의 피드백이 바뀌면 캐시가 저절로 무효가 된다
+  const cacheKey = await sha1([sentence, word, graphKey, provider.id, provider.model, settings.preciseMode, feedbackKey(feedbackRecords, sentenceHash)].join('|'));
   if (!noCache) {
     const hit = await cacheGet(cacheKey);
     if (hit) return { ...hit, cached: true };
@@ -151,7 +162,10 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
 
   onStage('search');
   const { vectors: [q] } = await offscreen('embed', { texts: [queryText], kind: 'query' });
-  const candidates = retrieve(q, graph, vecs, admin.retrieval);
+  // 피드백으로 빠지는 후보가 있어도 topK를 채우도록 넉넉히 뽑은 뒤 적용한다
+  const topK = admin.retrieval?.topK ?? 3;
+  const fb = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5 }), feedbackRecords, sentenceHash, topK);
+  const candidates = fb.candidates;
   const tags = topTags(q, graph, vecs, 5);
 
   onStage('generate');
@@ -191,7 +205,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     } : null,
     domain: graph.domain,
     theme: graph.theme,
+    feedbackApplied: fb.applied,
     debug: {
+      feedback: { excluded: fb.excluded, pinned: fb.pinned },
       candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagSim: c.tag?.sim, source: c.source })),
       topTags: tags,
       abstractText,
@@ -297,6 +313,16 @@ const handlers = {
     return { ok: true, text: text.trim().slice(0, 80), provider: `${provider.id}/${provider.model}` };
   },
   async explain(payload) { return explain(payload); },
+  // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
+  async feedback({ record, rerun }) {
+    const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
+    await feedbackStore.set(addRecord(await feedbackStore.get(), r));
+    return { id: r.id, result: rerun ? await explain(rerun) : null };
+  },
+  async 'feedback-undo'({ id, rerun }) {
+    await feedbackStore.set(removeRecord(await feedbackStore.get(), id));
+    return { id, result: rerun ? await explain(rerun) : null };
+  },
   async 'open-options'() { await chrome.runtime.openOptionsPage(); return true; }
 };
 

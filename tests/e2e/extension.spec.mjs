@@ -136,6 +136,38 @@ test('스트리밍: 후보 밖 nodeId 면 비유가 끝까지 안 보인다 (규
   expect(seen.at(-1)).toContain('테스트 뜻 풀이예요.');
 });
 
+test('피드백(T-129): 👎 → 다른 근거로 다시, 다시 물어도 반영, 되돌리기', async ({ ext }) => {
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const first = r1.data.evidence.nodeId;
+  expect(r1.data.feedbackApplied).toBe(false);
+  const fb = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId: first, tagId: null, vote: 'down', provider: r1.data.debug.provider }, rerun: q });
+  expect(fb.ok).toBe(true);
+  expect(fb.data.result.evidence.nodeId).not.toBe(first);
+  expect(fb.data.result.feedbackApplied).toBe(true);
+  const r2 = await ext.send({ type: 'explain', ...q });
+  expect(r2.data.evidence.nodeId).not.toBe(first);
+  expect(r2.data.feedbackApplied).toBe(true);
+  const u = await ext.send({ type: 'feedback-undo', id: fb.data.id, rerun: q });
+  expect(u.data.result.evidence.nodeId).toBe(first);
+  expect(u.data.result.feedbackApplied).toBe(false);
+});
+
+test('피드백(T-129): 다른 개념을 고르면 그 개념이 근거, 후보 밖 nodeId면 여전히 비유 숨김(규칙 1)', async ({ ext }) => {
+  const q = { sentence: '근력 운동은 초보 때는 빨리 늘지만 숙련될수록 같은 노력 대비 성장이 더뎌진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const pick = r1.data.debug.candidates[2].id;
+  const fb = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId: r1.data.evidence.nodeId, vote: 'pick', pickedNodeId: pick }, rerun: q });
+  expect(fb.data.result.evidence.nodeId).toBe(pick);
+  expect(fb.data.result.debug.candidates.map(c => c.id)).toEqual([pick]);
+  // 가짜 LLM은 "Leverage"가 있으면 후보에 없는 nodeId로 답한다
+  const lev = { sentence: 'Leverage amplifies both gains and losses.', word: '', context: '', pageTitle: 't' };
+  const l1 = await ext.send({ type: 'explain', ...lev });
+  const lf = await ext.send({ type: 'feedback', record: { sentence: lev.sentence, nodeId: l1.data.debug.candidates[0].id, vote: 'pick', pickedNodeId: l1.data.debug.candidates[1].id }, rerun: lev });
+  expect(lf.data.result.analogy).toBe('');
+  expect(lf.data.result.rejected).toMatch(/근거 목록에 없는/);
+});
+
 test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ context, ext }) => {
   await ext.setSettings({ triggerMode: 'auto', dwellMs: 500 });
   const page = await context.newPage();
