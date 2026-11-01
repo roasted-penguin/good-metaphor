@@ -168,7 +168,38 @@ test('피드백(T-129): 다른 개념을 고르면 그 개념이 근거, 후보 
   expect(lf.data.result.rejected).toMatch(/근거 목록에 없는/);
 });
 
-test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ context, ext }) => {
+test('내 피드백(T-132): 목록·공유 설정·7일 통계·지운 노드 라벨·전부 지우기 메시지', async ({ ext }) => {
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const nodeId = r1.data.evidence.nodeId;
+  await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId, tagId: null, vote: 'down', provider: r1.data.debug.provider } });
+  const l1 = await ext.send({ type: 'feedback:list' });
+  expect(l1.ok).toBe(true);
+  expect(l1.data.items).toHaveLength(1);
+  expect(l1.data.items[0].vote).toBe('down');
+  expect(l1.data.items[0].nodeId).toBe(nodeId);
+  expect(l1.data.items[0].nodeLabel).toMatch(/[가-힣]/);
+  expect(l1.data.items[0].masked).toBe(q.sentence);
+  expect(l1.data.share).toBe(false);
+  await ext.setSettings({ feedbackShare: true });
+  expect((await ext.send({ type: 'feedback:list' })).data.share).toBe(true);
+  const st = await ext.send({ type: 'feedback:stats' });
+  expect(st.data.hovers).toBeGreaterThanOrEqual(1);
+  expect(st.data.down).toBe(1);
+  // 그래프에 없는 노드면 라벨 대신 id 그대로
+  await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'gone-node', vote: 'down' } });
+  const l2 = await ext.send({ type: 'feedback:list' });
+  expect(l2.data.items).toHaveLength(2);
+  const gone = l2.data.items.find(i => i.nodeId === 'gone-node');
+  expect(gone.nodeLabel).toBe('gone-node');
+  expect(gone.masked).toBe('연락처 [숫자]');
+  expect(l2.data.items[0].nodeId, '최신순').toBe('gone-node');
+  const c = await ext.send({ type: 'feedback:clear' });
+  expect(c.data).toBe(true);
+  expect((await ext.send({ type: 'feedback:list' })).data.items).toHaveLength(0);
+});
+
+test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다',async ({ context, ext }) => {
   await ext.setSettings({ triggerMode: 'auto', dwellMs: 500 });
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
