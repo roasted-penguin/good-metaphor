@@ -54,3 +54,50 @@ export function applyFeedback(candidates, records, sentenceHash, topK = 3) {
 export function feedbackKey(records, sentenceHash) {
   return recordsFor(records, sentenceHash).filter(r => r.vote !== 'up').map(r => `${r.id}:${r.vote}:${r.nodeId}:${r.pickedNodeId || ''}`).join(',');
 }
+
+// ── "내 피드백" 설정 화면용 (T-132) ──
+
+/**
+ * 저장·표시 전에 문장의 개인정보 모양을 가린다.
+ * 메일 → [메일], URL(http://·https://·www.) → [주소], 4자리 이상 숫자·전화번호 모양 → [숫자].
+ * 1~3자리 숫자("4시간", "80점")는 뜻에 필요해서 그대로 둔다.
+ * 사람 이름은 규칙 기반으로 가려낼 수 없어서 가리지 않는다.
+ */
+export function maskSentence(text) {
+  return String(text)
+    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, '[메일]')
+    .replace(/(?:https?:\/\/|www\.)[^\s<>"']*[^\s<>"'.,!?)\]]/g, '[주소]')
+    .replace(/\d{2,4}[-\s]\d{3,4}[-\s]\d{4}|\d{4,}/g, '[숫자]');
+}
+
+// 날짜별 호버 수 집계. day는 YYYY-MM-DD, 가장 최근 14일만 남긴다(키 정렬 기준)
+export const HOVER_DAYS = 14;
+export function bumpHover(counts, day) {
+  const next = { ...counts, [day]: (counts[day] || 0) + 1 };
+  const keep = Object.keys(next).sort().slice(-HOVER_DAYS);
+  return Object.fromEntries(keep.map(k => [k, next[k]]));
+}
+
+// 밀리초 → 로컬 시각 기준 YYYY-MM-DD (background.js의 호버 집계도 씀)
+export function localDay(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// today 포함 지난 7일(today와 그 앞 6일)의 날짜 목록
+function last7Days(today) {
+  const [y, m, d] = today.split('-').map(Number);
+  return Array.from({ length: 7 }, (_, i) => localDay(new Date(y, m - 1, d - i, 12).getTime()));
+}
+
+/**
+ * 지난 7일 요약: 호버 수와 피드백 종류별 개수
+ * @returns {{ hovers: number, up: number, down: number, pick: number }}
+ */
+export function summarizeFeedback(records, counts, today) {
+  const days = new Set(last7Days(today));
+  const out = { hovers: 0, up: 0, down: 0, pick: 0 };
+  for (const [day, n] of Object.entries(counts)) if (days.has(day)) out.hovers += n;
+  for (const r of records) if (['up', 'down', 'pick'].includes(r.vote) && days.has(localDay(r.ts))) out[r.vote] += 1;
+  return out;
+}

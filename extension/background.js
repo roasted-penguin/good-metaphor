@@ -5,7 +5,7 @@ import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags } from './lib/retrieval.js';
-import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey } from './lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay } from './lib/feedback.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -102,6 +102,17 @@ const feedbackStore = {
   get: async () => (await chrome.storage.local.get('feedback')).feedback || [],
   set: feedback => chrome.storage.local.set({ feedback })
 };
+// 날짜별 호버 수(T-132 "내 피드백" 통계). 동시에 여러 번 불려도 빠지지 않게 차례로 쓴다.
+// 사용자가 직접 연 비유(호버 포트, 설정 화면 "시험해 보기")만 센다. 피드백 뒤 다시 비유는 세지 않는다(호버 대비 비율이 부풀지 않게).
+// 호버 응답을 늦추지 않게 기다리지 않고 부른다. 캐시 적중도 한 번으로 센다
+let hoverQueue = Promise.resolve();
+function countHover() {
+  hoverQueue = hoverQueue.then(async () => {
+    const { hoverCounts } = await chrome.storage.local.get('hoverCounts');
+    await chrome.storage.local.set({ hoverCounts: bumpHover(hoverCounts || {}, localDay(Date.now())) });
+  }).catch(e => console.warn('호버 집계 실패', e));
+  return hoverQueue;
+}
 const sentenceHashOf = sentence => sha1(String(sentence || '').trim());
 
 const RESULT_CACHE_MAX = 200;
@@ -232,6 +243,7 @@ chrome.runtime.onConnect.addListener(port => {
     if (msg.type !== 'explain') return;
     try {
       const post = m => { try { port.postMessage({ id: msg.id, ...m }); } catch {} };
+      countHover();
       const result = await explain(msg.payload, stage => post({ type: 'stage', stage }), partial => post({ type: 'partial', partial }));
       port.postMessage({ type: 'result', id: msg.id, result });
     } catch (e) {
@@ -312,7 +324,7 @@ const handlers = {
     const text = await complete(provider, '짧게 답하는 도우미다.', '"연결 성공"이라고만 답해.', { json: false });
     return { ok: true, text: text.trim().slice(0, 80), provider: `${provider.id}/${provider.model}` };
   },
-  async explain(payload) { return explain(payload); },
+  async explain(payload) { countHover(); return explain(payload); },
   // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
   async feedback({ record, rerun }) {
     const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
@@ -326,6 +338,26 @@ const handlers = {
   async 'feedback-undo'({ id, rerun }) {
     await feedbackStore.set(removeRecord(await feedbackStore.get(), id));
     return { id, result: rerun ? await explain(rerun) : null };
+  },
+  // "내 피드백" 설정 화면(T-132). 최신순, 라벨은 지금 병합 그래프에서 찾고 없으면 id 그대로
+  async 'feedback:list'() {
+    const [records, { graph }, settings] = await Promise.all([feedbackStore.get(), getMergedGraph(), getSettings()]);
+    const labelOf = id => (id ? graph.nodes.find(n => n.id === id)?.label || id : null);
+    // 기록은 뒤에 붙으므로 먼저 뒤집어, ts가 같아도 나중 기록이 앞에 오게 한다(안정 정렬)
+    const items = [...records].reverse().sort((a, b) => b.ts - a.ts).map(r => ({
+      id: r.id, ts: r.ts, sentence: r.sentence, masked: maskSentence(r.sentence ?? ''), vote: r.vote, reason: r.reason || null,
+      nodeId: r.nodeId, nodeLabel: labelOf(r.nodeId), pickedNodeId: r.pickedNodeId || null, pickedLabel: labelOf(r.pickedNodeId)
+    }));
+    return { items, share: settings.feedbackShare === true };
+  },
+  async 'feedback:stats'() {
+    const { hoverCounts } = await chrome.storage.local.get('hoverCounts');
+    return summarizeFeedback(await feedbackStore.get(), hoverCounts || {}, localDay(Date.now()));
+  },
+  // 결과 캐시 키에 피드백 지문이 있어서 캐시는 따로 안 지워도 된다
+  async 'feedback:clear'() {
+    await feedbackStore.set([]);
+    return true;
   },
   async 'open-options'() { await chrome.runtime.openOptionsPage(); return true; }
 };

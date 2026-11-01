@@ -168,6 +168,48 @@ test('피드백(T-129): 다른 개념을 고르면 그 개념이 근거, 후보 
   expect(lf.data.result.rejected).toMatch(/근거 목록에 없는/);
 });
 
+test('내 피드백(T-132): 목록·공유 설정·7일 통계·지운 노드 라벨·전부 지우기 메시지', async ({ ext }) => {
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const nodeId = r1.data.evidence.nodeId;
+  await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId, tagId: null, vote: 'down', provider: r1.data.debug.provider } });
+  const l1 = await ext.send({ type: 'feedback:list' });
+  expect(l1.ok).toBe(true);
+  expect(l1.data.items).toHaveLength(1);
+  expect(l1.data.items[0].vote).toBe('down');
+  expect(l1.data.items[0].nodeId).toBe(nodeId);
+  expect(l1.data.items[0].nodeLabel).toMatch(/[가-힣]/);
+  expect(l1.data.items[0].masked).toBe(q.sentence);
+  expect(l1.data.share).toBe(false);
+  await ext.setSettings({ feedbackShare: true });
+  expect((await ext.send({ type: 'feedback:list' })).data.share).toBe(true);
+  // 호버 집계는 기다리지 않고 쓰므로 poll로 읽는다
+  const hovers = async () => (await ext.send({ type: 'feedback:stats' })).data.hovers;
+  await expect.poll(hovers).toBeGreaterThanOrEqual(1);
+  const st = await ext.send({ type: 'feedback:stats' });
+  expect(st.data.down).toBe(1);
+  // 피드백 뒤 다시 비유(rerun)는 호버로 세지 않는다
+  const before = st.data.hovers;
+  const rr = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId, tagId: null, vote: 'down' }, rerun: q });
+  expect(rr.data.result).toBeTruthy();
+  await new Promise(r => setTimeout(r, 300));
+  expect(await hovers()).toBe(before);
+  // 그 down 기록은 지워 아래 개수 검사를 그대로 둔다
+  await ext.send({ type: 'feedback-undo', id: rr.data.id });
+  expect(await hovers()).toBe(before);
+  // 그래프에 없는 노드면 라벨 대신 id 그대로
+  await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'gone-node', vote: 'down' } });
+  const l2 = await ext.send({ type: 'feedback:list' });
+  expect(l2.data.items).toHaveLength(2);
+  const gone = l2.data.items.find(i => i.nodeId === 'gone-node');
+  expect(gone.nodeLabel).toBe('gone-node');
+  expect(gone.masked).toBe('연락처 [숫자]');
+  expect(l2.data.items[0].nodeId, '최신순').toBe('gone-node');
+  const c = await ext.send({ type: 'feedback:clear' });
+  expect(c.data).toBe(true);
+  expect((await ext.send({ type: 'feedback:list' })).data.items).toHaveLength(0);
+});
+
 test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ context, ext }) => {
   await ext.setSettings({ triggerMode: 'auto', dwellMs: 500 });
   const page = await context.newPage();
@@ -273,6 +315,80 @@ test('피드백 UI: 자동 모드에서 말풍선으로 옮겨 가도 닫히지 
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
   await page.mouse.down(); await page.mouse.up();
   await expect.poll(() => evidence(page), { timeout: 10000 }).not.toBe(first);
+});
+
+/* ───────── 설정 화면 "내 피드백" 칸 (T-132) ───────── */
+const P1 = '변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.';
+const DAY_RE = /\d{4}-\d{2}-\d{2}/;
+const EMPTY_FB = '아직 남긴 피드백이 없어요.';
+
+test('내 피드백 칸(T-132): 말풍선 👎 → 목록·7일 통계 → 되돌리기면 다시 물어도 원래 근거', async ({ context, ext }) => {
+  const r0 = await ext.send({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
+  const original = r0.data.evidence.nodeId;
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+
+  const op = ext.page;
+  await op.reload();
+  await expect(op.locator('#sec-feedback h2')).toHaveText('내 피드백');
+  const items = op.locator('#fbList li');
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText('👎');
+  await expect(items.first()).toContainText(DAY_RE);
+  await expect(items.first()).toContainText(P1); // 40자 이하면 줄이지 않음
+  await expect(op.locator('#fbStats')).toContainText('지난 7일');
+  await expect(op.locator('#fbStats')).toContainText('👎 1');
+
+  await items.first().getByRole('button', { name: '되돌리기' }).click();
+  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
+  await expect(op.locator('#fbList li:not(.empty)')).toHaveCount(0);
+  const r1 = await ext.send({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
+  expect(r1.data.feedbackApplied).toBe(false);
+  expect(r1.data.evidence.nodeId).toBe(original);
+});
+
+test('내 피드백 칸(T-132): JSON 내보내기, 보내기 설정과 미리보기, 전부 지우기', async ({ ext }) => {
+  const op = ext.page;
+  // 기본(설정 없음)은 보내지 않음
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  await expect(op.locator('#fbSharePreview')).toBeHidden();
+  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
+
+  const LONG = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어지며, 그 결과 저축한 돈의 실제 구매력도 함께 줄어든다.';
+  await ext.send({ type: 'feedback', record: { sentence: LONG, nodeId: 'meso', vote: 'down' } });
+  await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'meso', vote: 'up' } });
+  await op.reload();
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  await expect(op.locator('#fbList li').nth(0)).toContainText('👍');
+  await expect(op.locator('#fbList li').nth(0)).toContainText('메소');
+  await expect(op.locator('#fbList li').nth(1)).toContainText([...LONG].slice(0, 40).join('') + '…');
+
+  const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbExport')]);
+  expect(download.suggestedFilename()).toMatch(/^good-metaphor-feedback-\d{4}-\d{2}-\d{2}\.json$/);
+  const { readFileSync } = await import('node:fs');
+  const data = JSON.parse(readFileSync(await download.path(), 'utf8'));
+  expect(data).toHaveLength(2);
+  for (const it of data) { expect(it.vote).toBeTruthy(); expect(it.sentence).toBeTruthy(); }
+
+  await ext.setSettings({ feedbackShare: true });
+  await op.reload();
+  await expect(op.locator('#fbShare')).toBeChecked();
+  await expect(op.locator('#fbSharePreview')).toBeVisible();
+  await expect(op.locator('#fbSharePreview')).toContainText('이렇게 가려서 보내요: 연락처 [숫자]');
+  await op.locator('#fbShare').uncheck();
+  await expect(op.locator('#fbSharePreview')).toBeHidden();
+  await expect.poll(() => op.evaluate(async () => (await chrome.storage.local.get('settings')).settings.feedbackShare)).toBe(false);
+
+  op.once('dialog', d => d.accept());
+  await op.click('#fbClear');
+  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
+  expect((await ext.send({ type: 'feedback:list' })).data.items).toHaveLength(0);
+  await op.locator('#fbShare').check();
+  await expect(op.locator('#fbSharePreview')).toContainText('보낼 피드백이 아직 없어요.');
 });
 
 test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async ({ context, ext }) => {
