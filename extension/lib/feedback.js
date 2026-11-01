@@ -78,8 +78,8 @@ export function bumpHover(counts, day) {
   return Object.fromEntries(keep.map(k => [k, next[k]]));
 }
 
-// 밀리초 → 로컬 시각 기준 YYYY-MM-DD
-function localDay(ts) {
+// 밀리초 → 로컬 시각 기준 YYYY-MM-DD (background.js의 호버 집계도 씀)
+export function localDay(ts) {
   const d = new Date(ts);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
