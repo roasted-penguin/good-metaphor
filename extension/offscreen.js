@@ -34317,6 +34317,13 @@ function hashEmbed(text) {
 }
 var FALLBACK_ID = "fallback:hash-ngram-512";
 
+// extension/lib/embed-each.js
+async function embedEach(inputs, run) {
+  const out = [];
+  for (const t of inputs) out.push((await run([t]))[0]);
+  return out;
+}
+
 // src/offscreen-src.js
 env2.allowLocalModels = false;
 env2.useWasmCache = false;
@@ -34379,12 +34386,7 @@ async function embed(texts, kind) {
   const prefix = kind === "query" ? cfg?.queryPrefix ?? "" : cfg?.passagePrefix ?? "";
   const inputs = texts.map((t) => prefix + t);
   if (state.status === "fallback" || !extractor) return inputs.map(hashEmbed);
-  const out = [];
-  for (let i = 0; i < inputs.length; i += 16) {
-    const t = await extractor(inputs.slice(i, i + 16), { pooling: "mean", normalize: true });
-    out.push(...t.tolist());
-  }
-  return out;
+  return embedEach(inputs, async (batch) => (await extractor(batch, { pooling: "mean", normalize: true })).tolist());
 }
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.target !== "offscreen") return;

@@ -13,7 +13,7 @@
 ## 현재 상태 (2026-10-17)
 
 PoC 완료, 실제 키·실제 모델로 확인됨.
-- **검색:** 임베딩 `multilingual-e5-base`(2026-11-01, ADR 0009). 평가셋 40문장(T-103) 혼합 hit@1 30/35(86%), hit@3 91%, 금융 12/12. 태그에 다른 분야 예문, 노드 텍스트는 구조 먼저, 경제 태그 감점. e5-small 때 맞던 4문장이 틀려져 T-135에서 고친다. 회귀 가드 41문장(`npm run eval -- --guard`).
+- **검색:** 임베딩 `multilingual-e5-base`(2026-11-01, ADR 0009). 평가셋 40문장(T-103) 혼합 hit@1 27/35(77%), hit@3 94%, 금융 10/12(실제 확장 기준, ADR 0011). 태그에 다른 분야 예문, 노드 텍스트는 구조 먼저, 경제 태그 감점. e5-small 때 맞던 2문장이 틀려져 T-135에서 고친다. 회귀 가드 39문장(`npm run eval -- --guard`). 첫 로드 39초(266MB 다운로드), 이후 3초, 호버 임베딩 약 0.12초.
 - **LLM:** 무료 Gemini(`gemini-3.8-flash`)·Groq(`openai/gpt-oss-120b`) 키로 스모크 통과(T-101·T-119). 실제 확장 호버는 3.6~9.1초로 느리다(T-117 뜻 먼저, P0). Groq가 5~10배 빠르지만 존댓말·추상화 품질을 다듬어야 한다(T-122). 503·429는 재시도한다(T-121). 기본은 Groq `gpt-oss-120b` → Gemini `gemini-3.5-flash-lite` → NVIDIA `nemotron-3.5-super-vl` fallback 체인 → 맨 뒤 로컬 Ollama `gemma4:12b`(최종 방어선)(순위는 더 붙을 수 있음, `admin.json` `fallbackChain`에 추가만), 429 모델은 쿨다운(T-124, ADR 0008).
 - **데이터:** 공통 그래프 사실은 2026-10 패치 노트로 검수(2026.10.11-1).
 - **결정됨:** 앱 이름 "좋은비유네용"(변경은 T-115), 기본 트리거 Alt + 첫 실행 선택(D-1), 두 번째 관심사 식당·로그인 없이(D-4), 문서 출처(D-5), 검수 방식(D-3), 최신화 설계(ADR 0007). D-2(로그인)는 L3 전에 정한다.
@@ -38,7 +38,8 @@ npm run build                    # src/offscreen-src.js → extension/offscreen.
 npm test                         # 단위(node:test) + e2e(Playwright). 커밋 전 항상 통과시킬 것
 npm run test:unit                # 순수 함수만, 1초 이내
 npm run test:e2e                 # 확장을 실제 크롬에 로드. CHROMIUM_PATH=... 로 브라우저 지정 가능, HEADED=1 로 화면 보기
-npm run eval                     # 실제 임베딩 모델로 검색 품질(hit@1/@3). -- -v 로 틀린 문장 출력
+npm run eval                     # 실제 확장(크롬) 안에서 임베딩해 검색 품질(hit@1/@3). -- -v 틀린 문장, -- --node 빠르지만 실제와 다를 수 있음
+npm run check:embed              # 실제 모델 로드 시간·호버 시간, 시험해 보기 1위가 평가와 같은지(54문장)
 npm run eval:fallback            # 모델 없이 같은 평가
 npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장이 하나라도 틀리면 실패. 검색을 바꾸는 PR은 항상 돌린다
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
@@ -95,7 +96,7 @@ scripts/                     build, prepare-e2e
 - transformers.js의 `env.useWasmCache`는 꺼 둬야 한다(blob: URL import가 확장 CSP에 막힘). wasm 경로는 `chrome.runtime.getURL('vendor/...')`.
 - 확장 페이지는 `eval`이 막혀 있어 Playwright `waitForFunction('문자열')`이 실패한다. `page.evaluate(함수)`나 `expect.poll`을 쓴다.
 - 모델 다운로드처럼 긴 작업 중 서비스 워커가 잠들 수 있다. `keepAlive()`로 감싼다.
-- **검색 조정은 회귀 0이어야 한다**(사용자 원칙, 2026-10-18). 합계가 올라도 잘 맞던 문장이 틀리면 채택하지 않는다. q8 임베딩은 함께 묶인 배치에 따라 벡터가 달라지므로 평가는 질의를 한 문장씩 임베딩한다(`eval.mjs`).
+- **검색 조정은 회귀 0이어야 한다**(사용자 원칙, 2026-10-18). 합계가 올라도 잘 맞던 문장이 틀리면 채택하지 않는다. q8 임베딩은 함께 묶인 배치에 따라, 그리고 Node와 브라우저 사이에서 벡터가 달라진다. 임베딩은 항상 `embedEach`로 한 문장씩, 평가는 실제 확장 안에서 한다(ADR 0011). Node 수치를 실제 결과처럼 보고하지 말 것.
 - 회사망 등에서 Hugging Face가 막히면 모델 로드가 실패하고 대체 임베더로 조용히 바뀐다(`fallbackOnError`). 품질 비교 때 `debug.embedderId`를 꼭 확인.
 - 모델 ID·가격은 2026-09-28에 각 사 문서로 확인한 값이다. 바뀌면 `config/admin.json`의 `defaultModels`·`fallbackChain`과 `lib/providers.js`를 함께 고친다.
 - **모델을 고르거나 바꿀 때 성능 비교는 [Artificial Analysis 리더보드](https://artificialanalysis.ai/leaderboards/models)를 먼저 참고한다**(지능 지수, 출력 속도, 첫 토큰 지연, 가격). 후보를 거기서 추린 뒤 `npm run smoke:providers`(`--all-models`)로 이 앱 기준(뜻까지 시간, 존댓말, 근거 준수, JSON, 무료 한도)을 직접 잰다. 리더보드 수치는 확인한 날짜와 함께 적는다.
