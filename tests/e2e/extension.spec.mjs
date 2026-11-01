@@ -431,28 +431,39 @@ test('첫 실행 안내(T-116): 자동 + 보내기 → 시작하기면 저장되
   await expect(op.locator('#fbShare')).toBeChecked();
 
   await op.reload();
-  await expect(op.locator('#commonTitle')).toHaveText(/메이플스토리 · /); // 초기화가 끝날 때까지
+  await expect(op.locator('#onboarding[data-ready="1"]')).toHaveCount(1); // 안내 상태를 읽은 뒤에
   await expect(op.locator('#onboarding')).toBeHidden();
   await expect(op.locator('input[name=triggerMode][value=auto]')).toBeChecked();
 });
 
-test('첫 실행 안내(T-116): 아무것도 안 고르고 넘기기 → Alt·보내지 않음, 기존 사용자(onboarding 없음)에겐 안 뜸', async ({ ext }) => {
+test('첫 실행 안내(T-116): 아무것도 안 고르고 넘기기 → 설정은 그대로(Alt·보내지 않음), 기존 사용자(onboarding 없음)에겐 안 뜸', async ({ ext }) => {
   const op = await openFirstRun(ext);
   await expect(op.locator('#onboarding')).toBeVisible();
   await op.click('#obSkip');
   await expect(op.locator('#onboarding')).toBeHidden();
   await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  expect(typeof (await storageGet(op, 'onboarding')).doneAt).toBe('number');
   const s = await storageGet(op, 'settings');
-  expect(s.triggerMode).toBe('modifier');
-  expect(s.feedbackShare).toBe(false);
+  expect(s?.triggerMode ?? 'modifier').toBe('modifier');
+  expect(s?.feedbackShare).not.toBe(true);
   await expect(op.locator('input[name=triggerMode][value=modifier]')).toBeChecked();
   await expect(op.locator('#fbShare')).not.toBeChecked();
 
   // 기존 사용자: onboarding 키 자체가 없다
   await op.evaluate(() => chrome.storage.local.remove('onboarding'));
   await op.reload();
-  await expect(op.locator('#commonTitle')).toHaveText(/메이플스토리 · /);
+  await expect(op.locator('#onboarding[data-ready="1"]')).toHaveCount(1);
   await expect(op.locator('#onboarding')).toBeHidden();
+});
+
+test('첫 실행 안내(T-116): 넘기기는 이미 저장된 설정을 바꾸지 않는다', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  await ext.setSettings({ triggerMode: 'auto' });
+  await op.click('#obSkip');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  expect((await storageGet(op, 'settings')).triggerMode).toBe('auto');
+  await expect(op.locator('input[name=triggerMode][value=auto]')).toBeChecked(); // 아래 칸도 저장된 값
 });
 
 test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async ({ context, ext }) => {

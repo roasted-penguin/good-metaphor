@@ -43,8 +43,14 @@ function renderTrigger(s) {
 
 /* ───────── 첫 실행 안내 (T-116) ───────── */
 async function initOnboarding() {
-  const { onboarding } = await chrome.storage.local.get('onboarding');
-  $('#onboarding').hidden = !onboarding?.pending;
+  try {
+    const { onboarding } = await chrome.storage.local.get('onboarding');
+    $('#onboarding').hidden = !onboarding?.pending;
+  } catch (err) {
+    console.warn('첫 실행 안내 상태를 읽지 못했어요:', err);
+  } finally {
+    $('#onboarding').dataset.ready = '1'; // 보일지 말지 정해졌다는 표시(e2e가 기다림)
+  }
 }
 document.querySelectorAll('input[name=obTrigger]').forEach(r => r.addEventListener('change', () => {
   $('#obAutoWarn').hidden = document.querySelector('input[name=obTrigger]:checked')?.value !== 'auto';
@@ -55,7 +61,8 @@ for (const id of ['#obShareYes', '#obShareNo']) $(id).addEventListener('click', 
 });
 async function finishOnboarding(patch) {
   try {
-    state.settings = await send('settings:save', { patch });
+    // patch가 없으면(넘기기) 설정은 그대로 두고 안내만 닫는다
+    state.settings = patch ? await send('settings:save', { patch }) : (await send('settings:get')).settings;
     await chrome.storage.local.set({ onboarding: { pending: false, doneAt: Date.now() } });
     $('#onboarding').hidden = true;
     renderTrigger(state.settings);
@@ -66,7 +73,7 @@ $('#obStart').addEventListener('click', () => finishOnboarding({
   triggerMode: document.querySelector('input[name=obTrigger]:checked')?.value || 'modifier',
   feedbackShare: $('#obShareYes').getAttribute('aria-pressed') === 'true'
 }));
-$('#obSkip').addEventListener('click', () => finishOnboarding({ triggerMode: 'modifier', feedbackShare: false }));
+$('#obSkip').addEventListener('click', () => finishOnboarding(null));
 
 /* ───────── AI 제공자 ───────── */
 function fillProvider(id) {
@@ -316,7 +323,7 @@ $('#fbShare').addEventListener('change', async () => {
 (async function init() {
   state = await send('settings:get');
   renderTrigger(state.settings);
-  initOnboarding().catch(() => {});
+  initOnboarding();
 
   const allowed = state.admin.allowedProviders || Object.keys(state.providers);
   $('#provider').innerHTML = allowed.filter(id => state.providers[id])
