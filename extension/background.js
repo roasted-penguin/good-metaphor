@@ -370,6 +370,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-chrome.runtime.onInstalled.addListener(({ reason }) => {
-  if (reason === 'install') chrome.runtime.openOptionsPage();
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== 'install') return;
+  // 첫 실행 안내(T-116): 설정 화면이 열리기 전에 표시를 남긴다
+  try { await chrome.storage.local.set({ onboarding: { pending: true } }); }
+  finally { chrome.runtime.openOptionsPage(); } // 저장이 실패해도 설정 화면은 연다
 });

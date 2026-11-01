@@ -16,6 +16,32 @@
   </header>
 
   <main>
+    <!-- 0. 첫 실행 안내 (T-116) -->
+    <section id="onboarding" class="onboarding" hidden>
+      <h2>처음 오셨네요. 두 가지만 골라 주세요</h2>
+      <div class="ob-step">
+        <h3>1. 언제 설명을 띄울까요?</h3>
+        <div class="ob-choices">
+          <label><input type="radio" name="obTrigger" value="modifier" checked><span>Alt 누르고 문장에 올리기 (추천)</span></label>
+          <label><input type="radio" name="obTrigger" value="auto"><span>머무르면 자동</span></label>
+        </div>
+        <p class="ob-warn" id="obAutoWarn" hidden>호출이 많아져 무료 한도를 빨리 써요.</p>
+      </div>
+      <div class="ob-step">
+        <h3>2. 더 나은 비유를 위해 피드백을 보내 주실래요?</h3>
+        <div class="row">
+          <button type="button" class="ob-toggle" id="obShareYes" aria-pressed="false">보내기</button>
+          <button type="button" class="ob-toggle" id="obShareNo" aria-pressed="false">내 기기에만</button>
+        </div>
+        <p class="hint" id="obShareInfo">보내는 것: 숫자·메일 주소를 가린 문장 일부, 고른 개념, 👍/👎. 서버가 생기기 전까지는 이 기기에만 쌓아 둬요.</p>
+      </div>
+      <div class="row ob-actions">
+        <button type="button" class="primary" id="obStart">시작하기</button>
+        <button type="button" class="link" id="obSkip">넘기기</button>
+        <span class="status" id="obStatus"></span>
+      </div>
+    </section>
+
     <!-- 1. 사용 방식 -->
     <section id="sec-trigger">
       <h2>사용 방식</h2>

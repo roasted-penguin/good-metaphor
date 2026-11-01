@@ -81,3 +81,18 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .fb-share > label { font-weight: 600; }
 .fb-preview { margin-top: 8px; background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; word-break: break-all; }
 .fb-share .hint { margin: 6px 0 0; }
+/* 첫 실행 안내 (T-116) */
+.onboarding { border: 2px solid var(--accent); }
+.onboarding > h2 { font-size: 16px; margin-bottom: 12px; }
+.ob-step { margin-top: 14px; }
+.ob-step h3 { font-size: 13.5px; margin: 0 0 8px; }
+.ob-choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.ob-choices label { display: flex; gap: 6px; align-items: center; font-weight: 500; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; }
+.ob-choices label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+.ob-choices input { accent-color: var(--accent); margin: 0; }
+.ob-warn { margin: 8px 0 0; color: var(--warn); font-size: 12.5px; }
+.ob-toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.ob-step .hint { margin: 8px 0 0; }
+.ob-actions { margin-top: 18px; }
+button.link { background: none; border-color: transparent; color: var(--muted); text-decoration: underline; padding: 7px 8px; }
