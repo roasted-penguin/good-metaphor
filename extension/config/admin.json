@@ -33,7 +33,7 @@
   },
 
   "embedding": {
-    "model": "Xenova/multilingual-e5-small",
+    "model": "Xenova/multilingual-e5-base",
     "dtype": "q8",
     "queryPrefix": "query: ",
     "passagePrefix": "passage: ",
@@ -43,6 +43,8 @@
   "retrieval": {
     "topK": 3,
     "directWeight": 0.45,
-    "tagWeight": 0.55
+    "tagWeight": 0.55,
+    "_tagPenaltyComment": "경제 태그로 주제가 쏠리는 것을 줄이는 감점(T-113, ADR 0009). 공통 그래프 태그 id만",
+    "tagPenalty": { "inflation": 0.02, "market_price": 0.02 }
   }
 }

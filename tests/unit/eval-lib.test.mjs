@@ -113,3 +113,18 @@ test('T-103 새 문장은 태그 설명·예문과 3-gram 자카드 < 0.3', () =
     assert.ok(jaccard(c.sentence, t) < 0.3, `"${c.sentence}" ↔ "${t}"`);
   }
 });
+
+test('admin.json retrieval.tagPenalty는 공통 그래프에 있는 태그 id에만 0~0.1 사이 값 (T-113, 규칙 9)', () => {
+  const tagIds = new Set(common.tags.map(t => t.id));
+  const pen = admin.retrieval.tagPenalty;
+  assert.ok(pen && Object.keys(pen).length, 'tagPenalty 없음');
+  for (const [id, v] of Object.entries(pen)) {
+    assert.ok(tagIds.has(id), `없는 태그: ${id}`);
+    assert.ok(v > 0 && v <= 0.1, `${id}: ${v}`);
+  }
+});
+
+test('admin.json 임베딩 모델은 e5-base q8 (T-113 결정)', () => {
+  assert.equal(admin.embedding.model, 'Xenova/multilingual-e5-base');
+  assert.equal(admin.embedding.dtype, 'q8');
+});

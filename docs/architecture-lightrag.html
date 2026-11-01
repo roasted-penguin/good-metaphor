@@ -259,7 +259,7 @@
       <tbody>
         <tr><td>관심사 그래프</td><td>손으로 쓴 노드 18 · 태그 18</td><td>가이드 문서에서 LLM이 추출 + 기존 JSON을 시드로 주입</td></tr>
         <tr><td>추상 태그</td><td>노드의 <code>tags</code> 필드</td><td>"추상구조" 엔티티 + 관계의 high-level 키워드</td></tr>
-        <tr><td>검색</td><td>브라우저 e5-small</td><td>EC2 LightRAG hybrid (엔티티 + 관계 + 1-hop), bge-m3</td></tr>
+        <tr><td>검색</td><td>브라우저 e5-base</td><td>EC2 LightRAG hybrid (엔티티 + 관계 + 1-hop), bge-m3</td></tr>
         <tr><td>LLM 키</td><td>사용자 브라우저에 보관</td><td>서버에 보관 (키 프록시를 겸함)</td></tr>
         <tr><td>호버당 LLM 호출</td><td>1회 (정밀 모드 2회)</td><td>2회: 키워드 + 비유</td></tr>
         <tr><td>사용자 저장소</td><td>오버레이 JSON (개발용 로컬)</td><td>사용자별 LightRAG 워크스페이스 + 설정 표</td></tr>
