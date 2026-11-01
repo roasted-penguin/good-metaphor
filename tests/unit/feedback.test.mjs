@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX } from '../../extension/lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback } from '../../extension/lib/feedback.js';
 
 // 검색 후보(retrieve 결과 모양만 흉내)
 const cands = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, label: id.toUpperCase(), score: 1 - i * 0.1 }));
@@ -82,4 +82,49 @@ test('setReason: 그 기록에만 이유를 붙이고 정해진 값만 받는다
   assert.equal(out.find(r => r.id === 'x').reason, 'forced');
   assert.equal(out.find(r => r.id === 'y').reason, undefined);
   assert.throws(() => setReason(list, 'x', '<script>'), /이유/);
+});
+
+test('maskSentence: 메일·주소·긴 숫자·전화번호를 가린다', () => {
+  assert.equal(
+    maskSentence('연락은 hong@example.com 이나 010-1234-5678, 주문번호 20261101로 주세요. https://a.b/c 참고'),
+    '연락은 [메일] 이나 [숫자], 주문번호 [숫자]로 주세요. [주소] 참고'
+  );
+});
+
+test('maskSentence: 1~3자리 숫자는 그대로 둔다', () => {
+  const s = '이 약은 최소 4시간을 기다려야 한다.';
+  assert.equal(maskSentence(s), s);
+});
+
+test('bumpHover: 그날 값이 1 늘어난다', () => {
+  assert.deepEqual(bumpHover({}, '2026-11-01'), { '2026-11-01': 1 });
+  assert.deepEqual(bumpHover({ '2026-11-01': 2 }, '2026-11-01'), { '2026-11-01': 3 });
+});
+
+test('bumpHover: 가장 최근 14일만 남긴다', () => {
+  const counts = {};
+  for (let d = 1; d <= 15; d++) counts[`2026-10-${String(d).padStart(2, '0')}`] = 1;
+  const next = bumpHover(counts, '2026-10-16');
+  assert.equal(Object.keys(next).length, 14);
+  assert.equal(next['2026-10-01'], undefined);
+  assert.equal(next['2026-10-02'], undefined);
+  assert.equal(next['2026-10-16'], 1);
+});
+
+test('summarizeFeedback: 오늘 포함 지난 7일만 센다', () => {
+  // 로컬 정오로 만들어 시간대와 무관하게 날짜가 맞게 한다
+  const at = (day) => new Date(2026, 10, day, 12).getTime();
+  const records = [
+    rec({ ts: at(2), vote: 'up' }),
+    rec({ ts: at(3), vote: 'down' }),
+    rec({ ts: at(8), vote: 'down' }),
+    rec({ ts: at(5), vote: 'pick', pickedNodeId: 'b' }),
+    rec({ ts: at(1), vote: 'down' }), // 범위 밖
+  ];
+  const counts = { '2026-11-01': 5, '2026-11-02': 3, '2026-11-08': 2 };
+  assert.deepEqual(summarizeFeedback(records, counts, '2026-11-08'), { hovers: 5, up: 1, down: 2, pick: 1 });
+});
+
+test('summarizeFeedback: 빈 입력이면 모두 0', () => {
+  assert.deepEqual(summarizeFeedback([], {}, '2026-11-08'), { hovers: 0, up: 0, down: 0, pick: 0 });
 });
