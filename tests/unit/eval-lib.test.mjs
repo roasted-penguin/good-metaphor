@@ -26,8 +26,9 @@ test('scoreCases: hit@1·hit@3와 그룹별 hit@1을 센다', () => {
   assert.deepEqual(r.misses[0].got, ['x', 'b', 'y']);
 });
 
-test('평가셋의 금융 그룹은 T-113에서 틀린 5문장이다', () => {
-  const fin = evalSet.filter(c => c.group === 'finance').map(c => c.sentence.slice(0, 3));
+test('평가셋의 금융 그룹: 기존 문장은 T-113에서 틀린 5문장, T-103 새 금융 문장은 7개', () => {
+  assert.equal(evalSet.filter(c => c.group === 'finance' && c.since === 'T-103').length, 7);
+  const fin = evalSet.filter(c => c.group === 'finance' && !c.since).map(c => c.sentence.slice(0, 3));
   assert.deepEqual(fin.sort(), ['Lev', '누진세', '레버리', '백화점', '복권의'].sort());
 });
 
@@ -62,4 +63,53 @@ test('회귀 가드 목록의 문장은 모두 평가셋·검증셋에 있다', 
   assert.ok(guard.length > 0);
   assert.equal(new Set(guard).size, guard.length, '중복');
   for (const s of guard) assert.ok(all.has(s), s);
+});
+
+test('scoreCases: 맞는 비유가 없어야 하는 문장(expectNodes: [])은 hit에서 빼고 1위 점수와 함께 따로 센다 (T-103)', () => {
+  const cases = [
+    { sentence: '가', expectNodes: ['a'] },
+    { sentence: '없음', expectNodes: [] }
+  ];
+  const ranks = { 가: [{ id: 'a', score: 0.8 }, { id: 'x', score: 0.5 }], 없음: [{ id: 'x', score: 0.6 }] };
+  const r = scoreCases(cases, c => ranks[c.sentence]);
+  assert.equal(r.n, 1);
+  assert.equal(r.hit1, 1);
+  assert.deepEqual(r.noMatch, [{ sentence: '없음', top: 'x', score: 0.6 }]);
+  assert.deepEqual(r.hitScores, [0.8]);
+  assert.equal(r.misses.length, 0);
+});
+
+// 한글이 하나도 없으면 영어 문장으로 본다
+const isEnglish = s => !/[\uac00-\ud7a3]/.test(s);
+
+test('평가셋: 40문장 이상, 영어 25% 이상, 맞는 비유 없는 문장 5개 이상 (T-103)', () => {
+  assert.ok(evalSet.length >= 40, `평가셋 ${evalSet.length}문장`);
+  const en = evalSet.filter(c => isEnglish(c.sentence)).length;
+  assert.ok(en / evalSet.length >= 0.25, `영어 ${en}/${evalSet.length}`);
+  assert.ok(evalSet.filter(c => c.expectNodes.length === 0).length >= 5);
+});
+
+test('평가셋: id는 모두 공통 그래프에 있고, 문장 중복이 없다', () => {
+  const nodeIds = new Set(common.nodes.map(n => n.id));
+  const tagIds = new Set(common.tags.map(t => t.id));
+  const seen = new Set(holdout.map(c => c.sentence));
+  for (const c of evalSet) {
+    assert.ok(Array.isArray(c.expectNodes) && c.expectNodes.every(id => nodeIds.has(id)), c.sentence);
+    if (c.expectNodes.length) assert.ok(tagIds.has(c.expectTag), c.sentence);
+    assert.ok(!seen.has(c.sentence), `중복: ${c.sentence}`);
+    seen.add(c.sentence);
+  }
+});
+
+// 글자 3-gram 자카드: 새 문장이 태그 설명·예문을 베끼지 않았는지 본다
+const grams = s => { const t = s.replace(/\s+/g, ' '); const out = new Set(); for (let i = 0; i + 3 <= t.length; i++) out.add(t.slice(i, i + 3)); return out; };
+const jaccard = (a, b) => { const A = grams(a), B = grams(b); let n = 0; for (const g of A) if (B.has(g)) n++; return n / (A.size + B.size - n); };
+
+test('T-103 새 문장은 태그 설명·예문과 3-gram 자카드 < 0.3', () => {
+  const tagTexts = common.tags.flatMap(t => [t.desc || '', ...(t.examples || [])]);
+  const fresh = evalSet.filter(c => c.since === 'T-103');
+  assert.ok(fresh.length >= 24, `새 문장 ${fresh.length}개`);
+  for (const c of fresh) for (const t of tagTexts) {
+    assert.ok(jaccard(c.sentence, t) < 0.3, `"${c.sentence}" ↔ "${t}"`);
+  }
 });
