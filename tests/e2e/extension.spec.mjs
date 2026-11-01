@@ -317,6 +317,80 @@ test('피드백 UI: 자동 모드에서 말풍선으로 옮겨 가도 닫히지 
   await expect.poll(() => evidence(page), { timeout: 10000 }).not.toBe(first);
 });
 
+/* ───────── 설정 화면 "내 피드백" 칸 (T-132) ───────── */
+const P1 = '변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.';
+const DAY_RE = /\d{4}-\d{2}-\d{2}/;
+const EMPTY_FB = '아직 남긴 피드백이 없어요.';
+
+test('내 피드백 칸(T-132): 말풍선 👎 → 목록·7일 통계 → 되돌리기면 다시 물어도 원래 근거', async ({ context, ext }) => {
+  const r0 = await ext.send({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
+  const original = r0.data.evidence.nodeId;
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+
+  const op = ext.page;
+  await op.reload();
+  await expect(op.locator('#sec-feedback h2')).toHaveText('내 피드백');
+  const items = op.locator('#fbList li');
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText('👎');
+  await expect(items.first()).toContainText(DAY_RE);
+  await expect(items.first()).toContainText(P1); // 40자 이하면 줄이지 않음
+  await expect(op.locator('#fbStats')).toContainText('지난 7일');
+  await expect(op.locator('#fbStats')).toContainText('👎 1');
+
+  await items.first().getByRole('button', { name: '되돌리기' }).click();
+  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
+  await expect(op.locator('#fbList li:not(.empty)')).toHaveCount(0);
+  const r1 = await ext.send({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
+  expect(r1.data.feedbackApplied).toBe(false);
+  expect(r1.data.evidence.nodeId).toBe(original);
+});
+
+test('내 피드백 칸(T-132): JSON 내보내기, 보내기 설정과 미리보기, 전부 지우기', async ({ ext }) => {
+  const op = ext.page;
+  // 기본(설정 없음)은 보내지 않음
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  await expect(op.locator('#fbSharePreview')).toBeHidden();
+  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
+
+  const LONG = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어지며, 그 결과 저축한 돈의 실제 구매력도 함께 줄어든다.';
+  await ext.send({ type: 'feedback', record: { sentence: LONG, nodeId: 'meso', vote: 'down' } });
+  await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'meso', vote: 'up' } });
+  await op.reload();
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  await expect(op.locator('#fbList li').nth(0)).toContainText('👍');
+  await expect(op.locator('#fbList li').nth(0)).toContainText('메소');
+  await expect(op.locator('#fbList li').nth(1)).toContainText([...LONG].slice(0, 40).join('') + '…');
+
+  const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbExport')]);
+  expect(download.suggestedFilename()).toMatch(/^good-metaphor-feedback-\d{4}-\d{2}-\d{2}\.json$/);
+  const { readFileSync } = await import('node:fs');
+  const data = JSON.parse(readFileSync(await download.path(), 'utf8'));
+  expect(data).toHaveLength(2);
+  for (const it of data) { expect(it.vote).toBeTruthy(); expect(it.sentence).toBeTruthy(); }
+
+  await ext.setSettings({ feedbackShare: true });
+  await op.reload();
+  await expect(op.locator('#fbShare')).toBeChecked();
+  await expect(op.locator('#fbSharePreview')).toBeVisible();
+  await expect(op.locator('#fbSharePreview')).toContainText('이렇게 가려서 보내요: 연락처 [숫자]');
+  await op.locator('#fbShare').uncheck();
+  await expect(op.locator('#fbSharePreview')).toBeHidden();
+  await expect.poll(() => op.evaluate(async () => (await chrome.storage.local.get('settings')).settings.feedbackShare)).toBe(false);
+
+  op.once('dialog', d => d.accept());
+  await op.click('#fbClear');
+  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
+  expect((await ext.send({ type: 'feedback:list' })).data.items).toHaveLength(0);
+  await op.locator('#fbShare').check();
+  await expect(op.locator('#fbSharePreview')).toContainText('보낼 피드백이 아직 없어요.');
+});
+
 test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async ({ context, ext }) => {
   const { send } = ext;
   expect((await send({ type: 'graph:info' })).data.merged.usesCommon).toBe(true);
