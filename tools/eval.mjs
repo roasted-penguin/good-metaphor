@@ -1,7 +1,8 @@
 // 검색 품질 평가: 문장별로 기대 노드가 상위 1개·3개 안에 드는지, 가중치 설정별로 비교한다.
 // 사용법 (프로젝트 루트에서):
 //   npm install                            # 처음 한 번
-//   npm run eval                       # 실제 임베딩 모델 (약 120MB 다운로드), -- -v 로 틀린 문장 출력
+//   npm run eval                       # 실제 모델을 실제 확장(크롬, wasm) 안에서 임베딩해 잰다. -- -v 로 틀린 문장 출력
+//   npm run eval -- --node             # Node(onnxruntime-node)로 빠르게. q8 계산이 브라우저와 달라 수치가 실제와 다를 수 있다(T-128)
 //   npm run eval:fallback              # 글자 n-gram 대체 임베더
 //   npm run eval -- --rewrite gemini   # 질의를 LLM으로 추상 구조로 바꿔 함께 비교 (T-113 (4)). <ID>_API_KEY 필요,
 //                                      # 결과는 .tmp/rewrite-<제공자>-<모델>.json 에 캐시(다시 돌려도 호출 안 함)
@@ -9,6 +10,8 @@ import fs from 'node:fs';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
 import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
+import { embedEach } from '../extension/lib/embed-each.js';
+import { openBrowserEmbedder } from './browser-embedder.mjs';
 import { scoreCases, mixedSetting, regressions } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
@@ -60,23 +63,25 @@ if (rewriteId) {
 }
 const queryModes = rewrites ? [['원문', null], ['정밀(추상+원문)', 'precise'], ['추상만', 'abstract']] : [['원문', null]];
 
-let embed;
+let embed, embedderLabel, closeEmbedder = async () => {};
 if (useFallback) {
   embed = async (texts, kind) => texts.map(t => hashEmbed(t));
+  embedderLabel = 'fallback n-gram';
+} else if (!process.argv.includes('--node')) {
+  console.log(`확장 안에서 모델 준비 중: ${admin.embedding.model} (${admin.embedding.dtype}, 첫 실행은 다운로드)`);
+  const be = await openBrowserEmbedder();
+  embed = be.embed;
+  closeEmbedder = be.close;
+  embedderLabel = `${be.embedderId} · 브라우저`;
 } else {
   const { pipeline } = await import('@huggingface/transformers');
   const cfg = admin.embedding;
   console.log(`모델 불러오는 중: ${cfg.model} (${cfg.dtype})`);
   const ex = await pipeline('feature-extraction', cfg.model, { dtype: cfg.dtype });
-  // q8은 같은 문장도 함께 묶인 배치에 따라 벡터가 조금 달라진다(활성값 양자화 스케일이 배치 단위).
-  // 확장과 같게 노드·태그는 한 배치로, 질의는 한 문장씩 임베딩해 결과를 고정한다 (T-113)
+  // 확장 오프스크린과 같게 노드·태그·질의 모두 한 문장씩 (q8은 묶음에 따라 벡터가 달라진다, T-128)
   const run = async texts => (await ex(texts, { pooling: 'mean', normalize: true })).tolist();
-  embed = async (texts, kind) => {
-    if (kind === 'passage') return run(texts.map(t => cfg.passagePrefix + t));
-    const out = [];
-    for (const t of texts) out.push((await run([cfg.queryPrefix + t]))[0]);
-    return out;
-  };
+  embed = async (texts, kind) => embedEach(texts.map(t => (kind === 'query' ? cfg.queryPrefix : cfg.passagePrefix) + t), run);
+  embedderLabel = `${cfg.model} · Node (확장과 다를 수 있음)`;
 }
 
 const graph = mergeGraphs(common, null);
@@ -94,7 +99,7 @@ const pct = (a, b) => `${a}/${b} (${Math.round(a / b * 100)}%)`;
 
 for (const [modeName, mode] of queryModes) for (const { name, cases } of sets) {
   const qs = await embed(cases.map(c => mode ? rewriteQueryText(rewrites[c.sentence], c.sentence, mode) : c.sentence), 'query');
-  console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${useFallback ? 'fallback n-gram' : admin.embedding.model}\n`);
+  console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${embedderLabel}\n`);
   for (const s of settings) {
     const { topK, ...opts } = s;
     const rank = (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: 3 }).map(x => ({ id: x.id, score: x.score }));
@@ -125,4 +130,5 @@ for (const [modeName, mode] of queryModes) for (const { name, cases } of sets) {
   cases.forEach((c, i) => { if (c.expectTag && topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
   console.log(`\n추상 태그 top-1 정확도: ${pct(t1, tagged.length)}`);
 }
+await closeEmbedder();
 if (failGuard && regressed) { console.log(`\n회귀 ${regressed}건`); process.exit(1); }

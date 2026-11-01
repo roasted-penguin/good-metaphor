@@ -72,6 +72,17 @@ test('설정 화면: 공통 저장소 정보, 연결 테스트, 시험해 보기
   await expect(page.locator('#tryOut table tbody tr')).toHaveCount(3);
 });
 
+test('평가 도구 계약: 옵션 페이지에서 오프스크린 embed를 직접 불러 한 문장씩 같은 벡터를 받는다 (T-128)', async ({ ext }) => {
+  const r = await ext.send({ type: 'embed:warmup' });
+  expect(r.ok).toBe(true);
+  const embed = texts => ext.page.evaluate(t => chrome.runtime.sendMessage({ target: 'offscreen', type: 'embed', texts: t, kind: 'passage' }), texts);
+  const both = await embed(['첫 문장', '두 번째 문장']);
+  const alone = await embed(['두 번째 문장']);
+  expect(both.vectors).toHaveLength(2);
+  expect(both.embedderId).toBe(r.data.embedderId);
+  expect(alone.vectors[0]).toEqual(both.vectors[1]); // 묶어 보내도 한 문장씩과 같은 벡터
+});
+
 test('Alt+호버: 문장 강조, 메이플 테마 말풍선, Esc 닫기, 캐시', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');

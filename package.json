@@ -11,7 +11,8 @@
     "test:e2e": "node scripts/prepare-e2e.mjs && playwright test",
     "eval": "node tools/eval.mjs",
     "eval:fallback": "node tools/eval.mjs --fallback",
-    "smoke:providers": "node tools/smoke-providers.mjs"
+    "smoke:providers": "node tools/smoke-providers.mjs",
+    "check:embed": "node tools/check-real-embed.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"

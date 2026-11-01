@@ -2,6 +2,7 @@
 // 서비스 워커에서는 동적 import 가 막혀 있어서 모델 실행은 여기서 한다.
 import { pipeline, env } from '@huggingface/transformers';
 import { hashEmbed, FALLBACK_ID } from '../extension/lib/fallback-embed.js';
+import { embedEach } from '../extension/lib/embed-each.js';
 
 env.allowLocalModels = false;
 env.useWasmCache = false; // blob: URL import 는 확장 CSP 에서 막히므로 끔
@@ -60,12 +61,8 @@ async function embed(texts, kind) {
   const prefix = kind === 'query' ? (cfg?.queryPrefix ?? '') : (cfg?.passagePrefix ?? '');
   const inputs = texts.map(t => prefix + t);
   if (state.status === 'fallback' || !extractor) return inputs.map(hashEmbed);
-  const out = [];
-  for (let i = 0; i < inputs.length; i += 16) {
-    const t = await extractor(inputs.slice(i, i + 16), { pooling: 'mean', normalize: true });
-    out.push(...t.tolist());
-  }
-  return out;
+  // 한 문장씩 (묶으면 q8 벡터가 달라진다, T-128)
+  return embedEach(inputs, async batch => (await extractor(batch, { pooling: 'mean', normalize: true })).tolist());
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
