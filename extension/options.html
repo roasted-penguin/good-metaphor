@@ -120,6 +120,20 @@
       <div class="row" style="margin-top:8px"><button class="primary" id="tryRun">비유 만들기</button><span class="status" id="tryStatus"></span></div>
       <div id="tryOut"></div>
     </section>
+
+    <!-- 6. 내 피드백 (T-132) -->
+    <section id="sec-feedback">
+      <h2>내 피드백</h2>
+      <p class="desc">말풍선에서 남긴 👍·👎·교정이에요. 이 브라우저에만 저장되고, 되돌리면 다음 비유부터 반영이 빠져요.</p>
+      <div class="fb-stats" id="fbStats"></div>
+      <ul class="fb-list" id="fbList"></ul>
+      <div class="row" style="margin-top:10px"><button id="fbExport">JSON으로 내보내기</button><button id="fbClear">전부 지우기</button><span class="status" id="fbStatus"></span></div>
+      <div class="fb-share">
+        <label class="row"><input type="checkbox" id="fbShare"> 공통 그래프 개선에 보내기</label>
+        <div class="fb-preview" id="fbSharePreview" hidden></div>
+        <p class="hint">서버가 생기기 전까지는 이 기기에만 쌓아 둬요.</p>
+      </div>
+    </section>
   </main>
   <script type="module" src="options.js"></script>
 </body>

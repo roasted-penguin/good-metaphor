@@ -1,3 +1,5 @@
+import { localDay } from './lib/feedback.js';
+
 const $ = s => document.querySelector(s);
 const send = (type, extra = {}) => new Promise((resolve, reject) => {
   chrome.runtime.sendMessage({ type, ...extra }, res => {
@@ -214,6 +216,65 @@ $('#tryRun').addEventListener('click', async () => {
   clearInterval(pollTimer); pollTimer = null;
 });
 
+/* ───────── 내 피드백 (T-132) ───────── */
+const VOTE_MARK = { up: '👍', down: '👎', pick: '교정' };
+let fbItems = [];
+const clip = (s, n = 40) => { const cs = [...String(s ?? '')]; return cs.length > n ? cs.slice(0, n).join('') + '…' : cs.join(''); };
+
+function renderSharePreview() {
+  const on = $('#fbShare').checked;
+  $('#fbSharePreview').hidden = !on;
+  $('#fbSharePreview').textContent = fbItems.length ? '이렇게 가려서 보내요: ' + fbItems[0].masked : '보낼 피드백이 아직 없어요.';
+}
+
+async function loadFeedback() {
+  const [list, st] = await Promise.all([send('feedback:list'), send('feedback:stats')]);
+  fbItems = list.items;
+  $('#fbStats').textContent = `지난 7일 · 호버 ${st.hovers}번 · 👍 ${st.up} · 👎 ${st.down} · 교정 ${st.pick}`;
+  $('#fbList').innerHTML = fbItems.length ? fbItems.map(it => `
+    <li data-id="${esc(it.id)}">
+      <span class="fb-vote v-${esc(it.vote)}">${esc(VOTE_MARK[it.vote] || it.vote)}</span>
+      <span class="fb-text"><span class="fb-sentence" title="${esc(it.sentence)}">${esc(clip(it.sentence))}</span>
+        <span class="hint">${esc(it.vote === 'pick' ? it.pickedLabel : it.nodeLabel)} · ${localDay(it.ts)}</span></span>
+      <button class="fb-undo">되돌리기</button>
+    </li>`).join('') : '<li class="empty hint">아직 남긴 피드백이 없어요.</li>';
+  $('#fbShare').checked = list.share;
+  renderSharePreview();
+  $('#fbExport').disabled = !fbItems.length;
+  $('#fbClear').disabled = !fbItems.length;
+}
+
+$('#fbList').addEventListener('click', async e => {
+  const li = e.target.closest('.fb-undo')?.closest('li');
+  if (!li) return;
+  try { await send('feedback-undo', { id: li.dataset.id }); setStatus($('#fbStatus'), '되돌렸어요.', 'ok'); }
+  catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+  await loadFeedback();
+});
+
+$('#fbExport').addEventListener('click', () => {
+  // 목록 응답의 items 배열을 그대로 파일로
+  const blob = new Blob([JSON.stringify(fbItems, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `good-metaphor-feedback-${localDay(Date.now())}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+$('#fbClear').addEventListener('click', async () => {
+  if (!confirm('남긴 피드백을 모두 지울까요? 되돌릴 수 없어요.')) return;
+  try { await send('feedback:clear'); setStatus($('#fbStatus'), '모두 지웠어요.', 'ok'); }
+  catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+  await loadFeedback();
+});
+
+$('#fbShare').addEventListener('change', async () => {
+  renderSharePreview();
+  try { state.settings = await send('settings:save', { patch: { feedbackShare: $('#fbShare').checked } }); }
+  catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+});
+
 /* ───────── 초기화 ───────── */
 (async function init() {
   state = await send('settings:get');
@@ -235,6 +296,7 @@ $('#tryRun').addEventListener('click', async () => {
     $('#provider').disabled = true;
     $('#model').disabled = true;
   }
+  loadFeedback().catch(e => setStatus($('#fbStatus'), '피드백을 불러오지 못했어요: ' + e.message, 'err'));
   await loadStore().catch(e => { $('#commonTitle').textContent = '불러오기 실패: ' + e.message; });
   pollEmbed();
 })();
