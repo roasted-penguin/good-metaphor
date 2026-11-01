@@ -7,14 +7,43 @@ export function cosine(a, b) {
 }
 
 /**
+ * 비슷한 문장 피드백 (T-130): 질의와 코사인 c가 sim 이상인 기록만 그 노드 점수를 가감한다.
+ * 가중치 w = (c - sim) / (1 - sim)은 sim에서 0으로 연속 시작해 c=1에서 1이 된다.
+ * down은 -max·w, pick은 +max·w. 노드별 합은 [-max, +max]로 자른다.
+ * @param {number[]} q        질의 벡터
+ * @param {Array<{vec:number[], nodeId:string, vote:'down'|'pick'}>} memory
+ * @returns {Map<string, number>} nodeId -> 가감 값
+ */
+export function feedbackAdjust(q, memory, { sim = 0.92, max = 0.1 } = {}) {
+  const out = new Map();
+  for (const m of memory || []) {
+    // 벡터가 없거나 차원이 다른 기록(다른 임베더로 만든 것)은 건너뛴다
+    if (!Array.isArray(m?.vec) || m.vec.length !== q.length) continue;
+    const c = cosine(q, m.vec);
+    if (c < sim) continue;
+    const w = sim < 1 ? Math.min(1, (c - sim) / (1 - sim)) : 1;
+    const sign = m.vote === 'down' ? -1 : m.vote === 'pick' ? 1 : 0;
+    if (!sign) continue;
+    const sum = (out.get(m.nodeId) || 0) + sign * max * w;
+    out.set(m.nodeId, Math.max(-max, Math.min(max, sum)));
+  }
+  return out;
+}
+
+/**
  * @param {number[]} q        질의 벡터
  * @param {object} graph      mergeGraphs 결과
  * @param {Map} vecs          'tag:<id>' | 'node:<id>' -> 벡터
- * @param {object} opts       { topK, directWeight, tagWeight, tagAgg, tagPenalty }
+ * @param {object} opts       { topK, directWeight, tagWeight, tagAgg, tagPenalty, feedbackMemory, feedbackSim, feedbackMax }
  *   tagAgg      'max'(가장 높은 태그) | 'top2mean'(상위 2개 평균, 태그 1개면 그 값)
  *   tagPenalty  태그 id -> 태그 유사도에서 뺄 값. 주제가 넓은 태그(예: 경제)로 쏠리는 것을 줄인다 (T-113)
+ *   feedbackMemory  비슷한 문장 피드백 기록. 비어 있으면 결과가 이전과 같다 (T-130, feedbackAdjust)
  */
-export function retrieve(q, graph, vecs, { topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {} } = {}) {
+export function retrieve(q, graph, vecs, {
+  topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {},
+  feedbackMemory = [], feedbackSim = 0.92, feedbackMax = 0.1
+} = {}) {
+  const fb = feedbackMemory.length ? feedbackAdjust(q, feedbackMemory, { sim: feedbackSim, max: feedbackMax }) : null;
   const tagSim = new Map();
   for (const t of graph.tags) {
     const v = vecs.get('tag:' + t.id);
@@ -32,9 +61,11 @@ export function retrieve(q, graph, vecs, { topK = 3, directWeight = 0.45, tagWei
     const tagScore = top.length ? Math.max(0, top.reduce((sum, t) => sum + t.adj, 0) / top.length) : 0;
     const bestTag = ranked[0]?.sim > 0 ? ranked[0].id : null, bestTagSim = bestTag ? ranked[0].sim : 0;
     const boost = graph.boosts?.[n.id] || 0;
+    const feedback = fb?.get(n.id) || 0;
     return {
       node: n,
-      score: directWeight * direct + tagWeight * tagScore + boost,
+      score: directWeight * direct + tagWeight * tagScore + boost + feedback,
+      feedback,
       direct,
       tagId: bestTag,
       tagSim: bestTagSim
@@ -50,6 +81,7 @@ export function retrieve(q, graph, vecs, { topK = 3, directWeight = 0.45, tagWei
     source: c.node.source,
     facts: c.node.facts,
     score: +c.score.toFixed(4),
+    ...feedbackField(c.feedback),
     direct: +c.direct.toFixed(4),
     tag: c.tagId ? { id: c.tagId, label: tagById.get(c.tagId)?.label, desc: tagById.get(c.tagId)?.desc, sim: +c.tagSim.toFixed(4) } : null,
     otherTags: c.node.tags.filter(id => id !== c.tagId).map(id => tagById.get(id)?.label).filter(Boolean),
@@ -60,6 +92,12 @@ export function retrieve(q, graph, vecs, { topK = 3, directWeight = 0.45, tagWei
         return { label: nodeById.get(otherId)?.label, rel: e.rel, dir: e.from === c.node.id ? 'out' : 'in' };
       })
   }));
+}
+
+// 피드백 가감이 있을 때만 결과에 feedback 필드를 둔다(없으면 결과 모양이 이전과 같다)
+function feedbackField(delta) {
+  const r = +delta.toFixed(4);
+  return r ? { feedback: r } : {};
 }
 
 export function topTags(q, graph, vecs, k = 5) {
