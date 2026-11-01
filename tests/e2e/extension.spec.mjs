@@ -391,6 +391,70 @@ test('내 피드백 칸(T-132): JSON 내보내기, 보내기 설정과 미리보
   await expect(op.locator('#fbSharePreview')).toContainText('보낼 피드백이 아직 없어요.');
 });
 
+/* ───────── 첫 실행 안내 (T-116) ───────── */
+const storageGet = (page, key) => page.evaluate(async k => (await chrome.storage.local.get(k))[k], key);
+// 설치 이벤트가 onboarding을 비동기로 쓰므로, 써질 때까지 기다린 뒤 설정 화면을 새로 연다
+async function openFirstRun(ext) {
+  await expect.poll(() => storageGet(ext.page, 'onboarding')).toEqual({ pending: true });
+  await ext.page.reload();
+  return ext.page;
+}
+
+test('첫 실행 안내(T-116): 자동 + 보내기 → 시작하기면 저장되고 아래 칸도 같은 값, 새로고침해도 안 뜸', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  await expect(op.locator('#onboarding')).toBeVisible();
+  await expect(op.locator('#onboarding h2')).toHaveText('처음 오셨네요. 두 가지만 골라 주세요');
+  await expect(op.locator('input[name=obTrigger][value=modifier]')).toBeChecked();
+  await expect(op.locator('#obAutoWarn')).toBeHidden();
+  // 동의는 미리 선택된 값 없음
+  await expect(op.locator('#obShareYes')).toHaveAttribute('aria-pressed', 'false');
+  await expect(op.locator('#obShareNo')).toHaveAttribute('aria-pressed', 'false');
+
+  await op.locator('input[name=obTrigger][value=auto]').check();
+  await expect(op.locator('#obAutoWarn')).toBeVisible();
+  await expect(op.locator('#obAutoWarn')).toHaveText('호출이 많아져 무료 한도를 빨리 써요.');
+  await op.click('#obShareNo');
+  await expect(op.locator('#obShareNo')).toHaveAttribute('aria-pressed', 'true');
+  await op.click('#obShareYes');
+  await expect(op.locator('#obShareYes')).toHaveAttribute('aria-pressed', 'true');
+  await expect(op.locator('#obShareNo')).toHaveAttribute('aria-pressed', 'false');
+  await expect(op.locator('#obShareInfo')).toContainText('서버가 생기기 전까지는 이 기기에만 쌓아 둬요.');
+
+  await op.click('#obStart');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  expect(typeof (await storageGet(op, 'onboarding')).doneAt).toBe('number');
+  const s = await storageGet(op, 'settings');
+  expect(s.triggerMode).toBe('auto');
+  expect(s.feedbackShare).toBe(true);
+  await expect(op.locator('input[name=triggerMode][value=auto]')).toBeChecked();
+  await expect(op.locator('#fbShare')).toBeChecked();
+
+  await op.reload();
+  await expect(op.locator('#commonTitle')).toHaveText(/메이플스토리 · /); // 초기화가 끝날 때까지
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect(op.locator('input[name=triggerMode][value=auto]')).toBeChecked();
+});
+
+test('첫 실행 안내(T-116): 아무것도 안 고르고 넘기기 → Alt·보내지 않음, 기존 사용자(onboarding 없음)에겐 안 뜸', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  await expect(op.locator('#onboarding')).toBeVisible();
+  await op.click('#obSkip');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  const s = await storageGet(op, 'settings');
+  expect(s.triggerMode).toBe('modifier');
+  expect(s.feedbackShare).toBe(false);
+  await expect(op.locator('input[name=triggerMode][value=modifier]')).toBeChecked();
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+
+  // 기존 사용자: onboarding 키 자체가 없다
+  await op.evaluate(() => chrome.storage.local.remove('onboarding'));
+  await op.reload();
+  await expect(op.locator('#commonTitle')).toHaveText(/메이플스토리 · /);
+  await expect(op.locator('#onboarding')).toBeHidden();
+});
+
 test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async ({ context, ext }) => {
   const { send } = ext;
   expect((await send({ type: 'graph:info' })).data.merged.usesCommon).toBe(true);
