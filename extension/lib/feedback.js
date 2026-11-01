@@ -45,5 +45,5 @@ export function applyFeedback(candidates, records, sentenceHash, topK = 3) {
 
 // 그 문장 기록의 지문. 결과 캐시 키에 넣어 피드백이 바뀌면 캐시가 저절로 무효가 되게 한다
 export function feedbackKey(records, sentenceHash) {
-  return recordsFor(records, sentenceHash).map(r => `${r.id}:${r.vote}:${r.nodeId}:${r.pickedNodeId || ''}`).join(',');
+  return recordsFor(records, sentenceHash).filter(r => r.vote !== 'up').map(r => `${r.id}:${r.vote}:${r.nodeId}:${r.pickedNodeId || ''}`).join(',');
 }

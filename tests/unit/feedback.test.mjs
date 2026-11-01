@@ -70,3 +70,8 @@ test('feedbackKey: 그 문장의 기록이 바뀔 때만 바뀐다 (결과 캐�
   assert.equal(feedbackKey([...base, rec({ id: 'q', sentenceHash: 'h3' })], 'h1'), k0);
   assert.notEqual(feedbackKey([...base, rec({ id: 'r', sentenceHash: 'h1' })], 'h1'), k0);
 });
+
+test('feedbackKey: 👍은 후보를 바꾸지 않으니 지문도 바꾸지 않는다 (불필요한 LLM 재호출 방지)', () => {
+  const base = [rec({ id: 'p', vote: 'down' })];
+  assert.equal(feedbackKey([...base, rec({ id: 'u', vote: 'up' })], 'h1'), feedbackKey(base, 'h1'));
+});
