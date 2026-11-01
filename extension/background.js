@@ -5,7 +5,7 @@ import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags } from './lib/retrieval.js';
-import { addRecord, removeRecord, applyFeedback, feedbackKey } from './lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey } from './lib/feedback.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -318,6 +318,10 @@ const handlers = {
     const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
     await feedbackStore.set(addRecord(await feedbackStore.get(), r));
     return { id: r.id, result: rerun ? await explain(rerun) : null };
+  },
+  async 'feedback-reason'({ id, reason }) {
+    await feedbackStore.set(setReason(await feedbackStore.get(), id, reason));
+    return true;
   },
   async 'feedback-undo'({ id, rerun }) {
     await feedbackStore.set(removeRecord(await feedbackStore.get(), id));

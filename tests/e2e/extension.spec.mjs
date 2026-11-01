@@ -180,6 +180,101 @@ test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ conte
   await expect.poll(() => tooltip(page), { timeout: 5000 }).toBe('');
 });
 
+/* ───────── 말풍선 원클릭 피드백 (T-106, ADR 0010) ───────── */
+const box = page => page.locator('#analogy-helper-host .box');
+const evidence = async page => (await tooltip(page)).match(/근거: (.+)/)?.[1]?.trim();
+
+test('피드백 UI: 👎 한 번 → 글자 입력 없이 다른 근거로 다시, 반영 칩, 되돌리기 (T-106)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  await expect(box(page).getByRole('button', { name: '잘 맞아요' })).toBeVisible();
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain(`이 문장엔 '${first}'`);
+  await expect.poll(() => evidence(page)).not.toBe(first);
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+  expect(await box(page).locator('input, textarea, [contenteditable]').count(), '입력칸 없음').toBe(0);
+  const now = await evidence(page);
+  expect(await box(page).locator('button.alt').allInnerTexts(), '지금 근거와 뺀 개념은 칩에 없음').not.toContain(now);
+  expect(await box(page).locator('button.alt').allInnerTexts()).not.toContain(first);
+  const undo = await box(page).getByRole('button', { name: '되돌리기' }).boundingBox();
+  const close = await box(page).locator('button.close').boundingBox();
+  expect(undo.x + undo.width <= close.x || undo.y >= close.y + close.height, '되돌리기와 닫기 버튼이 겹치지 않음').toBe(true);
+  await box(page).getByRole('button', { name: '되돌리기' }).click();
+  await expect.poll(() => evidence(page)).toBe(first);
+  expect(await tooltip(page)).not.toContain('내 피드백 반영');
+});
+
+test('피드백 UI: 다른 개념 칩 → 그 개념이 근거, 다시 호버해도 반영 칩 (T-106)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  const alt = box(page).locator('button.alt').first();
+  await expect(alt).toBeVisible();
+  const label = (await alt.innerText()).trim();
+  await alt.click();
+  await expect.poll(() => evidence(page)).toBe(label);
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p2', 9);
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+  expect(await evidence(page)).toBe(label);
+});
+
+test('피드백 UI: 비유 없음 화면의 후보 칩 → 비유, 후보 밖 nodeId면 골라도 숨김(규칙 1) (T-106)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p4');
+  await expect.poll(() => tooltip(page)).toContain('혹시 이 중에 있나요?');
+  const chip = box(page).locator('button.alt').first();
+  const label = (await chip.innerText()).trim();
+  await chip.click();
+  await expect.poll(() => evidence(page)).toBe(label);
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p3');
+  await expect.poll(() => tooltip(page)).toContain('혹시 이 중에 있나요?');
+  await box(page).locator('button.alt').first().click();
+  await expect.poll(() => tooltip(page)).toContain('근거 목록에 없는');
+  expect(await tooltip(page)).not.toContain('메이플로 치면');
+});
+
+test('피드백 UI: 👍은 "고마워요"만, 이유 칩은 기록에 남는다 (T-106)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const before = await evidence(page);
+  await box(page).getByRole('button', { name: '잘 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain('고마워요');
+  expect(await evidence(page)).toBe(before);
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await box(page).getByRole('button', { name: '비유가 억지예요' }).click();
+  await expect.poll(() => ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback.map(r => `${r.vote}:${r.reason || ''}`))).toEqual(['up:', 'down:forced']);
+});
+
+test('피드백 UI: 자동 모드에서 말풍선으로 옮겨 가도 닫히지 않고 👎를 누를 수 있다 (T-106)', async ({ context, ext }) => {
+  await ext.setSettings({ triggerMode: 'auto', dwellMs: 300 });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { x, y } = await pointOnChar(page, '#p1', 10);
+  await page.mouse.move(x, y);
+  await page.mouse.move(x + 1, y);
+  await expect.poll(() => tooltip(page), { timeout: 10000 }).toContain('메이플로 치면');
+  const first = await evidence(page);
+  const b = await box(page).getByRole('button', { name: '안 맞아요' }).boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
+  await page.mouse.down(); await page.mouse.up();
+  await expect.poll(() => evidence(page), { timeout: 10000 }).not.toBe(first);
+});
+
 test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async ({ context, ext }) => {
   const { send } = ext;
   expect((await send({ type: 'graph:info' })).data.merged.usesCommon).toBe(true);
