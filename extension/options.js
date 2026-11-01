@@ -30,6 +30,43 @@ function syncTriggerUI() {
   $('#modifierKey').disabled = mode !== 'modifier';
   $('#dwellMs').disabled = mode !== 'auto';
 }
+// 저장된 설정을 "사용 방식" 칸에 그린다 (초기화와 첫 실행 안내가 같이 씀)
+function renderTrigger(s) {
+  $('#enabled').checked = s.enabled;
+  const r = document.querySelector(`input[name=triggerMode][value="${s.triggerMode}"]`);
+  if (r) r.checked = true;
+  $('#modifierKey').value = s.modifierKey;
+  $('#dwellMs').value = s.dwellMs;
+  $('#preciseMode').checked = s.preciseMode;
+  syncTriggerUI();
+}
+
+/* ───────── 첫 실행 안내 (T-116) ───────── */
+async function initOnboarding() {
+  const { onboarding } = await chrome.storage.local.get('onboarding');
+  $('#onboarding').hidden = !onboarding?.pending;
+}
+document.querySelectorAll('input[name=obTrigger]').forEach(r => r.addEventListener('change', () => {
+  $('#obAutoWarn').hidden = document.querySelector('input[name=obTrigger]:checked')?.value !== 'auto';
+}));
+for (const id of ['#obShareYes', '#obShareNo']) $(id).addEventListener('click', e => {
+  // 누른 쪽만 눌림. 미리 선택된 값은 없다(웹스토어 사용자 데이터 정책)
+  for (const b of ['#obShareYes', '#obShareNo']) $(b).setAttribute('aria-pressed', String($(b) === e.currentTarget));
+});
+async function finishOnboarding(patch) {
+  try {
+    state.settings = await send('settings:save', { patch });
+    await chrome.storage.local.set({ onboarding: { pending: false, doneAt: Date.now() } });
+    $('#onboarding').hidden = true;
+    renderTrigger(state.settings);
+    await loadFeedback(); // #fbShare를 저장된 값으로
+  } catch (err) { setStatus($('#obStatus'), err.message, 'err'); }
+}
+$('#obStart').addEventListener('click', () => finishOnboarding({
+  triggerMode: document.querySelector('input[name=obTrigger]:checked')?.value || 'modifier',
+  feedbackShare: $('#obShareYes').getAttribute('aria-pressed') === 'true'
+}));
+$('#obSkip').addEventListener('click', () => finishOnboarding({ triggerMode: 'modifier', feedbackShare: false }));
 
 /* ───────── AI 제공자 ───────── */
 function fillProvider(id) {
@@ -278,13 +315,8 @@ $('#fbShare').addEventListener('change', async () => {
 /* ───────── 초기화 ───────── */
 (async function init() {
   state = await send('settings:get');
-  const s = state.settings;
-  $('#enabled').checked = s.enabled;
-  document.querySelector(`input[name=triggerMode][value="${s.triggerMode}"]`).checked = true;
-  $('#modifierKey').value = s.modifierKey;
-  $('#dwellMs').value = s.dwellMs;
-  $('#preciseMode').checked = s.preciseMode;
-  syncTriggerUI();
+  renderTrigger(state.settings);
+  initOnboarding().catch(() => {});
 
   const allowed = state.admin.allowedProviders || Object.keys(state.providers);
   $('#provider').innerHTML = allowed.filter(id => state.providers[id])
