@@ -183,9 +183,20 @@ test('내 피드백(T-132): 목록·공유 설정·7일 통계·지운 노드 �
   expect(l1.data.share).toBe(false);
   await ext.setSettings({ feedbackShare: true });
   expect((await ext.send({ type: 'feedback:list' })).data.share).toBe(true);
+  // 호버 집계는 기다리지 않고 쓰므로 poll로 읽는다
+  const hovers = async () => (await ext.send({ type: 'feedback:stats' })).data.hovers;
+  await expect.poll(hovers).toBeGreaterThanOrEqual(1);
   const st = await ext.send({ type: 'feedback:stats' });
-  expect(st.data.hovers).toBeGreaterThanOrEqual(1);
   expect(st.data.down).toBe(1);
+  // 피드백 뒤 다시 비유(rerun)는 호버로 세지 않는다
+  const before = st.data.hovers;
+  const rr = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId, tagId: null, vote: 'down' }, rerun: q });
+  expect(rr.data.result).toBeTruthy();
+  await new Promise(r => setTimeout(r, 300));
+  expect(await hovers()).toBe(before);
+  // 그 down 기록은 지워 아래 개수 검사를 그대로 둔다
+  await ext.send({ type: 'feedback-undo', id: rr.data.id });
+  expect(await hovers()).toBe(before);
   // 그래프에 없는 노드면 라벨 대신 id 그대로
   await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'gone-node', vote: 'down' } });
   const l2 = await ext.send({ type: 'feedback:list' });
@@ -199,7 +210,7 @@ test('내 피드백(T-132): 목록·공유 설정·7일 통계·지운 노드 �
   expect((await ext.send({ type: 'feedback:list' })).data.items).toHaveLength(0);
 });
 
-test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다',async ({ context, ext }) => {
+test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ context, ext }) => {
   await ext.setSettings({ triggerMode: 'auto', dwellMs: 500 });
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
