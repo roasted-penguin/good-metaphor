@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractMeaning, buildAnalogyPrompt } from '../../extension/lib/prompt.js';
+import { extractMeaning, buildAnalogyPrompt, rewriteQueryText } from '../../extension/lib/prompt.js';
 
 test('extractMeaning: 따옴표가 닫히기 전에는 null', () => {
   assert.equal(extractMeaning(''), null);
@@ -26,4 +26,11 @@ test('extractMeaning: meaning이 없거나 비어 있으면 null', () => {
 test('비유 프롬프트: 필드 순서를 meaning → analogy → nodeId 로 고정한다', () => {
   const { system } = buildAnalogyPrompt({ sentence: 's', domain: '메이플스토리', analogyPrefix: '메이플로 치면', candidates: [] });
   assert.match(system, /meaning, analogy, nodeId, tagId, mapping 순서로/);
+});
+
+test('rewriteQueryText: 정밀 모드는 추상 + 원문, abstract 모드는 추상만, 추상이 비면 원문 (T-113 (4))', () => {
+  assert.equal(rewriteQueryText('구조', '원문'), '구조 원문');
+  assert.equal(rewriteQueryText('구조', '원문', 'abstract'), '구조');
+  assert.equal(rewriteQueryText('  ', '원문'), '원문');
+  assert.equal(rewriteQueryText(null, '원문', 'abstract'), '원문');
 });

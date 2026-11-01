@@ -10,6 +10,13 @@ export function buildAbstractPrompt({ sentence, word, pageTitle }) {
   return { system, user };
 }
 
+// 검색 질의 문자열. 'precise'(정밀 모드) = 추상 구조 + 원문, 'abstract' = 추상 구조만. 추상이 비면 원문
+export function rewriteQueryText(abstractText, sentence, mode = 'precise') {
+  const a = (abstractText || '').trim();
+  if (!a) return sentence;
+  return mode === 'abstract' ? a : `${a} ${sentence}`;
+}
+
 export function buildAnalogyPrompt({ sentence, context, word, pageTitle, domain, analogyPrefix, candidates }) {
   const system = [
     `너는 사용자가 이해하기 어려워하는 문장을, 사용자가 잘 아는 "${domain}"에 빗대 짧게 설명하는 도우미다.`,

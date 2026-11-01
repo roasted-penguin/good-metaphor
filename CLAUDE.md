@@ -39,6 +39,8 @@ npm run test:unit                # 순수 함수만, 1초 이내
 npm run test:e2e                 # 확장을 실제 크롬에 로드. CHROMIUM_PATH=... 로 브라우저 지정 가능, HEADED=1 로 화면 보기
 npm run eval                     # 실제 임베딩 모델로 검색 품질(hit@1/@3). -- -v 로 틀린 문장 출력
 npm run eval:fallback            # 모델 없이 같은 평가
+npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장이 하나라도 틀리면 실패. 검색을 바꾸는 PR은 항상 돌린다
+npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
 ```
 
@@ -92,6 +94,7 @@ scripts/                     build, prepare-e2e
 - transformers.js의 `env.useWasmCache`는 꺼 둬야 한다(blob: URL import가 확장 CSP에 막힘). wasm 경로는 `chrome.runtime.getURL('vendor/...')`.
 - 확장 페이지는 `eval`이 막혀 있어 Playwright `waitForFunction('문자열')`이 실패한다. `page.evaluate(함수)`나 `expect.poll`을 쓴다.
 - 모델 다운로드처럼 긴 작업 중 서비스 워커가 잠들 수 있다. `keepAlive()`로 감싼다.
+- **검색 조정은 회귀 0이어야 한다**(사용자 원칙, 2026-10-18). 합계가 올라도 잘 맞던 문장이 틀리면 채택하지 않는다. q8 임베딩은 함께 묶인 배치에 따라 벡터가 달라지므로 평가는 질의를 한 문장씩 임베딩한다(`eval.mjs`).
 - 회사망 등에서 Hugging Face가 막히면 모델 로드가 실패하고 대체 임베더로 조용히 바뀐다(`fallbackOnError`). 품질 비교 때 `debug.embedderId`를 꼭 확인.
 - 모델 ID·가격은 2026-09-28에 각 사 문서로 확인한 값이다. 바뀌면 `config/admin.json`의 `defaultModels`·`fallbackChain`과 `lib/providers.js`를 함께 고친다.
 - **모델을 고르거나 바꿀 때 성능 비교는 [Artificial Analysis 리더보드](https://artificialanalysis.ai/leaderboards/models)를 먼저 참고한다**(지능 지수, 출력 속도, 첫 토큰 지연, 가격). 후보를 거기서 추린 뒤 `npm run smoke:providers`(`--all-models`)로 이 앱 기준(뜻까지 시간, 존댓말, 근거 준수, JSON, 무료 한도)을 직접 잰다. 리더보드 수치는 확인한 날짜와 함께 적는다.

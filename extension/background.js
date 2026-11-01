@@ -5,7 +5,7 @@ import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags } from './lib/retrieval.js';
-import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning } from './lib/prompt.js';
+import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -146,7 +146,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     onStage('abstract');
     const p = buildAbstractPrompt({ sentence, word, pageTitle });
     abstractText = (await ask(p.system, p.user, { json: false })).trim();
-    if (abstractText) queryText = `${abstractText} ${sentence}`;
+    queryText = rewriteQueryText(abstractText, sentence);
   }
 
   onStage('search');

@@ -37,6 +37,7 @@
 | T-115 | 앱 이름을 "좋은비유네용"으로 바꾸기 | 1 품질 | P1 | 대기 | |
 | T-114 | 메이플 커뮤니티 용어 사전: 은어 aliases + 멸칭 금칙어 필터 | 1 품질 | P1 | 대기 | |
 | T-113 | 금융·경제 문장이 `meso`·`auction`으로 끌려가는 주제 편향 줄이기 | 1 품질 | P0 | 대기 | |
+| T-134 | **[사용자 결정]** 평가 도구: 금융 그룹·검증셋·회귀 가드(`--guard`)·결과 고정·질의 재작성 시험 (T-113에서 분리, T-103 선행) | 1 품질 | P0 | 리뷰 | |
 | D-2 | 로그인 방식과 백엔드 | 결정 | P0 | 보류 | **L3 시작 전에 결정** (추천 d) |
 | T-201 | 사용자 저장소 서버 + remote 어댑터 연결 | 2 계정 | P0 | 대기 | D-2 |
 | T-202 | 그래프 편집 화면 (JSON 대신 폼) | 2 계정 | P1 | 대기 | |
@@ -217,6 +218,11 @@ Alt를 눌렀다 떼면 크롬 메뉴로 포커스가 가는 문제를 keyup `pr
 **할 일** 차례로 시도하고 각각 EVAL_LOG에 기록: (1) 노드 임베딩 텍스트에서 게임 고유 용어 비중 줄이고 구조 설명 비중 늘리기 (2) 태그에 분야가 다른 예문 `examples` 추가(T-103과 공유) (3) 경제 태그(`market_price`, `inflation`)에 일정 감점 또는 태그 점수 상위 2개 평균 (4) 질의를 LLM으로 "추상 구조 한 줄"로 바꾼 뒤 임베딩(정밀 모드와 같음, 무료 키로 시험) (5) 태그를 임베딩 대신 판정 모델로 고르기(T-120, Jev 또는 Gemini 객관식).
 **완료 기준** 실제 모델 혼합 hit@1 ≥ 13/16, 금융 문장 5건 중 3건 이상 맞힘. T-103의 확장 평가셋에서도 떨어지지 않을 것.
 **파일** `extension/lib/graph.js`, `extension/lib/retrieval.js`, `extension/data/common/maplestory.json`, `tools/eval.mjs`
+
+### T-134 평가 도구 (T-113에서 분리)
+**왜** T-113 PR #11은 회귀 2건으로 Draft가 됐지만 그 과정에서 만든 평가 도구는 T-103·T-133·T-130이 모두 쓴다. 병합 안 된 브랜치 위에 쌓지 않도록 도구만 먼저 dev로(사용자 결정, 2026-10-18).
+**할 일** `tools/eval-lib.mjs`(`scoreCases`·`mixedSetting`·`regressions`), `eval.mjs`가 평가셋·검증셋·그룹별 hit@1·회귀를 출력, `--guard`(회귀 있으면 종료 코드 1), 질의 한 문장씩 임베딩(q8 배치 차이), `--rewrite <제공자>`(정밀 모드 프롬프트, 결과 캐시). `prompt.js` `rewriteQueryText`를 확장 정밀 모드와 공유. `eval-guard.json`은 dev가 지금 맞히는 문장.
+**완료 기준** 단위 테스트 통과, 실제 모델 `npm run eval -- --guard` 종료 코드 0, 회귀가 있으면 1(대체 임베더로 확인).
 
 ### T-119 실제 키 스모크 CI 워크플로
 **왜** 로컬 `~/.zshrc` 말고도 같은 키로 언제든 제공자 형식을 확인할 수 있게 한다. 공개 저장소라 키는 Actions 비밀값에만 둔다(암호화 `.env` 커밋은 검토 후 보류: 무료 키라 위험은 낮지만 개인키 관리 부담이 생기고, 비밀값으로 충분).
@@ -432,6 +438,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-10-18 | T-134 | task/T-134-eval-tooling | [#13](https://github.com/roasted-penguin/good-metaphor/pull/13) | **[사용자 결정]** T-113 평가 도구만 분리. 금융 그룹·검증셋 14문장·회귀 가드 17문장(`--guard`)·질의 한 문장씩 임베딩(q8 배치 차이로 ±2 흔들림)·`--rewrite`. 단위 57, e2e 9 통과, 실제 모델 `--guard` 0, 대체 임베더로 실패 경로 확인. |
 | 2026-10-18 | T-127 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** 로컬 Ollama `gemma4:12b`를 호버 체인 맨 뒤 최종 방어선으로(`local`은 항상 맨 뒤). 규칙 8과 설계 문서 세 곳 갱신. Ollama 미설치로 실제 호출 미확인. |
 | 2026-10-18 | T-125 | task/T-125-chain-nvidia | [#10](https://github.com/roasted-penguin/good-metaphor/pull/10) | **[사용자 추가]** #9 병합 뒤 커밋 5개가 빠져 따로 올림: 체인 Groq → Gemini 3.5 Flash-Lite → NVIDIA super-vl(thinking 끔, 뜻 0.5~1.0초), `PROVIDERS.nvidia`, 체인 설정 검사 테스트. T-124 완료 반영. |
 | 2026-10-18 | T-124 | task/T-124-fallback-chain | [#9](https://github.com/roasted-penguin/good-metaphor/pull/9) | **[사용자 추가]** Groq `gpt-oss-120b` → Gemini `gemini-3.5-flash-lite` → NVIDIA `nemotron-3.5-super-vl` fallback 체인(처음 3.8 Flash였다가 재측정 뒤 사용자 결정으로 교체), 429 쿨다운(Retry-After, 기본 60초, 상한 10분, session 저장). 다음 순서가 있으면 429 재시도 생략, 키 오류는 체인 안 탐. 기본 제공자 groq. T-117 위에 쌓음. 실제 키로 체인 동작은 미확인(Groq 키가 로컬에 없음). |
