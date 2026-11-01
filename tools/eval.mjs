@@ -97,7 +97,8 @@ for (const [modeName, mode] of queryModes) for (const { name, cases } of sets) {
   console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${useFallback ? 'fallback n-gram' : admin.embedding.model}\n`);
   for (const s of settings) {
     const { topK, ...opts } = s;
-    const r = scoreCases(cases, (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: 3 }).map(x => x.id));
+    const rank = (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: 3 }).map(x => ({ id: x.id, score: x.score }));
+    const r = scoreCases(cases, rank);
     const groups = Object.entries(r.groups).map(([g, v]) => `  ${g} ${v.hit1}/${v.n}`).join('');
     console.log(`${s.name.padEnd(18)}  hit@1 ${pct(r.hit1, r.n)}  hit@3 ${pct(r.hit3, r.n)}${groups}`);
     if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);
@@ -105,10 +106,23 @@ for (const [modeName, mode] of queryModes) for (const { name, cases } of sets) {
       const reg = regressions(guard, r);
       regressed += reg.length;
       console.log(reg.length ? reg.map(x => `  ⚠ 회귀(잘 맞던 문장이 틀림): ${x}`).join('\n') : '  회귀 없음');
+      // 조정에 쓰지 않은 T-103 새 문장만 따로 (깨끗한 확인용)
+      const idx = cases.map((c, i) => [c, i]).filter(([c]) => c.since === 'T-103');
+      if (idx.length) {
+        const f = scoreCases(idx.map(([c]) => c), (c, j) => rank(c, idx[j][1]));
+        console.log(`  T-103 새 문장  hit@1 ${pct(f.hit1, f.n)}  hit@3 ${pct(f.hit3, f.n)}`);
+      }
+      // 비유가 없어야 하는 문장의 1위 점수 vs 맞힌 문장의 1위 점수 (임계값 근거)
+      if (r.noMatch.length) {
+        const hs = [...r.hitScores].sort((a, b) => a - b);
+        const fmt = x => x.toFixed(3);
+        console.log(`  비유 없음 ${r.noMatch.length}문장 1위 점수 ${r.noMatch.map(m => fmt(m.score)).join(' ')} | 맞힌 문장 1위 점수 최소 ${fmt(hs[0])} · 중간 ${fmt(hs[hs.length >> 1])}`);
+      }
     }
   }
   let t1 = 0;
-  cases.forEach((c, i) => { if (topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
-  console.log(`\n추상 태그 top-1 정확도: ${pct(t1, cases.length)}`);
+  const tagged = cases.filter(c => c.expectTag);
+  cases.forEach((c, i) => { if (c.expectTag && topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
+  console.log(`\n추상 태그 top-1 정확도: ${pct(t1, tagged.length)}`);
 }
 if (failGuard && regressed) { console.log(`\n회귀 ${regressed}건`); process.exit(1); }
