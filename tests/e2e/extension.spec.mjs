@@ -168,6 +168,29 @@ test('피드백(T-129): 다른 개념을 고르면 그 개념이 근거, 후보 
   expect(lf.data.result.rejected).toMatch(/근거 목록에 없는/);
 });
 
+test('비슷한 문장(T-130): 👎 기록에 벡터 저장(목록엔 없음) → 거의 같은 문장은 감점, 무관한 문장은 그대로', async ({ ext }) => {
+  const a = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...a });
+  const x = r1.data.evidence.nodeId;
+  await ext.send({ type: 'feedback', record: { sentence: a.sentence, nodeId: x, tagId: null, vote: 'down', provider: r1.data.debug.provider } });
+  // 기록에는 벡터가 붙지만 설정 화면·내보내기용 목록에는 싣지 않는다
+  const stored = await ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback);
+  expect(Array.isArray(stored[0].vec) && stored[0].vec.length > 0).toBe(true);
+  const l = await ext.send({ type: 'feedback:list' });
+  expect(Object.keys(l.data.items[0])).not.toContain('vec');
+  // 끝 마침표만 다른 문장: 대체 임베더 코사인 ≥ 임계값 → X 감점
+  const a2 = { ...a, sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다' };
+  const r2 = await ext.send({ type: 'explain', ...a2 });
+  const sim = r2.data.debug.feedback.similar;
+  expect(sim.find(s => s.nodeId === x)?.delta).toBeLessThan(0);
+  expect(r2.data.feedbackApplied).toBe(true);
+  // 무관한 문장은 가감 없음
+  const b = { ...a, sentence: '근력 운동은 초보 때는 빨리 늘지만 숙련될수록 같은 노력 대비 성장이 더뎌진다.' };
+  const r3 = await ext.send({ type: 'explain', ...b });
+  expect(r3.data.debug.feedback.similar).toEqual([]);
+  expect(r3.data.feedbackApplied).toBe(false);
+});
+
 test('내 피드백(T-132): 목록·공유 설정·7일 통계·지운 노드 라벨·전부 지우기 메시지', async ({ ext }) => {
   const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
   const r1 = await ext.send({ type: 'explain', ...q });
