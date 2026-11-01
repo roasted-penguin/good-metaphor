@@ -50,6 +50,34 @@ export function applyFeedback(candidates, records, sentenceHash, topK = 3) {
   return { candidates: kept.slice(0, topK), applied, excluded, pinned: null };
 }
 
+/**
+ * 비슷한 문장 피드백 메모리 (T-130). 지금 문장(sentenceHash)이 아닌 다른 문장의 👎·고정 기록을
+ * retrieve의 feedbackMemory 모양으로 바꾼다. 원문 없이 벡터 + 노드만 쓴다.
+ * 문장마다 applyFeedback과 같은 규칙: 같은 노드는 나중 기록이 이기고, 고정은 하나만.
+ * 벡터(vec)가 없는 기록(임베딩 실패, T-130 이전 기록)은 뺀다.
+ * @returns {Array<{ vec: number[], nodeId: string, vote: 'down'|'pick' }>}
+ */
+export function similarMemory(records, sentenceHash) {
+  const bySentence = new Map(); // sentenceHash -> Map(nodeId -> 기록)
+  for (const r of [...(records || [])].sort((a, b) => a.ts - b.ts)) {
+    if (r.sentenceHash === sentenceHash) continue;
+    if (!bySentence.has(r.sentenceHash)) bySentence.set(r.sentenceHash, new Map());
+    const last = bySentence.get(r.sentenceHash);
+    if (r.vote === 'down' && r.nodeId) last.set(r.nodeId, { vote: 'down', vec: r.vec });
+    if (r.vote === 'pick' && r.pickedNodeId) {
+      for (const [id, v] of last) if (v.vote === 'pick') last.delete(id); // 고정은 하나만
+      last.set(r.pickedNodeId, { vote: 'pick', vec: r.vec });
+    }
+  }
+  const out = [];
+  for (const last of bySentence.values()) {
+    for (const [nodeId, { vote, vec }] of last) {
+      if (Array.isArray(vec) && vec.length) out.push({ vec, nodeId, vote });
+    }
+  }
+  return out;
+}
+
 // 그 문장 기록의 지문. 결과 캐시 키에 넣어 피드백이 바뀌면 캐시가 저절로 무효가 되게 한다
 export function feedbackKey(records, sentenceHash) {
   return recordsFor(records, sentenceHash).filter(r => r.vote !== 'up').map(r => `${r.id}:${r.vote}:${r.nodeId}:${r.pickedNodeId || ''}`).join(',');

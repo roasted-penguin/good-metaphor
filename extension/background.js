@@ -4,8 +4,8 @@ import { complete, parseJSONLoose, PROVIDERS } from './lib/providers.js';
 import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
-import { retrieve, topTags } from './lib/retrieval.js';
-import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay } from './lib/feedback.js';
+import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
+import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay } from './lib/feedback.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -129,6 +129,19 @@ async function cachePut(key, value) {
   await chrome.storage.session.set({ results });
 }
 
+// 피드백 기록에 붙이는 질의 벡터(T-130). explain과 같은 오프스크린 embed(kind query)지만,
+// 정밀 모드의 질의 재작성은 LLM 호출이라 하지 않고 원문 문장으로 만든다. 저장 크기를 줄이려 소수 넷째 자리로 반올림.
+// 임베딩이 실패하면 null — 피드백은 벡터 없이도 저장한다
+async function queryVector(sentence) {
+  try {
+    const { vectors: [v] } = await keepAlive(offscreen('embed', { texts: [String(sentence ?? '')], kind: 'query' }));
+    return Array.isArray(v) ? v.map(x => Math.round(x * 1e4) / 1e4) : null;
+  } catch (e) {
+    console.warn('[feedback] 문장 벡터를 못 만들었어요', e);
+    return null;
+  }
+}
+
 // onPartial({ meaning }) 은 스트리밍 중 meaning 이 처음 완성될 때 한 번 불린다. 비유는 넣지 않는다(검증 전이라서)
 async function explain({ sentence, context, word, pageTitle, noCache }, onStage = () => {}, onPartial = null) {
   const t0 = Date.now();
@@ -142,7 +155,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const sentenceHash = await sentenceHashOf(sentence);
   const feedbackRecords = await feedbackStore.get();
   // 피드백 지문을 캐시 키에 넣어, 그 문장의 피드백이 바뀌면 캐시가 저절로 무효가 된다
-  const cacheKey = await sha1([sentence, word, graphKey, provider.id, provider.model, settings.preciseMode, feedbackKey(feedbackRecords, sentenceHash)].join('|'));
+  // 비슷한 문장 메모리(T-130)는 다른 문장의 기록이라, 그 기록 id 목록도 키에 넣어 새 👎·고정이 생기면 무효가 되게 한다
+  const memoryKey = feedbackRecords.filter(r => r.vec && r.vote !== 'up' && r.sentenceHash !== sentenceHash).map(r => r.id).join(',');
+  const cacheKey = await sha1([sentence, word, graphKey, provider.id, provider.model, settings.preciseMode, feedbackKey(feedbackRecords, sentenceHash), memoryKey].join('|'));
   if (!noCache) {
     const hit = await cacheGet(cacheKey);
     if (hit) return { ...hit, cached: true };
@@ -175,8 +190,20 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const { vectors: [q] } = await offscreen('embed', { texts: [queryText], kind: 'query' });
   // 피드백으로 빠지는 후보가 있어도 topK를 채우도록 넉넉히 뽑은 뒤 적용한다
   const topK = admin.retrieval?.topK ?? 3;
-  const fb = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5 }), feedbackRecords, sentenceHash, topK);
+  // 다른 문장의 👎·고정 중 지금 문장과 코사인이 임계값 이상인 것만 점수를 가감한다(T-130)
+  const memory = similarMemory(feedbackRecords, sentenceHash);
+  const fb = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackMemory: memory }), feedbackRecords, sentenceHash, topK);
   const candidates = fb.candidates;
+  const similar = memory.length
+    ? [...feedbackAdjust(q, memory, { sim: admin.retrieval?.feedbackSim ?? 0.92, max: admin.retrieval?.feedbackMax ?? 0.1 })]
+      .filter(([, d]) => d).map(([nodeId, d]) => ({ nodeId, delta: +d.toFixed(4) }))
+    : [];
+  // 비슷한 문장 가감이 상위 topK 순서를 바꿨는지는 메모리 없이 한 번 더 뽑아 비교한다(검색은 가볍다)
+  let similarChanged = false;
+  if (similar.length) {
+    const plain = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5 }), feedbackRecords, sentenceHash, topK);
+    similarChanged = plain.candidates.map(c => c.id).join() !== candidates.map(c => c.id).join();
+  }
   const tags = topTags(q, graph, vecs, 5);
 
   onStage('generate');
@@ -216,9 +243,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     } : null,
     domain: graph.domain,
     theme: graph.theme,
-    feedbackApplied: fb.applied,
+    feedbackApplied: fb.applied || similarChanged,
     debug: {
-      feedback: { excluded: fb.excluded, pinned: fb.pinned },
+      feedback: { excluded: fb.excluded, pinned: fb.pinned, similar },
       candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagSim: c.tag?.sim, source: c.source })),
       topTags: tags,
       abstractText,
@@ -328,6 +355,11 @@ const handlers = {
   // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
   async feedback({ record, rerun }) {
     const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
+    delete r.vec; // 벡터는 받지 않고 여기서 만든다
+    if (r.vote === 'down' || r.vote === 'pick') {
+      const vec = await queryVector(record.sentence);
+      if (vec) r.vec = vec;
+    }
     await feedbackStore.set(addRecord(await feedbackStore.get(), r));
     return { id: r.id, result: rerun ? await explain(rerun) : null };
   },
