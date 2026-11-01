@@ -15,6 +15,13 @@ export function removeRecord(list, id) {
   return list.filter(r => r.id !== id);
 }
 
+// 👎 뒤 고르는 이유(선택). forced = 비유가 억지, meaning = 뜻이 틀림(LLM 문제, T-122), fact = 사실이 틀림(공통 노드 제보, T-118), none = 맞는 개념 없음
+export const REASONS = ['forced', 'meaning', 'fact', 'none'];
+export function setReason(list, id, reason) {
+  if (!REASONS.includes(reason)) throw new Error(`알 수 없는 이유: ${reason}`);
+  return list.map(r => (r.id === id ? { ...r, reason } : r));
+}
+
 // 그 문장의 기록만 시간순으로
 function recordsFor(records, sentenceHash) {
   return records.filter(r => r.sentenceHash === sentenceHash).sort((a, b) => a.ts - b.ts);

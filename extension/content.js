@@ -174,11 +174,13 @@
           --bg: #ffffff; --ink: #1f2328; --muted: #656d76; --line: #d8dee4; --label: #8250df;
           --em: #1f2328; --chip-bg: #f1f3f5; --chip-ink: #3d4450; --chip2-bg: #eef1ff; --chip2-ink: #3a47b8;
           --user-bg: #e6f4ff; --user-ink: #0b5cad; --accent: #4f5bd5; --shadow: 0 8px 28px rgba(15, 20, 30, .16);
+          --fb-bg: #e7f6ec; --fb-ink: #1a7f37;
         }
         @media (prefers-color-scheme: dark) {
           .box.t-neutral { --bg: #1d2129; --ink: #e8eaee; --muted: #9aa3b2; --line: #343a46; --label: #b99cff;
             --em: #ffffff; --chip-bg: #2a303b; --chip-ink: #cfd5df; --chip2-bg: #262d4a; --chip2-ink: #aab4ff;
-            --user-bg: #15324d; --user-ink: #9fd0ff; --accent: #8d96ff; --shadow: 0 8px 28px rgba(0,0,0,.5); }
+            --user-bg: #15324d; --user-ink: #9fd0ff; --accent: #8d96ff; --shadow: 0 8px 28px rgba(0,0,0,.5);
+            --fb-bg: #16351f; --fb-ink: #7ee2a0; }
         }
         .box.t-maple {
           --bg: rgba(22, 28, 43, .97); --ink: #eef1f7; --muted: #9ba5bd; --line: #46506a;
@@ -188,6 +190,7 @@
           --chip2-bg: rgba(190, 140, 255, .16); --chip2-ink: #d2b1ff; /* 에픽 보라 = 추상 태그 */
           --user-bg: rgba(90, 200, 255, .15); --user-ink: #8fdcff;    /* 레어 파랑 = 내 저장소 */
           --accent: #ff9a2e;                         /* 단풍잎 주황 */
+          --fb-bg: rgba(160, 230, 60, .14); --fb-ink: #b9ef5a;       /* 레전드리 초록 = 내 피드백 반영 */
           --shadow: 0 10px 30px rgba(0, 0, 0, .45);
         }
         .box { position: fixed; max-width: 380px; min-width: 240px; box-sizing: border-box;
@@ -213,6 +216,22 @@
         .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: s .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
         @keyframes s { to { transform: rotate(360deg); } }
         .err { color: #e5534b; }
+        /* 피드백 (T-106, ADR 0010): 평소엔 흐리게, 말풍선 위에서 또렷하게. 👎은 중립 회색, 반영은 초록 */
+        .fb { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
+        .fbtn { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+          color: var(--muted); opacity: .55; transition: opacity .12s; }
+        .box:hover .fbtn { opacity: 1; }
+        .fbtn svg { width: 16px; height: 16px; }
+        .fbtn.down svg { transform: rotate(180deg); }
+        .fbtn.up.on { color: var(--fb-ink); opacity: 1; }
+        button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
+        .thanks { font-size: 11.5px; color: var(--fb-ink); padding: 0 6px; }
+        .fbbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin: 0 0 6px; padding-right: 18px; } /* 닫기(×)와 겹치지 않게 */
+        .ask { font-size: 11.5px; color: var(--muted); margin: 6px 0 4px; }
+        .chip.fb { background: var(--fb-bg); color: var(--fb-ink); }
+        .chip.alt, .chip.reason { cursor: pointer; padding: 3px 10px; background: transparent; border: 1px solid var(--line); color: var(--ink); }
+        .chip.reason { color: var(--muted); }
+        .chip.alt:hover, .chip.reason:hover { background: var(--chip-bg); }
       </style>
       <div class="box" role="dialog" aria-live="polite"></div>`;
     box = shadow.querySelector('.box');
@@ -252,6 +271,77 @@
     analogy: '비유 찾는 중'
   };
 
+  // 을/를
+  function eul(word) {
+    const code = String(word).slice(-1).charCodeAt(0) - 0xac00;
+    return code >= 0 && code <= 11171 && code % 28 ? '을' : '를';
+  }
+  const THUMB = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v11H3V10h4z"/><path d="M7 10l4-8a3 3 0 0 1 3 3v4h5.5a2 2 0 0 1 2 2.3l-1.3 8a2 2 0 0 1-2 1.7H7"/></svg>';
+  const REASON_CHIPS = [['forced', '비유가 억지예요'], ['meaning', '뜻이 틀렸어요'], ['fact', '사실이 틀렸어요']];
+
+  /* ───────── 원클릭 피드백 (T-106, ADR 0010) ─────────
+     글자 입력 없음. 👎 → 그 자리에서 다른 비유, 칩은 선택. 되돌리기 5초, 칩은 3초 뒤 접힘(말풍선 위에 있으면 유지) */
+  let view = null;
+  let fbTimers = [];
+  const ask = (type, extra) => new Promise(res => {
+    try { chrome.runtime.sendMessage({ type, ...extra }, r => res(r || { ok: false, error: chrome.runtime.lastError?.message })); }
+    catch (e) { res({ ok: false, error: String(e?.message || e) }); }
+  });
+  // 말풍선 위에 마우스가 있으면 미뤘다가 벗어난 뒤 적용
+  function later(ms, fn) {
+    const run = () => { if (box?.matches(':hover')) box.addEventListener('mouseleave', () => setTimeout(run, 600), { once: true }); else fn(); };
+    fbTimers.push(setTimeout(run, ms));
+  }
+  async function onFeedback(act, data) {
+    if (!current || !view?.result) return;
+    const key = current.key, r = view.result, fb = view.fb || {};
+    const sent = { sentence: current.payload.sentence, provider: r.debug?.provider || '' };
+    const stillHere = () => current && current.key === key;
+    const done = (res, nextFb, extra = {}) => {
+      if (!stillHere()) return;
+      if (!res?.ok) return render({ error: res?.error || '피드백을 저장하지 못했어요.' });
+      render({ result: res.data.result || r, fb: nextFb, ...extra });
+    };
+    if (act === 'up') {
+      const res = await ask('feedback', { record: { ...sent, nodeId: r.evidence?.nodeId || null, tagId: null, vote: 'up' } });
+      return done(res, fb, { thanked: true });
+    }
+    if (act === 'down') {
+      fbTimers.forEach(clearTimeout); fbTimers = [];
+      const label = r.evidence.nodeLabel;
+      const alts = (r.debug?.candidates || []).filter(c => c.id !== r.evidence.nodeId);
+      const nextFb = { down: true, label, alts, chips: true, undo: true };
+      render({ result: r, fb: nextFb, busy: true });
+      const res = await ask('feedback', { record: { ...sent, nodeId: r.evidence.nodeId, tagId: null, vote: 'down' }, rerun: current.payload });
+      nextFb.id = res?.data?.id;
+      done(res, nextFb);
+      later(5000, () => { nextFb.undo = false; if (stillHere() && view?.fb === nextFb) render({ ...view }); });
+      later(3000, () => { nextFb.chips = false; if (stillHere() && view?.fb === nextFb) render({ ...view }); });
+      return;
+    }
+    if (act === 'pick') {
+      const picked = (fb.alts || r.debug?.candidates || []).find(c => c.id === data.id);
+      const nextFb = { pick: true, label: picked?.label || data.id, undo: true };
+      render({ result: r, fb: nextFb, busy: true });
+      const res = await ask('feedback', { record: { ...sent, nodeId: r.evidence?.nodeId || null, tagId: null, vote: 'pick', pickedNodeId: data.id }, rerun: current.payload });
+      nextFb.id = res?.data?.id;
+      done(res, nextFb);
+      later(5000, () => { nextFb.undo = false; if (stillHere() && view?.fb === nextFb) render({ ...view }); });
+      return;
+    }
+    if (act === 'reason' && fb.id) {
+      await ask('feedback-reason', { id: fb.id, reason: data.reason });
+      fb.reason = data.reason;
+      if (data.reason === 'none') fb.chips = false;
+      if (stillHere()) render({ ...view, fb });
+      return;
+    }
+    if (act === 'undo' && fb.id) {
+      render({ result: r, fb: {}, busy: true });
+      done(await ask('feedback-undo', { id: fb.id, rerun: current.payload }), {});
+    }
+  }
+
   let theme = 'maple';
   function render(state) {
     ensureTooltip();
@@ -266,22 +356,43 @@
         <div class="foot"><span></span><button data-act="options">설정 열기</button></div>`;
     } else {
       const r = state.result;
+      const fb = state.fb || {};
+      if (fb.label) html += `<div class="fbbar"><span>${esc(fb.pick ? `'${fb.label}'${euro(fb.label).slice(fb.label.length)} 바꿨어요` : `이 문장엔 '${fb.label}'${eul(fb.label)} 안 쓸게요`)}</span>${fb.undo ? '<button data-act="undo">되돌리기</button>' : ''}</div>`;
       if (r.meaning) html += `<div class="row"><span class="label">쉬운 뜻</span>${esc(r.meaning)}</div>`;
-      if (r.analogy) {
+      if (state.busy) {
+        html += `<div class="muted"><span class="spin"></span>다른 비유 찾는 중…</div>`;
+      } else if (r.analogy) {
         html += `<div class="row"><span class="label">${esc(euro(r.domain))} 보면</span><span class="analogy">${esc(r.analogy)}</span></div>`;
       } else {
         html += `<div class="row muted">${esc(r.rejected || `${r.domain}에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.`)}</div>`;
       }
-      if (r.evidence) {
-        html += `<div class="chips"><span class="chip ${r.evidence.source === 'user' ? 'user' : ''}" title="${r.evidence.source === 'user' ? '내 저장소' : '공통 저장소'}">근거: ${esc(r.evidence.nodeLabel)}</span>${r.evidence.tagLabel ? `<span class="chip tag" title="공유하는 추상 구조">${esc(r.evidence.tagLabel)}</span>` : ''}</div>`;
+      // 후보 칩: 👎 직후 "더 맞는 개념", 비유가 없을 때 "혹시 이 중에 있나요?" (고르면 그 개념으로 다시, 근거 검증은 그대로)
+      // 지금 근거로 쓰인 개념은 다시 고를 필요가 없으니 뺀다
+      const alts = (fb.down ? fb.alts : (!r.analogy && !fb.label ? (r.debug?.candidates || []) : [])).filter(c => c.id !== r.evidence?.nodeId);
+      if (!state.busy && alts.length && (fb.down ? fb.chips : true)) {
+        html += `<div class="ask">${fb.down ? '더 맞는 개념이 있나요?' : '혹시 이 중에 있나요?'}</div><div class="chips">${alts.map(c => `<button class="chip alt" data-act="pick" data-id="${esc(c.id)}">${esc(c.label)}</button>`).join('')}${fb.down ? '<button class="chip reason" data-act="reason" data-reason="none">없어요</button>' : ''}</div>`;
       }
-      html += `<div class="foot"><span>${esc(r.debug?.provider || '')}${r.cached ? ' · 캐시' : ''}</span><button data-act="options">설정</button></div>`;
+      if (fb.down && fb.chips && !state.busy) {
+        html += fb.reason
+          ? '<div class="ask thanks">알려 줘서 고마워요</div>'
+          : `<div class="ask">왜 안 맞았나요? (선택)</div><div class="chips">${REASON_CHIPS.map(([k, t]) => `<button class="chip reason" data-act="reason" data-reason="${k}">${t}</button>`).join('')}</div>`;
+      }
+      if (r.evidence && !state.busy) {
+        html += `<div class="chips"><span class="chip ${r.evidence.source === 'user' ? 'user' : ''}" title="${r.evidence.source === 'user' ? '내 저장소' : '공통 저장소'}">근거: ${esc(r.evidence.nodeLabel)}</span>${r.evidence.tagLabel ? `<span class="chip tag" title="공유하는 추상 구조">${esc(r.evidence.tagLabel)}</span>` : ''}${r.feedbackApplied ? '<span class="chip fb" title="내가 남긴 피드백으로 바뀐 결과예요">내 피드백 반영</span>' : ''}</div>`;
+      }
+      const thumbs = state.thanked
+        ? '<span class="thanks">고마워요</span>'
+        : `<button class="fbtn up" data-act="up" aria-label="잘 맞아요" title="잘 맞아요">${THUMB}</button>${r.evidence && r.analogy ? `<button class="fbtn down" data-act="down" aria-label="안 맞아요" title="안 맞아요">${THUMB}</button>` : ''}`;
+      html += `<div class="foot"><span>${esc(r.debug?.provider || '')}${r.cached ? ' · 캐시' : ''}</span><span class="fb">${state.busy || !r.analogy ? '' : thumbs}<button data-act="options">설정</button></span></div>`;
     }
     box.innerHTML = html;
+    view = state;
     box.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
-      if (b.dataset.act === 'close') hideTooltip();
-      if (b.dataset.act === 'options') chrome.runtime.sendMessage({ type: 'open-options' });
+      const act = b.dataset.act;
+      if (act === 'close') hideTooltip();
+      else if (act === 'options') chrome.runtime.sendMessage({ type: 'open-options' });
+      else onFeedback(act, b.dataset);
     }));
     if (current) place(current.range.getBoundingClientRect());
     requestAnimationFrame(() => box.classList.add('show'));
@@ -289,6 +400,8 @@
 
   function hideTooltip() {
     clearTimeout(hideTimer);
+    fbTimers.forEach(clearTimeout); fbTimers = [];
+    view = null;
     current = null;
     reqSeq++;
     clearHighlight();
@@ -320,13 +433,14 @@
     if (!s) return;
     if (current && current.key === s.key) return;
     const reqId = ++reqSeq;
-    current = { key: s.key, range: s.range, reqId, pending: true };
+    const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120) };
+    current = { key: s.key, range: s.range, reqId, pending: true, payload };
     highlight(s.range);
     render({ loading: true, stage: 'graph' });
     try {
       getPort().postMessage({
         type: 'explain', id: reqId,
-        payload: { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120) }
+        payload
       });
     } catch {
       port = null;

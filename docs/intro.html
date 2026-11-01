@@ -237,6 +237,7 @@
       <li><b>구조가 같은 개념 찾기</b><span>문장을 벡터로 바꿔 관심사 그래프와 비교합니다. 개념을 직접 비교하는 것에 더해, 추상 태그를 한 번 거쳐 같은 구조를 가진 개념으로 이동해요.</span></li>
       <li><b>근거로 비유 만들기</b><span>상위 3개 개념의 사실만 AI에 건네고, 그중 가장 잘 맞는 하나로 쉬운 뜻과 비유를 쓰게 합니다.</span></li>
       <li><b>검증 후 보여 주기</b><span>AI가 후보에 없는 개념을 댔으면 비유를 숨기고 뜻만 보여 줘요. 말풍선에는 근거 개념과 태그를 늘 함께 표시합니다.</span></li>
+      <li><b>안 맞으면 버튼 한 번</b><span>👎를 누르면 그 개념을 빼고 그 자리에서 다시 비유해요. 더 맞는 개념을 칩으로 고를 수도 있어요. 피드백은 내 크롬에만 저장되고, 같은 문장에는 "내 피드백 반영" 표시가 붙어요.</span></li>
     </ol>
 
     <figure class="figure" style="margin:0">
@@ -370,10 +371,11 @@
               <text x="504" y="188" class="i-sub">e5-base 임베딩</text>
             </g>
             <g>
-              <rect x="488" y="330" width="168" height="90" rx="10" class="i-box"/>
+              <rect x="488" y="330" width="168" height="108" rx="10" class="i-box"/>
               <text x="504" y="356" class="i-name">chrome.storage</text>
               <text x="504" y="378" class="i-sub">설정 · 키 · 벡터 캐시</text>
               <text x="504" y="396" class="i-sub">결과 캐시 (세션)</text>
+              <text x="504" y="414" class="i-sub">피드백 👍/👎 (내 기기만)</text>
             </g>
             <g>
               <rect x="36" y="476" width="620" height="84" rx="10" class="i-box" style="stroke-dasharray:0"/>
@@ -677,11 +679,11 @@
     <div class="status">
       <div>
         <h3><span class="dot ok"></span>동작 확인</h3>
-        <ul><li>Alt·자동 호버, 강조, 말풍선</li><li>저장소 두 층, 관심사 변경</li><li>제공자 교체, 정밀 모드</li></ul>
+        <ul><li>Alt·자동 호버, 강조, 말풍선</li><li>저장소 두 층, 관심사 변경</li><li>제공자 교체, 정밀 모드</li><li>말풍선 원클릭 피드백</li><li>실제 모델 검색 77% (평가셋 40문장)</li></ul>
       </div>
       <div>
         <h3><span class="dot wait"></span>아직 미확인</h3>
-        <ul><li>실제 AI 키로 비유 품질</li><li>실제 임베딩 모델의 검색 품질</li></ul>
+        <ul><li>실제 AI 키로 비유 품질</li><li>실사용 피드백 비율</li></ul>
       </div>
       <div>
         <h3><span class="dot todo"></span>다음 단계</h3>

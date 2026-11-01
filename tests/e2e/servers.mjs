@@ -28,7 +28,9 @@ function mockLLM(req, res) {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
       const tag = user.match(/맞은 추상 태그: .+? \(id=(\S+)\)/);
       const nodeId = user.includes('Leverage') ? 'not-a-candidate' : id;
-      content = '```json\n' + JSON.stringify({ meaning: '테스트 뜻 풀이예요.', analogy: `메이플로 치면 ${label}과 같은 구조예요.`, nodeId, tagId: tag?.[1] ?? null, mapping: `원문 ↔ ${label}` }) + '\n```';
+      // "펭귄" 문장: 후보가 여럿이면 맞는 비유 없음, 사용자가 하나를 골라 후보가 1개면 그 개념으로 (T-106)
+      if (user.includes('펭귄') && /\[2\] id=/.test(user)) content = '```json\n' + JSON.stringify({ meaning: '테스트 뜻 풀이예요.', analogy: '', nodeId: null, tagId: null, mapping: '' }) + '\n```';
+      else content = '```json\n' + JSON.stringify({ meaning: '테스트 뜻 풀이예요.', analogy: `메이플로 치면 ${label}과 같은 구조예요.`, nodeId, tagId: tag?.[1] ?? null, mapping: `원문 ↔ ${label}` }) + '\n```';
     }
     if (stream) return streamOut(res, cors, content);
     res.writeHead(200, { ...cors, 'content-type': 'application/json' });

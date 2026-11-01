@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addRecord, removeRecord, applyFeedback, feedbackKey, FEEDBACK_MAX } from '../../extension/lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX } from '../../extension/lib/feedback.js';
 
 // 검색 후보(retrieve 결과 모양만 흉내)
 const cands = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, label: id.toUpperCase(), score: 1 - i * 0.1 }));
@@ -74,4 +74,12 @@ test('feedbackKey: 그 문장의 기록이 바뀔 때만 바뀐다 (결과 캐�
 test('feedbackKey: 👍은 후보를 바꾸지 않으니 지문도 바꾸지 않는다 (불필요한 LLM 재호출 방지)', () => {
   const base = [rec({ id: 'p', vote: 'down' })];
   assert.equal(feedbackKey([...base, rec({ id: 'u', vote: 'up' })], 'h1'), feedbackKey(base, 'h1'));
+});
+
+test('setReason: 그 기록에만 이유를 붙이고 정해진 값만 받는다', () => {
+  const list = [rec({ id: 'x' }), rec({ id: 'y' })];
+  const out = setReason(list, 'x', 'forced');
+  assert.equal(out.find(r => r.id === 'x').reason, 'forced');
+  assert.equal(out.find(r => r.id === 'y').reason, undefined);
+  assert.throws(() => setReason(list, 'x', '<script>'), /이유/);
 });
