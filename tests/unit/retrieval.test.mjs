@@ -140,3 +140,14 @@ test('retrieve: feedbackSim·feedbackMax 옵션과 vec 없는 기록', () => {
   assert.equal(r.find(x => x.id === 'n2').feedback, 0.2);
   assert.equal('feedback' in r.find(x => x.id === 'n1'), false);
 });
+
+test('feedbackAdjust: 노드 합은 마지막에 한 번만 잘라 순서와 무관', () => {
+  const pick = { vec: [1, 0, 0], nodeId: 'a', vote: 'pick' };
+  const down = { vec: [1, 0, 0], nodeId: 'a', vote: 'down' };
+  close(feedbackAdjust([1, 0, 0], [pick, pick, pick, down]).get('a'), 0.1);
+  close(feedbackAdjust([1, 0, 0], [down, pick, pick, pick]).get('a'), 0.1);
+});
+
+test('retrieve: feedbackMemory가 null이어도 예외 없이 이전과 같음', () => {
+  assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: null }), retrieve(q, gClose, vecs));
+});

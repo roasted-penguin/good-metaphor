@@ -24,9 +24,10 @@ export function feedbackAdjust(q, memory, { sim = 0.92, max = 0.1 } = {}) {
     const w = sim < 1 ? Math.min(1, (c - sim) / (1 - sim)) : 1;
     const sign = m.vote === 'down' ? -1 : m.vote === 'pick' ? 1 : 0;
     if (!sign) continue;
-    const sum = (out.get(m.nodeId) || 0) + sign * max * w;
-    out.set(m.nodeId, Math.max(-max, Math.min(max, sum)));
+    out.set(m.nodeId, (out.get(m.nodeId) || 0) + sign * max * w);
   }
+  // 합을 다 구한 뒤 한 번만 자른다(기록 순서와 무관하게)
+  for (const [id, sum] of out) out.set(id, Math.max(-max, Math.min(max, sum)));
   return out;
 }
 
@@ -43,7 +44,7 @@ export function retrieve(q, graph, vecs, {
   topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {},
   feedbackMemory = [], feedbackSim = 0.92, feedbackMax = 0.1
 } = {}) {
-  const fb = feedbackMemory.length ? feedbackAdjust(q, feedbackMemory, { sim: feedbackSim, max: feedbackMax }) : null;
+  const fb = feedbackMemory?.length ? feedbackAdjust(q, feedbackMemory, { sim: feedbackSim, max: feedbackMax }) : null;
   const tagSim = new Map();
   for (const t of graph.tags) {
     const v = vecs.get('tag:' + t.id);
