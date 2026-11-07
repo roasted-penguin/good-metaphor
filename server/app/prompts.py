@@ -101,13 +101,25 @@ def build_analogy_prompt(sentence: str, context: str | None, word: str | None, p
 
 # --- 질의 키워드(LightRAG hl/ll) 프롬프트. 확장에는 없는 서버 전용 내부 프롬프트 ---
 
+def vocabulary_tags(tags: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """통제 어휘가 되는 태그들(라벨 있는 것만, 파일 순서 그대로). 규칙 9의 단일 원본.
+
+    질의 키워드 프롬프트와 추출 프롬프트(app/extract.py)가 모두 이 함수로 목록을 만든다.
+    """
+    return [t for t in tags if t.get("label")]
+
+
+def tag_lines(tags: Iterable[Mapping[str, Any]]) -> list[str]:
+    """프롬프트에 넣는 통제 어휘 줄. "- 라벨: 설명"(설명 없으면 "- 라벨")."""
+    return [f"- {t['label']}: {t['desc']}" if t.get("desc") else f"- {t['label']}" for t in vocabulary_tags(tags)]
+
+
 def build_keyword_prompt(sentence: str, page_title: str | None,
                          tags: Iterable[Mapping[str, Any]]) -> tuple[str, str]:
     """(system, user). tags는 공통 그래프의 tags 목록을 그대로 받는다(규칙 9: 하드코딩 금지)."""
-    tag_list = [t for t in tags if t.get("label")]
-    if not tag_list:
+    lines = tag_lines(tags)
+    if not lines:
         raise ValueError("추상 태그 목록이 비어 있어요. 공통 그래프의 tags를 넘겨 주세요.")
-    tag_lines = [f"- {t['label']}: {t['desc']}" if t.get("desc") else f"- {t['label']}" for t in tag_list]
     system = "\n".join([
         "너는 문장에서 검색용 키워드를 뽑는 도우미다.",
         "hl_keywords: 문장의 핵심 개념이 가진 추상 구조를 아래 [추상 태그] 목록의 라벨 중에서만 0~3개 고른다. 목록에 없는 말을 만들지 않는다.",
@@ -116,7 +128,7 @@ def build_keyword_prompt(sentence: str, page_title: str | None,
         '출력 형식: {"hl_keywords": [string], "ll_keywords": [string]}',
         "",
         "[추상 태그]",
-        *tag_lines,
+        *lines,
     ])
     user = f"페이지: {page_title or '(제목 없음)'}\n문장: {sentence}"
     return system, user
