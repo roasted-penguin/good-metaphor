@@ -12,8 +12,9 @@ export function normalizeText(text) {
 }
 
 // 아라비아 숫자 연속을 뽑는다. "1,000"처럼 천 단위 쉼표는 붙여 하나로 본다.
+// NFKC로 먼저 정규화해 전각 숫자("１０")도 "10"과 같게 본다.
 export function numbersIn(text) {
-  const s = String(text ?? '').replace(/(\d),(?=\d{3}(?!\d))/g, '$1');
+  const s = String(text ?? '').normalize('NFKC').replace(/(\d),(?=\d{3}(?!\d))/g, '$1');
   return s.match(/\d+/g) ?? [];
 }
 

@@ -12,6 +12,7 @@ import { buildAbstractPrompt, buildAnalogyPrompt, extractMeaning } from '../exte
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
 import { retrieve } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
+import { checkGrounding } from '../extension/lib/grounding.js';
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
@@ -107,7 +108,15 @@ for (const p of runs) {
     if (problem) failed++;
     console.log(`  비유 생성  ${problem ? '✗' : '✓'} ${marks}${r.ms}ms${r.retry}  ${s.sentence.slice(0, 24)}…`);
     if (problem) console.log(`    문제: ${problem}${r.ok ? `\n    원문: ${r.value.slice(0, 200)}` : ''}`);
-    else console.log(`    → [${answer.nodeId}] ${answer.analogy || '(비유 없음)'}\n      뜻: ${answer.meaning}`);
+    else {
+      console.log(`    → [${answer.nodeId}] ${answer.analogy || '(비유 없음)'}\n      뜻: ${answer.meaning}`);
+      // 근거 검사(T-123): 확장과 같은 검사. 실패해도 스모크 실패로 세지 않고 결과만 보인다(확장은 비유를 숨김)
+      if (answer.analogy) {
+        const chosen = candidates.find(c => c.id === answer.nodeId);
+        const g = checkGrounding({ analogy: answer.analogy, usedFact: answer.usedFact, facts: chosen.facts, sentence: s.sentence, context: s.context });
+        console.log(`      근거 검사: ${g.ok ? '통과' : `숨김(${g.reason})`}  usedFact: ${answer.usedFact || '(없음)'}`);
+      }
+    }
   }
 }
 console.log(`\n${failed ? `실패 ${failed}건` : '모두 통과'}`);

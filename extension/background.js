@@ -8,6 +8,7 @@ import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken, REJECTED_TEXT } from './lib/analogy-server.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
+import { checkGrounding, GROUNDING_REJECTED_TEXT } from './lib/grounding.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -250,10 +251,20 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   }
 
   // 근거 검증: 후보에 없는 노드를 댔으면 비유를 버린다
-  const chosen = candidates.find(c => c.id === answer.nodeId) || null;
+  let chosen = candidates.find(c => c.id === answer.nodeId) || null;
   if (answer.analogy && !chosen) {
     answer.analogy = '';
     answer.rejected = REJECTED_TEXT;
+  }
+  // 근거 검사(T-123): 고른 노드 facts 밖의 사실(usedFact 불일치, 지어낸 숫자)이면 비유를 버린다
+  let grounding = null;
+  if (answer.analogy && chosen) {
+    grounding = checkGrounding({ analogy: answer.analogy, usedFact: answer.usedFact, facts: chosen.facts, sentence, context });
+    if (!grounding.ok) {
+      answer.analogy = '';
+      answer.rejected = GROUNDING_REJECTED_TEXT;
+      chosen = null;
+    }
   }
 
   const result = {
@@ -284,6 +295,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       ms: Date.now() - t0
     }
   };
+  if (grounding) result.debug.grounding = grounding;
   if (serverInfo) {
     result.source = 'local';
     result.debug.server = serverInfo;
