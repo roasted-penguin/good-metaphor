@@ -777,3 +777,45 @@ test('서버 모드(T-404): 로그인 세션이면 서버를 부르지 않는다
   expect(analogyCalls.length - before).toBe(0);
   await send({ type: 'auth:logout' });
 });
+
+/* ───────── 제외 사이트 (T-107) ───────── */
+// 가짜 LLM·가짜 analogy-api 요청 수 합계. 제외면 둘 다 그대로여야 한다
+const sentCount = () => calls.length + analogyCalls.length;
+
+test('제외 사이트(T-107): 목록에 넣으면 떠 있던 말풍선이 닫히고 Alt+호버해도 안 보냄, 빼면 새로고침 없이 다시 동작', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+
+  await ext.setSettings({ excludedHosts: ['kbstar.com', '127.0.0.1'] });
+  await expect.poll(() => tooltip(page), { message: '제외되면 떠 있던 말풍선을 숨김' }).toBe('');
+
+  const before = sentCount();
+  await altHover(page, '#p2');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '제외 사이트에서는 말풍선 없음').toBeFalsy();
+  expect(await page.evaluate(() => CSS.highlights.has('analogy-helper-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '제외 사이트에서는 요청을 보내지 않음').toBe(0);
+
+  await ext.setSettings({ excludedHosts: ['kbstar.com'] });
+  await page.waitForTimeout(300);
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});
+
+test('비밀번호 폼(T-107): 폼 안 문장은 안 보내고, 같은 페이지 폼 밖 문장은 정상', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const before = sentCount();
+  await altHover(page, '#p7');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '비밀번호 폼 안에서는 말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '비밀번호 폼 안 문장은 보내지 않음').toBe(0);
+  expect(calls.some(c => c.user.includes('비밀번호폼테스트'))).toBe(false);
+
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});
