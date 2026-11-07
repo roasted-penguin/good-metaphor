@@ -1117,6 +1117,9 @@ async function recordBoxClasses(page) {
   });
 }
 const boxLog = page => page.evaluate(() => window.__boxLog);
+// content.js가 미리 받은 테마를 적용할 때까지 기다린다(고정 대기 대신, T-136 교훈)
+const contentTheme = async page => (await hook(page, 'content-theme')).data;
+const waitTheme = (page, theme) => expect.poll(() => contentTheme(page), { message: `content.js 테마 ${theme}` }).toEqual({ theme, ready: true });
 const NEUTRAL_OVERLAY = {
   useCommon: false, domain: '축구', analogyPrefix: '축구로 치면', theme: 'neutral',
   nodes: [
@@ -1132,7 +1135,7 @@ test('테마(T-108): 중립 관심사면 로딩 말풍선부터 t-neutral, t-map
 
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
-  await page.waitForTimeout(500); // 시작할 때 테마를 미리 받는 시간
+  await waitTheme(page, 'neutral');
   await recordBoxClasses(page);
   await altHover(page, '#p9');
   await expect.poll(async () => (await boxLog(page)).some(e => e.loading && e.cls.includes('show')), { message: '로딩 말풍선이 보임' }).toBe(true);
@@ -1158,7 +1161,7 @@ test('테마(T-108): content.js를 거치지 않아도 explain 포트의 stage �
 test('테마(T-108): 메이플 기본이면 로딩 말풍선도 t-maple (바뀌지 않음)', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
-  await page.waitForTimeout(500);
+  await waitTheme(page, 'maple');
   await recordBoxClasses(page);
   await altHover(page, '#p9');
   await expect.poll(async () => (await boxLog(page)).some(e => e.loading), { message: '로딩 말풍선' }).toBe(true);
@@ -1170,10 +1173,10 @@ test('테마(T-108): 메이플 기본이면 로딩 말풍선도 t-maple (바뀌�
 test('테마(T-108): 페이지를 연 뒤 로그인해 중립 관심사로 바꿔도 새로고침 없이 로딩부터 t-neutral', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
-  await page.waitForTimeout(500); // 메이플 테마를 먼저 받아 둔 상태
+  await waitTheme(page, 'maple'); // 메이플 테마를 먼저 받아 둔 상태
   await ext.send({ type: 'auth:login', nickname: '테스터' });
   await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY });
-  await page.waitForTimeout(500); // 세션·오버레이 키 변경으로 다시 받는 시간
+  await waitTheme(page, 'neutral'); // 세션·오버레이 키 변경으로 다시 받음
   await recordBoxClasses(page);
   await altHover(page, '#p9');
   await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('축구로 보면');
