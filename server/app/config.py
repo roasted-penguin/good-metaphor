@@ -11,6 +11,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_COMMON_GRAPH_PATH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
 DEFAULT_WORKSPACE = "common_maplestory"
 DEFAULT_RATE_LIMIT_PER_MIN = 30
+# 확장 config/admin.json의 defaultModels.gemini와 같게 둔다
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 
 def read_graph_version(path: str | os.PathLike) -> str | None:
@@ -30,6 +32,8 @@ class Settings:
     workspace_version: str | None
     rate_limit_per_min: int
     common_graph_path: str
+    keyword_model: str = DEFAULT_GEMINI_MODEL
+    analogy_model: str = DEFAULT_GEMINI_MODEL
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Settings":
@@ -44,4 +48,6 @@ class Settings:
             workspace_version=version,
             rate_limit_per_min=int(env.get("RATE_LIMIT_PER_MIN") or DEFAULT_RATE_LIMIT_PER_MIN),
             common_graph_path=graph_path,
+            keyword_model=env.get("GEMINI_KEYWORD_MODEL") or DEFAULT_GEMINI_MODEL,
+            analogy_model=env.get("GEMINI_ANALOGY_MODEL") or DEFAULT_GEMINI_MODEL,
         )

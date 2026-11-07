@@ -136,6 +136,11 @@ def _extract_json_object(text: str) -> Any:
     return None
 
 
+def parse_json_object(text: str) -> Any:
+    """비유 응답 등에서 첫 JSON 객체를 꺼낸다(확장 parseJSONLoose에 해당). 없으면 None."""
+    return _extract_json_object(text)
+
+
 def _clean_list(value: Any) -> list[str]:
     """문자열만, 앞뒤 공백 제거, 빈 값·중복 제거(순서 유지)."""
     if not isinstance(value, list):
