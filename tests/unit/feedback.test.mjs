@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, similarMemory, boostForNode } from '../../extension/lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, feedbackPercent, formatFeedbackStats, similarMemory, boostForNode } from '../../extension/lib/feedback.js';
 
 // 검색 후보(retrieve 결과 모양만 흉내)
 const cands = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, label: id.toUpperCase(), score: 1 - i * 0.1 }));
@@ -96,6 +96,27 @@ test('maskSentence: 1~3자리 숫자는 그대로 둔다', () => {
   assert.equal(maskSentence(s), s);
 });
 
+test('maskSentence: 주소 뒤에 붙은 조사는 남긴다 (T-137)', () => {
+  assert.equal(maskSentence('https://a.com/x에서 받았다'), '[주소]에서 받았다');
+  assert.equal(maskSentence('https://a.com/x을 열었다'), '[주소]을 열었다');
+  assert.equal(maskSentence('www.a.com는 느리다'), '[주소]는 느리다');
+  assert.equal(maskSentence('http://a.com/p?q=1로 보낸다'), '[주소]로 보낸다');
+});
+
+test('maskSentence: 문장 끝·괄호의 주소 (T-137)', () => {
+  assert.equal(maskSentence('자세한 건 https://a.com/x.'), '자세한 건 [주소].');
+  assert.equal(maskSentence('자세한 건 https://a.com/x로.'), '자세한 건 [주소]로.');
+  assert.equal(maskSentence('출처(https://a.com/x)를 보라'), '출처([주소])를 보라');
+  assert.equal(maskSentence('출처(https://a.com/x)'), '출처([주소])');
+});
+
+test('maskSentence: 주소 안 한글 경로는 함께 가린다(새지 않게) (T-137)', () => {
+  assert.equal(maskSentence('https://ko.wikipedia.org/wiki/메이플스토리에서 봤다'), '[주소] 봤다');
+  assert.equal(maskSentence('https://a.com/q=홍길동'), '[주소]');
+  // 조사를 떼도 주소 안 숫자·메일은 남지 않는다
+  assert.equal(maskSentence('https://a.com/u/12345678에서'), '[주소]에서');
+});
+
 test('bumpHover: 그날 값이 1 늘어난다', () => {
   assert.deepEqual(bumpHover({}, '2026-11-01'), { '2026-11-01': 1 });
   assert.deepEqual(bumpHover({ '2026-11-01': 2 }, '2026-11-01'), { '2026-11-01': 3 });
@@ -127,6 +148,24 @@ test('summarizeFeedback: 오늘 포함 지난 7일만 센다', () => {
 
 test('summarizeFeedback: 빈 입력이면 모두 0', () => {
   assert.deepEqual(summarizeFeedback([], {}, '2026-11-08'), { hovers: 0, up: 0, down: 0, pick: 0 });
+});
+
+test('feedbackPercent: 호버 대비 반올림 정수, 100% 상한, 호버 0·모름이면 null (T-137)', () => {
+  assert.equal(feedbackPercent(3, 18), 17);
+  assert.equal(feedbackPercent(1, 3), 33);
+  assert.equal(feedbackPercent(2, 3), 67);
+  assert.equal(feedbackPercent(0, 5), 0);
+  assert.equal(feedbackPercent(5, 2), 100);
+  assert.equal(feedbackPercent(3, 0), null);
+  assert.equal(feedbackPercent(3, undefined), null);
+  assert.equal(feedbackPercent(3, NaN), null);
+});
+
+test('formatFeedbackStats: 개수 옆 호버 대비 %, 호버 0이면 개수만 (T-137)', () => {
+  assert.equal(formatFeedbackStats({ hovers: 18, up: 1, down: 3, pick: 0 }),
+    '지난 7일 · 호버 18번 · 👍 1 (6%) · 👎 3 (17%) · 교정 0 (0%)');
+  assert.equal(formatFeedbackStats({ hovers: 0, up: 1, down: 2, pick: 1 }),
+    '지난 7일 · 호버 0번 · 👍 1 · 👎 2 · 교정 1');
 });
 
 // ── 비슷한 문장 메모리 (T-130) ──
