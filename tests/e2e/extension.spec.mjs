@@ -548,6 +548,28 @@ test('내 피드백 칸(T-137): 보내기 설정 저장이 실패하면 체크�
   expect((await storageGetFb(op, 'settings'))?.feedbackShare).not.toBe(true);
 });
 
+test('내 피드백 칸(T-137): 보내기 저장 중에 다른 탭 변경으로 목록을 다시 읽어도 체크가 덮이지 않는다', async ({ ext }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  // settings:save 응답을 붙잡아 저장이 끝나지 않은 상태를 만든다
+  await op.evaluate(() => {
+    const orig = chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.runtime.sendMessage = (msg, cb) => {
+      if (msg?.type === 'settings:save') { window.__releaseSave = () => orig(msg, cb); return; }
+      return cb ? orig(msg, cb) : orig(msg);
+    };
+  });
+  await op.locator('#fbShare').click();
+  await expect.poll(() => op.evaluate(() => typeof window.__releaseSave)).toBe('function');
+  // 저장 중 피드백 변경 → onChanged로 목록을 다시 읽음(저장된 share는 아직 false)
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await expect(op.locator('#fbList li')).toHaveCount(1);
+  await expect(op.locator('#fbShare')).toBeChecked();
+  await op.evaluate(() => window.__releaseSave());
+  await expect.poll(async () => (await storageGetFb(op, 'settings'))?.feedbackShare).toBe(true);
+  await expect(op.locator('#fbShare')).toBeChecked();
+});
+
 test('내 피드백 칸(T-137): 되돌리기·지우기 뒤 목록 다시 읽기가 실패하면 이전 목록을 두고 오류 문구', async ({ ext }) => {
   const op = ext.page;
   await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });

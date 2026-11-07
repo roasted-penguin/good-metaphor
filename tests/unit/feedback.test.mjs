@@ -103,6 +103,20 @@ test('maskSentence: 주소 뒤에 붙은 조사는 남긴다 (T-137)', () => {
   assert.equal(maskSentence('http://a.com/p?q=1로 보낸다'), '[주소]로 보낸다');
 });
 
+test('maskSentence: 주소 끝 한글이 알려진 조사가 아니면 함께 가린다(경로가 새지 않게) (T-137)', () => {
+  assert.equal(maskSentence('https://a.com/wiki/Maple스토리'), '[주소]');
+  assert.equal(maskSentence('https://a.com/u/hong길동 님'), '[주소] 님');
+  assert.equal(maskSentence('https://a.com/x1234가나 참고'), '[주소] 참고');
+  // 조사가 붙어도 조사가 아닌 한글 덩어리면 통째로 가린다
+  assert.equal(maskSentence('https://a.com/u/hong길동에서'), '[주소]');
+});
+
+test('maskSentence: 겹친 조사도 남긴다 (T-137)', () => {
+  assert.equal(maskSentence('https://a.com/x에서는 된다'), '[주소]에서는 된다');
+  assert.equal(maskSentence('https://a.com/x까지는 간다'), '[주소]까지는 간다');
+  assert.equal(maskSentence('https://a.com/x의 글'), '[주소]의 글');
+});
+
 test('maskSentence: 문장 끝·괄호의 주소 (T-137)', () => {
   assert.equal(maskSentence('자세한 건 https://a.com/x.'), '자세한 건 [주소].');
   assert.equal(maskSentence('자세한 건 https://a.com/x로.'), '자세한 건 [주소]로.');
