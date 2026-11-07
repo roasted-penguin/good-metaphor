@@ -110,8 +110,20 @@ export function feedbackKey(records, sentenceHash) {
 export function maskSentence(text) {
   return String(text)
     .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, '[메일]')
-    .replace(/(?:https?:\/\/|www\.)[^\s<>"']*[^\s<>"'.,!?)\]]/g, '[주소]')
+    .replace(/(?:https?:\/\/|www\.)[^\s<>"']*[^\s<>"'.,!?)\]]/g, m => '[주소]' + urlTail(m))
     .replace(/\d{2,4}[-\s]\d{3,4}[-\s]\d{4}|\d{4,}/g, '[숫자]');
+}
+
+// 주소에 붙어 함께 잡힌 조사("https://a.com/x에서"의 "에서")를 돌려준다 (T-137).
+// 끝의 한글 덩어리 전체가 알려진 조사이고 그 앞이 영문·숫자·닫는 괄호일 때만 돌려준다.
+// 그 밖의 한글("/wiki/Maple스토리", "/u/hong길동")은 주소 경로일 수 있어 함께 가린다(가릴 것이 새지 않게).
+// 떼어 낸 앞쪽 끝의 문장부호(닫는 괄호·마침표 등)도 원문으로 돌려준다.
+const URL_PARTICLE = /^(?:에서는|에서도|으로는|으로도|까지는|부터는|에는|에도|에서|에게|으로|부터|까지|처럼|같은|에|을|를|은|는|이|가|로|의|와|과|도|만)$/;
+function urlTail(m) {
+  const t = m.match(/^(.*?[A-Za-z0-9)\]])([\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]+)$/);
+  if (!t || !URL_PARTICLE.test(t[2])) return '';
+  const punct = t[1].match(/[.,!?)\]]+$/)?.[0] || '';
+  return punct + t[2];
 }
 
 // 날짜별 호버 수 집계. day는 YYYY-MM-DD, 가장 최근 14일만 남긴다(키 정렬 기준)
@@ -144,4 +156,23 @@ export function summarizeFeedback(records, counts, today) {
   for (const [day, n] of Object.entries(counts)) if (days.has(day)) out.hovers += n;
   for (const r of records) if (['up', 'down', 'pick'].includes(r.vote) && days.has(localDay(r.ts))) out[r.vote] += 1;
   return out;
+}
+
+/**
+ * 호버 대비 백분율 (T-137). 같은 7일 창의 호버 수(summarizeFeedback의 hovers)로 나눈다.
+ * 반올림 정수, 100% 상한. 호버 수가 0이거나 모르면 null(개수만 보인다).
+ * @returns {number|null}
+ */
+export function feedbackPercent(count, hovers) {
+  if (!Number.isFinite(hovers) || hovers <= 0 || !Number.isFinite(count)) return null;
+  return Math.min(100, Math.round((count / hovers) * 100));
+}
+
+// "내 피드백" 요약 한 줄. 개수 옆에 호버 대비 %를 붙인다(호버 수를 모르면 개수만)
+export function formatFeedbackStats(st) {
+  const n = (mark, count) => {
+    const pct = feedbackPercent(count, st.hovers);
+    return `${mark} ${count}${pct === null ? '' : ` (${pct}%)`}`;
+  };
+  return `지난 7일 · 호버 ${st.hovers}번 · ${n('👍', st.up)} · ${n('👎', st.down)} · ${n('교정', st.pick)}`;
 }

@@ -475,5 +475,6 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason !== 'install') return;
   // 첫 실행 안내(T-116): 설정 화면이 열리기 전에 표시를 남긴다
   try { await chrome.storage.local.set({ onboarding: { pending: true } }); }
+  catch (e) { console.warn('[install] 첫 실행 안내 상태를 저장하지 못했어요', e); } // 조용히 삼키지 않는다(T-137)
   finally { chrome.runtime.openOptionsPage(); } // 저장이 실패해도 설정 화면은 연다
 });

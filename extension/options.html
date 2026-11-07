@@ -29,7 +29,7 @@
       </div>
       <div class="ob-step">
         <h3>2. 더 나은 비유를 위해 피드백을 보내 주실래요?</h3>
-        <div class="row">
+        <div class="row" role="group" aria-label="서버로 보내기 동의">
           <button type="button" class="ob-toggle" id="obShareYes" aria-pressed="false">보내기</button>
           <button type="button" class="ob-toggle" id="obShareNo" aria-pressed="false">내 기기에만</button>
         </div>
@@ -152,7 +152,8 @@
       <h2>내 피드백</h2>
       <p class="desc">말풍선에서 남긴 👍·👎·교정이에요. 이 브라우저에만 저장되고, 되돌리면 다음 비유부터 반영이 빠져요.</p>
       <div class="fb-stats" id="fbStats"></div>
-      <ul class="fb-list" id="fbList"></ul>
+      <ul class="fb-list" id="fbList" hidden></ul>
+      <p class="fb-empty hint" id="fbEmpty" hidden>아직 남긴 피드백이 없어요.</p>
       <div class="row" style="margin-top:10px"><button id="fbExport">JSON으로 내보내기</button><button id="fbClear">전부 지우기</button><span class="status" id="fbStatus"></span></div>
       <div class="fb-share">
         <label class="row"><input type="checkbox" id="fbShare"> 공통 그래프 개선에 보내기</label>

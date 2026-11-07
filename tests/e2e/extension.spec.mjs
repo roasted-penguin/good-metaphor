@@ -428,8 +428,8 @@ test('내 피드백 칸(T-132): 말풍선 👎 → 목록·7일 통계 → 되�
   await expect(op.locator('#fbStats')).toContainText('👎 1');
 
   await items.first().getByRole('button', { name: '되돌리기' }).click();
-  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
-  await expect(op.locator('#fbList li:not(.empty)')).toHaveCount(0);
+  await expect(op.locator('#fbEmpty')).toHaveText(EMPTY_FB);
+  await expect(op.locator('#fbList li')).toHaveCount(0);
   const r1 = await ext.send({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
   expect(r1.data.feedbackApplied).toBe(false);
   expect(r1.data.evidence.nodeId).toBe(original);
@@ -440,7 +440,7 @@ test('내 피드백 칸(T-132): JSON 내보내기, 보내기 설정과 미리보
   // 기본(설정 없음)은 보내지 않음
   await expect(op.locator('#fbShare')).not.toBeChecked();
   await expect(op.locator('#fbSharePreview')).toBeHidden();
-  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
+  await expect(op.locator('#fbEmpty')).toHaveText(EMPTY_FB);
 
   const LONG = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어지며, 그 결과 저축한 돈의 실제 구매력도 함께 줄어든다.';
   await ext.send({ type: 'feedback', record: { sentence: LONG, nodeId: 'meso', vote: 'down' } });
@@ -469,10 +469,126 @@ test('내 피드백 칸(T-132): JSON 내보내기, 보내기 설정과 미리보
 
   op.once('dialog', d => d.accept());
   await op.click('#fbClear');
-  await expect(op.locator('#fbList')).toContainText(EMPTY_FB);
+  await expect(op.locator('#fbEmpty')).toHaveText(EMPTY_FB);
   expect((await ext.send({ type: 'feedback:list' })).data.items).toHaveLength(0);
   await op.locator('#fbShare').check();
   await expect(op.locator('#fbSharePreview')).toContainText('보낼 피드백이 아직 없어요.');
+});
+
+/* ───────── "내 피드백" 다듬기 (T-137) ───────── */
+const storageGetFb = (page, key) => page.evaluate(async k => (await chrome.storage.local.get(k))[k], key);
+// 설정 화면의 chrome.runtime.sendMessage를 바꿔, 고른 메시지 종류만 실패 응답을 돌려준다
+async function failMessages(op, types) {
+  await op.evaluate(ts => {
+    if (!window.__origSend) window.__origSend = chrome.runtime.sendMessage.bind(chrome.runtime);
+    window.__failTypes = new Set(ts);
+    chrome.runtime.sendMessage = (msg, cb) => {
+      if (window.__failTypes.has(msg?.type)) {
+        const res = { ok: false, error: '테스트 실패' };
+        return cb ? setTimeout(() => cb(res)) : Promise.resolve(res);
+      }
+      return cb ? window.__origSend(msg, cb) : window.__origSend(msg);
+    };
+  }, types);
+}
+
+test('내 피드백 칸(T-137): 빈 목록 문구는 목록 밖 문단, 피드백이 생기면 숨김', async ({ ext }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbEmpty')).toBeVisible();
+  await expect(op.locator('#fbEmpty')).toHaveText(EMPTY_FB);
+  expect(await op.evaluate(() => document.getElementById('fbEmpty').tagName)).toBe('P');
+  expect(await op.evaluate(() => !!document.getElementById('fbEmpty').closest('ul,ol'))).toBe(false);
+  await expect(op.locator('#fbList li')).toHaveCount(0);
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await op.reload();
+  await expect(op.locator('#fbList li')).toHaveCount(1);
+  await expect(op.locator('#fbEmpty')).toBeHidden();
+});
+
+test('내 피드백 칸(T-137): 열린 설정 화면은 다른 페이지의 피드백·호버를 새로고침 없이 반영, 통계에 호버 대비 %', async ({ context, ext, extId }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbEmpty')).toBeVisible();
+  // 다른 탭에서 호버(비유)와 👎
+  const other = await context.newPage();
+  await other.goto(`chrome-extension://${extId}/popup.html`);
+  const sendOther = m => other.evaluate(x => chrome.runtime.sendMessage(x), m);
+  await sendOther({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
+  const r = await sendOther({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await expect(op.locator('#fbList li')).toHaveCount(1);
+  await expect(op.locator('#fbEmpty')).toBeHidden();
+  await expect(op.locator('#fbStats')).toContainText(/👎 1 \(\d+%\)/);
+  await expect(op.locator('#fbExport')).toBeEnabled();
+  const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbExport')]);
+  const { readFileSync } = await import('node:fs');
+  expect(JSON.parse(readFileSync(await download.path(), 'utf8'))).toHaveLength(1);
+  // 다른 탭에서 되돌리면 목록도 빈다
+  await sendOther({ type: 'feedback-undo', id: r.data.id });
+  await expect(op.locator('#fbList li')).toHaveCount(0);
+  await expect(op.locator('#fbEmpty')).toBeVisible();
+  await expect(op.locator('#fbExport')).toBeDisabled();
+});
+
+test('내 피드백 칸(T-137): 라벨 없는 항목은 날짜만, 구분점이 홀로 남지 않는다', async ({ ext }) => {
+  const op = ext.page;
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'pick' } }); // pickedNodeId 없음 → 라벨 없음
+  await op.reload();
+  const hint = op.locator('#fbList li .fb-text .hint');
+  await expect(hint).toHaveCount(1);
+  expect((await hint.textContent()).trim()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('내 피드백 칸(T-137): 보내기 설정 저장이 실패하면 체크를 되돌리고 오류 문구', async ({ ext }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  await failMessages(op, ['settings:save']);
+  await op.locator('#fbShare').click();
+  await expect(op.locator('#fbStatus')).toHaveText('저장하지 못했어요. 다시 시도해 주세요.');
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  await expect(op.locator('#fbSharePreview')).toBeHidden();
+  expect((await storageGetFb(op, 'settings'))?.feedbackShare).not.toBe(true);
+});
+
+test('내 피드백 칸(T-137): 보내기 저장 중에 다른 탭 변경으로 목록을 다시 읽어도 체크가 덮이지 않는다', async ({ ext }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  // settings:save 응답을 붙잡아 저장이 끝나지 않은 상태를 만든다
+  await op.evaluate(() => {
+    const orig = chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.runtime.sendMessage = (msg, cb) => {
+      if (msg?.type === 'settings:save') { window.__releaseSave = () => orig(msg, cb); return; }
+      return cb ? orig(msg, cb) : orig(msg);
+    };
+  });
+  await op.locator('#fbShare').click();
+  await expect.poll(() => op.evaluate(() => typeof window.__releaseSave)).toBe('function');
+  // 저장 중 피드백 변경 → onChanged로 목록을 다시 읽음(저장된 share는 아직 false)
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await expect(op.locator('#fbList li')).toHaveCount(1);
+  await expect(op.locator('#fbShare')).toBeChecked();
+  await op.evaluate(() => window.__releaseSave());
+  await expect.poll(async () => (await storageGetFb(op, 'settings'))?.feedbackShare).toBe(true);
+  await expect(op.locator('#fbShare')).toBeChecked();
+});
+
+test('내 피드백 칸(T-137): 되돌리기·지우기 뒤 목록 다시 읽기가 실패하면 이전 목록을 두고 오류 문구', async ({ ext }) => {
+  const op = ext.page;
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'meso', vote: 'up' } });
+  await op.reload();
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  await failMessages(op, ['feedback:list']);
+  await op.locator('#fbList li').first().getByRole('button', { name: '되돌리기' }).click();
+  await expect(op.locator('#fbStatus')).toHaveText('목록을 다시 읽지 못했어요.');
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  await expect(op.locator('#fbEmpty')).toBeHidden();
+  expect(await storageGetFb(op, 'feedback')).toHaveLength(1); // 되돌리기 자체는 저장됨
+
+  await op.evaluate(() => { document.getElementById('fbStatus').textContent = ''; });
+  op.once('dialog', d => d.accept());
+  await op.click('#fbClear');
+  await expect(op.locator('#fbStatus')).toHaveText('목록을 다시 읽지 못했어요.');
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  expect(await storageGetFb(op, 'feedback')).toHaveLength(0);
 });
 
 /* ───────── 첫 실행 안내 (T-116) ───────── */
@@ -538,6 +654,14 @@ test('첫 실행 안내(T-116): 아무것도 안 고르고 넘기기 → 설정�
   await op.reload();
   await expect(op.locator('#onboarding[data-ready="1"]')).toHaveCount(1);
   await expect(op.locator('#onboarding')).toBeHidden();
+});
+
+test('첫 실행 안내(T-137): 보내기 동의 버튼은 이름 붙은 group으로 묶인다', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  const group = op.getByRole('group', { name: '서버로 보내기 동의' });
+  await expect(group).toBeVisible();
+  await expect(group.locator('#obShareYes')).toHaveCount(1);
+  await expect(group.locator('#obShareNo')).toHaveCount(1);
 });
 
 test('첫 실행 안내(T-116): 넘기기는 이미 저장된 설정을 바꾸지 않는다', async ({ ext }) => {
