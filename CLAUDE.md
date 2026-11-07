@@ -73,6 +73,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   data/common/maplestory.json 공통 저장소 그래프 (노드 18, 태그 18, 엣지 12)
 src/offscreen-src.js         오프스크린 원본 (transformers.js 번들 입력)
 tools/eval.mjs, eval-set.json 검색 품질 평가
+tools/eval-gen.mjs           생성 품질 평가(`npm run eval:gen -- --judge`, 다른 모델이 근거·구조·자연스러움 채점)
 tests/unit/                  node:test 단위 테스트 (lib/* 순수 함수)
 tests/e2e/                   Playwright: 가짜 LLM(:8765) + 테스트 페이지(:8766) + 확장 사본(.tmp/ext-e2e)
 scripts/                     build, prepare-e2e
