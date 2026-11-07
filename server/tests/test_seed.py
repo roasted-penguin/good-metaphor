@@ -160,3 +160,15 @@ def test_unknown_node_tag_is_dropped():
 def test_seed_counts(graph, kg):
     expected_rels = sum(len(n["tags"]) for n in graph["nodes"]) + len(graph["edges"])
     assert seed_counts(kg) == {"entities": 36, "relationships": expected_rels}
+
+
+def test_self_loop_edge_is_dropped():
+    """LightRAG는 src == tgt 관계를 받지 않고 주입 전체를 멈춘다. 자기 자신을 가리키는 엣지는 버린다."""
+    g = {
+        "tags": [],
+        "nodes": [{"id": "n1", "label": "노드1", "facts": ["사실1."], "tags": []},
+                  {"id": "n2", "label": "노드2", "facts": ["사실2."], "tags": []}],
+        "edges": [{"from": "n1", "to": "n1", "rel": "자기"}, {"from": "n1", "to": "n2", "rel": "이어짐"}],
+    }
+    kg = graph_to_custom_kg(g)
+    assert [(r["src_id"], r["tgt_id"]) for r in kg["relationships"]] == [("노드1", "노드2")]

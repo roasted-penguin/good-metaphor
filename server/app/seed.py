@@ -79,6 +79,8 @@ def graph_to_custom_kg(graph: dict[str, Any]) -> dict[str, list[dict[str, Any]]]
         src, tgt = node_label.get(e.get("from")), node_label.get(e.get("to"))
         if src is None or tgt is None:  # 그래프에 없는 노드를 가리키는 엣지는 버린다
             continue
+        if e.get("from") == e.get("to"):  # 자기 자신 엣지: LightRAG가 예외로 주입 전체를 멈춘다
+            continue
         relationships.append({
             "src_id": src,
             "tgt_id": tgt,
