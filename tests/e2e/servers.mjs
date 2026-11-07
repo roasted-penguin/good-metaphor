@@ -1,4 +1,4 @@
-// e2e용 서버 두 개: 가짜 LLM(OpenAI 호환, :8765)과 테스트 페이지(:8766)
+// e2e용 서버 세 개: 가짜 LLM(OpenAI 호환, :8765), 테스트 페이지(:8766), 가짜 analogy-api(:8767, T-404)
 // 가짜 LLM은 stream:true 면 SSE로, meaning 까지 먼저 보내고 나머지는 STREAM_GAP_MS 뒤에 보낸다.
 // 모델이 'mock-busy'면 429(Retry-After 60)를 낸다(fallback 체인 확인용).
 // 문장에 "Leverage"가 있으면 후보에 없는 nodeId 로 답한다(근거 검증 확인용)
@@ -6,6 +6,7 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 
 export const calls = [];
+export const analogyCalls = []; // 가짜 analogy-api 요청 기록 { headers, body }
 export const STREAM_GAP_MS = 1500;
 
 function mockLLM(req, res) {
@@ -57,9 +58,66 @@ function staticPage(_req, res) {
   res.end(readFileSync(new URL('./page.html', import.meta.url)));
 }
 
+// 가짜 analogy-api(T-404). 응답 모양은 server/app/pipeline.py 반환값과 같다.
+// 문장에 표시어가 있을 때만 답한다. 그 밖의 문장(기존 e2e 문장 전부)은 500 → 확장이 로컬로 대체한다.
+//   '서버정상' → 정상 결과(후보는 공통 그래프 실제 id), '서버후보밖' → 후보 밖 nodeId,
+//   '서버지연' → SERVER_DELAY_MS 뒤 정상 결과(확장의 timeoutMs 보다 길게)
+export const SERVER_DELAY_MS = 5000;
+export const SERVER_ANALOGY = '서버가 만든 비유예요: 스타포스 강화와 같은 구조예요.';
+function serverResult(nodeId) {
+  return {
+    meaning: '서버 뜻 풀이예요.',
+    analogy: SERVER_ANALOGY,
+    mapping: '원문 ↔ 스타포스 강화',
+    rejected: null,
+    evidence: nodeId === 'starforce' ? { nodeId: 'starforce', nodeLabel: '스타포스 강화', source: 'common', tagLabel: null } : { nodeId, nodeLabel: '없는 개념', source: 'common', tagLabel: null },
+    domain: '메이플스토리',
+    theme: 'maple',
+    feedbackApplied: false,
+    debug: {
+      feedback: { excluded: [], pinned: null, similar: [] },
+      candidates: [
+        { id: 'starforce', label: '스타포스 강화', score: 0.8, direct: 0.8, tag: null, tagSim: null, source: 'common' },
+        { id: 'cube', label: '잠재능력 재설정(큐브)', score: 0.7, direct: 0.7, tag: null, tagSim: null, source: 'common' },
+        { id: 'meso', label: '메소', score: 0.6, direct: 0.6, tag: null, tagSim: null, source: 'common' }
+      ],
+      topTags: [], abstractText: null, embedderId: null, embedderStatus: null,
+      provider: 'server/mock-analogy', fallbacks: [], llmRetries: 0, user: null,
+      keywords: { hl: [], ll: [] }, ms: 5
+    }
+  };
+}
+function mockAnalogyApi(req, res) {
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS' };
+  if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+  let raw = '';
+  req.on('data', c => (raw += c));
+  req.on('end', () => {
+    let body = null;
+    try { body = JSON.parse(raw); } catch {}
+    analogyCalls.push({ path: req.url, headers: req.headers, body });
+    const sentence = String(body?.sentence || '');
+    const send = result => {
+      if (res.destroyed) return;
+      res.writeHead(200, { ...cors, 'content-type': 'application/json' });
+      res.end(JSON.stringify(result));
+    };
+    if (req.url !== '/v1/analogy') { res.writeHead(404, cors); return res.end(); }
+    if (sentence.includes('서버정상')) return send(serverResult('starforce'));
+    if (sentence.includes('서버후보밖')) return send(serverResult('not-a-candidate'));
+    if (sentence.includes('서버지연')) return void setTimeout(() => send(serverResult('starforce')), SERVER_DELAY_MS);
+    res.writeHead(500, { ...cors, 'content-type': 'application/json' });
+    res.end(JSON.stringify({ detail: 'mock error' }));
+  });
+}
+
 export async function startServers() {
-  const a = http.createServer(mockLLM).listen(8765, '127.0.0.1');
-  const b = http.createServer(staticPage).listen(8766, '127.0.0.1');
-  await Promise.all([a, b].map(s => new Promise(r => s.once('listening', r))));
-  return () => Promise.all([a, b].map(s => new Promise(r => s.close(r))));
+  const servers = [
+    http.createServer(mockLLM).listen(8765, '127.0.0.1'),
+    http.createServer(staticPage).listen(8766, '127.0.0.1'),
+    http.createServer(mockAnalogyApi).listen(8767, '127.0.0.1')
+  ];
+  await Promise.all(servers.map(s => new Promise((r, j) => { s.once('listening', r); s.once('error', j); })));
+  // 지연 응답 중인 연결이 닫기를 막지 않게 한다
+  return () => Promise.all(servers.map(s => new Promise(r => { s.closeAllConnections?.(); s.close(r); })));
 }

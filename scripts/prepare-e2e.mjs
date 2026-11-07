@@ -15,6 +15,8 @@ admin.customBaseUrl = 'http://127.0.0.1:8765/v1';
 admin.defaultModels.custom = 'mock-model';
 // fallback 체인(T-124): 'mock-busy'(가짜 LLM이 429)를 고르면 mock-model 로 넘어간다
 admin.fallbackChain = [{ provider: 'custom', model: 'mock-model' }];
+// 서버 모드(T-404): 가짜 analogy-api. 표시어 없는 문장은 500이라 기존 e2e는 로컬 결과 그대로
+admin.analogyServer = { url: 'http://127.0.0.1:8767', timeoutMs: 800 };
 writeFileSync(p, JSON.stringify(admin, null, 2));
 
 await build({ entryPoints: ['tests/e2e/ort-smoke-src.js'], bundle: true, format: 'esm', platform: 'browser', outfile: `${OUT}/ort-smoke.js`, logLevel: 'warning' });

@@ -4,7 +4,7 @@ import { test as base, expect, chromium } from '@playwright/test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startServers, calls } from './servers.mjs';
+import { startServers, calls, analogyCalls, SERVER_ANALOGY } from './servers.mjs';
 
 const EXT = path.resolve('.tmp/ext-e2e');
 
@@ -641,4 +641,104 @@ test('fallback 체인: 429 모델은 다음 순서로 넘기고 쿨다운 동안
   expect(b.data.debug.provider).toBe('custom/mock-model');
   expect(b.data.debug.fallbacks[0]).toMatchObject({ provider: 'custom/mock-busy', reason: '쿨다운 중' });
   expect(busyCalls() - before, '쿨다운 중에는 부르지 않음').toBe(1);
+});
+
+/* ───────────── 서버 모드(T-404): 가짜 analogy-api(:8767), timeoutMs 800 ───────────── */
+
+const REJECTED = '모델이 근거 목록에 없는 개념을 골라서 비유를 숨겼어요.';
+const footText = page => page.evaluate(() => document.getElementById('analogy-helper-host')?.shadowRoot.querySelector('.foot span')?.innerText ?? '');
+
+test('서버 모드(T-404): 서버 결과를 말풍선에 보이고 foot에 서버, 요청마다 같은 설치 토큰', async ({ context, ext }) => {
+  const before = analogyCalls.length;
+  const llmBefore = calls.length;
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p5');
+  await expect.poll(() => tooltip(page)).toContain(SERVER_ANALOGY);
+  expect(await footText(page)).toBe('server/mock-analogy · 서버');
+  expect(await tooltip(page)).toContain('근거: 스타포스 강화');
+
+  const r = await ext.send({ type: 'explain', sentence: '서버정상 두 번째 문장이에요.', word: '', context: '', pageTitle: 't', noCache: true });
+  expect(r.data.source).toBe('server');
+  expect(r.data.analogy).toBe(SERVER_ANALOGY);
+  expect(r.data.feedbackApplied).toBe(false);
+  expect(r.data.debug.server).toMatchObject({ used: true });
+  expect(typeof r.data.debug.server.ms).toBe('number');
+  expect(calls.length - llmBefore, '서버가 답하면 LLM을 부르지 않음').toBe(0);
+
+  const mine = analogyCalls.slice(before);
+  expect(mine).toHaveLength(2);
+  expect(mine[0].path).toBe('/v1/analogy');
+  expect(mine[0].body).toMatchObject({ sentence: '서버정상 확률형 강화는 실패하면 들인 비용만 날아간다.' });
+  expect(Object.keys(mine[0].body).sort()).toEqual(['context', 'pageTitle', 'sentence', 'word']);
+  const token = mine[0].headers['x-install-token'];
+  expect(token).toMatch(/^[0-9a-f-]{36}$/);
+  expect(mine[1].headers['x-install-token']).toBe(token);
+  const stored = await ext.page.evaluate(async () => (await chrome.storage.local.get('installToken')).installToken);
+  expect(stored).toBe(token);
+
+  // 서버 결과도 세션 캐시에 남는다
+  const c = await ext.send({ type: 'explain', sentence: '서버정상 두 번째 문장이에요.', word: '', context: '', pageTitle: 't' });
+  expect(c.data.cached).toBe(true);
+  expect(c.data.source).toBe('server');
+  expect(analogyCalls.length - before).toBe(2);
+});
+
+test('서버 모드(T-404): 서버 500이면 로컬 결과, foot에 로컬', async ({ context, ext }) => {
+  const r = await ext.send({ type: 'explain', sentence: '서버오류 금리가 오르면 이자가 늘어난다.', noCache: true });
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'http-500' });
+  expect(r.data.analogy).toContain('같은 구조예요');
+  expect(r.data.debug.provider).toBe('custom/mock-model');
+
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플스토리로 보면');
+  await expect.poll(() => footText(page)).toBe('custom/mock-model · 로컬');
+});
+
+test('서버 모드(T-404): 서버가 느리면 timeoutMs에서 끊고 로컬로', async ({ ext }) => {
+  await ext.send({ type: 'embed:warmup' }); // 모델 준비 시간을 재지 않게
+  const t0 = Date.now();
+  const r = await ext.send({ type: 'explain', sentence: '서버지연 환율이 오르면 수입품 값이 비싸진다.', noCache: true });
+  const ms = Date.now() - t0;
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'timeout' });
+  expect(r.data.analogy).toContain('같은 구조예요');
+  expect(ms, '서버 지연(5초)을 기다리지 않음').toBeLessThan(3000);
+});
+
+test('서버 모드(T-404): 서버가 후보 밖 nodeId를 대면 비유를 숨긴다(규칙 1)', async ({ ext }) => {
+  const r = await ext.send({ type: 'explain', sentence: '서버후보밖 레버리지는 손익을 키운다.', noCache: true });
+  expect(r.data.source).toBe('server');
+  expect(r.data.analogy).toBe('');
+  expect(r.data.rejected).toBe(REJECTED);
+  expect(r.data.evidence).toBeNull();
+  expect(r.data.meaning).toBe('서버 뜻 풀이예요.');
+});
+
+test('서버 모드(T-404): 그 문장에 👎 기록이 있으면 서버를 부르지 않는다', async ({ ext }) => {
+  const q = { sentence: '서버정상 물가가 오르면 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  expect(r1.data.source).toBe('server');
+  const before = analogyCalls.length;
+  const fb = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId: r1.data.evidence.nodeId, tagId: null, vote: 'down', provider: r1.data.debug.provider }, rerun: q });
+  expect(fb.ok).toBe(true);
+  expect(fb.data.result.source).toBe('local');
+  expect(fb.data.result.debug.server).toEqual({ used: false, reason: 'feedback' });
+  const r2 = await ext.send({ type: 'explain', ...q, noCache: true });
+  expect(r2.data.source).toBe('local');
+  expect(analogyCalls.length - before, '가짜 서버 요청 수 그대로').toBe(0);
+});
+
+test('서버 모드(T-404): 로그인 세션이면 서버를 부르지 않는다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  const before = analogyCalls.length;
+  const r = await send({ type: 'explain', sentence: '서버정상 예금 금리가 오르면 이자가 늘어난다.', noCache: true });
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'session' });
+  expect(analogyCalls.length - before).toBe(0);
+  await send({ type: 'auth:logout' });
 });

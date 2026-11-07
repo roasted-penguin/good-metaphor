@@ -6,6 +6,7 @@ import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode } from './lib/feedback.js';
+import { callAnalogyServer, serverSkipReason, getInstallToken, REJECTED_TEXT } from './lib/analogy-server.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -163,6 +164,31 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     if (hit) return { ...hit, cached: true };
   }
 
+  // 서버 모드(T-404): analogy-api 를 먼저 부르고, 실패하면 아래 로컬 파이프라인으로 간다.
+  // 주소가 비었으면(서버 모드 꺼짐) source·debug.server 를 붙이지 않는다(지금 결과 그대로)
+  const skip = serverSkipReason({
+    admin, session, providerKind: provider.def.kind,
+    sentenceRecords: feedbackRecords.filter(r => r.sentenceHash === sentenceHash)
+  });
+  let serverInfo = skip === 'off' ? null : { used: false, reason: skip };
+  if (!skip) {
+    onStage('server');
+    const token = await getInstallToken(chrome.storage.local);
+    const r = await callAnalogyServer({
+      url: admin.analogyServer.url,
+      token,
+      timeoutMs: admin.analogyServer.timeoutMs,
+      payload: { sentence, word: word || '', context: context || '', pageTitle: pageTitle || '' }
+    });
+    if (r.ok) {
+      // callAnalogyServer 가 이미 규칙 1 검증(checkServerResult)을 거쳤다. 서버 경로에는 partial 이 없다
+      const result = { ...r.result, source: 'server', feedbackApplied: false, debug: { ...r.result.debug, server: { used: true, ms: r.ms } } };
+      await cachePut(cacheKey, result);
+      return result;
+    }
+    serverInfo = { used: false, reason: r.reason };
+  }
+
   onStage('model');
   const { vecs, embedderId, embedderStatus } = await ensureGraphVectors(graph);
 
@@ -227,7 +253,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const chosen = candidates.find(c => c.id === answer.nodeId) || null;
   if (answer.analogy && !chosen) {
     answer.analogy = '';
-    answer.rejected = '모델이 근거 목록에 없는 개념을 골라서 비유를 숨겼어요.';
+    answer.rejected = REJECTED_TEXT;
   }
 
   const result = {
@@ -258,6 +284,10 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       ms: Date.now() - t0
     }
   };
+  if (serverInfo) {
+    result.source = 'local';
+    result.debug.server = serverInfo;
+  }
   await cachePut(cacheKey, result);
   return result;
 }

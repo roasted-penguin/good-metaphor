@@ -66,9 +66,10 @@
 | T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
 | T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 완료 | |
 | T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 대기 | T-402 |
-| T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 리뷰 | T-402 |
+| T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 완료 | T-402 |
 | T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 대기 | T-403 |
-| T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 대기 | T-402 |
+| T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 리뷰 | T-402 |
+| T-141 | 서버 모드 실사용 준비: 서버 도메인 `host_permissions` + 서버 CORS(chrome-extension), `managed_schema.json`에 `analogyServer`, 서버 장애 중 로컬 결과는 세션 캐시에 안 남기기, 규칙 1을 로컬 그래프 노드로도 확인 | L 서버 | P1 | 대기 | T-404, T-401 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가, 관문: 서버 hit@1 ≥ 브라우저 | L 서버 | P0 | 대기 | T-403 |
 | T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
 | T-412 | [L1] 추출 프롬프트: 통제 어휘·용어 사전, JSON 모드 | L 서버 | P0 | 대기 | T-403 |
@@ -481,6 +482,11 @@ LightRAG 엔티티 이름은 공통 그래프 노드 id 또는 label과 같아�
 `config/admin.json`에 `analogyServer.url`. 설정되면 background가 서버를 먼저 부르고, 실패(타임아웃 4초, 5xx)하면 기존 브라우저 파이프라인으로 대체. 말풍선 footer에 `서버`/`로컬` 표시. e2e는 가짜 analogy-api(Node)로.
 **완료 기준** e2e: 서버 응답 사용, 서버 다운 시 로컬 대체 모두 통과.
 
+### T-141 서버 모드 실사용 준비 (T-404 후속)
+**왜** T-404는 가짜 analogy-api로만 확인했다. 실제 서버를 켜려면: 서버 도메인이 manifest `host_permissions`에 없고 서버(FastAPI)는 CORS를 허용하지 않아 지금은 늘 `network`로 로컬 대체된다. `extension/managed_schema.json`에 `analogyServer`가 없어 기업 정책으로 주소를 줄 수 없다. 서버가 잠깐 죽었을 때 만든 로컬 결과가 세션 캐시에 남아 서버가 살아나도 그 문장은 로컬이다. 규칙 1 재검증이 서버의 후보 목록 기준이라 로컬 그래프에 없는 노드는 못 거른다.
+**할 일** 도메인이 정해지면(T-401) `host_permissions`에 추가(또는 `optional_host_permissions` 요청), 서버에 `CORSMiddleware`(`chrome-extension://` 출처, `X-Install-Token` 헤더), 스키마에 `analogyServer`, 서버 실패로 만든 로컬 결과는 캐시하지 않기, 서버 결과의 `evidence.nodeId`를 로컬 공통 그래프 노드 id로도 확인.
+**완료 기준** 실제 서버 주소로 확장 호버가 `서버`로 뜸, 정책으로 주소 설정, 단위·e2e.
+
 ### T-405 [L0] 평가 도구 서버 모드 · L0 관문
 `tools/eval.mjs --server <url>`: 같은 평가셋을 서버 `/v1/analogy`(debug 후보)로 돌려 hit@1·hit@3 비교. 결과를 EVAL_LOG에.
 **완료 기준** 서버 hit@1 ≥ 브라우저 hit@1. 통과하면 ADR 0006 상태를 "채택"으로.
@@ -524,6 +530,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-08 | T-404 | task/T-404-server-mode | [#24](https://github.com/roasted-penguin/good-metaphor/pull/24) | 확장 서버 모드: `admin.json analogyServer.url`(기본 빈 값 = 꺼짐)이 있으면 analogy-api를 먼저(설치 토큰, 4초 타임아웃), 실패하면(네트워크·타임아웃·2xx 아님·모양 오류) 로컬. 로그인·그 문장 👎/교정·데모면 서버 건너뜀. 서버 결과도 확장에서 규칙 1 재검증. 말풍선에 `서버`/`로컬`(꺼짐이면 표시 없음). e2e 가짜 analogy-api :8767. 단위 134·e2e 36. Opus·medium 서브에이전트 2작업. 실사용 준비는 T-141. |
 | 2026-11-07 | T-403 | task/T-403-seed-kg | [#23](https://github.com/roasted-penguin/good-metaphor/pull/23) | 시드 주입: 공통 그래프 → LightRAG custom KG(엔티티 36 = 추상구조 18 + 게임시스템 18, 라벨 이름, 관계 48, 청크 36, source_id `seed:`), `python -m app.seed`(해시 임베딩·Ollama bge-m3 설정값, 오프라인 글자 토크나이저, LLM 호출 금지 함수), 다시 넣어도 엔티티 36·관계 48 그대로(메인 세션에서 CLI 두 번 확인), analogy-api가 시드 인덱스를 지연·한 번만 열어 검색(없으면 503). pytest 102. Opus·medium 서브에이전트 3작업 + 최종 수정 1회. 실제 bge-m3 품질은 T-405, 후속 T-140. |
 | 2026-11-07 | T-402 | task/T-402-analogy-api | [#22](https://github.com/roasted-penguin/good-metaphor/pull/22) | analogy-api 서버 골격 `server/`(FastAPI, lightrag-hku 1.5.7 고정): `/health`, `POST /v1/analogy`(키워드 LLM → LightRAG hybrid 맥락만 → 후보 3 → 비유 LLM → 규칙 1 nodeId 검증, 확장 explain() 결과 모양), 프롬프트 Python 이식 + prompt.js 규칙 비교 테스트, 캐시(문장+단어+워크스페이스 버전), 설치 토큰별 요청 한도, 한국어 JSON 오류, 빈 키워드로 LightRAG 내부 LLM 안 부름, docker compose(그래프 읽기 전용 마운트, .env). pytest 64. 메인 세션에서 docker 빌드·실행 확인(/health 200, 토큰 없음 400, 키 없음 503, 빌드 8분). Opus·medium 서브에이전트 4작업 + 최종 수정 1회. 실제 인덱스는 T-403, CI는 T-139. |
 | 2026-11-07 | T-130 | task/T-130-similar-feedback | [#21](https://github.com/roasted-penguin/good-metaphor/pull/21) | 비슷한 문장 피드백(ADR 0010 2단계): `feedbackAdjust`(노드별 합 ±0.1, 임계값에서 0부터), 실제 모델로 잰 임계값 0.90(바꿔 말한 쌍 30개, `npm run sim:feedback`), 👎·교정 기록에 질의 벡터 저장 + 다른 문장 기록을 메모리로(목록·내보내기엔 벡터 없음), 로그인 사용자는 같은 개념 서로 다른 문장 👎 3건부터 오버레이 `feedbackBoosts`(기록으로 매번 다시 계산, 손으로 넣은 `nodeBoosts`와 합쳐 ±0.2). Opus·medium 서브에이전트 4작업, 수정 4회(합 자르기, 되돌리기 반복, 수동 가중치 보존, 지우기·500건). 회귀 가드 0. 후속 T-138. |

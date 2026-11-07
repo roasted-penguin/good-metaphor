@@ -268,8 +268,11 @@
     abstract: '핵심 개념 뽑는 중',
     search: '비슷한 개념 찾는 중',
     generate: '비유 만드는 중',
-    analogy: '비유 찾는 중'
+    analogy: '비유 찾는 중',
+    server: '서버에 묻는 중'
   };
+  // 서버 모드(T-404)일 때만 결과에 source 가 있다. 꺼져 있으면 아무것도 덧붙이지 않는다
+  const SOURCE_TEXT = { server: ' · 서버', local: ' · 로컬' };
 
   // 을/를
   function eul(word) {
@@ -383,7 +386,7 @@
       const thumbs = state.thanked
         ? '<span class="thanks">고마워요</span>'
         : `<button class="fbtn up" data-act="up" aria-label="잘 맞아요" title="잘 맞아요">${THUMB}</button>${r.evidence && r.analogy ? `<button class="fbtn down" data-act="down" aria-label="안 맞아요" title="안 맞아요">${THUMB}</button>` : ''}`;
-      html += `<div class="foot"><span>${esc(r.debug?.provider || '')}${r.cached ? ' · 캐시' : ''}</span><span class="fb">${state.busy || !r.analogy ? '' : thumbs}<button data-act="options">설정</button></span></div>`;
+      html += `<div class="foot"><span>${esc(r.debug?.provider || '')}${SOURCE_TEXT[r.source] || ''}${r.cached ? ' · 캐시' : ''}</span><span class="fb">${state.busy || !r.analogy ? '' : thumbs}<button data-act="options">설정</button></span></div>`;
     }
     box.innerHTML = html;
     view = state;
