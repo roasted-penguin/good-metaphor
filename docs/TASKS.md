@@ -64,7 +64,8 @@
 | T-302 | 두 번째 공통 관심사: 식당 그래프 + 로그인 없이 관심사 선택 | 3 확장 | P1 | 대기 | T-304 |
 | T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 대기 | T-107, T-402 |
 | T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
-| T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 진행 | |
+| T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 리뷰 | |
+| T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 대기 | T-402 |
 | T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 대기 | T-402 |
 | T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 대기 | T-402 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가, 관문: 서버 hit@1 ≥ 브라우저 | L 서버 | P0 | 대기 | T-403 |
@@ -460,6 +461,11 @@ D-4 결정(식당, 로그인 없이 선택 가능). [naming-meme.md](naming-meme
 `server/`(Python, FastAPI, `lightrag-hku` 버전 고정). `POST /v1/analogy`는 확장의 `explain()` 결과 형식을 그대로 돌려준다. 키워드(Gemini Flash-Lite) → `QueryParam(mode="hybrid", hl_keywords, ll_keywords, only_need_context=True)` → 후보 3개 → 비유(Gemini Flash) → `nodeId` 검증. 결과 캐시(문장 해시 + 워크스페이스 버전). 설치 토큰별 요청 한도. 프롬프트는 `extension/lib/prompt.js`와 같은 규칙을 Python으로 옮기고, 두 쪽이 같은 규칙인지 확인하는 테스트를 둔다.
 **완료 기준** pytest(가짜 LLM, 작은 시드 그래프)로 응답 형식·근거 검증·캐시 확인. `docker compose up`으로 로컬 실행.
 
+### T-139 CI에 서버 테스트
+**왜** T-402로 `server/`(FastAPI, pytest 64개)가 생겼지만 `.github/workflows/ci.yml`은 확장 테스트(npm)만 돌린다.
+**할 일** `ci.yml`에 서버 잡: Python 3.12, `pip install -r server/requirements.txt -r server/requirements-dev.txt`(캐시), `cd server && pytest -q`. 기존 `test` 체크 이름은 바꾸지 않는다(브랜치 보호).
+**완료 기준** PR에서 서버 테스트가 돌고, 일부러 깨뜨리면 실패.
+
 ### T-403 [L0] 시드 주입
 `maplestory.json` → `insert_custom_kg` 변환 스크립트. 태그 18개는 `entity_type="추상구조"` 엔티티, 노드는 `게임시스템` 등, 노드–태그 연결은 `keywords`에 태그 라벨이 들어간 관계, 기존 엣지는 `rel`을 설명으로. `source_id`는 `seed:<id>`.
 LightRAG 엔티티 이름은 공통 그래프 노드 id 또는 label과 같아야 서버 검색기가 후보로 바꾼다(T-402 retriever 규칙).
@@ -512,6 +518,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-07 | T-402 | task/T-402-analogy-api | | analogy-api 서버 골격 `server/`(FastAPI, lightrag-hku 1.5.7 고정): `/health`, `POST /v1/analogy`(키워드 LLM → LightRAG hybrid 맥락만 → 후보 3 → 비유 LLM → 규칙 1 nodeId 검증, 확장 explain() 결과 모양), 프롬프트 Python 이식 + prompt.js 규칙 비교 테스트, 캐시(문장+단어+워크스페이스 버전), 설치 토큰별 요청 한도, 한국어 JSON 오류, 빈 키워드로 LightRAG 내부 LLM 안 부름, docker compose(그래프 읽기 전용 마운트, .env). pytest 64. 메인 세션에서 docker 빌드·실행 확인(/health 200, 토큰 없음 400, 키 없음 503, 빌드 8분). Opus·medium 서브에이전트 4작업 + 최종 수정 1회. 실제 인덱스는 T-403, CI는 T-139. |
 | 2026-11-07 | T-130 | task/T-130-similar-feedback | [#21](https://github.com/roasted-penguin/good-metaphor/pull/21) | 비슷한 문장 피드백(ADR 0010 2단계): `feedbackAdjust`(노드별 합 ±0.1, 임계값에서 0부터), 실제 모델로 잰 임계값 0.90(바꿔 말한 쌍 30개, `npm run sim:feedback`), 👎·교정 기록에 질의 벡터 저장 + 다른 문장 기록을 메모리로(목록·내보내기엔 벡터 없음), 로그인 사용자는 같은 개념 서로 다른 문장 👎 3건부터 오버레이 `feedbackBoosts`(기록으로 매번 다시 계산, 손으로 넣은 `nodeBoosts`와 합쳐 ±0.2). Opus·medium 서브에이전트 4작업, 수정 4회(합 자르기, 되돌리기 반복, 수동 가중치 보존, 지우기·500건). 회귀 가드 0. 후속 T-138. |
 | 2026-11-01 | T-116 | task/T-116-first-run | [#20](https://github.com/roasted-penguin/good-metaphor/pull/20) | 첫 실행 안내: 설치 때 `onboarding.pending` 기록 뒤 설정 화면을 열고, 맨 위에서 트리거(Alt 추천·자동, 자동이면 무료 한도 경고)와 피드백 보내기 동의(미리 선택 없음, D-7)를 고른 뒤 [시작하기]로 저장. [넘기기]는 설정을 바꾸지 않고 닫기만(판정). 업데이트·기존 사용자에게는 안 뜸. Opus·medium 서브에이전트 구현 + 작업 검토 + 전체 검토 + 수정 1회. e2e 3 추가. 캡처 `docs/screens/t116-first-run.png`. |
 | 2026-11-01 | T-132 | task/T-132-my-feedback | [#19](https://github.com/roasted-penguin/good-metaphor/pull/19) | **[사용자 추가]** 설정 화면 "내 피드백": 목록(문장·개념·👍/👎/교정·날짜)·되돌리기·JSON 내보내기·전부 지우기·공통 개선 보내기 토글(기본 꺼짐) + 가림 미리보기(메일·주소·4자리 이상 숫자)·지난 7일 호버·👍·👎·교정. background `feedback:list`·`feedback:stats`·`feedback:clear`, 호버 집계(피드백 재비유는 제외). **처음으로 Opus·medium 서브에이전트가 구현**(superpowers subagent-driven-development, 작업 3개, 작업마다 검토 + 전체 검토). 단위 6·e2e 3 추가. 남은 것은 T-137. |
