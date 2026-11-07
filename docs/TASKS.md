@@ -64,9 +64,9 @@
 | T-302 | 두 번째 공통 관심사: 식당 그래프 + 로그인 없이 관심사 선택 | 3 확장 | P1 | 대기 | T-304 |
 | T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 대기 | T-107, T-402 |
 | T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
-| T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 리뷰 | |
+| T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 완료 | |
 | T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 대기 | T-402 |
-| T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 대기 | T-402 |
+| T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 진행 | T-402 |
 | T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 대기 | T-402 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가, 관문: 서버 hit@1 ≥ 브라우저 | L 서버 | P0 | 대기 | T-403 |
 | T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
