@@ -66,7 +66,8 @@
 | T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
 | T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 완료 | |
 | T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 대기 | T-402 |
-| T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 진행 | T-402 |
+| T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 리뷰 | T-402 |
+| T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 대기 | T-403 |
 | T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 대기 | T-402 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가, 관문: 서버 hit@1 ≥ 브라우저 | L 서버 | P0 | 대기 | T-403 |
 | T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
@@ -471,6 +472,11 @@ D-4 결정(식당, 로그인 없이 선택 가능). [naming-meme.md](naming-meme
 LightRAG 엔티티 이름은 공통 그래프 노드 id 또는 label과 같아야 서버 검색기가 후보로 바꾼다(T-402 retriever 규칙).
 **완료 기준** 워크스페이스 `common_maplestory`에 엔티티 36개, 관계(노드–태그 + 기존 엣지) 적재 확인. 재실행해도 중복이 생기지 않음.
 
+### T-140 시드 인덱스 다듬기 (T-403 후속)
+**왜** T-403 검토에서 남긴 것: 서버와 시드의 `EMBEDDING_*`가 다르거나 그래프가 바뀌어도 코드가 알아채지 못한다(README 안내만). docker 컨테이너는 인덱스 볼륨이 없어 늘 503. `initialize_storages()`가 중간에 실패하면 반쯤 만든 인스턴스를 정리하지 않는다. Ollama 응답 차원을 확인하지 않는다. 자기 자신 엣지 판정이 id 기준(라벨이 같은 서로 다른 노드는 못 거름).
+**할 일** 시드 때 워크스페이스에 `seed-meta.json`(그래프 버전, 임베딩 공급자·모델·차원) 기록, 서버가 열 때 비교해 다르면 503과 한국어 안내. compose에 `rag_storage` 볼륨. 나머지 정리.
+**완료 기준** 단위·통합 테스트, docker에서 시드된 인덱스로 200(T-401 환경 또는 로컬).
+
 ### T-404 [L0] 확장 서버 모드
 `config/admin.json`에 `analogyServer.url`. 설정되면 background가 서버를 먼저 부르고, 실패(타임아웃 4초, 5xx)하면 기존 브라우저 파이프라인으로 대체. 말풍선 footer에 `서버`/`로컬` 표시. e2e는 가짜 analogy-api(Node)로.
 **완료 기준** e2e: 서버 응답 사용, 서버 다운 시 로컬 대체 모두 통과.
@@ -518,6 +524,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-07 | T-403 | task/T-403-seed-kg | | 시드 주입: 공통 그래프 → LightRAG custom KG(엔티티 36 = 추상구조 18 + 게임시스템 18, 라벨 이름, 관계 48, 청크 36, source_id `seed:`), `python -m app.seed`(해시 임베딩·Ollama bge-m3 설정값, 오프라인 글자 토크나이저, LLM 호출 금지 함수), 다시 넣어도 엔티티 36·관계 48 그대로(메인 세션에서 CLI 두 번 확인), analogy-api가 시드 인덱스를 지연·한 번만 열어 검색(없으면 503). pytest 102. Opus·medium 서브에이전트 3작업 + 최종 수정 1회. 실제 bge-m3 품질은 T-405, 후속 T-140. |
 | 2026-11-07 | T-402 | task/T-402-analogy-api | [#22](https://github.com/roasted-penguin/good-metaphor/pull/22) | analogy-api 서버 골격 `server/`(FastAPI, lightrag-hku 1.5.7 고정): `/health`, `POST /v1/analogy`(키워드 LLM → LightRAG hybrid 맥락만 → 후보 3 → 비유 LLM → 규칙 1 nodeId 검증, 확장 explain() 결과 모양), 프롬프트 Python 이식 + prompt.js 규칙 비교 테스트, 캐시(문장+단어+워크스페이스 버전), 설치 토큰별 요청 한도, 한국어 JSON 오류, 빈 키워드로 LightRAG 내부 LLM 안 부름, docker compose(그래프 읽기 전용 마운트, .env). pytest 64. 메인 세션에서 docker 빌드·실행 확인(/health 200, 토큰 없음 400, 키 없음 503, 빌드 8분). Opus·medium 서브에이전트 4작업 + 최종 수정 1회. 실제 인덱스는 T-403, CI는 T-139. |
 | 2026-11-07 | T-130 | task/T-130-similar-feedback | [#21](https://github.com/roasted-penguin/good-metaphor/pull/21) | 비슷한 문장 피드백(ADR 0010 2단계): `feedbackAdjust`(노드별 합 ±0.1, 임계값에서 0부터), 실제 모델로 잰 임계값 0.90(바꿔 말한 쌍 30개, `npm run sim:feedback`), 👎·교정 기록에 질의 벡터 저장 + 다른 문장 기록을 메모리로(목록·내보내기엔 벡터 없음), 로그인 사용자는 같은 개념 서로 다른 문장 👎 3건부터 오버레이 `feedbackBoosts`(기록으로 매번 다시 계산, 손으로 넣은 `nodeBoosts`와 합쳐 ±0.2). Opus·medium 서브에이전트 4작업, 수정 4회(합 자르기, 되돌리기 반복, 수동 가중치 보존, 지우기·500건). 회귀 가드 0. 후속 T-138. |
 | 2026-11-01 | T-116 | task/T-116-first-run | [#20](https://github.com/roasted-penguin/good-metaphor/pull/20) | 첫 실행 안내: 설치 때 `onboarding.pending` 기록 뒤 설정 화면을 열고, 맨 위에서 트리거(Alt 추천·자동, 자동이면 무료 한도 경고)와 피드백 보내기 동의(미리 선택 없음, D-7)를 고른 뒤 [시작하기]로 저장. [넘기기]는 설정을 바꾸지 않고 닫기만(판정). 업데이트·기존 사용자에게는 안 뜸. Opus·medium 서브에이전트 구현 + 작업 검토 + 전체 검토 + 수정 1회. e2e 3 추가. 캡처 `docs/screens/t116-first-run.png`. |
