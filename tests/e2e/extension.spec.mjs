@@ -83,6 +83,29 @@ test('평가 도구 계약: 옵션 페이지에서 오프스크린 embed를 직�
   expect(alone.vectors[0]).toEqual(both.vectors[1]); // 묶어 보내도 한 문장씩과 같은 벡터
 });
 
+test('벡터 캐시 정리(T-110): 다른 임베더 키는 지워지고, 바뀐 것이 없으면 다시 저장하지 않는다', async ({ ext }) => {
+  const getCache = () => ext.page.evaluate(async () => (await chrome.storage.local.get('vecCache')).vecCache || {});
+  // 서비스 워커가 캐시를 읽기 전에 다른 임베더 키를 심는다
+  await ext.page.evaluate(() => chrome.storage.local.set({ vecCache: { 'old-embedder|deadbeef': [0.1, 0.2] } }));
+  const r = await ext.send({ type: 'embed:warmup' });
+  expect(r.ok).toBe(true);
+  const id = r.data.embedderId;
+  await expect.poll(async () => Object.keys(await getCache()).includes('old-embedder|deadbeef')).toBe(false);
+  const keys = Object.keys(await getCache());
+  expect(keys.length).toBe(r.data.vectors);
+  expect(keys.every(k => k.startsWith(id + '|'))).toBe(true);
+
+  // 같은 그래프로 다시: 추가·삭제가 없으면 vecCache를 쓰지 않는다(호버마다 저장 금지)
+  await ext.page.evaluate(() => {
+    window.__vecWrites = 0;
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.vecCache) window.__vecWrites++; });
+  });
+  const r2 = await ext.send({ type: 'embed:warmup' });
+  expect(r2.data.vectors).toBe(r.data.vectors);
+  await ext.page.waitForTimeout(300);
+  expect(await ext.page.evaluate(() => window.__vecWrites)).toBe(0);
+});
+
 test('Alt+호버: 문장 강조, 메이플 테마 말풍선, Esc 닫기, 캐시', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');

@@ -42,8 +42,8 @@
 | T-107 | 제외 사이트 목록과 "이 사이트에서 끄기" | 1 품질 | P1 | 완료 | |
 | T-144 | 제외 사이트 다듬기: 설정 화면에서 제외 목록 보기·편집, 팝업 토글 실제 크롬 수동 확인(activeTab), background 이중 방어 e2e(콘텐츠 우회 훅) | 1 품질 | P2 | 완료 | T-107 |
 | T-108 | 첫 결과 전 테마 깜빡임 제거 | 1 품질 | P2 | 완료 | |
-| T-109 | 여러 줄 문장에서 말풍선 위치 | 1 품질 | P2 | 리뷰 | |
-| T-110 | 벡터 캐시 정리 (모델 바뀌면 삭제, 상한) | 1 품질 | P2 | 대기 | |
+| T-109 | 여러 줄 문장에서 말풍선 위치 | 1 품질 | P2 | 완료 | |
+| T-110 | 벡터 캐시 정리 (모델 바뀌면 삭제, 상한) | 1 품질 | P2 | 리뷰 | |
 | T-111 | iframe·Shadow DOM 안 문장 지원 | 1 품질 | P2 | 대기 | |
 | T-112 | 윈도우에서 Alt 메뉴 포커스 충돌 확인 | 1 품질 | P2 | 대기 | |
 | T-115 | 앱 이름을 "좋은비유네용"으로 바꾸기 | 1 품질 | P1 | 대기 | |
@@ -548,6 +548,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-08 | T-110 | task/T-110-vector-cache | [#39](https://github.com/roasted-penguin/good-metaphor/pull/39) | 벡터 캐시 정리: `lib/vec-cache.js`(`touch`·`pruneVecCache` 순수 함수) — 지금 embedderId가 아닌 항목 삭제, `admin.vecCacheMax` 2,000개 상한(LRU, 이번 그래프 키는 절대 안 지움), 추가·삭제가 있을 때만 저장(호버마다 쓰지 않음). 임베딩 중 "캐시 지우기"가 있으면 되살리지 않는 가드. Opus·medium 서브에이전트. 단위 384·e2e 61. |
 | 2026-11-08 | T-109 | task/T-109-bubble-position | [#38](https://github.com/roasted-penguin/good-metaphor/pull/38) | 여러 줄 문장 말풍선 위치: 문장 전체 rect 대신 호버한 줄 rect 아래, 넘치면 그 줄 위로(`lib/place.js` 클래식 스크립트: `lineRects`·`pickLineIndex`·`pickLineRect`·`placeBox`). 줄은 호버 때 인덱스로 한 번 고르고 다시 배치할 때 그 줄의 지금 rect를 써서 로딩 중 조금 스크롤해도 같은 줄. 가로는 호버 때 커서 x로 고정(결과 뒤 커서를 따라가지 않음). Opus·medium 서브에이전트(수정 1회: 스크롤 뒤 옆 줄). 단위 373·e2e 60. |
 | 2026-11-08 | T-108 | task/T-108-theme-flicker | [#37](https://github.com/roasted-penguin/good-metaphor/pull/37) | 첫 결과 전 테마 깜빡임: content.js가 페이지마다 한 번 `graph:info`(`merged.theme` 추가)로 테마를 미리 받고(세션·오버레이 키가 바뀔 때만 다시, 실패하면 다음 호버 때 다시), background 포트의 `stage` 메시지에도 `theme`을 실음(병합 그래프 한 번 읽어 explain에 넘김). 중립 관심사에서 로딩 말풍선이 `t-maple`로 한 번도 안 뜸(MutationObserver e2e, 고정 대기 대신 폴링, 3회 반복 통과). Opus·medium 서브에이전트(수정 1회). 단위 361·e2e 57. |
 | 2026-11-08 | T-144 | task/T-144-site-exclude-polish | [#36](https://github.com/roasted-penguin/good-metaphor/pull/36) | 제외 사이트 다듬기: 설정 화면 "제외 사이트" 섹션(목록·추가·지우기·기본 목록으로, `validateHostInput`: localhost·IPv4 허용, 점 없는 단어 거부, 이미 덮인 호스트는 중복), 열린 화면 자동 갱신. background 이중 방어 e2e는 e2e 사본에만 넣는 훅 콘텐츠 스크립트로 explain 포트·sendMessage·피드백 rerun 세 길 모두 요청 0 확인(배포물엔 훅 없음). 팝업 토글 실제 크롬 확인은 사람이 할 일(PR 본문 절차). Opus·medium 서브에이전트. 단위 361·e2e 53. |
