@@ -10,6 +10,7 @@
 - 호출 순서 = 사용자가 고른 제공자·모델 → `fallbackChain`. 중복, 키 없음, 허용 안 됨은 건너뛴다. 데모는 체인을 타지 않는다.
 - 429·503·네트워크·시간 초과면 다음 순서로. 키 오류(400·401·403)는 사용자가 고쳐야 하므로 넘기지 않고 보여 준다.
 - 429를 받은 모델은 `Retry-After`(없으면 `cooldown.defaultMs` 60초, 상한 `maxMs` 10분) 동안 쿨다운한다. 기록은 `chrome.storage.session`. 쿨다운 중이면 부르지 않고 바로 다음으로 간다. 모두 쿨다운이면 가장 먼저 풀리는 것을 부른다.
+- **하루 한도 429는 리셋까지 쿨다운한다**(T-126, 2026-11-08). 판정은 제공자 id가 아니라 오류 `message`+원문 본문(`err.body`, `postOnce`가 앞 4000자를 붙임, 판정에만 쓰고 로그·UI·저장소로 내보내지 않음)의 패턴 표 하나(`lib/fallback.js` `DAILY_PATTERNS`)로 한다: `on tokens|requests per day (TPD|RPD)`(Groq 모양), `PerDay`(Gemini `quotaId` 모양). 그 밖(`TPM`·`RPM`·`PerMinute`, 모양 모르는 429)은 분당이고 위 규칙 그대로다. 하루 한도 기간(`cooldownMsFor`)은 (1) 본문의 `Please try again in 1h12m3s`(ms 올림) → (2) `PerDay`면 다음 America/Los_Angeles 자정(Gemini 무료 리셋, `Intl.DateTimeFormat`, 서머타임 안전. 본문 `RetryInfo.retryDelay`는 짧게 나와 다시 부르게 되므로 쓰지 않음) → (3) `cooldown.dailyDefaultMs`(1시간) 순이고, 최소 `defaultMs`, 상한 `dailyMaxMs`(24시간). 새 모양은 표에 한 줄 더한다.
 - 다음 순서가 있으면 429에 같은 모델 재시도(T-121)를 하지 않는다. 마지막 순서에서는 기존 재시도를 그대로 한다.
 - 호출 로직은 `lib/fallback.js` 한 곳. 제공자별 분기를 늘리지 않는다(규칙 7).
 
