@@ -54,7 +54,7 @@ npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있
 ```
 extension/                   크롬에 로드되는 폴더. 빌드 결과(offscreen.js, vendor/)도 커밋한다
   background.js              서비스 워커. explain() 파이프라인과 모든 메시지 핸들러
-  content.js / content.css   커서 아래 문장 찾기(Intl.Segmenter), CSS Highlight, Shadow DOM 말풍선
+  content.js / content.css   커서 아래 문장 찾기(Intl.Segmenter), CSS Highlight, Shadow DOM 말풍선. 모든 프레임에 들어가고(서브프레임은 최상위 호스트도 제외 검사, 모르면 꺼짐), 열린 Shadow DOM 문장도 찾는다 (T-111)
   offscreen.html / .js       임베딩 모델 실행 (빌드 산출물, 직접 고치지 말 것 → src/offscreen-src.js)
   options.* / popup.*        설정·팝업 UI
   lib/config.js              설정 우선순위: admin.json < chrome.storage.managed < 사용자 설정(잠금 아닐 때)
@@ -67,6 +67,10 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/grounding.js           근거 검사: usedFact가 고른 노드 facts와 맞는지 + 비유 숫자가 facts·라벨·원문에 있는지 (T-123)
   lib/feedback.js            말풍선 피드백 층: 문장별 👎 제외·고른 개념 고정, 500건, 캐시 지문 (ADR 0010)
   lib/embed-each.js          임베딩은 항상 한 문장씩 (q8 묶음 차이, ADR 0011)
+  lib/site-filter.js         제외 사이트 판정·`frameHosts`(최상위 호스트)·background 이중 방어. 클래식 스크립트(`globalThis.AnalogySiteFilter`) — 콘텐츠·background·팝업·설정이 같이 씀 (T-107·T-111)
+  lib/place.js               말풍선 배치: 호버한 줄(인덱스) 아래, 넘치면 위 (클래식 스크립트, T-109)
+  lib/shadow.js              열린 shadow root 모으기·shadow 경계 블록·`composedParent` (클래식 스크립트, T-111)
+  lib/vec-cache.js           그래프 벡터 캐시 정리: 다른 임베더 삭제, 2,000개 LRU (T-110)
   lib/prompt.js              프롬프트, 데모 응답, 조사 처리
   lib/fallback-embed.js      모델 없을 때 쓰는 글자 n-gram 임베더
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)
@@ -107,6 +111,9 @@ scripts/                     build, prepare-e2e
 - 모델 ID·가격은 2026-09-28에 각 사 문서로 확인한 값이다. 바뀌면 `config/admin.json`의 `defaultModels`·`fallbackChain`과 `lib/providers.js`를 함께 고친다.
 - **모델을 고르거나 바꿀 때 성능 비교는 [Artificial Analysis 리더보드](https://artificialanalysis.ai/leaderboards/models)를 먼저 참고한다**(지능 지수, 출력 속도, 첫 토큰 지연, 가격). 후보를 거기서 추린 뒤 `npm run smoke:providers`(`--all-models`)로 이 앱 기준(뜻까지 시간, 존댓말, 근거 준수, JSON, 무료 한도)을 직접 잰다. 리더보드 수치는 확인한 날짜와 함께 적는다.
 - Gemini 3.x는 `thinkingConfig`를 받지 않는 모델이 있어 400이면 빼고 재시도한다.
+- 콘텐츠 스크립트는 ES 모듈을 못 쓴다. 콘텐츠와 background가 같이 쓰는 순수 함수는 export 없는 클래식 스크립트로 `globalThis`에 달고(`lib/site-filter.js`·`place.js`·`shadow.js`), manifest `content_scripts`에서 `content.js` 앞에 둔다. 단위 테스트는 부수효과 import.
+- 닫힌(closed) Shadow DOM은 지원하지 않는다. 열린 Shadow DOM 경로는 크롬 128+(`caretPositionFromPoint`의 `shadowRoots`)에서만 동작한다(`minimum_chrome_version`은 116, 낮으면 예전처럼). 하이라이트 색은 `content.css`와 `content.js` `HL_RULE` 두 곳에 있다.
+- e2e 전용 코드(훅 콘텐츠 스크립트 `tests/e2e/hook-content.js`)는 `scripts/prepare-e2e.mjs`가 `.tmp/ext-e2e` 사본에만 넣는다. `extension/`에 테스트 코드를 넣지 않는다.
 
 ## API 키를 두는 곳
 
