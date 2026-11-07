@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "비유 설명 도우미 (PoC)",
-  "short_name": "비유 도우미",
+  "name": "좋은비유네용 (PoC)",
+  "short_name": "좋은비유네용",
   "version": "0.1.0",
   "description": "모르는 문장에 커서를 올리면 내 관심사(기본: 메이플스토리)에 빗대 한 줄로 풀어 줍니다.",
   "minimum_chrome_version": "116",
@@ -28,7 +28,7 @@
     "match_about_blank": true
   }],
   "options_page": "options.html",
-  "action": { "default_popup": "popup.html", "default_title": "비유 도우미", "default_icon": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" } },
+  "action": { "default_popup": "popup.html", "default_title": "좋은비유네용", "default_icon": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" } },
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
   "storage": { "managed_schema": "managed_schema.json" },
   "content_security_policy": {

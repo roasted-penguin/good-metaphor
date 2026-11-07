@@ -1,4 +1,4 @@
-# 비유 도우미 (PoC)
+# 좋은비유네용 (PoC)
 
 > 작동 방식과 인프라 구성은 [`docs/intro.html`](docs/intro.html)을 브라우저로 열어 보세요.
 
