@@ -133,6 +133,8 @@ async function postOnce(url, headers, body, timeoutMs, onData) {
       let msg = text.slice(0, 300);
       try { const j = JSON.parse(text); msg = j.error?.message || j.message || msg; } catch {}
       const err = new ProviderError(`${res.status} ${msg}`, res.status);
+      // 원문 본문은 쿨다운 판정(fallback.js isDailyLimit)에만 쓴다. 로그·UI·저장소로 내보내지 않는다
+      err.body = text.slice(0, 4000);
       const ra = Number(res.headers?.get?.('retry-after'));
       if (ra > 0) err.retryAfterMs = ra * 1000;
       throw err;

@@ -17,7 +17,7 @@
     { "provider": "nvidia", "model": "nvidia/nemotron-3.5-super-vl-120b-a12b" },
     { "provider": "ollama", "model": "gemma4:12b" }
   ],
-  "cooldown": { "defaultMs": 60000, "maxMs": 600000 },
+  "cooldown": { "defaultMs": 60000, "maxMs": 600000, "dailyDefaultMs": 3600000, "dailyMaxMs": 86400000 },
   "allowedProviders": ["gemini", "groq", "nvidia", "ollama", "openai", "anthropic", "custom", "demo"],
   "lockProvider": false,
   "sharedApiKeys": {},
