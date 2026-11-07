@@ -43,6 +43,7 @@ npm run check:embed              # 실제 모델 로드 시간·호버 시간, �
 npm run eval:fallback            # 모델 없이 같은 평가
 npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장이 하나라도 틀리면 실패. 검색을 바꾸는 PR은 항상 돌린다
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
+npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
 ```
 

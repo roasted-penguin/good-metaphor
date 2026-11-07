@@ -6,6 +6,8 @@
 //   npm run eval:fallback              # 글자 n-gram 대체 임베더
 //   npm run eval -- --rewrite gemini   # 질의를 LLM으로 추상 구조로 바꿔 함께 비교 (T-113 (4)). <ID>_API_KEY 필요,
 //                                      # 결과는 .tmp/rewrite-<제공자>-<모델>.json 에 캐시(다시 돌려도 호출 안 함)
+//   npm run eval -- --server <url>     # 같은 문장을 analogy-api(POST /v1/analogy)의 debug.candidates 순위로도 채점하고 관문 한 줄 (T-405)
+//        [--server-only]               # 브라우저 평가 생략   [--rpm 20] 분당 요청 수   [--token <값>] 기본은 eval-<무작위>
 import fs from 'node:fs';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
 import { retrieve, topTags } from '../extension/lib/retrieval.js';
@@ -15,6 +17,7 @@ import { openBrowserEmbedder } from './browser-embedder.mjs';
 import { scoreCases, mixedSetting, regressions } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
+import { rankAllViaServer, gateLine, ServerUnavailable } from './eval-server.mjs';
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
@@ -32,6 +35,15 @@ const verbose = process.argv.includes('-v');
 const guard = JSON.parse(fs.readFileSync(new URL('./eval-guard.json', here)));
 const failGuard = process.argv.includes('--guard');
 let regressed = 0;
+
+// 서버 모드 (T-405). 토큰은 평가용 무작위 문자열이고 출력하지 않는다
+const argAfter = flag => { const i = process.argv.indexOf(flag); return i > 0 ? process.argv[i + 1] : null; };
+const serverUrl = argAfter('--server');
+const serverOnly = !!serverUrl && process.argv.includes('--server-only');
+const serverRpm = Number(argAfter('--rpm')) || 20;
+const serverToken = argAfter('--token') || `eval-${Math.random().toString(36).slice(2, 12)}`;
+if (process.argv.includes('--server-only') && !serverUrl) throw new Error('--server-only는 --server <url>과 함께 써요');
+let browserHit1 = null; // 평가셋 · 원문 · 혼합 hit@1 (관문 비교용)
 
 // 질의 재작성 (정밀 모드와 같은 프롬프트). 문장별 결과를 캐시해 무료 한도를 아끼고 결과를 고정한다
 const rwAt = process.argv.indexOf('--rewrite');
@@ -64,7 +76,9 @@ if (rewriteId) {
 const queryModes = rewrites ? [['원문', null], ['정밀(추상+원문)', 'precise'], ['추상만', 'abstract']] : [['원문', null]];
 
 let embed, embedderLabel, closeEmbedder = async () => {};
-if (useFallback) {
+if (serverOnly) {
+  // 브라우저 평가 생략
+} else if (useFallback) {
   embed = async (texts, kind) => texts.map(t => hashEmbed(t));
   embedderLabel = 'fallback n-gram';
 } else if (!process.argv.includes('--node')) {
@@ -88,7 +102,7 @@ const graph = mergeGraphs(common, null);
 const tagMap = new Map(graph.tags.map(t => [t.id, t]));
 const keys = [...graph.tags.map(t => 'tag:' + t.id), ...graph.nodes.map(n => 'node:' + n.id)];
 const texts = [...graph.tags.map(tagText), ...graph.nodes.map(n => nodeText(n, tagMap))];
-const vs = await embed(texts, 'passage');
+const vs = serverOnly ? [] : await embed(texts, 'passage');
 const vecs = new Map(keys.map((k, i) => [k, vs[i]]));
 const settings = [
   { name: '노드 직접 비교만', directWeight: 1, tagWeight: 0 },
@@ -97,26 +111,35 @@ const settings = [
 ];
 const pct = (a, b) => `${a}/${b} (${Math.round(a / b * 100)}%)`;
 
-for (const [modeName, mode] of queryModes) for (const { name, cases } of sets) {
+const pctLine = (label, r) => {
+  const groups = Object.entries(r.groups).map(([g, v]) => `  ${g} ${v.hit1}/${v.n}`).join('');
+  return `${label.padEnd(18)}  hit@1 ${pct(r.hit1, r.n)}  hit@3 ${pct(r.hit3, r.n)}${groups}`;
+};
+// 회귀(가드 기준)와 T-103 새 문장 줄. 브라우저 혼합 줄과 서버 줄이 함께 쓴다
+function printGuardAndNew(cases, r, rank) {
+  const reg = regressions(guard, r);
+  regressed += reg.length;
+  console.log(reg.length ? reg.map(x => `  ⚠ 회귀(잘 맞던 문장이 틀림): ${x}`).join('\n') : '  회귀 없음');
+  // 조정에 쓰지 않은 T-103 새 문장만 따로 (깨끗한 확인용)
+  const idx = cases.map((c, i) => [c, i]).filter(([c]) => c.since === 'T-103');
+  if (idx.length) {
+    const f = scoreCases(idx.map(([c]) => c), (c, j) => rank(c, idx[j][1]));
+    console.log(`  T-103 새 문장  hit@1 ${pct(f.hit1, f.n)}  hit@3 ${pct(f.hit3, f.n)}`);
+  }
+}
+
+if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, cases } of sets) {
   const qs = await embed(cases.map(c => mode ? rewriteQueryText(rewrites[c.sentence], c.sentence, mode) : c.sentence), 'query');
   console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${embedderLabel}\n`);
   for (const s of settings) {
     const { topK, ...opts } = s;
     const rank = (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: 3 }).map(x => ({ id: x.id, score: x.score }));
     const r = scoreCases(cases, rank);
-    const groups = Object.entries(r.groups).map(([g, v]) => `  ${g} ${v.hit1}/${v.n}`).join('');
-    console.log(`${s.name.padEnd(18)}  hit@1 ${pct(r.hit1, r.n)}  hit@3 ${pct(r.hit3, r.n)}${groups}`);
+    console.log(pctLine(s.name, r));
     if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);
     if (s.name === mixedSetting(admin).name) {
-      const reg = regressions(guard, r);
-      regressed += reg.length;
-      console.log(reg.length ? reg.map(x => `  ⚠ 회귀(잘 맞던 문장이 틀림): ${x}`).join('\n') : '  회귀 없음');
-      // 조정에 쓰지 않은 T-103 새 문장만 따로 (깨끗한 확인용)
-      const idx = cases.map((c, i) => [c, i]).filter(([c]) => c.since === 'T-103');
-      if (idx.length) {
-        const f = scoreCases(idx.map(([c]) => c), (c, j) => rank(c, idx[j][1]));
-        console.log(`  T-103 새 문장  hit@1 ${pct(f.hit1, f.n)}  hit@3 ${pct(f.hit3, f.n)}`);
-      }
+      if (name === '평가셋' && !mode) browserHit1 = r.hit1;
+      printGuardAndNew(cases, r, rank);
       // 비유가 없어야 하는 문장의 1위 점수 vs 맞힌 문장의 1위 점수 (임계값 근거)
       if (r.noMatch.length) {
         const hs = [...r.hitScores].sort((a, b) => a - b);
@@ -131,4 +154,28 @@ for (const [modeName, mode] of queryModes) for (const { name, cases } of sets) {
   console.log(`\n추상 태그 top-1 정확도: ${pct(t1, tagged.length)}`);
 }
 await closeEmbedder();
+
+if (serverUrl) {
+  let serverHit1 = null, serverN = 0;
+  try {
+    for (const { name, cases } of sets) {
+      const onProgress = process.stdout.isTTY ? (i, n) => process.stdout.write(`\r  서버 요청 ${i}/${n}`) : undefined;
+      const ranked = await rankAllViaServer({ url: serverUrl, token: serverToken, cases, rpm: serverRpm, onProgress });
+      if (onProgress) process.stdout.write('\r\x1b[K');
+      const rank = (c, i) => ranked[i];
+      const r = scoreCases(cases, rank);
+      console.log(`\n[${name} · 서버] 문장 ${cases.length}개 · 서버: ${serverUrl} (분당 ${serverRpm}회)\n`);
+      console.log(pctLine('서버', r));
+      if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);
+      printGuardAndNew(cases, r, rank);
+      if (r.noMatch.length) console.log(`  비유 없음 ${r.noMatch.length}문장 1위 후보 ${r.noMatch.map(m => m.top ?? '-').join(' ')}`);
+      if (name === '평가셋') { serverHit1 = r.hit1; serverN = r.n; }
+    }
+  } catch (e) {
+    if (process.stdout.isTTY) process.stdout.write('\r\x1b[K');
+    console.log(`\n${e instanceof ServerUnavailable ? '서버 평가를 멈췄어요' : '서버 평가 실패'}: ${e.message}`);
+    process.exit(1);
+  }
+  console.log(`\n${gateLine(serverHit1, serverOnly ? null : browserHit1, serverN)}`);
+}
 if (failGuard && regressed) { console.log(`\n회귀 ${regressed}건`); process.exit(1); }
