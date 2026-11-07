@@ -8,6 +8,7 @@ import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
+import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -85,9 +86,19 @@ async function ensureGraphVectors(graph) {
   if (missing.length) {
     const { vectors } = await keepAlive(offscreen('embed', { texts: missing.map(m => m.text), kind: 'passage' }));
     missing.forEach((m, i) => cache.set(m.cacheKey, vectors[i]));
-    await saveVecCache();
   }
-  const vecs = new Map(items.map(it => [it.key, cache.get(it.cacheKey)]));
+  // 정리(T-110): 이번 키를 최근 사용으로 옮기고, 다른 임베더 항목과 상한 초과분을 지운다(이번 키는 지키고)
+  const used = items.map(it => it.cacheKey);
+  touch(cache, used);
+  const admin = await getAdminConfig();
+  const { cache: pruned, removed } = pruneVecCache(cache, { embedderId, max: admin.vecCacheMax ?? VEC_CACHE_MAX, keep: new Set(used) });
+  // 임베딩을 기다리는 사이 "캐시 지우기"나 다른 호출이 vecMem을 바꿨으면 덮어쓰지 않는다(이번 결과 vecs는 그대로 쓴다)
+  if (vecMem === cache) {
+    vecMem = pruned;
+    // 추가·삭제가 있을 때만 저장한다. touch만으로는 저장하지 않는다(호버마다 쓰지 않게, 저장 순서는 LRU 근사로 충분)
+    if (missing.length || removed) await saveVecCache();
+  }
+  const vecs = new Map(items.map(it => [it.key, pruned.get(it.cacheKey)]));
   return { vecs, embedderId, embedderStatus: init.status };
 }
 

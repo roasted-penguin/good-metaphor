@@ -22,6 +22,9 @@
   "lockProvider": false,
   "sharedApiKeys": {},
 
+  "_vecCacheMaxComment": "그래프 벡터 캐시(chrome.storage.local vecCache) 상한(T-110). 넘으면 가장 오래 안 쓴 것부터 지운다. 다른 임베더 항목은 상한과 상관없이 지운다.",
+  "vecCacheMax": 2000,
+
   "commonStore": {
     "bundled": "data/common/maplestory.json",
     "url": ""
