@@ -432,9 +432,10 @@ const handlers = {
   async explain(payload, sender) { await assertSiteAllowed(sender, payload?.topHost); countHover(); return explain(payload); },
   // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
   async feedback({ record, rerun }, sender) {
-    await assertSiteAllowed(sender, rerun?.topHost ?? record?.topHost);
+    await assertSiteAllowed(sender, record?.topHost || rerun?.topHost);
     const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
     delete r.vec; // 벡터는 받지 않고 여기서 만든다
+    delete r.topHost; // 검사용일 뿐 기록·내보내기에 남기지 않는다(T-111)
     if (r.vote === 'down' || r.vote === 'pick') {
       const vec = await queryVector(record.sentence);
       if (vec) r.vec = vec;

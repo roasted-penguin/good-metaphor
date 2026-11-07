@@ -22,11 +22,16 @@
      iframe이면 자기 호스트와 최상위 페이지 호스트 중 하나라도 제외 목록에 있으면 꺼진다
      (은행 페이지 안 다른 출처 iframe 문장이 새지 않게). topHost는 background 이중 방어용으로 페이로드에 싣는다 */
   const isTop = window === window.top;
-  const hosts = isTop
-    ? [SF.normalizeHost(location.hostname)]
-    : SF.frameHosts({ selfHost: location.hostname, ancestorOrigins: location.ancestorOrigins, referrer: document.referrer });
-  const topHost = isTop ? hosts[0] : (hosts.at(-1) ?? '');
-  const excludedBy = list => hosts.some(h => SF.isExcludedHost(h, list));
+  const { hosts, topHost, topKnown } = isTop
+    ? { hosts: [SF.normalizeHost(location.hostname)], topHost: SF.normalizeHost(location.hostname), topKnown: true }
+    : SF.frameHosts({
+      selfHost: location.hostname,
+      topHostname: (() => { try { return window.top.location.hostname; } catch { return ''; } })(), // 같은 출처 사슬만 읽힘
+      ancestorOrigins: location.ancestorOrigins,
+      referrer: document.referrer
+    });
+  // 최상위를 모르는 서브프레임(불투명·가려진 출처 + referrer 없음)은 실패 시 닫힘: 강조·말풍선·메시지 모두 없음
+  const excludedBy = list => !topKnown || hosts.some(h => SF.isExcludedHost(h, list));
   // 서브프레임(광고 등)은 시작 시 테마를 미리 받지 않고 처음 보조키를 누를 때(trigger) 받는다(프레임 많은 페이지의 메시지 폭주 방지)
   let themeWanted = isTop;
   // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
@@ -364,7 +369,7 @@
   async function onFeedback(act, data) {
     if (!current || !view?.result) return;
     const key = current.key, r = view.result, fb = view.fb || {};
-    const sent = { sentence: current.payload.sentence, provider: r.debug?.provider || '' };
+    const sent = { sentence: current.payload.sentence, provider: r.debug?.provider || '', topHost }; // topHost: rerun 없는 👍도 background가 검사(T-111)
     const stillHere = () => current && current.key === key;
     const done = (res, nextFb, extra = {}) => {
       if (!stillHere()) return;

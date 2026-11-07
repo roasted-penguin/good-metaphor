@@ -57,14 +57,20 @@
     return !!topHost && isExcludedHost(topHost, list);
   }
 
-  // 프레임에서 제외 판정에 쓸 호스트들(T-111): [자기 호스트, 최상위 호스트]. 정규화·빈 값·중복 제거.
-  // 최상위 = ancestorOrigins 마지막 항목(크롬), 없거나 "null"(sandbox)이면 referrer, 둘 다 없으면 자기 호스트만.
+  // 프레임에서 제외 판정에 쓸 호스트들(T-111) → { hosts: [자기 호스트, 최상위 호스트], topHost, topKnown }.
+  // 최상위 = topHostname(같은 출처 사슬이면 content.js가 window.top.location 에서 읽음) → ancestorOrigins 마지막(크롬)
+  // → referrer 순. http(s) 출처·주소만 믿고 'null'(불투명·가려진 출처)·about:·data:·file: 은 모르는 것으로 본다.
+  // topKnown=false 면 content.js가 그 프레임을 꺼 둔다(실패 시 닫힘: 은행 페이지 안 프레임일 수도 있어서).
   // 최상위 프레임에서는 부르지 않는다(최상위의 referrer는 이전 페이지라서)
-  function frameHosts({ selfHost, ancestorOrigins, referrer } = {}) {
+  const httpHost = v => {
+    const t = String(v ?? '').trim();
+    return /^https?:\/\//i.test(t) ? normalizeHost(t) : '';
+  };
+  function frameHosts({ selfHost, topHostname, ancestorOrigins, referrer } = {}) {
     const origins = ancestorOrigins ? [...ancestorOrigins] : [];
-    const last = String(origins.at(-1) ?? '');
-    const top = (last.includes('://') ? normalizeHost(last) : '') || normalizeHost(referrer); // 'null' 출처는 버린다
-    return [...new Set([normalizeHost(selfHost), top].filter(Boolean))];
+    const topHost = normalizeHost(topHostname) || httpHost(origins.at(-1)) || httpHost(referrer);
+    const hosts = [...new Set([normalizeHost(selfHost), topHost].filter(Boolean))];
+    return { hosts, topHost, topKnown: !!topHost };
   }
 
   // 설정 화면 "추가" 입력 검증(T-144). URL이든 호스트든 정규화한다.
