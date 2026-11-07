@@ -819,3 +819,11 @@ test('비밀번호 폼(T-107): 폼 안 문장은 안 보내고, 같은 페이지
   await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
   expect(sentCount() - before).toBeGreaterThan(0);
 });
+
+test('팝업(T-107): http(s)가 아닌 탭에서는 "이 사이트에서 끄기"를 끄고 안내 문구', async ({ context, extId }) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extId}/popup.html`); // 현재 탭이 확장 페이지
+  await expect(page.locator('#siteOff')).toBeDisabled();
+  await expect(page.locator('label[for="siteOff"]')).toHaveText('이 사이트에서 끄기');
+  await expect(page.locator('#siteHost')).toHaveText('이 페이지에서는 쓸 수 없어요.');
+});
