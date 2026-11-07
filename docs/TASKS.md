@@ -37,7 +37,8 @@
 | T-131 | **[사용자 추가]** 교정 → 태그 예문 후보·평가셋 후보, 승인 전 `eval --guard` 회귀 0 (3단계) | 1 품질 | P1 | 대기 | T-129, T-114 |
 | T-132 | **[사용자 추가]** 설정 화면 "내 피드백": 목록·되돌리기·초기화·내보내기·공통 개선 보내기(기본 꺼짐)·피드백 비율 | 1 품질 | P1 | 완료 | T-129 |
 | T-137 | "내 피드백" 다듬기: 비율(%) 표시, 열린 설정 화면 자동 갱신, URL 뒤 조사 보존, 이름 가림 검토, 오류 경로 처리 | 1 품질 | P2 | 대기 | T-132 |
-| T-107 | 제외 사이트 목록과 "이 사이트에서 끄기" | 1 품질 | P1 | 진행 | |
+| T-107 | 제외 사이트 목록과 "이 사이트에서 끄기" | 1 품질 | P1 | 리뷰 | |
+| T-144 | 제외 사이트 다듬기: 설정 화면에서 제외 목록 보기·편집, 팝업 토글 실제 크롬 수동 확인(activeTab), background 이중 방어 e2e(콘텐츠 우회 훅) | 1 품질 | P2 | 대기 | T-107 |
 | T-108 | 첫 결과 전 테마 깜빡임 제거 | 1 품질 | P2 | 대기 | |
 | T-109 | 여러 줄 문장에서 말풍선 위치 | 1 품질 | P2 | 대기 | |
 | T-110 | 벡터 캐시 정리 (모델 바뀌면 삭제, 상한) | 1 품질 | P2 | 대기 | |
@@ -545,6 +546,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-08 | T-107 | task/T-107-site-exclude | | 제외 사이트: `settings.excludedHosts`(기본 메일·로그인·은행 17개, 같거나 하위 도메인), `lib/site-filter.js`(콘텐츠·background·팝업 공용), content.js가 제외 호스트·비밀번호 폼(문장과 같은 블록의 폼 글자도) 무시, background가 explain을 부르는 모든 길에서 이중 방어, 팝업 "이 사이트에서 끄기"(`activeTab` 추가). Opus·medium 서브에이전트(수정 1회). 단위 202·e2e 42. 남은 것 T-144. |
 | 2026-11-08 | T-104 | task/T-104-gen-eval | [#29](https://github.com/roasted-penguin/good-metaphor/pull/29) | 생성 품질 평가: 비유 생성 핵심을 `lib/pipeline.js`로(동작 그대로, 확장과 평가가 같은 코드), `npm run eval:gen -- --judge`(실제 임베딩·실제 체인, 채점은 다른 계열 모델 — 기본 NVIDIA Nemotron, 채점 모델은 생성 체인에서 뺌, 결과 매번 저장). 측정: 생성 Gemini 3.5 Flash-Lite 35문장 중 채점 33, 근거 준수 100%·구조 4.33·자연스러움 4.58 → 통과. Opus·medium 서브에이전트 3작업(Task 2 수정 1회). 단위 192·e2e 38. Groq 생성 품질은 T-122. |
 | 2026-11-08 | T-123 | task/T-123-grounding-check | [#28](https://github.com/roasted-penguin/good-metaphor/pull/28) | 근거 facts 밖 사실 검사: 프롬프트에 `usedFact`(비유에 쓴 사실을 facts 그대로 인용, 뜻 먼저 그대로), `lib/grounding.js` — usedFact가 고른 노드 fact와 맞는지(부분 문자열·3-gram 자카드 ≥ 0.6) + 비유 숫자가 facts·노드/이웃 라벨·원문에 있는지(NFKC), usedFact 없으면 숫자만. 규칙 1 뒤에 검사, 실패면 비유 숨김("근거에 없는 내용이 섞여 있어서 비유를 숨겼어요."). 서버도 같은 규칙·검사(Python 이식, 규칙 비교 테스트). 실제 키 스모크: Gemini·NVIDIA 오탐 없음. 단위 168·e2e 38·서버 156. 빈틈은 T-143. |
 | 2026-11-08 | T-412 | task/T-412-extract-prompt | [#27](https://github.com/roasted-penguin/good-metaphor/pull/27) | 추출 프롬프트: `server/app/extract.py` — 엔티티 유형 6개, 통제 어휘(키워드 프롬프트와 같은 `vocabulary_tags`에서, 규칙 9), 용어 사전(노드 라벨: facts 첫 문장, 은어는 T-114), 예시 2개(공통 그래프 사실만), LightRAG 1.5.7 `addon_params["entity_types_guidance"]`·`entity_extraction_use_json`, 목록 밖 추상구조와 그 관계를 버리는 `filter_extraction`. pytest 119. Opus·medium 서브에이전트. 후처리 연결은 T-414, 실제 모델 확인 거리는 T-413에 적음. |
