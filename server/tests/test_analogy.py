@@ -16,6 +16,7 @@ COMMON_GRAPH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
 GRAPH = json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))
 
 REJECTED = "모델이 근거 목록에 없는 개념을 골라서 비유를 숨겼어요."
+GROUNDING_REJECTED = "근거에 없는 내용이 섞여 있어서 비유를 숨겼어요."
 TOKEN = {"X-Install-Token": "install-a"}
 
 
@@ -96,6 +97,46 @@ def test_out_of_candidates_node_hides_analogy():
     assert body["rejected"] == REJECTED
     assert body["evidence"] is None
     assert body["meaning"] == "테스트 뜻 풀이예요."
+
+
+def test_normal_answer_passes_grounding_check():
+    client, _, llm, _ = _client()
+    body = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.").json()
+    assert body["analogy"].startswith("메이플로 치면")
+    assert body["rejected"] is None
+    assert body["evidence"] is not None
+    assert body["debug"]["grounding"] == {"ok": True}
+    # 비유 프롬프트에 usedFact 규칙이 들어간다
+    an_system = next(c["system"] for c in llm.calls if "검색용 키워드" not in c["system"])
+    assert "usedFact에 글자 그대로 옮긴다" in an_system
+
+
+def test_number_outside_facts_hides_analogy():
+    client, *_ = _client()
+    body = _post(client, "입장횟수테스트 이 적금은 한 달에 한 번만 넣을 수 있다.").json()
+    assert body["analogy"] == ""
+    assert body["rejected"] == GROUNDING_REJECTED
+    assert body["evidence"] is None
+    assert body["meaning"] == "테스트 뜻 풀이예요."
+    assert body["debug"]["grounding"] == {"ok": False, "reason": "number-outside"}
+
+
+def test_used_fact_outside_facts_hides_analogy():
+    client, *_ = _client()
+    body = _post(client, "사실조작테스트 강화 문장이에요.").json()
+    assert body["analogy"] == ""
+    assert body["rejected"] == GROUNDING_REJECTED
+    assert body["evidence"] is None
+    assert body["debug"]["grounding"] == {"ok": False, "reason": "fact-mismatch"}
+
+
+def test_grounding_check_skipped_when_node_check_rejects_or_no_analogy():
+    client, *_ = _client()
+    leverage = _post(client, "Leverage magnifies both gains and losses.").json()
+    assert leverage["rejected"] == REJECTED
+    assert "grounding" not in leverage["debug"]
+    penguin = _post(client, "펭귄은 남극에 살아요.").json()
+    assert "grounding" not in penguin["debug"]
 
 
 def test_null_node_means_no_analogy():

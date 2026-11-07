@@ -201,3 +201,18 @@ def test_parse_keywords_dedup_and_strip():
 @pytest.mark.parametrize("text", ["", "아무 말", "{깨진 json", '["배열"]', '{"hl_keywords": "문자열"}'])
 def test_parse_keywords_bad_input_returns_empty(text):
     assert parse_keywords(text, ALLOWED) == ([], [])
+
+
+# --- usedFact 규칙 (T-123) ---
+
+def test_system_prompt_has_used_fact_rule_and_field_order():
+    system, _ = _build(domain="요리")
+    assert "필드는 meaning, analogy, nodeId, tagId, usedFact, mapping 순서로 쓴다." in system
+    assert ("7. analogy에 쓴 요리 쪽 사실은 고른 후보의 facts 문장 하나를 usedFact에 글자 그대로 옮긴다. "
+            "비유가 없으면 usedFact는 빈 문자열이다.") in system
+    assert '"tagId": string|null, "usedFact": string, "mapping": string}' in system
+    # 뜻 먼저 스트리밍(T-117): meaning이 맨 앞
+    fmt = next(line for line in system.splitlines() if line.startswith("출력 형식:"))
+    assert fmt.index('"meaning"') < fmt.index('"usedFact"')
+    # 규칙 1은 그대로
+    assert "근거에 없는 요리의 수치, 이름, 규칙을 지어내지 않는다." in system
