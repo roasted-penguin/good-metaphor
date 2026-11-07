@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { callAnalogyServer, checkServerResult, shouldUseServer, getInstallToken, REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
+import { callAnalogyServer, checkServerResult, shouldUseServer, serverSkipReason, getInstallToken, REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
 
 // 서버 응답 모양(server/app/pipeline.py 반환값을 흉내)
 const serverResult = (over = {}) => ({
@@ -177,4 +177,26 @@ test('getInstallToken: 없으면 만들어 저장, 두 번 불러도 같은 값'
 test('getInstallToken: 이미 있으면 그대로', async () => {
   const storage = { async get() { return { installToken: 'keep-me' }; }, async set() { throw new Error('저장하면 안 돼요'); } };
   assert.equal(await getInstallToken(storage), 'keep-me');
+});
+
+test('timeoutMs 를 안 주면 4000ms 로 끊는다', async () => {
+  const realSet = globalThis.setTimeout;
+  const delays = [];
+  globalThis.setTimeout = (fn, ms, ...a) => { delays.push(ms); return realSet(fn, 1e6, ...a);  };
+  try {
+    const r = await callAnalogyServer({ url: 'https://a', token: 't', payload, fetchImpl: async () => jsonRes(serverResult()) });
+    assert.equal(r.ok, true);
+  } finally {
+    globalThis.setTimeout = realSet;
+  }
+  assert.deepEqual(delays, [4000]);
+});
+
+test('serverSkipReason: 서버를 건너뛰는 이유(off·session·feedback·demo), 쓰면 null', () => {
+  const base = { admin, session: null, sentenceRecords: [], providerKind: 'gemini' };
+  assert.equal(serverSkipReason(base), null);
+  assert.equal(serverSkipReason({ ...base, admin: { analogyServer: { url: '' } } }), 'off');
+  assert.equal(serverSkipReason({ ...base, session: { name: 'u' } }), 'session');
+  assert.equal(serverSkipReason({ ...base, sentenceRecords: [{ vote: 'pick' }] }), 'feedback');
+  assert.equal(serverSkipReason({ ...base, providerKind: 'demo' }), 'demo');
 });
