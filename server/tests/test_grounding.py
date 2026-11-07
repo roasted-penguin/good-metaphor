@@ -1,4 +1,7 @@
 """근거 검사 이식 테스트. 확장 tests/unit/grounding.test.mjs와 같은 입력 → 같은 결과."""
+import json
+from pathlib import Path
+
 import pytest
 
 from app.grounding import (
@@ -135,3 +138,20 @@ def test_helpers():
     assert char_jaccard("", "") == 0
     assert char_jaccard("강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있어요.", WEEKLY_BOSS[0]) >= 0.6
     assert char_jaccard("보스는 매주 한 번 보상을 준다", WEEKLY_BOSS[0]) < 0.6
+
+
+# T-143: 한글 수사·만/천 단위 수. 확장 tests/unit/grounding.test.mjs와 같은 공유 사례를 읽는다
+SHARED = json.loads((Path(__file__).resolve().parents[2] / "tests/fixtures/grounding-numbers.json").read_text("utf-8"))
+
+
+@pytest.mark.parametrize("case", SHARED["numbers"], ids=lambda c: c["text"])
+def test_shared_numbers(case):
+    assert numbers_in(case["text"]) == case["numbers"]
+
+
+@pytest.mark.parametrize("case", SHARED["checks"], ids=lambda c: c["note"])
+def test_shared_checks(case):
+    i = case["input"]
+    got = check_grounding(i.get("analogy"), i.get("usedFact"), i.get("facts"), i.get("sentence"),
+                          i.get("context"), labels=i.get("labels"))
+    assert got == (case["ok"], case["reason"])

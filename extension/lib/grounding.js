@@ -11,11 +11,101 @@ export function normalizeText(text) {
   return String(text ?? '').normalize('NFC').replace(/[\s\p{P}\p{S}]/gu, '');
 }
 
-// 아라비아 숫자 연속을 뽑는다. "1,000"처럼 천 단위 쉼표는 붙여 하나로 본다.
-// NFKC로 먼저 정규화해 전각 숫자("１０")도 "10"과 같게 본다.
+// ── 숫자 추출 (T-123, T-143) ──
+// 서버 server/app/grounding.py와 같은 상수·같은 정규식이어야 한다(공유 사례 tests/fixtures/grounding-numbers.json).
+// 한글 수는 오탐이 가장 큰 위험이라("한국", "세계", "일주일") 세는 말 바로 앞이거나 자리 단위와 결합할 때만 바꾼다.
+
+// 세는 말. 정규식에서는 긴 것부터 맞춘다(주일 > 주, 시간 > 시)
+export const COUNTERS = ['번', '회', '개', '명', '마리', '장', '권', '판', '차례', '가지', '시간', '시', '분', '초', '일', '주',
+  '주일', '달', '개월', '년', '해', '살', '배', '층', '단계', '등', '위', '칸', '줄', '통', '잔', '대', '곳', '군데', '사람',
+  '세트', '묶음', '바퀴'];
+// 한자어 수 뒤에만 오는 단위
+export const SINO_UNITS = ['원', '메소', '포인트', '퍼센트', '%'];
+// 수와 붙여 쓰면(공백 0개) 다른 낱말이 되는 세는 말: 세일·세대·두통·열등·열위·석회·넉살·세분·세배·십분·만회
+const ATTACHED_BLOCK = ['일', '대', '통', '등', '위', '분', '판', '회', '살', '배', '주', '년'];
+// 세는 말 바로 뒤에 와도 되는 글자(조사·접미사 첫 글자). 그 밖의 한글이 오면 다른 낱말("두 대상", "네 주인")
+const AFTER_COUNTER = '이가을를은는에의도만씩째쯤과와로으까부마밖뿐나랑짜동간께요엔예';
+const NATIVE_TENS = { 열: 10, 스물: 20, 스무: 20, 서른: 30, 마흔: 40, 쉰: 50 };
+const NATIVE_UNITS = { 하나: 1, 한: 1, 둘: 2, 두: 2, 셋: 3, 세: 3, 석: 3, 넷: 4, 네: 4, 넉: 4,
+  다섯: 5, 여섯: 6, 일곱: 7, 여덟: 8, 아홉: 9 };
+const SINO_DIGITS = { 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 칠: 7, 팔: 8, 구: 9 };
+const SMALL_UNITS = { 십: 10, 백: 100, 천: 1000 };
+const BIG_UNITS = { 만: 10000, 억: 100000000 };
+
+// 정규식 특수문자는 이스케이프한다(Python re.escape와 같게)
+const esc = (w) => w.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&');
+const alt = (words) => [...words].sort((a, b) => b.length - a.length).map(esc).join('|');
+const COUNTER_ALT = alt(COUNTERS);
+const AFTER = `(?=$|[^가-힣]|[${AFTER_COUNTER}])`;
+const SP = '[ \\t\\r\\n]';
+// 자리 단위. "200만큼"의 만은 단위가 아니다
+const UNIT = '(?:[억천백]|만(?!큼))';
+const NUMBER_RE = new RegExp([
+  // 아라비아 숫자 + 자리 단위: 1만, 3천, 1만 2천, 1.5만, 1천만
+  `(?<au>\\d+(?:\\.\\d+)?${UNIT}(?:${SP}?\\d+(?:\\.\\d+)?${UNIT}|${UNIT})*)`,
+  `(?<d>\\d+)`,
+  // 고유어 수 + 세는 말: 두 번, 열한 번째, 스물두 살, 열 두 번
+  `(?<![가-힣])(?:(?<tens>${alt(Object.keys(NATIVE_TENS))})(?:${SP}?(?<u1>${alt(Object.keys(NATIVE_UNITS))}))?` +
+    `|(?<u2>${alt(Object.keys(NATIVE_UNITS))}))(?<sp1>${SP}?)(?<c1>${COUNTER_ALT})${AFTER}`,
+  // 한자어 수 + 세는 말·단위. 한자어 글자 연속은 통째로만 본다("만일"을 "만"+"일"로 쪼개지 않음)
+  `(?<![가-힣])(?=(?<run>[일이삼사오육칠팔구십백천만억]+))\\k<run>(?<sp2>${SP}?)(?<c2>${alt([...COUNTERS, ...SINO_UNITS])})${AFTER}`
+].join('|'), 'g');
+const PIECE_RE = /(\d+(?:\.\d+)?)?[ \t\r\n]?([억만천백])/g;
+
+// 자리 단위 계산: [[수(문자열)|null, 단위|null], ...] → 정수 문자열, 정수가 아니면 null.
+// 소수("1.5만")가 있어도 정확하도록 10^소수자리를 곱한 BigInt로 센다.
+function evalPieces(pieces) {
+  const dec = Math.max(0, ...pieces.map(([n]) => (n?.split('.')[1] ?? '').length));
+  const D = 10n ** BigInt(dec);
+  const scaled = (n) => { const [i, f = ''] = n.split('.'); return BigInt(i + f.padEnd(dec, '0')); };
+  // current가 null이면 "수가 없음"(단독 "만" = 1만). 0은 수가 있는 것이다("0만" = 0)
+  let total = 0n, section = 0n, current = null, hasSection = false;
+  for (const [num, unit] of pieces) {
+    if (num != null) current = scaled(num);
+    if (unit in SMALL_UNITS) {
+      section += (current ?? D) * BigInt(SMALL_UNITS[unit]); current = null; hasSection = true;
+    } else if (unit in BIG_UNITS) {
+      total += (current != null || hasSection ? section + (current ?? 0n) : D) * BigInt(BIG_UNITS[unit]);
+      section = 0n; current = null; hasSection = false;
+    }
+  }
+  const sum = total + section + (current ?? 0n);
+  return sum % D === 0n ? String(sum / D) : null;
+}
+
+// 한자어 수 글자 연속: 자리 단위가 들어간 2음절 이상, 또는 단독 십·백·천·만일 때만 수로 본다
+function sinoValue(run) {
+  const hasPlace = [...run].some(ch => ch in SMALL_UNITS || ch in BIG_UNITS);
+  if (!(run.length >= 2 ? hasPlace : '십백천만'.includes(run))) return null;
+  return evalPieces([...run].map(ch => ch in SINO_DIGITS ? [String(SINO_DIGITS[ch]), null] : [null, ch]));
+}
+
+// 숫자를 등장 순으로 뽑아 정수의 10진 표기 배열로 돌려준다.
+// - 아라비아 숫자 연속. "1,000"처럼 천 단위 쉼표는 붙여 하나로 본다. NFKC로 전각 숫자("１０")도 같게 본다.
+// - 아라비아 숫자 + 자리 단위("1만 2천" → 12000). 바뀐 수 하나만 낸다("1만"이 "1"을 따로 내지 않음).
+// - 고유어 수 + 세는 말("두 번" → 2). 단독 "한/하나"는 관용 표현("한 번에")이 많아 바꾸지 않는다.
+// - 한자어 수 + 세는 말·원·메소 등("삼천 원" → 3000).
 export function numbersIn(text) {
   const s = String(text ?? '').normalize('NFKC').replace(/(\d),(?=\d{3}(?!\d))/g, '$1');
-  return s.match(/\d+/g) ?? [];
+  const out = [];
+  for (const m of s.matchAll(NUMBER_RE)) {
+    const g = m.groups;
+    if (g.au) {
+      const v = evalPieces([...g.au.matchAll(PIECE_RE)].map(p => [p[1] ?? null, p[2]]));
+      out.push(...(v != null ? [v] : g.au.match(/\d+/g)));
+    } else if (g.d) {
+      out.push(g.d);
+    } else if (g.c1) {
+      if (!g.sp1 && ATTACHED_BLOCK.includes(g.c1)) continue;
+      if (!g.tens && NATIVE_UNITS[g.u2] === 1) continue;
+      out.push(String((NATIVE_TENS[g.tens] ?? 0) + (NATIVE_UNITS[g.u1 ?? g.u2] ?? 0)));
+    } else if (g.c2) {
+      if (!g.sp2 && ATTACHED_BLOCK.includes(g.c2)) continue;
+      const v = sinoValue(g.run);
+      if (v != null) out.push(v);
+    }
+  }
+  return out;
 }
 
 function trigrams(text) {
