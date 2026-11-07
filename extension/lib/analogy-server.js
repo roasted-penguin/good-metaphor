@@ -43,7 +43,7 @@ export function checkServerResult(result) {
 
 // POST {url}/v1/analogy. 성공이면 { ok: true, result, ms }, 실패면 { ok: false, reason }.
 // reason: 'network' | 'timeout' | 'http-<status>' | 'bad-json' | 'bad-shape'
-export async function callAnalogyServer({ url, token, payload, timeoutMs, fetchImpl = fetch }) {
+export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000, fetchImpl = fetch }) {
   const endpoint = `${String(url).replace(/\/$/, '')}/v1/analogy`;
   const ctrl = new AbortController();
   let timedOut = false;
@@ -81,15 +81,20 @@ export async function callAnalogyServer({ url, token, payload, timeoutMs, fetchI
   }
 }
 
-// 서버를 쓸지 판정한다. 하나라도 걸리면 로컬:
-// (a) 서버 주소 없음 (b) 로그인 세션(오버레이를 서버가 모름, 규칙 3)
-// (c) 그 문장에 👎·pick 기록(서버가 내 피드백을 모름, ADR 0010) (d) 데모 제공자
-export function shouldUseServer({ admin, session, sentenceRecords, providerKind }) {
-  if (!admin?.analogyServer?.url) return false;
-  if (session) return false;
-  if ((sentenceRecords || []).some(r => r?.vote === 'down' || r?.vote === 'pick')) return false;
-  if (providerKind === 'demo') return false;
-  return true;
+// 서버를 건너뛰는 이유. 하나라도 걸리면 로컬, 서버를 쓰면 null:
+// 'off' 서버 주소 없음 / 'session' 로그인 세션(오버레이를 서버가 모름, 규칙 3)
+// 'feedback' 그 문장에 👎·pick 기록(서버가 내 피드백을 모름, ADR 0010) / 'demo' 데모 제공자
+export function serverSkipReason({ admin, session, sentenceRecords, providerKind }) {
+  if (!admin?.analogyServer?.url) return 'off';
+  if (session) return 'session';
+  if ((sentenceRecords || []).some(r => r?.vote === 'down' || r?.vote === 'pick')) return 'feedback';
+  if (providerKind === 'demo') return 'demo';
+  return null;
+}
+
+// 서버를 쓸지 판정한다
+export function shouldUseServer(args) {
+  return serverSkipReason(args) === null;
 }
 
 // 설치 토큰: storage.installToken. 없으면 만들어 저장한다. 사용자 식별 정보가 아니다.
