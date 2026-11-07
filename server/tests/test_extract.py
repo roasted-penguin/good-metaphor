@@ -79,7 +79,10 @@ def test_glossary_and_config_have_no_banned_words(graph, config):
 # --- LightRAG 설정 조각 ---
 
 def test_entity_types_exact():
+    from app.seed import TAG_ENTITY_TYPE
+
     assert ENTITY_TYPES == ["게임시스템", "재화", "아이템", "보스", "지역", "추상구조"]
+    assert TAG_ENTITY_TYPE in ENTITY_TYPES
 
 
 def test_config_json_mode_and_language(config):
