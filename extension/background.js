@@ -5,7 +5,7 @@ import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
-import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay } from './lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostAfterDown } from './lib/feedback.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -280,6 +280,24 @@ chrome.runtime.onConnect.addListener(port => {
   });
 });
 
+// 로그인 사용자만: 같은 노드에 서로 다른 문장 👎가 쌓이면 오버레이 nodeBoosts를 낮춘다(T-130).
+// 오버레이 변경은 로그인 세션의 saveOverlay로만(규칙 3). 실패해도 피드백 기록은 이미 저장돼 있다.
+async function boostOverlayAfterDown(records, nodeId) {
+  if (!nodeId) return;
+  try {
+    // getSessionAndOverlay()는 읽기 실패를 null로 삼키므로, 빈 오버레이로 덮어쓰지 않게 여기서 직접 읽는다
+    const store = await getUserStore();
+    const session = await store.getSession();
+    if (!session) return;
+    const ov = normalizeOverlay(await store.loadOverlay(session));
+    const next = boostAfterDown(records, nodeId, ov.nodeBoosts?.[nodeId] ?? 0);
+    if (next === null) return;
+    await store.saveOverlay(session, { ...ov, nodeBoosts: { ...(ov.nodeBoosts || {}), [nodeId]: next } });
+  } catch (e) {
+    console.warn('[feedback] 오버레이 가중치를 못 바꿨어요', e);
+  }
+}
+
 const handlers = {
   async 'settings:get'() {
     const admin = await getAdminConfig();
@@ -360,7 +378,9 @@ const handlers = {
       const vec = await queryVector(record.sentence);
       if (vec) r.vec = vec;
     }
-    await feedbackStore.set(addRecord(await feedbackStore.get(), r));
+    const records = addRecord(await feedbackStore.get(), r);
+    await feedbackStore.set(records);
+    if (r.vote === 'down') await boostOverlayAfterDown(records, r.nodeId);
     return { id: r.id, result: rerun ? await explain(rerun) : null };
   },
   async 'feedback-reason'({ id, reason }) {
