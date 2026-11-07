@@ -9,6 +9,7 @@ from app.grounding import (
     char_jaccard,
     check_grounding,
     normalize_text,
+    number_groups,
     numbers_in,
 )
 
@@ -155,3 +156,9 @@ def test_shared_checks(case):
     got = check_grounding(i.get("analogy"), i.get("usedFact"), i.get("facts"), i.get("sentence"),
                           i.get("context"), labels=i.get("labels"))
     assert got == (case["ok"], case["reason"])
+
+
+# T-145: 읽기 후보 묶음(뜻이 둘이면 readings 둘, 숫자가 아닐 수도 있으면 optional)
+@pytest.mark.parametrize("case", SHARED["groups"], ids=lambda c: c["text"])
+def test_shared_groups(case):
+    assert number_groups(case["text"]) == case["groups"]

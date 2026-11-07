@@ -82,7 +82,10 @@
     },
     {
       "text": "이십일 동안 기다려요.",
-      "numbers": []
+      "numbers": [
+        "21",
+        "20"
+      ]
     },
     {
       "text": "두 단계 위로 올라가요.",
@@ -402,6 +405,13 @@
       "numbers": [
         "23"
       ]
+    },
+    {
+      "text": "200만 쓰면 돼요.",
+      "numbers": [
+        "2000000",
+        "200"
+      ]
     }
   ],
   "checks": [
@@ -570,6 +580,492 @@
       },
       "ok": true,
       "reason": null
+    },
+    {
+      "note": "200만(=200뿐) + facts 200 → ok",
+      "input": {
+        "analogy": "200만 쓰면 되는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "레벨 200부터 입장한다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": true,
+      "reason": null
+    },
+    {
+      "note": "200만 + facts 수 없음 → number-outside",
+      "input": {
+        "analogy": "200만 쓰면 되는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있다.",
+          "보스를 잡으면 나오는 결정석(강렬한 힘의 결정)을 상점에 팔아 메소를 번다.",
+          "한 주에 팔 수 있는 결정석 개수에는 상한이 있다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": false,
+      "reason": "number-outside"
+    },
+    {
+      "note": "1만 원은 뜻 하나(10000)",
+      "input": {
+        "analogy": "1만 원 내는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "레벨 1부터 입장한다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": false,
+      "reason": "number-outside"
+    },
+    {
+      "note": "네 차례(=너의 차례)는 optional",
+      "input": {
+        "analogy": "네 차례예요.",
+        "usedFact": "",
+        "facts": [
+          "강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있다.",
+          "보스를 잡으면 나오는 결정석(강렬한 힘의 결정)을 상점에 팔아 메소를 번다.",
+          "한 주에 팔 수 있는 결정석 개수에는 상한이 있다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": true,
+      "reason": null
+    },
+    {
+      "note": "이십일 동안 + facts 20일 → ok",
+      "input": {
+        "analogy": "이십일 동안 기다리는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "보상은 20일 뒤에 받는다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": true,
+      "reason": null
+    },
+    {
+      "note": "이십일 동안 + facts 21일 → ok",
+      "input": {
+        "analogy": "이십일 동안 기다리는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "보상은 21일 뒤에 받는다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": true,
+      "reason": null
+    },
+    {
+      "note": "이십일 동안 + facts 수 없음 → number-outside",
+      "input": {
+        "analogy": "이십일 동안 기다리는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있다.",
+          "보스를 잡으면 나오는 결정석(강렬한 힘의 결정)을 상점에 팔아 메소를 번다.",
+          "한 주에 팔 수 있는 결정석 개수에는 상한이 있다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": false,
+      "reason": "number-outside"
+    },
+    {
+      "note": "facts 두배 + 비유 2배 → ok",
+      "input": {
+        "analogy": "2배로 느는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "비용이 두배로 늘어난다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": true,
+      "reason": null
+    },
+    {
+      "note": "세배(새해 인사)는 optional",
+      "input": {
+        "analogy": "세배 드리는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있다.",
+          "보스를 잡으면 나오는 결정석(강렬한 힘의 결정)을 상점에 팔아 메소를 번다.",
+          "한 주에 팔 수 있는 결정석 개수에는 상한이 있다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": true,
+      "reason": null
+    },
+    {
+      "note": "확실한 수 두배는 엄격",
+      "input": {
+        "analogy": "두배로 느는 것과 같아요.",
+        "usedFact": "",
+        "facts": [
+          "강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있다.",
+          "보스를 잡으면 나오는 결정석(강렬한 힘의 결정)을 상점에 팔아 메소를 번다.",
+          "한 주에 팔 수 있는 결정석 개수에는 상한이 있다."
+        ],
+        "sentence": "이 적금은 한 달에 한 번만 납입할 수 있어요.",
+        "context": ""
+      },
+      "ok": false,
+      "reason": "number-outside"
+    }
+  ],
+  "groups": [
+    {
+      "text": "200만 쓰면 돼요.",
+      "groups": [
+        {
+          "readings": [
+            "2000000",
+            "200"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "레벨 200만 입장할 수 있어요.",
+      "groups": [
+        {
+          "readings": [
+            "2000000",
+            "200"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "200만 메소예요.",
+      "groups": [
+        {
+          "readings": [
+            "2000000"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "1만 원이에요.",
+      "groups": [
+        {
+          "readings": [
+            "10000"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "3만 명이 모여요.",
+      "groups": [
+        {
+          "readings": [
+            "30000"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "1만 2천 메소예요.",
+      "groups": [
+        {
+          "readings": [
+            "12000"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "1만 2천이면 돼요.",
+      "groups": [
+        {
+          "readings": [
+            "12000"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "200만큼 올라요.",
+      "groups": [
+        {
+          "readings": [
+            "200"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "1.5만 쓰면 돼요.",
+      "groups": [
+        {
+          "readings": [
+            "15000"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "네 차례예요.",
+      "groups": [
+        {
+          "readings": [
+            "4"
+          ],
+          "optional": true
+        }
+      ]
+    },
+    {
+      "text": "네 일이야.",
+      "groups": [
+        {
+          "readings": [
+            "4"
+          ],
+          "optional": true
+        }
+      ]
+    },
+    {
+      "text": "네 번 해요.",
+      "groups": [
+        {
+          "readings": [
+            "4"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "네 시간 걸려요.",
+      "groups": [
+        {
+          "readings": [
+            "4"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "넷 차례 해요.",
+      "groups": [
+        {
+          "readings": [
+            "4"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "두배로 늘어요.",
+      "groups": [
+        {
+          "readings": [
+            "2"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "네배예요.",
+      "groups": [
+        {
+          "readings": [
+            "4"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "다섯배가 돼요.",
+      "groups": [
+        {
+          "readings": [
+            "5"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "두살이에요.",
+      "groups": [
+        {
+          "readings": [
+            "2"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "세살이에요.",
+      "groups": [
+        {
+          "readings": [
+            "3"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "열살이에요.",
+      "groups": [
+        {
+          "readings": [
+            "10"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "세배를 드려요.",
+      "groups": [
+        {
+          "readings": [
+            "3"
+          ],
+          "optional": true
+        }
+      ]
+    },
+    {
+      "text": "세일 기간이에요.",
+      "groups": []
+    },
+    {
+      "text": "두통이 심해요.",
+      "groups": []
+    },
+    {
+      "text": "세대 차이가 나요.",
+      "groups": []
+    },
+    {
+      "text": "열등감이 있어요.",
+      "groups": []
+    },
+    {
+      "text": "넉살이 좋아요.",
+      "groups": []
+    },
+    {
+      "text": "한살 더 먹어요.",
+      "groups": []
+    },
+    {
+      "text": "이십일 동안 기다려요.",
+      "groups": [
+        {
+          "readings": [
+            "21",
+            "20"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "삼십일 뒤에 와요.",
+      "groups": [
+        {
+          "readings": [
+            "31",
+            "30"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "백일 잔치를 해요.",
+      "groups": [
+        {
+          "readings": [
+            "101",
+            "100"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "이십일 명이 모여요.",
+      "groups": [
+        {
+          "readings": [
+            "21"
+          ],
+          "optional": false
+        }
+      ]
+    },
+    {
+      "text": "만일 실패하면요?",
+      "groups": []
+    },
+    {
+      "text": "일주일 동안 기다려요.",
+      "groups": []
+    },
+    {
+      "text": "백일몽 같아요.",
+      "groups": []
+    },
+    {
+      "text": "두 번 하고 200만 쓰면 돼요.",
+      "groups": [
+        {
+          "readings": [
+            "2"
+          ],
+          "optional": false
+        },
+        {
+          "readings": [
+            "2000000",
+            "200"
+          ],
+          "optional": false
+        }
+      ]
     }
   ]
 }

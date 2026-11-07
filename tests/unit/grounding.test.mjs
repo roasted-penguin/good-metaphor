@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
-  checkGrounding, GROUNDING_REJECTED_TEXT, normalizeText, numbersIn, charJaccard
+  checkGrounding, GROUNDING_REJECTED_TEXT, normalizeText, numbersIn, numberGroups, charJaccard
 } from '../../extension/lib/grounding.js';
 
 // 공통 그래프(maplestory.json)의 실제 facts
@@ -172,5 +172,12 @@ for (const { text, numbers } of SHARED.numbers) {
 for (const { note, input, ok, reason } of SHARED.checks) {
   test(`공유 사례 checkGrounding: ${note}`, () => {
     assert.deepEqual(checkGrounding(input), ok ? { ok: true } : { ok: false, reason });
+  });
+}
+
+// T-145: 읽기 후보 묶음(뜻이 둘이면 readings 둘, 숫자가 아닐 수도 있으면 optional)
+for (const { text, groups } of SHARED.groups) {
+  test(`공유 사례 numberGroups: ${text}`, () => {
+    assert.deepEqual(numberGroups(text), groups);
   });
 }
