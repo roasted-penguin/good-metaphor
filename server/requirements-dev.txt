@@ -1,0 +1,4 @@
+# 개발·테스트 의존성(버전 고정)
+-r requirements.txt
+pytest==9.2.0
+PyYAML==6.0.3
