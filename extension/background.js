@@ -145,14 +145,15 @@ async function queryVector(sentence) {
 }
 
 // onPartial({ meaning }) 은 스트리밍 중 meaning 이 처음 완성될 때 한 번 불린다. 비유는 넣지 않는다(검증 전이라서)
-async function explain({ sentence, context, word, pageTitle, noCache }, onStage = () => {}, onPartial = null) {
+// merged: 부르는 쪽이 이미 getMergedGraph()를 했으면 넘겨 같은 결과를 다시 읽지 않는다(T-108 포트 경로)
+async function explain({ sentence, context, word, pageTitle, noCache }, onStage = () => {}, onPartial = null, merged = null) {
   const t0 = Date.now();
   const settings = await getSettings();
   const admin = await getAdminConfig();
   const provider = await resolveProvider();
 
   onStage('graph');
-  const { graph, session } = await getMergedGraph();
+  const { graph, session } = merged || await getMergedGraph();
   const graphKey = JSON.stringify([graph.sources, session?.userId || null, graph.nodes.length]);
   const sentenceHash = await sentenceHashOf(sentence);
   const feedbackRecords = await feedbackStore.get();
@@ -303,7 +304,11 @@ chrome.runtime.onConnect.addListener(port => {
       const post = m => { try { port.postMessage({ id: msg.id, ...m }); } catch {} };
       if (await siteBlocked(port.sender)) { post({ type: 'error', error: SITE_OFF }); return; }
       countHover();
-      const result = await explain(msg.payload, stage => post({ type: 'stage', stage }), partial => post({ type: 'partial', partial }));
+      // 병합 그래프를 먼저 읽어 모든 stage 메시지에 테마를 싣는다(T-108). 첫 결과 전 말풍선이 다른 테마로 뜨지 않게.
+      // 읽은 그래프는 explain에 넘겨 다시 읽지 않는다
+      const merged = await getMergedGraph();
+      const theme = merged.graph.theme;
+      const result = await explain(msg.payload, stage => post({ type: 'stage', stage, theme }), partial => post({ type: 'partial', partial }), merged);
       port.postMessage({ type: 'result', id: msg.id, result });
     } catch (e) {
       console.error(e);
@@ -384,7 +389,7 @@ const handlers = {
     const { graph, session } = await getMergedGraph();
     return {
       common: { id: common.id, domain: common.domain, version: common.version, nodes: common.nodes.length, tags: common.tags.length, nodeList: common.nodes.map(n => ({ id: n.id, label: n.label })), tagList: common.tags.map(t => ({ id: t.id, label: t.label })) },
-      merged: { domain: graph.domain, nodes: graph.nodes.length, tags: graph.tags.length, userNodes: graph.sources.userNodes, usesCommon: !!graph.sources.common },
+      merged: { domain: graph.domain, theme: graph.theme, nodes: graph.nodes.length, tags: graph.tags.length, userNodes: graph.sources.userNodes, usesCommon: !!graph.sources.common },
       session
     };
   },

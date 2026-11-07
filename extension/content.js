@@ -15,6 +15,8 @@
 
   /* ───────── 설정 ───────── */
   const SF = globalThis.AnalogySiteFilter; // lib/site-filter.js (manifest에서 먼저 주입)
+  let theme = 'maple';      // 말풍선 테마. 미리 받기(graph:info)·stage·결과 순으로 고쳐진다
+  let themeStale = true;    // 테마를 (다시) 받아야 함
   // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
   let siteExcluded = SF.isExcludedHost(location.hostname, SF.DEFAULT_EXCLUDED_HOSTS);
   // 켜져 있고 이 사이트가 제외 목록에 없을 때만 동작한다
@@ -24,12 +26,34 @@
       settings = { ...settings, ...(s || {}) };
       siteExcluded = SF.isExcludedHost(location.hostname, settings.excludedHosts ?? SF.DEFAULT_EXCLUDED_HOSTS);
       if (!active()) hideTooltip();
+      else if (themeStale) refreshTheme();
     });
   }
   loadSettings();
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.settings) loadSettings();
+    if (area !== 'local') return;
+    if (changes.settings) loadSettings();
+    if (Object.keys(changes).some(isGraphKey)) { themeStale = true; if (active()) refreshTheme(); }
   });
+
+  /* ───────── 테마 미리 받기 (T-108) ─────────
+     관심사 테마를 첫 결과 전에 알아 둬서 로딩 말풍선이 다른 테마로 뜨지 않게 한다.
+     켜져 있고 제외 사이트가 아닐 때 한 번만 받고, 로그인 세션·내 오버레이 키가 바뀌면 다시 받는다.
+     실패하면 지금 값(기본 maple)을 그대로 둔다. 로딩 중에는 stage 메시지의 theme이 한 번 더 고친다 */
+  function isGraphKey(k) {
+    return k === 'devSession' || k === 'remoteSession' || k.startsWith('devOverlay:');
+  }
+  let themeSeq = 0;
+  function refreshTheme() {
+    themeStale = false;
+    const seq = ++themeSeq;
+    try {
+      chrome.runtime.sendMessage({ type: 'graph:info' }, res => {
+        void chrome.runtime.lastError; // 확장이 다시 로드됐을 때 등. 기본값 유지
+        if (seq === themeSeq && res?.ok && res.data?.merged?.theme) theme = res.data.merged.theme;
+      });
+    } catch { /* 확장 컨텍스트가 사라짐. 기본값 유지 */ }
+  }
 
   /* ───────── 커서 아래 문장 찾기 ───────── */
   const BLOCK_DISPLAYS = new Set(['block', 'list-item', 'table-cell', 'flex', 'grid', 'table', 'flow-root', 'table-caption']);
@@ -359,7 +383,6 @@
     }
   }
 
-  let theme = 'maple';
   function render(state) {
     ensureTooltip();
     if (state.result?.theme) theme = state.result.theme;
@@ -433,6 +456,7 @@
       if (!current || msg.id !== current.reqId) return;
       // 뜻이 먼저 왔으면 이후 단계 표시에서도 뜻을 유지한다
       if (msg.type === 'partial') { current.meaning = msg.partial.meaning; render({ loading: true, stage: 'analogy', meaning: current.meaning }); }
+      if (msg.type === 'stage' && msg.theme) theme = msg.theme; // 로딩 중에도 관심사 테마로(T-108)
       if (msg.type === 'stage') render({ loading: true, stage: msg.stage, meaning: current.meaning });
       if (msg.type === 'result') render({ result: msg.result });
       if (msg.type === 'error') render({ error: msg.error });
