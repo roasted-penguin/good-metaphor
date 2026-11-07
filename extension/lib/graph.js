@@ -8,6 +8,7 @@ export const EMPTY_OVERLAY = {
   theme: 'neutral',         // 말풍선 테마: 'maple' | 'neutral'
   hiddenNodeIds: [],        // 공통 그래프에서 숨길 노드
   nodeBoosts: {},           // 노드 id -> 점수 가산 (-0.2 ~ 0.2)
+  feedbackBoosts: {},       // 노드 id -> 👎 누적으로 정해진 가산 (T-130, 확장이 기록으로 계산해 씀. 손으로 고치지 않음)
   tags: [],                 // 내가 추가한 추상 개념 태그
   nodes: [],                // 내가 추가한 노드 (공통 태그 id도 참조 가능)
   edges: []
@@ -35,6 +36,17 @@ export function validateGraph(g, { partial = false } = {}) {
     nodeIds.add(n.id);
   }
   return errors;
+}
+
+export const BOOST_LIMIT = 0.2;
+// 손으로 넣은 가중치(nodeBoosts) + 피드백 가중치(feedbackBoosts), 노드마다 -0.2~0.2로 자르고 소수 둘째 자리로 (T-130)
+function combineBoosts(manual = {}, feedback = {}) {
+  const out = {};
+  for (const id of new Set([...Object.keys(manual || {}), ...Object.keys(feedback || {})])) {
+    const sum = (Number(manual?.[id]) || 0) + (Number(feedback?.[id]) || 0);
+    out[id] = Math.round(Math.min(BOOST_LIMIT, Math.max(-BOOST_LIMIT, sum)) * 100) / 100;
+  }
+  return out;
 }
 
 export function mergeGraphs(common, overlay) {
@@ -77,7 +89,7 @@ export function mergeGraphs(common, overlay) {
     tags: [...tags.values()].filter(t => usedTagIds.has(t.id)),
     nodes: [...nodes.values()],
     edges: liveEdges,
-    boosts: ov.nodeBoosts || {}
+    boosts: combineBoosts(ov.nodeBoosts, ov.feedbackBoosts)
   };
 }
 

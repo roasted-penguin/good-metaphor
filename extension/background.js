@@ -280,7 +280,7 @@ chrome.runtime.onConnect.addListener(port => {
   });
 });
 
-// 로그인 사용자만: 같은 노드에 서로 다른 문장 👎가 쌓이면 오버레이 nodeBoosts를 낮춘다(T-130).
+// 로그인 사용자만: 같은 노드에 서로 다른 문장 👎가 쌓이면 오버레이 feedbackBoosts를 낮춘다(T-130).
 // 값은 지금 기록으로 다시 계산한다(boostForNode). 👎 뒤와 되돌리기 뒤에 부르고, 값이 바뀔 때만 저장한다.
 // 오버레이 변경은 로그인 세션의 saveOverlay로만(규칙 3). 실패해도 피드백 기록은 이미 저장돼 있다.
 async function syncNodeBoost(records, nodeId) {
@@ -291,13 +291,14 @@ async function syncNodeBoost(records, nodeId) {
     const session = await store.getSession();
     if (!session) return;
     const ov = normalizeOverlay(await store.loadOverlay(session));
-    const current = ov.nodeBoosts || {};
+    // 손으로 넣은 nodeBoosts는 건드리지 않고 feedbackBoosts에만 쓴다. 둘은 mergeGraphs가 더한다
+    const current = ov.feedbackBoosts || {};
     const target = boostForNode(records, nodeId);
     if ((current[nodeId] ?? 0) === target && (target !== 0 || !(nodeId in current))) return;
-    const nodeBoosts = { ...current };
-    if (target === 0) delete nodeBoosts[nodeId];
-    else nodeBoosts[nodeId] = target;
-    await store.saveOverlay(session, { ...ov, nodeBoosts });
+    const feedbackBoosts = { ...current };
+    if (target === 0) delete feedbackBoosts[nodeId];
+    else feedbackBoosts[nodeId] = target;
+    await store.saveOverlay(session, { ...ov, feedbackBoosts });
   } catch (e) {
     console.warn('[feedback] 오버레이 가중치를 못 바꿨어요', e);
   }
