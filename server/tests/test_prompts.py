@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.prompts import (
+    analogy_system_section,
     analogy_system_static_fragments,
     build_analogy_prompt,
     build_keyword_prompt,
@@ -76,6 +77,10 @@ def test_static_fragments_appear_in_built_system_prompt():
         assert frag in system
 
 
+def test_missing_section_reports_every_fragment():
+    assert missing_fragments("") == analogy_system_static_fragments()
+
+
 def test_rules_match_extension_prompt_js():
     assert missing_fragments(_js_text()) == []
 
@@ -90,8 +95,9 @@ def test_rule_comparison_fails_when_prompt_js_changes_by_one_char():
 def test_every_fragment_is_checked_against_prompt_js():
     # 고정 문구마다 한 글자씩 바꿔 보아, 어느 줄이 바뀌어도 비교가 실패하는지 확인한다.
     js = _js_text()
+    section_start = js.index(analogy_system_section(js))
     for frag in analogy_system_static_fragments():
-        idx = js.index(frag)
+        idx = js.index(frag, section_start)
         mid = idx + len(frag) // 2
         changed = js[:mid] + ("X" if js[mid] != "X" else "Y") + js[mid + 1:]
         assert frag in missing_fragments(changed), frag
