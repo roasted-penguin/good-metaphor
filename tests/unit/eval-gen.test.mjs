@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildJudgePrompt, parseJudge, summarize, assertDifferentModels, modelKey, evalLogRow } from '../../tools/eval-gen-lib.mjs';
+import { buildJudgePrompt, parseJudge, summarize, assertDifferentModels, modelKey, evalLogRow, withoutModel, judgePlan, SAME_MODEL_SKIP, parseLimit, pct, fix2 } from '../../tools/eval-gen-lib.mjs';
 
 const candidates = [
   { id: 'starforce', label: '스타포스 강화', facts: ['강화에 실패하면 장비가 파괴될 수 있다.', '단계가 오를수록 비용이 커진다.'] },
@@ -124,4 +124,47 @@ test('evalLogRow: 생성·채점 모델, 문장 수, 세 지표가 든 표 한 �
   assert.match(line, /자연스러움 4\.00/);
   assert.match(line, /숨김 1/);
   assert.match(line, /\|$/);
+});
+
+test('withoutModel: 채점 모델과 같은 항목만 체인에서 뺀다(순서 유지)', () => {
+  const chain = [{ id: 'gemini', model: 'a' }, { id: 'nvidia', model: 'n' }, { id: 'ollama', model: 'o' }];
+  assert.deepEqual(withoutModel(chain, { id: 'nvidia', model: 'n' }).map(modelKey), ['gemini/a', 'ollama/o']);
+  // 같은 제공자 다른 모델은 남긴다
+  assert.deepEqual(withoutModel(chain, { id: 'nvidia', model: 'other' }).map(modelKey), ['gemini/a', 'nvidia/n', 'ollama/o']);
+  assert.deepEqual(withoutModel(chain, 'gemini/a').map(modelKey), ['nvidia/n', 'ollama/o']);
+});
+
+test('judgePlan: 숨김·생성 실패는 조용히 건너뛰고, 채점 모델이 생성한 행은 표시하고 건너뛴다', () => {
+  const judge = { id: 'nvidia', model: 'n' };
+  assert.deepEqual(judgePlan(row('가', '비유', undefined, { provider: 'gemini/a' }), judge), { judge: true });
+  assert.deepEqual(judgePlan(row('나', '', null, { provider: 'gemini/a' }), judge), { judge: false });
+  assert.deepEqual(judgePlan({ sentence: '다', error: 'x', provider: 'nvidia/n' }, judge), { judge: false });
+  assert.deepEqual(judgePlan(row('라', '비유', undefined, { provider: 'nvidia/n' }), judge), { judge: false, judgeError: SAME_MODEL_SKIP });
+  assert.equal(SAME_MODEL_SKIP, '채점 모델과 같은 모델이 생성함');
+  // provider 기록이 없는 행은 채점한다
+  assert.deepEqual(judgePlan(row('마', '비유', undefined), judge), { judge: true });
+});
+
+test('summarize: 같은 모델이라 건너뛴 행은 채점 안 됨으로 센다', () => {
+  const s = summarize([
+    row('가', '비유', { grounded: true, structure: 4, natural: 4, reason: '' }),
+    row('나', '비유', null, { judgeError: SAME_MODEL_SKIP })
+  ]);
+  assert.equal(s.judged, 1);
+  assert.equal(s.unjudged, 1);
+});
+
+test('parseLimit: 없으면 전부, 0은 0, 음수·소수·글자는 거절', () => {
+  assert.equal(parseLimit(null), Infinity);
+  assert.equal(parseLimit(undefined), Infinity);
+  assert.equal(parseLimit('0'), 0);
+  assert.equal(parseLimit('5'), 5);
+  for (const bad of ['-1', '1.5', 'abc', '']) assert.throws(() => parseLimit(bad), /--limit/);
+});
+
+test('pct·fix2: 없으면 —', () => {
+  assert.equal(pct(2 / 3), '67%');
+  assert.equal(pct(null), '—');
+  assert.equal(fix2(11 / 3), '3.67');
+  assert.equal(fix2(null), '—');
 });

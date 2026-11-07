@@ -80,8 +80,31 @@ export function assertDifferentModels(gen, judge) {
   }
 }
 
+// 채점 모델을 생성 체인에서 뺀다(생성 모델이 채점 모델이 될 수 없게). 순서는 그대로
+export function withoutModel(chain, judge) {
+  const k = modelKey(judge);
+  return chain.filter(p => modelKey(p) !== k);
+}
+
+export const SAME_MODEL_SKIP = '채점 모델과 같은 모델이 생성함';
+
+// 행을 채점할지. 숨김·생성 실패는 조용히 건너뛰고, 채점 모델이 생성한 행(--from 입력)은 표시하고 건너뛴다
+export function judgePlan(row, judge) {
+  if (row.error || !row.answer?.analogy) return { judge: false };
+  if (row.provider && modelKey(row.provider) === modelKey(judge)) return { judge: false, judgeError: SAME_MODEL_SKIP };
+  return { judge: true };
+}
+
+// --limit 값: 없으면 전부(Infinity), 0 이상 정수만
+export function parseLimit(v) {
+  if (v == null) return Infinity;
+  if (!/^\d+$/.test(v)) throw new Error(`--limit은 0 이상 정수로 써 주세요(받은 값: ${v || '없음'})`);
+  return Number(v);
+}
+
+export const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`);
+export const fix2 = v => (v == null ? '—' : v.toFixed(2));
 const pctText = (a, b) => `${a}/${b} (${Math.round(a / b * 100)}%)`;
-const fix2 = v => (v == null ? '—' : v.toFixed(2));
 
 // EVAL_LOG에 붙일 표 한 줄. 이 표의 칸(임베더·평가셋·설정·hit…)에 맞춰 생성 지표를 메모 칸까지 채운다.
 // meta: { date, gen: ['제공자/모델', ...](실제로 답한 모델들), judge: '제공자/모델', embedder? }
