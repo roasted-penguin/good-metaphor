@@ -1,12 +1,13 @@
 """FastAPI 앱 생성. deps로 설정·가짜 부품을 주입할 수 있다(테스트용).
 
-deps 키: settings, graph, llm(키워드·비유 공용) 또는 keyword_llm·analogy_llm, retriever, cache, rate_limiter.
+deps 키: settings, graph, llm(키워드·비유 공용) 또는 keyword_llm·analogy_llm, retriever, rag, cache, rate_limiter.
 주입하지 않은 부품은 첫 요청 때 실제 것으로 만든다(앱 생성·import 때는 네트워크·LightRAG를 건드리지 않는다).
 """
 from __future__ import annotations
 
 import json
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -36,12 +37,24 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
     deps = dict(deps or {})
     settings = deps.get("settings") or Settings.from_env()
 
-    app = FastAPI(title="analogy-api", version=__version__)
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        yield
+        # 앱이 직접 만든 검색기만 닫는다(첫 검색 때 연 LightRAG 저장소). 주입된 부품은 건드리지 않는다
+        owned = _app.state.owned_retriever
+        if owned is not None:
+            try:
+                await owned.close()
+            except Exception as e:  # 종료 중 오류는 기록만 한다
+                log.warning("LightRAG 저장소를 닫지 못함: %s", e)
+
+    app = FastAPI(title="analogy-api", version=__version__, lifespan=lifespan)
     app.state.settings = settings
     app.state.deps = deps
     app.state.cache = deps.get("cache") or ResultCache()
     app.state.rate_limiter = deps.get("rate_limiter") or RateLimiter(settings.rate_limit_per_min)
     app.state.pipeline = None
+    app.state.owned_retriever = None
 
     def get_pipeline() -> AnalogyPipeline:
         """주입된 부품 + 없는 것은 실제 부품으로 파이프라인을 한 번만 만든다."""
@@ -66,10 +79,13 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
                 raise PipelineError(503, "공통 그래프를 읽지 못했어요.") from e
         retriever = deps.get("retriever")
         if retriever is None:
-            from .retriever import LightRAGRetriever
+            from .retriever import LazyLightRAGRetriever, LightRAGRetriever
 
-            # 실제 LightRAG 인스턴스 연결은 T-403. 그 전에는 검색 단계에서 503으로 막힌다
-            retriever = LightRAGRetriever(rag=deps.get("rag"), graph=graph)
+            if "rag" in deps:
+                retriever = LightRAGRetriever(rag=deps["rag"], graph=graph)
+            else:
+                # 시드된 인덱스(LIGHTRAG_WORKING_DIR/WORKSPACE)를 첫 검색 때 연다. 없으면 검색 단계에서 503
+                retriever = app.state.owned_retriever = LazyLightRAGRetriever(s, graph)
         app.state.pipeline = AnalogyPipeline(graph, keyword_llm, analogy_llm, retriever, s.analogy_model)
         return app.state.pipeline
 
