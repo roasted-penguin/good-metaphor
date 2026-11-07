@@ -300,14 +300,15 @@
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  // 말풍선 배치(T-109): 호버한 순간의 커서(anchorX·anchorY)가 있던 줄 rect 아래, 넘치면 그 줄 위.
-  // 결과가 와서 말풍선이 커져 다시 부를 때도 같은 앵커라, 커서가 움직여도 따라다니지 않는다.
-  // 줄 rect를 못 고르면 문장 전체 bounding rect(한 줄 문장은 둘이 같다)
+  // 말풍선 배치(T-109): 호버할 때 정한 줄(lineIndex)의 지금 rect 아래, 넘치면 그 줄 위. 가로는 호버 때 커서 x(anchorX).
+  // 결과가 와서 다시 부를 때도 같은 줄·같은 x라, 커서가 움직이거나 조금 스크롤해도 다른 줄로 옮겨 가지 않는다.
+  // 줄 목록이 비면 문장 전체 bounding rect(한 줄 문장은 둘이 같다). 줄 수가 줄었으면 마지막 줄로
   function place(cur) {
     const pad = 10;
     const w = Math.min(380, window.innerWidth - 2 * pad);
     box.style.maxWidth = w + 'px';
-    const rect = AP.pickLineRect(cur.range.getClientRects(), cur.anchorY) || cur.range.getBoundingClientRect();
+    const lines = AP.lineRects(cur.range.getClientRects());
+    const rect = lines.length ? lines[Math.min(Math.max(cur.lineIndex, 0), lines.length - 1)] : cur.range.getBoundingClientRect();
     const { left, top } = AP.placeBox({
       rect, mouseX: cur.anchorX, bw: box.offsetWidth || 300, bh: box.offsetHeight || 120,
       vw: window.innerWidth, vh: window.innerHeight, pad
@@ -492,7 +493,9 @@
     if (current && current.key === s.key) return;
     const reqId = ++reqSeq;
     const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120) };
-    current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, anchorY: mouse.y };
+    // 줄은 호버한 순간 한 번만 고른다(뷰포트 y는 스크롤하면 다른 줄을 가리킴)
+    const lineIndex = AP.pickLineIndex(s.range.getClientRects(), mouse.y);
+    current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, lineIndex };
     highlight(s.range);
     render({ loading: true, stage: 'graph' });
     try {
