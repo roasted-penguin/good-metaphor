@@ -25,7 +25,7 @@ PoC 완료, 실제 키·실제 모델로 확인됨.
 
 ## 여러 세션이 동시에 작업할 때
 
-- 작업 하나 = 세션 하나 = 브랜치 하나. 같은 파일을 크게 고치는 작업은 동시에 잡지 않는다(예: T-113·T-120은 `retrieval.js`, T-117·T-122는 `providers.js`·`prompt.js`, T-114·T-304는 `graph.js`·공통 그래프 JSON).
+- 작업 하나 = 세션 하나 = 브랜치 하나. 같은 파일을 크게 고치는 작업은 동시에 잡지 않는다(예: T-113·T-120은 `retrieval.js`, T-117·T-122는 `providers.js`·`prompt.js`·`pipeline.js`, T-114·T-304는 `graph.js`·공통 그래프 JSON).
 - `docs/TASKS.md`는 모든 PR이 고친다. 표의 자기 작업 줄과 작업 로그 맨 위 한 줄만 고치고, 충돌이 나면 양쪽 줄을 모두 살린다.
 - 시작 전에 `gh pr list --state open`으로 다른 세션이 이미 잡은 작업(`진행`·`리뷰`)을 확인한다.
 
@@ -63,6 +63,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/stores.js              공통 저장소 로더 + 사용자 저장소 어댑터(none / local-dev / remote)
   lib/graph.js               그래프 병합(공통 + 오버레이), 검증, 임베딩 텍스트
   lib/retrieval.js           점수 = 직접 유사도 × w1 + 최고 태그 유사도 × w2 + boost
+  lib/pipeline.js            비유 생성 핵심(추상화·프롬프트·호출·규칙 1·근거 검사), 확장과 eval:gen이 같이 씀 (T-104)
   lib/grounding.js           근거 검사: usedFact가 고른 노드 facts와 맞는지 + 비유 숫자가 facts·라벨·원문에 있는지 (T-123)
   lib/feedback.js            말풍선 피드백 층: 문장별 👎 제외·고른 개념 고정, 500건, 캐시 지문 (ADR 0010)
   lib/embed-each.js          임베딩은 항상 한 문장씩 (q8 묶음 차이, ADR 0011)
@@ -81,7 +82,7 @@ scripts/                     build, prepare-e2e
 
 ## 지켜야 할 규칙
 
-1. **근거 밖 비유 금지.** LLM이 고른 `nodeId`가 후보에 없으면 비유를 숨기는 검증(background.js)을 절대 빼지 않는다. 프롬프트의 "근거에 없는 사실을 지어내지 않는다" 규칙도 유지.
+1. **근거 밖 비유 금지.** LLM이 고른 `nodeId`가 후보에 없으면 비유를 숨기는 검증(`lib/pipeline.js` `runAnalogy`, background.js가 부름 — 근거 검사 `lib/grounding.js`도 같은 곳)을 절대 빼지 않는다. 프롬프트의 "근거에 없는 사실을 지어내지 않는다" 규칙도 유지.
 2. **공통 그래프 facts에는 자주 바뀌는 수치를 넣지 않는다**(확률표, 최대 강화 단계, 가격). 게임 패치로 틀려진다. 예외는 날짜와 함께 판본별로 통째 교체되는 공식 패치 노트 원문뿐이다(ADR 0007). 노드 추가는 `/add-common-node` 절차를 따른다.
 3. **저장소 두 층을 섞지 않는다.** 로그아웃 = 공통만, 로그인 = 공통 + 오버레이. 공통 그래프 파일을 사용자 데이터로 고치지 않는다. 사용자 노드 id는 `u:` 접두어. **예외: 말풍선 피드백 층**(D-7, ADR 0010)은 로그아웃이어도 사용자 크롬 프로필(`chrome.storage.local` `feedback`)에 저장해 그 사용자 결과에만 반영한다. 피드백은 후보 제외·고정만 하고 그래프 파일·새 사실·새 태그를 만들지 않는다.
 4. **원격 코드 금지(MV3·웹스토어 정책).** 스크립트와 wasm은 모두 확장 안에 번들한다. 모델 가중치(데이터)만 원격에서 받는다. CSP는 `script-src 'self' 'wasm-unsafe-eval'`.

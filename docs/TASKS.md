@@ -27,7 +27,7 @@
 | T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 (오프라인 대체 경로) | 1 품질 | P2 | 진행 | 첫 로드 확인됨, 캐시·대체 경로 남음 |
 | T-103 | 검색 평가셋 확장(40문장+, 바꿔 말한 문장·영어·맞는 비유 없는 문장) | 1 품질 | P0 | 완료 | |
 | T-133 | 검색 품질 관문: 실제 모델 hit@1 ≥ 75%, hit@3 ≥ 90% (T-103에서 분리) | 1 품질 | P0 | 완료 | T-103, T-405 |
-| T-104 | 생성 품질 평가 (근거 준수·자연스러움) | 1 품질 | P1 | 진행 | T-101, T-103 |
+| T-104 | 생성 품질 평가 (근거 준수·자연스러움) | 1 품질 | P1 | 리뷰 | T-101, T-103 |
 | T-105 | 공통 그래프 벡터 사전 계산 | 1 품질 | P2 | 보류 | LightRAG 전환으로 서버가 벡터를 보관 |
 | T-106 | **[사용자 추가]** 말풍선 원클릭 피드백 UI(👍/👎, 다른 개념 고르기, 즉시 다시 비유, 되돌리기, 반영 표시) (ADR 0010) | 1 품질 | P0 | 완료 | T-129 |
 | T-129 | **[사용자 추가]** 피드백 층과 즉시 반영: 그 문장의 (문장, 노드) 제외·고정, 캐시 무효화 (ADR 0010 1단계) | 1 품질 | P0 | 완료 | D-7 |
@@ -545,6 +545,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-08 | T-104 | task/T-104-gen-eval | | 생성 품질 평가: 비유 생성 핵심을 `lib/pipeline.js`로(동작 그대로, 확장과 평가가 같은 코드), `npm run eval:gen -- --judge`(실제 임베딩·실제 체인, 채점은 다른 계열 모델 — 기본 NVIDIA Nemotron, 채점 모델은 생성 체인에서 뺌, 결과 매번 저장). 측정: 생성 Gemini 3.5 Flash-Lite 35문장 중 채점 33, 근거 준수 100%·구조 4.33·자연스러움 4.58 → 통과. Opus·medium 서브에이전트 3작업(Task 2 수정 1회). 단위 192·e2e 38. Groq 생성 품질은 T-122. |
 | 2026-11-08 | T-123 | task/T-123-grounding-check | [#28](https://github.com/roasted-penguin/good-metaphor/pull/28) | 근거 facts 밖 사실 검사: 프롬프트에 `usedFact`(비유에 쓴 사실을 facts 그대로 인용, 뜻 먼저 그대로), `lib/grounding.js` — usedFact가 고른 노드 fact와 맞는지(부분 문자열·3-gram 자카드 ≥ 0.6) + 비유 숫자가 facts·노드/이웃 라벨·원문에 있는지(NFKC), usedFact 없으면 숫자만. 규칙 1 뒤에 검사, 실패면 비유 숨김("근거에 없는 내용이 섞여 있어서 비유를 숨겼어요."). 서버도 같은 규칙·검사(Python 이식, 규칙 비교 테스트). 실제 키 스모크: Gemini·NVIDIA 오탐 없음. 단위 168·e2e 38·서버 156. 빈틈은 T-143. |
 | 2026-11-08 | T-412 | task/T-412-extract-prompt | [#27](https://github.com/roasted-penguin/good-metaphor/pull/27) | 추출 프롬프트: `server/app/extract.py` — 엔티티 유형 6개, 통제 어휘(키워드 프롬프트와 같은 `vocabulary_tags`에서, 규칙 9), 용어 사전(노드 라벨: facts 첫 문장, 은어는 T-114), 예시 2개(공통 그래프 사실만), LightRAG 1.5.7 `addon_params["entity_types_guidance"]`·`entity_extraction_use_json`, 목록 밖 추상구조와 그 관계를 버리는 `filter_extraction`. pytest 119. Opus·medium 서브에이전트. 후처리 연결은 T-414, 실제 모델 확인 거리는 T-413에 적음. |
 | 2026-11-08 | T-133 | task/T-133-quality-gate | [#26](https://github.com/roasted-penguin/good-metaphor/pull/26) | 검색 품질 관문 재측정: 실제 확장 기준 hit@1 27/35(77%), hit@3 33/35(94%), `--guard` 회귀 0 → 통과(설정 변경 없음). T-103 새 문장만은 12/19(63%). 서버 비교는 T-142. #25 병합 반영(T-405 완료). |
