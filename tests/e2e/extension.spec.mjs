@@ -224,6 +224,33 @@ test('비슷한 문장(T-130): 👎 기록에 벡터 저장(목록엔 없음) �
   const r3 = await ext.send({ type: 'explain', ...b });
   expect(r3.data.debug.feedback.similar).toEqual([]);
   expect(r3.data.feedbackApplied).toBe(false);
+  // 정밀 모드가 꺼져 있으면 검색 벡터를 그대로 쓰고 추가 임베딩이 없다(T-138)
+  for (const r of [r1, r2, r3]) {
+    expect(r.data.debug.feedback.queryVec).toBe('query');
+    expect(r.data.debug.feedback.extraEmbedMs).toBe(0);
+  }
+});
+
+test('정밀 모드 비슷한 문장(T-138): 검색은 추상 구조 + 원문, 비슷한 문장 판정은 원문 벡터로', async ({ ext }) => {
+  await ext.setSettings({ preciseMode: true });
+  const a = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...a });
+  // 가짜 LLM의 추상화 응답이 원문과 달라 검색 질의가 바뀐다
+  expect(r1.data.debug.abstractText).toBeTruthy();
+  expect(r1.data.debug.abstractText).not.toBe(a.sentence);
+  // 메모리가 비면 비슷한 문장 판정이 없으니 추가 임베딩도 건너뛴다
+  expect(r1.data.debug.feedback.queryVec).toBe('query');
+  expect(r1.data.debug.feedback.extraEmbedMs).toBe(0);
+  const x = r1.data.evidence.nodeId;
+  await ext.send({ type: 'feedback', record: { sentence: a.sentence, nodeId: x, tagId: null, vote: 'down', provider: r1.data.debug.provider } });
+  const a2 = { ...a, sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다' };
+  const r2 = await ext.send({ type: 'explain', ...a2 });
+  expect(r2.data.debug.abstractText).toBeTruthy();
+  expect(r2.data.debug.feedback.queryVec).toBe('sentence');
+  expect(r2.data.debug.feedback.extraEmbedMs).toBeGreaterThanOrEqual(0);
+  console.log('[T-138] extraEmbedMs', r2.data.debug.feedback.extraEmbedMs);
+  expect(r2.data.debug.feedback.similar.find(s => s.nodeId === x)?.delta).toBeLessThan(0);
+  expect(r2.data.feedbackApplied).toBe(true);
 });
 
 test('내 피드백(T-132): 목록·공유 설정·7일 통계·지운 노드 라벨·전부 지우기 메시지', async ({ ext }) => {
