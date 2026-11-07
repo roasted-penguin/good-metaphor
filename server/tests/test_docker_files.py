@@ -54,3 +54,10 @@ def test_env_예시는_키가_비어_있고_env는_커밋하지_않는다():
     assert key_lines == ["GEMINI_API_KEY="]
     ignored = (SERVER_DIR / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert ".env" in ignored
+
+
+def test_dockerignore가_비밀값과_가상환경을_뺀다():
+    ignored = [l.strip().rstrip("/") for l in
+               (SERVER_DIR / ".dockerignore").read_text(encoding="utf-8").splitlines()]
+    for name in (".env", ".venv", "__pycache__", ".pytest_cache", "tests"):
+        assert name in ignored, name

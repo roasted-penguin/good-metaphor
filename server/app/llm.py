@@ -72,4 +72,8 @@ class GeminiLLM:
             except ValueError:
                 message = res.text[:200]
             raise LLMError(f"Gemini {res.status_code}: {message}", status=res.status_code)
-        return _gemini_text(res.json())
+        try:
+            data = res.json()
+        except ValueError as e:
+            raise LLMError("Gemini 응답이 JSON이 아니에요.", status=502) from e
+        return _gemini_text(data)

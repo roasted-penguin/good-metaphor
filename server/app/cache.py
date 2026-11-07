@@ -1,4 +1,6 @@
-"""비유 결과 캐시. 키 = sha1(앞뒤 공백 뺀 문장) + ":" + 워크스페이스 버전.
+"""비유 결과 캐시. 키 = sha1(앞뒤 공백 뺀 문장 + "\x1f" + 커서 단어) + ":" + 워크스페이스 버전.
+
+커서 단어가 다르면 설명할 대상이 달라지므로 키에 넣는다(확장 캐시 키도 word를 넣는다).
 
 그래프 판본(버전)이 바뀌면 키가 달라져 예전 결과를 저절로 안 쓴다.
 """
@@ -16,12 +18,13 @@ log = logging.getLogger(__name__)
 UNVERSIONED = "unversioned"
 
 
-def cache_key(sentence: str, workspace_version: str | None) -> str:
+def cache_key(sentence: str, word: str | None, workspace_version: str | None) -> str:
     if not workspace_version:
         log.warning("워크스페이스 버전을 몰라 캐시 키에 '%s'를 써요. 그래프가 바뀌어도 캐시가 안 비워질 수 있어요.",
                     UNVERSIONED)
         workspace_version = UNVERSIONED
-    digest = hashlib.sha1(sentence.strip().encode("utf-8")).hexdigest()
+    raw = sentence.strip() + "\x1f" + (word or "")
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()
     return f"{digest}:{workspace_version}"
 
 

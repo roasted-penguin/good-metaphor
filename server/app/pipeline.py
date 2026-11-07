@@ -11,7 +11,7 @@ from typing import Any
 
 from .llm import LLM, LLMError
 from .prompts import build_analogy_prompt, build_keyword_prompt, parse_json_object, parse_keywords
-from .retriever import Retriever, RetrieverUnavailable
+from .retriever import Retriever, RetrieverError, RetrieverUnavailable
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +68,9 @@ class AnalogyPipeline:
         except RetrieverUnavailable as e:
             log.warning("검색기 준비 안 됨: %s", e)
             raise PipelineError(503, "검색 인덱스가 아직 준비되지 않았어요.") from e
+        except RetrieverError as e:
+            log.warning("검색 실패: %s", e)
+            raise PipelineError(502, "검색 중에 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.") from e
         candidates = list(candidates)[:TOP_K]
 
         # 3) 비유

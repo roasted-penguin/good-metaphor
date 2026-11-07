@@ -142,12 +142,25 @@ def test_same_sentence_uses_cache_and_version_change_misses():
     assert len(llm.calls) == calls * 2
 
 
+def test_same_sentence_different_word_misses_cache():
+    client, _, llm, _ = _client()
+    _post(client, "강화할 때마다 확률이 낮아져요.", word="강화")
+    calls = len(llm.calls)
+    assert _post(client, "강화할 때마다 확률이 낮아져요.", word="강화").json()["cached"] is True
+    assert len(llm.calls) == calls
+    res = _post(client, "강화할 때마다 확률이 낮아져요.", word="확률").json()
+    assert "cached" not in res
+    assert len(llm.calls) == calls * 2
+
+
 def test_cache_key_and_eviction():
     import hashlib
 
     from app.cache import ResultCache, cache_key
 
-    assert cache_key("  문장 ", "v1") == hashlib.sha1("문장".encode("utf-8")).hexdigest() + ":v1"
+    assert cache_key("  문장 ", None, "v1") == hashlib.sha1("문장\x1f".encode("utf-8")).hexdigest() + ":v1"
+    assert cache_key("문장", "강화", "v1") == hashlib.sha1("문장\x1f강화".encode("utf-8")).hexdigest() + ":v1"
+    assert cache_key("문장", "강화", "v1") != cache_key("문장", "확률", "v1")
     c = ResultCache(max_size=2)
     c.put("a", {"n": 1})
     c.put("b", {"n": 2})
@@ -162,7 +175,7 @@ def test_cache_key_without_version_warns(caplog):
     from app.cache import UNVERSIONED, cache_key
 
     with caplog.at_level(logging.WARNING):
-        key = cache_key("문장", None)
+        key = cache_key("문장", None, None)
     assert key.endswith(":" + UNVERSIONED)
     assert "None" not in key
     assert any("버전" in r.getMessage() for r in caplog.records)
@@ -407,3 +420,83 @@ def test_settings_model_defaults(monkeypatch):
     assert s.keyword_model == "gemini-3.5-flash-lite" and s.analogy_model == "gemini-3.5-flash-lite"
     monkeypatch.setenv("GEMINI_ANALOGY_MODEL", "gemini-3.8-flash")
     assert Settings.from_env().analogy_model == "gemini-3.8-flash"
+
+
+# --- 오류는 항상 한국어 JSON (맨 500 금지) ---
+
+def test_gemini_non_json_200_raises_llm_error_502():
+    from app.llm import GeminiLLM, LLMError
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, text="<html>프록시 오류</html>")))
+    llm = GeminiLLM(api_key="dummy-not-a-key", model="m", client=client)
+    with pytest.raises(LLMError) as e:
+        asyncio.run(llm.complete("s", "u", json=False))
+    assert e.value.status == 502
+    assert "Gemini" in str(e.value)
+
+
+def test_gemini_non_json_200_endpoint_returns_json_502():
+    from app.llm import GeminiLLM
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, text="not json")))
+    llm = GeminiLLM(api_key="dummy-not-a-key", model="m", client=client)
+    c, *_ = _client(llm=llm)
+    res = _post(c, "강화 문장이에요.")
+    assert res.status_code == 502
+    assert res.json() == {"error": "AI 서버를 부르지 못했어요. 잠시 뒤 다시 시도해 주세요."}
+
+
+class _BrokenRag:
+    async def aquery(self, query, param=None, system_prompt=None):
+        raise RuntimeError("vector db down")
+
+
+def test_lightrag_aquery_error_is_wrapped():
+    from app.retriever import LightRAGRetriever, RetrieverError
+
+    with pytest.raises(RetrieverError):
+        asyncio.run(LightRAGRetriever(rag=_BrokenRag(), graph=GRAPH).candidates("문장", ["확률형 강화"], []))
+
+
+def test_lightrag_aquery_error_endpoint_returns_json_502():
+    from app.main import create_app
+
+    app = create_app(deps={"settings": _settings(), "llm": FakeLLM(), "rag": _BrokenRag()})
+    res = _post(TestClient(app, raise_server_exceptions=False), "강화 문장이에요.")
+    assert res.status_code == 502
+    assert res.json() == {"error": "검색 중에 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요."}
+
+
+# --- LightRAG 자체 키워드 LLM을 부르지 않게(규칙 8·9) ---
+
+def test_lightrag_never_gets_both_keyword_lists_empty():
+    from app.retriever import LightRAGRetriever
+
+    params = []
+
+    class _Rag:
+        async def aquery(self, query, param=None, system_prompt=None):
+            params.append(param)
+            return FAKE_CONTEXT
+
+    r = LightRAGRetriever(rag=_Rag(), graph=GRAPH)
+    asyncio.run(r.candidates("빈 키워드 문장", [], []))
+    asyncio.run(r.candidates("hl만 있는 문장", ["확률형 강화"], []))
+    for p in params:
+        assert p.hl_keywords or p.ll_keywords
+    assert params[0].hl_keywords == [] and params[0].ll_keywords == ["빈 키워드 문장"]
+    assert params[1].ll_keywords == []  # 하나라도 있으면 그대로 둔다
+
+
+def test_unexpected_error_is_korean_json_500():
+    class _Boom:
+        async def candidates(self, sentence, hl, ll, top_k=3):
+            raise RuntimeError("예상 못 한 오류")
+
+    from app.main import create_app
+
+    app = create_app(deps={"settings": _settings(), "llm": FakeLLM(), "retriever": _Boom()})
+    res = _post(TestClient(app, raise_server_exceptions=False), "강화 문장이에요.")
+    assert res.status_code == 500
+    assert res.json() == {"error": "서버에서 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요."}

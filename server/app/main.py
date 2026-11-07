@@ -73,6 +73,12 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
         app.state.pipeline = AnalogyPipeline(graph, keyword_llm, analogy_llm, retriever, s.analogy_model)
         return app.state.pipeline
 
+    @app.exception_handler(Exception)
+    async def unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
+        # 예상 못 한 오류도 맨 500 대신 한국어 JSON으로 돌려준다
+        log.exception("처리 못 한 오류: %s", exc)
+        return _error(500, "서버에서 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.")
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {"ok": True, "version": __version__}
@@ -97,14 +103,15 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
         # 한도 → 캐시 → 파이프라인
         if not app.state.rate_limiter.allow(token):
             return _error(429, "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요.")
-        key = cache_key(sentence, app.state.settings.workspace_version)
+        word = _opt_str(body.get("word"))
+        key = cache_key(sentence, word, app.state.settings.workspace_version)
         hit = app.state.cache.get(key)
         if hit is not None:
             return JSONResponse({**hit, "cached": True})
         try:
             result = await get_pipeline().run(AnalogyRequest(
                 sentence=sentence,
-                word=_opt_str(body.get("word")),
+                word=word,
                 context=_opt_str(body.get("context")),
                 page_title=_opt_str(body.get("pageTitle")),
             ))

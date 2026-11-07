@@ -30,7 +30,11 @@ class Retriever(Protocol):
 
 
 class RetrieverUnavailable(Exception):
-    """검색 인덱스가 없거나 준비되지 않았을 때."""
+    """검색 인덱스가 없거나 준비되지 않았을 때(503)."""
+
+
+class RetrieverError(Exception):
+    """검색 중 LightRAG 쪽에서 예외가 났을 때(502)."""
 
 
 def build_candidate(node: dict[str, Any], graph: dict[str, Any], tag_id: str | None = None,
@@ -140,6 +144,14 @@ class LightRAGRetriever:
         # 무거운 패키지라 실제로 물을 때만 불러온다(앱 생성·import 때는 안 부른다)
         from lightrag import QueryParam
 
-        param = QueryParam(mode="hybrid", hl_keywords=list(hl), ll_keywords=list(ll), only_need_context=True)
-        context = await self._rag.aquery(sentence, param=param)
+        hl, ll = list(hl), list(ll)
+        if not hl and not ll:
+            # 둘 다 비면 LightRAG가 자기 키워드 LLM(get_keywords_from_query)을 부른다.
+            # 그러면 클라우드 밖 LLM·통제 어휘 밖 키워드가 끼어들 수 있어(규칙 8·9) 문장 자체를 ll로 넘긴다
+            ll = [sentence]
+        param = QueryParam(mode="hybrid", hl_keywords=hl, ll_keywords=ll, only_need_context=True)
+        try:
+            context = await self._rag.aquery(sentence, param=param)
+        except Exception as e:  # LightRAG 내부 오류는 종류가 많아 한 가지로 감싼다
+            raise RetrieverError(f"LightRAG 검색 실패: {type(e).__name__}") from e
         return context_to_candidates(context if isinstance(context, str) else "", self._graph, hl, top_k)
