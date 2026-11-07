@@ -70,7 +70,7 @@
 | T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 대기 | T-403 |
 | T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 완료 | T-402 |
 | T-141 | 서버 모드 실사용 준비: 서버 도메인 `host_permissions` + 서버 CORS(chrome-extension), `managed_schema.json`에 `analogyServer`, 서버 장애 중 로컬 결과는 세션 캐시에 안 남기기, 규칙 1을 로컬 그래프 노드로도 확인 | L 서버 | P1 | 대기 | T-404, T-401 |
-| T-405 | [L0] 평가 도구에 서버 모드 추가 (관문 측정은 T-142로 분리) | L 서버 | P0 | 진행 | T-403 |
+| T-405 | [L0] 평가 도구에 서버 모드 추가 (관문 측정은 T-142로 분리) | L 서버 | P0 | 리뷰 | T-403 |
 | T-142 | [L0] 관문 측정: bge-m3 서버로 `npm run eval -- --server` → 서버 hit@1 ≥ 브라우저면 ADR 0006 채택 (T-405에서 분리) | L 서버 | P0 | 대기 | T-405, T-401 |
 | T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
 | T-412 | [L1] 추출 프롬프트: 통제 어휘·용어 사전, JSON 모드 | L 서버 | P0 | 대기 | T-403 |
@@ -494,7 +494,7 @@ LightRAG 엔티티 이름은 공통 그래프 노드 id 또는 label과 같아�
 **완료 기준** `npm run eval -- --server <url>`이 서버 결과를 브라우저와 같은 방식(hit@1·hit@3·금융·새 문장·회귀)으로 출력하고 관문 한 줄을 낸다. 요청 한도·429·503을 처리한다. 단위 테스트.
 
 ### T-142 [L0] 관문 측정 (T-405에서 분리)
-**할 일** bge-m3로 시드한 서버(T-401 EC2 또는 Ollama 있는 환경, T-403 `python -m app.seed` with `EMBEDDING_PROVIDER=ollama`)에 `npm run eval -- --server <url> --guard`. EVAL_LOG에 서버·브라우저 나란히.
+**할 일** bge-m3로 시드한 서버(T-401 EC2 또는 Ollama 있는 환경, T-403 `python -m app.seed` with `EMBEDDING_PROVIDER=ollama`)에 `npm run eval -- --server <url> --guard`. EVAL_LOG에 서버·브라우저 나란히. 기본 모드(실제 확장 임베딩)로 잰다 — `--fallback`·`--node`면 브라우저 숫자가 다른 임베더 값이라 관문 줄에 임베더 이름을 함께 찍도록 먼저 고친다(T-405 최종 검토). `--server-only`면 질의 재작성 호출은 건너뛰게.
 **완료 기준** 서버 hit@1 ≥ 브라우저 hit@1(실제 확장 기준 27/35). 통과하면 ADR 0006 상태를 "채택"으로, 미달이면 원인과 다음 수단을 ADR에.
 
 ### T-411 [L1] 맥 추출 노드
@@ -536,6 +536,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-08 | T-405 | task/T-405-eval-server | | 평가 도구 서버 모드: `npm run eval -- --server <url>`(`--server-only`, `--rpm` 기본 20, `--token`)이 평가셋·검증셋을 analogy-api `debug.candidates` 순위로 같은 방식(hit@1·hit@3·금융·새 문장·회귀) 채점, 429는 Retry-After만큼 기다려 같은 문장 최대 3번, 502 한 번, 503이면 한국어로 멈춤(통과 출력 없음), 마지막에 관문 한 줄. 관문 측정·ADR 0006 채택은 T-142로 분리(bge-m3 인덱스 없음). 메인 세션에서 키 없는 로컬 서버로 503 멈춤 확인. 단위 144·e2e 36. |
 | 2026-11-08 | T-404 | task/T-404-server-mode | [#24](https://github.com/roasted-penguin/good-metaphor/pull/24) | 확장 서버 모드: `admin.json analogyServer.url`(기본 빈 값 = 꺼짐)이 있으면 analogy-api를 먼저(설치 토큰, 4초 타임아웃), 실패하면(네트워크·타임아웃·2xx 아님·모양 오류) 로컬. 로그인·그 문장 👎/교정·데모면 서버 건너뜀. 서버 결과도 확장에서 규칙 1 재검증. 말풍선에 `서버`/`로컬`(꺼짐이면 표시 없음). e2e 가짜 analogy-api :8767. 단위 134·e2e 36. Opus·medium 서브에이전트 2작업. 실사용 준비는 T-141. |
 | 2026-11-07 | T-403 | task/T-403-seed-kg | [#23](https://github.com/roasted-penguin/good-metaphor/pull/23) | 시드 주입: 공통 그래프 → LightRAG custom KG(엔티티 36 = 추상구조 18 + 게임시스템 18, 라벨 이름, 관계 48, 청크 36, source_id `seed:`), `python -m app.seed`(해시 임베딩·Ollama bge-m3 설정값, 오프라인 글자 토크나이저, LLM 호출 금지 함수), 다시 넣어도 엔티티 36·관계 48 그대로(메인 세션에서 CLI 두 번 확인), analogy-api가 시드 인덱스를 지연·한 번만 열어 검색(없으면 503). pytest 102. Opus·medium 서브에이전트 3작업 + 최종 수정 1회. 실제 bge-m3 품질은 T-405, 후속 T-140. |
 | 2026-11-07 | T-402 | task/T-402-analogy-api | [#22](https://github.com/roasted-penguin/good-metaphor/pull/22) | analogy-api 서버 골격 `server/`(FastAPI, lightrag-hku 1.5.7 고정): `/health`, `POST /v1/analogy`(키워드 LLM → LightRAG hybrid 맥락만 → 후보 3 → 비유 LLM → 규칙 1 nodeId 검증, 확장 explain() 결과 모양), 프롬프트 Python 이식 + prompt.js 규칙 비교 테스트, 캐시(문장+단어+워크스페이스 버전), 설치 토큰별 요청 한도, 한국어 JSON 오류, 빈 키워드로 LightRAG 내부 LLM 안 부름, docker compose(그래프 읽기 전용 마운트, .env). pytest 64. 메인 세션에서 docker 빌드·실행 확인(/health 200, 토큰 없음 400, 키 없음 503, 빌드 8분). Opus·medium 서브에이전트 4작업 + 최종 수정 1회. 실제 인덱스는 T-403, CI는 T-139. |
