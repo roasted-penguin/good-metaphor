@@ -26,33 +26,44 @@
       settings = { ...settings, ...(s || {}) };
       siteExcluded = SF.isExcludedHost(location.hostname, settings.excludedHosts ?? SF.DEFAULT_EXCLUDED_HOSTS);
       if (!active()) hideTooltip();
-      else if (themeStale) refreshTheme();
+      else refreshIfStale();
     });
   }
   loadSettings();
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.settings) loadSettings();
-    if (Object.keys(changes).some(isGraphKey)) { themeStale = true; if (active()) refreshTheme(); }
+    if (Object.keys(changes).some(isGraphKey)) { themeStale = true; markTheme(); if (active()) refreshTheme(); }
   });
 
   /* ───────── 테마 미리 받기 (T-108) ─────────
      관심사 테마를 첫 결과 전에 알아 둬서 로딩 말풍선이 다른 테마로 뜨지 않게 한다.
      켜져 있고 제외 사이트가 아닐 때 한 번만 받고, 로그인 세션·내 오버레이 키가 바뀌면 다시 받는다.
-     실패하면 지금 값(기본 maple)을 그대로 둔다. 로딩 중에는 stage 메시지의 theme이 한 번 더 고친다 */
+     실패하면 지금 값(기본 maple)을 두고 stale로 남겨, 다음 설정 변경·호버 때 다시 받는다.
+     로딩 중에는 stage 메시지의 theme이 한 번 더 고친다 */
   function isGraphKey(k) {
     return k === 'devSession' || k === 'remoteSession' || k.startsWith('devOverlay:');
   }
   let themeSeq = 0;
+  let themeLoading = false; // 받는 중(같은 요청을 겹쳐 보내지 않게)
+  // 지금 테마와 미리 받기 완료 여부. 콘텐츠 스크립트 격리 월드의 window라 페이지 스크립트에는 안 보인다(e2e가 기다릴 때 씀)
+  const markTheme = () => { window.__analogyHelperTheme = { theme, ready: !themeStale }; };
+  const refreshIfStale = () => { if (themeStale && !themeLoading && active()) refreshTheme(); };
   function refreshTheme() {
-    themeStale = false;
-    const seq = ++themeSeq;
+    const seq = ++themeSeq; // 늦게 온 옛 응답은 버린다(키가 바뀌어 다시 받은 경우)
+    themeLoading = true;
+    const done = got => {
+      if (seq !== themeSeq) return;
+      themeLoading = false;
+      if (got) { theme = got; themeStale = false; } else themeStale = true;
+      markTheme();
+    };
     try {
       chrome.runtime.sendMessage({ type: 'graph:info' }, res => {
         void chrome.runtime.lastError; // 확장이 다시 로드됐을 때 등. 기본값 유지
-        if (seq === themeSeq && res?.ok && res.data?.merged?.theme) theme = res.data.merged.theme;
+        done(res?.ok ? res.data?.merged?.theme : null);
       });
-    } catch { /* 확장 컨텍스트가 사라짐. 기본값 유지 */ }
+    } catch { done(null); /* 확장 컨텍스트가 사라짐. 기본값 유지 */ }
   }
 
   /* ───────── 커서 아래 문장 찾기 ───────── */
@@ -456,7 +467,7 @@
       if (!current || msg.id !== current.reqId) return;
       // 뜻이 먼저 왔으면 이후 단계 표시에서도 뜻을 유지한다
       if (msg.type === 'partial') { current.meaning = msg.partial.meaning; render({ loading: true, stage: 'analogy', meaning: current.meaning }); }
-      if (msg.type === 'stage' && msg.theme) theme = msg.theme; // 로딩 중에도 관심사 테마로(T-108)
+      if (msg.type === 'stage' && msg.theme) { theme = msg.theme; markTheme(); } // 로딩 중에도 관심사 테마로(T-108)
       if (msg.type === 'stage') render({ loading: true, stage: msg.stage, meaning: current.meaning });
       if (msg.type === 'result') render({ result: msg.result });
       if (msg.type === 'error') render({ error: msg.error });
@@ -470,6 +481,7 @@
 
   function trigger() {
     if (!active()) return;
+    refreshIfStale(); // 미리 받기가 실패했으면 호버 때 다시(이번 말풍선은 stage theme이 고침)
     const s = sentenceAt(mouse.x, mouse.y);
     if (!s) return;
     if (current && current.key === s.key) return;
