@@ -50,24 +50,20 @@ export function applyFeedback(candidates, records, sentenceHash, topK = 3) {
   return { candidates: kept.slice(0, topK), applied, excluded, pinned: null };
 }
 
-/**
- * 로그인 사용자 노드 가중치 누적 (T-130). records는 이번 👎를 붙인 뒤의 기록(마지막이 이번 기록)이다.
- * nodeId에 대한 👎가 서로 다른 문장(sentenceHash) 3건 이상이면 currentBoost에서 0.05 낮춘 값(하한 -0.2)을,
- * 3건 미만이거나 이번 👎가 이미 센 문장의 반복이면 null(바꾸지 않음)을 돌려준다.
- * @returns {number|null}
- */
 export const BOOST_STEP = 0.05;
 export const BOOST_MIN = -0.2;
 export const BOOST_MIN_SENTENCES = 3;
-export function boostAfterDown(records, nodeId, currentBoost = 0) {
-  const downs = records.filter(r => r.vote === 'down' && r.nodeId === nodeId);
-  const latest = downs.at(-1);
-  if (!latest) return null;
-  const earlier = new Set(downs.slice(0, -1).map(r => r.sentenceHash));
-  if (earlier.has(latest.sentenceHash)) return null; // 같은 문장 반복은 세지 않는다
-  if (earlier.size + 1 < BOOST_MIN_SENTENCES) return null;
-  // 0.05 단위 누적에서 생기는 부동소수 오차(-0.15000000000000002)를 없앤다
-  return Math.max(BOOST_MIN, Math.round((currentBoost - BOOST_STEP) * 100) / 100);
+/**
+ * 로그인 사용자 노드 가중치 (T-130). 지금 기록만으로 정하는 순수 함수라, 되돌리기·반복 👎에도 값이 흔들리지 않는다.
+ * nodeId에 대한 👎의 서로 다른 문장(sentenceHash) 수가 3 미만이면 0(가중치 없음),
+ * 그 이상이면 -0.05 × (문장 수 − 2), 하한 -0.2.
+ * @returns {number}
+ */
+export function boostForNode(records, nodeId) {
+  const distinct = new Set(records.filter(r => r.vote === 'down' && r.nodeId === nodeId).map(r => r.sentenceHash)).size;
+  if (distinct < BOOST_MIN_SENTENCES) return 0;
+  // 0.05 단위에서 생기는 부동소수 오차(-0.15000000000000002)를 없앤다
+  return Math.max(BOOST_MIN, Math.round(-BOOST_STEP * (distinct - BOOST_MIN_SENTENCES + 1) * 100) / 100);
 }
 
 /**

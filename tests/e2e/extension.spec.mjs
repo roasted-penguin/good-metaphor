@@ -543,6 +543,23 @@ test('로그인 시 같은 노드에 서로 다른 문장 👎 3건 → 오버�
   expect((await send({ type: 'overlay:get' })).data.nodeBoosts.auction).toBeUndefined();
 });
 
+test('로그인 시 👎 되돌리기는 가중치도 되돌리고, 다시 👎해도 더 내려가지 않는다 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  const boosts = async () => (await send({ type: 'overlay:get' })).data.nodeBoosts;
+  const downMeso = async sentence => (await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).data.id;
+  await downMeso(DOWN_SENTENCES[0]);
+  await downMeso(DOWN_SENTENCES[1]);
+  let id = await downMeso(DOWN_SENTENCES[2]);
+  expect((await boosts()).meso).toBe(-0.05);
+  for (let i = 0; i < 3; i++) {
+    expect((await send({ type: 'feedback-undo', id })).ok).toBe(true);
+    expect('meso' in (await boosts())).toBe(false); // 키를 지운다
+    id = await downMeso(DOWN_SENTENCES[2]);
+    expect((await boosts()).meso).toBe(-0.05);
+  }
+});
+
 test('로그아웃 상태의 같은 노드 👎 3건은 오버레이를 바꾸지 않는다 (T-130)', async ({ ext }) => {
   const { send } = ext;
   for (const sentence of DOWN_SENTENCES) {
