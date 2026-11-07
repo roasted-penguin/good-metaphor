@@ -107,11 +107,10 @@ export function mergeGraphs(common, overlay) {
 export function tagText(t) {
   return [`${t.label}: ${t.desc || ''}`.trim(), ...(t.examples || [])].join(' ');
 }
-// 별칭은 라벨 뒤 괄호에 붙인다: "스타포스 강화(펑, 프텍)". 별칭이 없으면 예전과 같은 문자열(벡터 캐시 불변, T-114)
+// 별칭(aliases)은 넣지 않는다: 넣으면 노드 벡터가 바뀌어 잘 맞던 문장이 틀려졌다(T-114). 별칭은 retrieval.js 어휘 가산으로 쓴다
 export function nodeText(n, tagMap) {
   const structure = n.tags.map(id => tagMap.get(id)).filter(Boolean).map(tagText).join(' ');
-  const label = n.aliases?.length ? `${n.label}(${n.aliases.join(', ')})` : n.label;
-  return `${structure} ${label}. ${n.facts.join(' ')}`.trim();
+  return `${structure} ${n.label}. ${n.facts.join(' ')}`.trim();
 }
 
 export async function sha1(str) {

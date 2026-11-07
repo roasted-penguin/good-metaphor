@@ -146,21 +146,16 @@ test('오버레이 노드의 aliases도 같은 규칙으로 검사한다 (T-114)
   assert.deepEqual(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], aliases: ['별칭'] }] }), []);
 });
 
-test('nodeText: 별칭이 없으면 예전과 바이트 단위로 같은 문자열 (벡터 캐시·검색 불변, T-114)', () => {
+test('nodeText: 별칭은 임베딩 텍스트에 넣지 않는다. 모든 노드가 예전과 바이트 단위로 같다 (벡터 캐시·검색 불변, T-114 재설계)', () => {
   const tagMap = new Map(common.tags.map(t => [t.id, t]));
   // 예전 구현 그대로(T-113)
   const before = n => `${n.tags.map(id => tagMap.get(id)).filter(Boolean).map(tagText).join(' ')} ${n.label}. ${n.facts.join(' ')}`.trim();
   for (const n of common.nodes) {
     const { aliases, ...plain } = n;
-    assert.equal(nodeText(plain, tagMap), before(plain), `${n.id}`);
-    assert.equal(nodeText({ ...plain, aliases: [] }, tagMap), before(plain), `${n.id} 빈 배열`);
+    assert.equal(nodeText(n, tagMap), before(plain), `${n.id}`);
   }
-});
-
-test('nodeText: 별칭은 라벨 뒤 괄호에 쉼표로 붙는다 (T-114)', () => {
-  const tagMap = new Map([['t', { id: 't', label: '태그', desc: '설명' }]]);
-  const n = { id: 'starforce', label: '스타포스 강화', facts: ['사실 하나.', '사실 둘.'], tags: ['t'], aliases: ['펑', '프텍'] };
-  assert.equal(nodeText(n, tagMap), '태그: 설명 스타포스 강화(펑, 프텍). 사실 하나. 사실 둘.');
+  const n = { id: 'x', label: '스타포스 강화', facts: ['사실.'], tags: [], aliases: ['펑', '프텍'] };
+  assert.equal(nodeText(n, tagMap), '스타포스 강화. 사실.');
 });
 
 test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드에 있다 (T-114)', () => {

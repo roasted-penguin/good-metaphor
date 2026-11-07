@@ -241,7 +241,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     }
     extraEmbedMs = Date.now() - te;
   }
-  const fb = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq }), feedbackRecords, sentenceHash, topK);
+  const fb = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq, aliasText: sentence }), feedbackRecords, sentenceHash, topK);
   const candidates = fb.candidates;
   const similar = memory.length
     ? [...feedbackAdjust(fq, memory, { sim: admin.retrieval?.feedbackSim ?? 0.92, max: admin.retrieval?.feedbackMax ?? 0.1 })]
@@ -250,7 +250,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // 비슷한 문장 가감이 상위 topK 순서를 바꿨는지는 메모리 없이 한 번 더 뽑아 비교한다(검색은 가볍다)
   let similarChanged = false;
   if (similar.length) {
-    const plain = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackQuery: fq }), feedbackRecords, sentenceHash, topK);
+    const plain = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackQuery: fq, aliasText: sentence }), feedbackRecords, sentenceHash, topK);
     similarChanged = plain.candidates.map(c => c.id).join() !== candidates.map(c => c.id).join();
   }
   const tags = topTags(q, graph, vecs, 5);

@@ -133,7 +133,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
   console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${embedderLabel}\n`);
   for (const s of settings) {
     const { topK, ...opts } = s;
-    const rank = (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: 3 }).map(x => ({ id: x.id, score: x.score }));
+    const rank = (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: 3, aliasText: c.sentence }).map(x => ({ id: x.id, score: x.score }));
     const r = scoreCases(cases, rank);
     console.log(pctLine(s.name, r));
     if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);

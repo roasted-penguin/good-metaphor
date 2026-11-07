@@ -131,7 +131,7 @@ async function generate(cases) {
   }
 
   for (const [i, c] of cases.entries()) {
-    const candidates = retrieve(qs[i], graph, vecs, admin.retrieval);
+    const candidates = retrieve(qs[i], graph, vecs, { ...admin.retrieval, aliasText: c.sentence });
     let used = null, fallbacks = [];
     const ask = async (system, user, opts) => {
       const r = await withLimitRetry(() => completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown }));

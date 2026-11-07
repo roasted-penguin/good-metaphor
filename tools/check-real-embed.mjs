@@ -22,7 +22,7 @@ async function check(label, fresh) {
     let same = 0; const ms = []; const diff = [];
     for (const c of cases) {
       const [q] = await be.embed([c.sentence], 'query');
-      const evalTop = retrieve(q, graph, vecs, admin.retrieval)[0].id;
+      const evalTop = retrieve(q, graph, vecs, { ...admin.retrieval, aliasText: c.sentence })[0].id;
       const r = await be.send('explain', { sentence: c.sentence, word: '', context: '', pageTitle: 'check', noCache: true });
       if (!r.ok) throw new Error(r.error);
       const d = r.data.debug;

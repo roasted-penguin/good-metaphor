@@ -177,3 +177,52 @@ test('retrieve: feedbackQuery 미지정·null이면 결과가 이전과 완전�
   assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: mem, feedbackQuery: null }), before);
   assert.deepEqual(retrieve(q, gClose, vecs, { feedbackQuery: sentenceVec }), retrieve(q, gClose, vecs));
 });
+
+// --- T-114 별칭 어휘 가산(aliasBoost): 은어가 낱말로 있으면 그 노드에 점수를 더한다 ---
+import { aliasMatch } from '../../extension/lib/retrieval.js';
+
+test('aliasMatch: 문장 처음·공백·문장부호 뒤에 오면 맞고, 뒤에는 조사가 붙어도 된다', () => {
+  assert.equal(aliasMatch('메요일이라 보스 초기화됐다.', ['메요일']), true);
+  assert.equal(aliasMatch('22성 도전하다가 또 펑 났다.', ['펑', '프텍']), true);
+  assert.equal(aliasMatch('오늘도 재획을 돌렸다', ['재획']), true);
+  assert.equal(aliasMatch('또 펑났다', ['펑']), true);
+  assert.equal(aliasMatch('결과는 "펑"이었다', ['펑']), true);
+  assert.equal(aliasMatch('(재획) 두 시간', ['재획']), true);
+});
+
+test('aliasMatch: 없거나 다른 낱말 안에 들어 있으면 맞지 않는다', () => {
+  assert.equal(aliasMatch('누진세는 소득 구간이 높아질수록 세율이 커진다.', ['세금']), false);
+  assert.equal(aliasMatch('종합세금 신고', ['세금']), false);
+  assert.equal(aliasMatch('셔틀버스를 탔다', ['버스']), false);
+  assert.equal(aliasMatch('펑펑 울었다', ['펑']) , true, '앞이 경계면 뒤는 무엇이든 된다(조사 규칙의 대가)');
+  assert.equal(aliasMatch('', ['재획']), false);
+  assert.equal(aliasMatch('재획', []), false);
+  assert.equal(aliasMatch('재획', undefined), false);
+});
+
+test('aliasMatch: NFKC로 맞춘 뒤 비교한다(전각 문장부호 뒤도 경계)', () => {
+  assert.equal(aliasMatch('오늘！재획', ['재획']), true);
+  assert.equal(aliasMatch('ＡＢ 재획'.normalize('NFD'), ['재획']), true);
+});
+
+const gAlias = {
+  ...graph,
+  nodes: [graph.nodes[0], { ...graph.nodes[1], aliases: ['펑'] }]
+};
+
+test('retrieve: 별칭이 없는 문장은 aliasBoost를 줘도 결과가 완전히 같다', () => {
+  const base = retrieve(q, gAlias, vecs);
+  assert.deepEqual(retrieve(q, gAlias, vecs, { aliasBoost: 0.08, aliasText: '아무 상관 없는 문장' }), base);
+  assert.deepEqual(retrieve(q, gAlias, vecs, { aliasBoost: 0.08 }), base, 'aliasText가 없으면 영향 없음');
+  assert.deepEqual(retrieve(q, gAlias, vecs, { aliasText: '또 펑 났다' }), base, 'aliasBoost 기본값 0');
+});
+
+test('retrieve: 별칭이 낱말로 있으면 그 노드 점수에 aliasBoost를 정확히 더한다', () => {
+  const all = o => Object.fromEntries(retrieve(q, gAlias, vecs, { topK: 2, ...o }).map(r => [r.id, r.score]));
+  const base = all({});
+  const hit = all({ aliasBoost: 0.08, aliasText: '또 펑 났다' });
+  assert.equal(hit.n1, base.n1);
+  assert.ok(Math.abs(hit.n2 - base.n2 - 0.08) < 1e-4, `${hit.n2} - ${base.n2}`);
+  // 큰 가산이면 순위가 뒤집힌다
+  assert.equal(retrieve(q, gAlias, vecs, { aliasBoost: 0.5, aliasText: '또 펑 났다' })[0].id, 'n2');
+});
