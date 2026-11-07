@@ -127,6 +127,8 @@ export function numberGroups(text) {
       push([String((NATIVE_TENS[g.tens] ?? 0) + (NATIVE_UNITS[unit] ?? 0))], optional);
     } else if (g.c2) {
       if (!g.sp2 && ATTACHED_BLOCK.includes(g.c2)) continue;
+      // "백일장"처럼 일로 끝나는 한자어 수에 세는 말이 붙으면 다른 낱말이다(띄어 쓴 "이십일 장"은 수)
+      if (!g.sp2 && g.run.length >= 2 && g.run.endsWith('일')) continue;
       const v = sinoValue(g.run);
       if (v != null) push([v]);
     } else if (g.run) {

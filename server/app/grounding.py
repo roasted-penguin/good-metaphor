@@ -72,6 +72,29 @@ _LONE_MAN_RE = re.compile(r"([0-9]+)만")
 _PIECE_RE = re.compile(r"([0-9]+(?:\.[0-9]+)?)?[ \t\r\n]?([억만천백])")
 
 
+# Python은 4300자리가 넘는 정수와 문자열 사이 변환을 막는다(sys.int_max_str_digits). JS BigInt와 같은 결과를 내려고
+# 1000자리씩 나눠 바꾼다(전역 설정을 건드리지 않음)
+_CHUNK = 1000
+
+
+def _to_int(digits: str) -> int:
+    n = 0
+    for i in range(0, len(digits), _CHUNK):
+        part = digits[i:i + _CHUNK]
+        n = n * 10 ** len(part) + int(part)
+    return n
+
+
+def _to_str(n: int) -> str:
+    if n < 10 ** _CHUNK:
+        return str(n)
+    parts = []
+    while n >= 10 ** _CHUNK:
+        n, r = divmod(n, 10 ** _CHUNK)
+        parts.append(str(r).zfill(_CHUNK))
+    return str(n) + "".join(reversed(parts))
+
+
 def _eval_pieces(pieces: list[tuple[str | None, str | None]]) -> str | None:
     """자리 단위 계산. 정수가 아니면 None. 소수("1.5만")도 정확하도록 10^소수자리를 곱한 정수로 센다."""
     dec = max([0, *(len(n.split(".")[1]) if n and "." in n else 0 for n, _ in pieces)])
@@ -79,7 +102,7 @@ def _eval_pieces(pieces: list[tuple[str | None, str | None]]) -> str | None:
 
     def scaled(n: str) -> int:
         i, _, f = n.partition(".")
-        return int(i + f.ljust(dec, "0"))
+        return _to_int(i + f.ljust(dec, "0"))
 
     # current가 None이면 "수가 없음"(단독 "만" = 1만). 0은 수가 있는 것이다("0만" = 0)
     total = section = 0
@@ -96,7 +119,7 @@ def _eval_pieces(pieces: list[tuple[str | None, str | None]]) -> str | None:
             total += base * _BIG_UNITS[unit]
             section, current, has_section = 0, None, False
     total += section + (current or 0)
-    return str(total // D) if total % D == 0 else None
+    return _to_str(total // D) if total % D == 0 else None
 
 
 def _sino_value(run: str) -> str | None:
@@ -144,7 +167,8 @@ def number_groups(text: Any) -> list[dict[str, Any]]:
             # 단독 "N만" 뒤에 세는 말·화폐가 없으면 "N뿐"일 수도 있다("레벨 200만 입장")
             lone = _LONE_MAN_RE.fullmatch(g["au"])
             counted = _COUNTED_AFTER_RE.match(s, m.start() + len(g["au"])) is not None
-            push([v, str(int(lone.group(1)))] if lone and not counted else [v])
+            # 앞자리 0만 떼어 JS String(BigInt(...))와 같게 한다(int 변환의 4300자리 제한을 피함)
+            push([v, lone.group(1).lstrip("0") or "0"] if lone and not counted else [v])
         elif g["d"]:
             push([g["d"]])
         elif g["c1"]:
@@ -164,6 +188,9 @@ def number_groups(text: Any) -> list[dict[str, Any]]:
             push([str(_NATIVE_TENS.get(g["tens"] or "", 0) + _NATIVE_UNITS.get(unit or "", 0))], optional)
         elif g["c2"]:
             if not g["sp2"] and g["c2"] in _ATTACHED_BLOCK:
+                continue
+            # "백일장"처럼 일로 끝나는 한자어 수에 세는 말이 붙으면 다른 낱말이다(띄어 쓴 "이십일 장"은 수)
+            if not g["sp2"] and len(g["run"]) >= 2 and g["run"].endswith("일"):
                 continue
             v = _sino_value(g["run"])
             if v is not None:
