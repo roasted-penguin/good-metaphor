@@ -1363,8 +1363,16 @@ test('iframe 이중 방어(T-111): content.js를 건너뛴 iframe 요청도 payl
   expect(await hook(frame, 'feedback', q)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
   expect(sentCount() - before, '요청 0').toBe(0);
 
-  // topHost 가 제외 목록 밖이면 같은 프레임에서 정상
-  const okRes = await hook(frame, 'explain-port', { ...q, topHost: 'example.com' });
+  // topHost 를 속여도(example.com) 탭 주소(tab.url, 127.0.0.1 호스트 권한으로 옴)가 제외면 막는다
+  expect(await hook(frame, 'explain-port', { ...q, topHost: 'example.com' })).toMatchObject({ ok: false, type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+  // topHost 를 안 실은 서브프레임 요청은 실패 시 닫힘
+  const { topHost: _omit, ...noTop } = q;
+  expect(await hook(frame, 'explain-msg', noTop)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(sentCount() - before, '요청 0').toBe(0);
+
+  // 제외를 풀면 같은 프레임에서 정상(topHost 는 실어야 함)
+  await ext.setSettings({ excludedHosts: [] });
+  const okRes = await hook(frame, 'explain-port', q);
   expect(okRes.type).toBe('result');
   expect(sentCount() - before).toBeGreaterThan(0);
 });
@@ -1405,7 +1413,8 @@ test('피드백 👍(T-111): rerun 이 없어도 record.topHost 가 제외면 �
   expect(await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: '127.0.0.1' })).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
   expect((await getFb()).length).toBe(n0);
 
-  const ok = await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: 'example.com' });
+  await ext.setSettings({ excludedHosts: [] });
+  const ok = await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: '127.0.0.1' });
   expect(ok.ok).toBe(true);
   const recs = await getFb();
   expect(recs.length).toBe(n0 + 1);

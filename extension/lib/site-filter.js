@@ -50,10 +50,13 @@
   // sender.url은 권한 없이도 오는 보낸 문서 주소(iframe이면 그 프레임 주소), tab.url은 tabs·호스트 권한이 있을 때만 온다.
   // topHost(T-111): content.js가 explain 페이로드에 실어 보내는 최상위 페이지 호스트. 은행 페이지 안 다른 출처
   // iframe처럼 보낸 문서 호스트는 제외가 아니어도 최상위가 제외면 막는다
+  // 서브프레임(frameId > 0)이 topHost 를 싣지 않았거나 비어 있으면 실패 시 닫힘으로 막는다(content.js는 최상위를 알 때만 보냄).
+  // tab.url 은 sender.url 과 따로 본다(프레임이면 sender.url 은 그 프레임 주소라 탭 주소를 대신하지 못함)
   function isBlockedSender(sender, list, topHost) {
     if (!sender?.tab) return false;
-    const url = sender.url || sender.tab.url;
-    if (url && isExcludedHost(url, list)) return true;
+    if (sender.frameId > 0 && !normalizeHost(topHost)) return true;
+    if (sender.url && isExcludedHost(sender.url, list)) return true;
+    if (sender.tab.url && isExcludedHost(sender.tab.url, list)) return true;
     return !!topHost && isExcludedHost(topHost, list);
   }
 
@@ -68,7 +71,9 @@
   };
   function frameHosts({ selfHost, topHostname, ancestorOrigins, referrer } = {}) {
     const origins = ancestorOrigins ? [...ancestorOrigins] : [];
-    const topHost = normalizeHost(topHostname) || httpHost(origins.at(-1)) || httpHost(referrer);
+    // referrer 는 바로 위 부모 주소라, 부모가 최상위일 때(ancestorOrigins 길이 ≤ 1)나 ancestorOrigins 미지원일 때만 쓴다
+    const referrerIsTop = !ancestorOrigins || origins.length <= 1;
+    const topHost = normalizeHost(topHostname) || httpHost(origins.at(-1)) || (referrerIsTop ? httpHost(referrer) : '');
     const hosts = [...new Set([normalizeHost(selfHost), topHost].filter(Boolean))];
     return { hosts, topHost, topKnown: !!topHost };
   }

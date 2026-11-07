@@ -72,13 +72,14 @@ test('기본 목록: 판정된 항목 그대로, 설정 기본값과 같고 테�
   assert.equal(isExcludedHost('obank.kbstar.com', DEFAULT_SETTINGS.excludedHosts), true);
 });
 
-test('isBlockedSender: 탭에서 온 메시지만 본다, sender.url 먼저 그다음 tab.url', () => {
+test('isBlockedSender: 탭에서 온 메시지만 본다, sender.url 과 tab.url 을 각각 본다', () => {
   const list = ['127.0.0.1'];
   assert.equal(isBlockedSender(undefined, list), false, 'sender 없음');
   assert.equal(isBlockedSender({ url: 'http://127.0.0.1:8766/' }, list), false, '탭이 없으면(확장 페이지 등) 막지 않음');
   assert.equal(isBlockedSender({ tab: {}, url: 'http://127.0.0.1:8766/' }, list), true);
   assert.equal(isBlockedSender({ tab: { url: 'http://127.0.0.1:8766/' } }, list), true, 'sender.url 없으면 tab.url');
-  assert.equal(isBlockedSender({ tab: { url: 'http://127.0.0.1/' }, url: 'https://example.com/' }, list), false, 'sender.url 우선');
+  assert.equal(isBlockedSender({ tab: { url: 'http://127.0.0.1/' }, url: 'https://example.com/' }, list), true, 'tab.url 도 따로 본다(T-111, 실패 시 닫힘)');
+  assert.equal(isBlockedSender({ tab: { url: 'https://example.com/' }, url: 'https://example.com/', frameId: 0 }, list), false, '최상위 프레임, 제외 아님');
   assert.equal(isBlockedSender({ tab: {} }, list), false, 'URL을 모르면 막지 않음');
   assert.equal(isBlockedSender({ tab: {}, url: 'https://example.com/' }, list), false);
 });
@@ -86,13 +87,24 @@ test('isBlockedSender: 탭에서 온 메시지만 본다, sender.url 먼저 그�
 test('isBlockedSender: 프레임이 실어 보낸 최상위 호스트(topHost)가 제외면 막는다 (T-111)', () => {
   const list = ['127.0.0.1'];
   const frame = { tab: {}, url: 'http://localhost:8766/frame.html', frameId: 3 };
-  assert.equal(isBlockedSender(frame, list), false, '프레임 호스트만 보면 통과');
+  assert.equal(isBlockedSender(frame, list), true, '서브프레임이 topHost 를 안 실으면 막음(실패 시 닫힘)');
   assert.equal(isBlockedSender(frame, list, '127.0.0.1'), true, '최상위가 제외면 막음');
   assert.equal(isBlockedSender(frame, list, 'http://127.0.0.1:8766/'), true, 'URL 꼴도 정규화');
   assert.equal(isBlockedSender(frame, list, 'example.com'), false);
-  assert.equal(isBlockedSender(frame, list, ''), false, '빈 topHost 는 무시');
+  assert.equal(isBlockedSender(frame, list, ''), true, '빈 topHost 도 막음');
+  assert.equal(isBlockedSender(frame, list, 'file:///x'), true, '정규화하면 빈 topHost');
+  assert.equal(isBlockedSender({ tab: {}, url: 'https://example.com/', frameId: 0 }, list, ''), false, '최상위 프레임은 topHost 없어도 자기 주소로 판정(그대로)');
+  assert.equal(isBlockedSender({ tab: {}, url: 'https://example.com/' }, list), false, 'frameId 모름 = 최상위 취급(그대로)');
   assert.equal(isBlockedSender({ tab: {}, url: 'http://127.0.0.1:8766/' }, list, 'example.com'), true, '보낸 문서가 제외면 topHost 와 무관하게 막음');
   assert.equal(isBlockedSender({ url: 'http://localhost/' }, list, '127.0.0.1'), false, '탭이 없으면(확장 페이지) 막지 않음');
+});
+
+test('isBlockedSender: 서브프레임은 sender.url 이 있어도 tab.url(호스트 권한이 있을 때만 옴)이 제외면 막는다 (T-111)', () => {
+  const list = ['kbstar.com'];
+  const probe = { tab: { url: 'https://kbstar.com/' }, url: 'https://ads.x.com/f', frameId: 3 };
+  assert.equal(isBlockedSender(probe, list, ''), true, '리뷰 재현: topHost 비어 있음');
+  assert.equal(isBlockedSender(probe, list, 'example.com'), true, 'topHost 가 거짓이어도 tab.url 이 막음');
+  assert.equal(isBlockedSender({ tab: { url: 'https://news.com/' }, url: 'https://ads.x.com/f', frameId: 3 }, list, 'news.com'), false);
 });
 
 const fh = o => frameHosts(o);
@@ -124,6 +136,7 @@ test('frameHosts: 최상위를 모르면 topKnown=false(실패 시 닫힘), http
   unknown({ selfHost: 'ads.x.com', ancestorOrigins: ['file://'], referrer: 'file:///a.html' }, 'file 은 호스트 없음');
   unknown({ selfHost: 'ads.x.com', topHostname: '', ancestorOrigins: ['null'], referrer: 'data:text/html,x' }, 'data: referrer');
   unknown({ selfHost: '', ancestorOrigins: [], referrer: '' }, 'about:blank + 정보 없음');
+  unknown({ selfHost: 'ads.x.com', ancestorOrigins: ['https://widget.com', 'null'], referrer: 'https://widget.com/w' }, '중첩이면 referrer 는 중간 프레임이라 안 씀');
 });
 
 test('validateHostInput: URL이든 호스트든 정규화해서 받는다 (T-144)', () => {
