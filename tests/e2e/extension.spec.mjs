@@ -40,8 +40,8 @@ let stop;
 test.beforeAll(async () => { stop = await startServers(); });
 test.afterAll(async () => { await stop?.(); });
 
-const tooltip = page => page.evaluate(() => document.getElementById('analogy-helper-host')?.shadowRoot.querySelector('.box')?.innerText ?? null);
-const boxClass = page => page.evaluate(() => document.getElementById('analogy-helper-host')?.shadowRoot.querySelector('.box')?.className ?? '');
+const tooltip = page => page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.box')?.innerText ?? null);
+const boxClass = page => page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.box')?.className ?? '');
 async function pointOnChar(page, sel, idx) {
   return page.evaluate(([s, i]) => {
     const r = document.createRange(); const t = document.querySelector(s).firstChild;
@@ -118,7 +118,7 @@ test('Alt+호버: 문장 강조, 메이플 테마 말풍선, Esc 닫기, 캐시'
   await altHover(page, '#p1');
   await expect.poll(() => tooltip(page)).toContain('메이플스토리로 보면');
   expect(await boxClass(page)).toContain('t-maple');
-  const hl = await page.evaluate(() => [...CSS.highlights.get('analogy-helper-hl')][0].toString());
+  const hl = await page.evaluate(() => [...CSS.highlights.get('good-metaphor-hl')][0].toString());
   expect(hl).toBe('변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
 
   await page.keyboard.press('Escape');
@@ -331,7 +331,7 @@ test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ conte
 });
 
 /* ───────── 말풍선 원클릭 피드백 (T-106, ADR 0010) ───────── */
-const box = page => page.locator('#analogy-helper-host .box');
+const box = page => page.locator('#good-metaphor-host .box');
 const evidence = async page => (await tooltip(page)).match(/근거: (.+)/)?.[1]?.trim();
 
 test('피드백 UI: 👎 한 번 → 글자 입력 없이 다른 근거로 다시, 반영 칩, 되돌리기 (T-106)', async ({ context, ext }) => {
@@ -855,7 +855,7 @@ test('fallback 체인: 429 모델은 다음 순서로 넘기고 쿨다운 동안
 /* ───────────── 서버 모드(T-404): 가짜 analogy-api(:8767), timeoutMs 800 ───────────── */
 
 const REJECTED = '모델이 근거 목록에 없는 개념을 골라서 비유를 숨겼어요.';
-const footText = page => page.evaluate(() => document.getElementById('analogy-helper-host')?.shadowRoot.querySelector('.foot span')?.innerText ?? '');
+const footText = page => page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.foot span')?.innerText ?? '');
 
 test('서버 모드(T-404): 서버 결과를 말풍선에 보이고 foot에 서버, 요청마다 같은 설치 토큰', async ({ context, ext }) => {
   const before = analogyCalls.length;
@@ -969,7 +969,7 @@ test('제외 사이트(T-107): 목록에 넣으면 떠 있던 말풍선이 닫�
   await altHover(page, '#p2');
   await page.waitForTimeout(1500);
   expect(await tooltip(page), '제외 사이트에서는 말풍선 없음').toBeFalsy();
-  expect(await page.evaluate(() => CSS.highlights.has('analogy-helper-hl')), '강조도 없음').toBe(false);
+  expect(await page.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
   expect(sentCount() - before, '제외 사이트에서는 요청을 보내지 않음').toBe(0);
 
   await ext.setSettings({ excludedHosts: ['kbstar.com'] });
@@ -1132,10 +1132,10 @@ async function recordBoxClasses(page) {
       log(box);
       new MutationObserver(() => log(box)).observe(box, { attributes: true, attributeFilter: ['class'], childList: true });
     };
-    const host = document.getElementById('analogy-helper-host');
+    const host = document.getElementById('good-metaphor-host');
     if (host) return watch(host);
     new MutationObserver((_, obs) => {
-      const h = document.getElementById('analogy-helper-host');
+      const h = document.getElementById('good-metaphor-host');
       if (h) { obs.disconnect(); watch(h); }
     }).observe(document.documentElement, { childList: true });
   });
@@ -1227,7 +1227,7 @@ const lineInfo = (page, sel = '#p10') => page.evaluate(s => {
 }, sel);
 // 말풍선 위치. 나타날 때 transform 애니메이션이 있어 style 값(배치 결과)을 읽는다
 const boxPos = page => page.evaluate(() => {
-  const box = document.getElementById('analogy-helper-host')?.shadowRoot.querySelector('.box');
+  const box = document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.box');
   if (!box || !box.style.top) return null;
   const top = parseFloat(box.style.top);
   return { top, bottom: top + box.offsetHeight, text: box.innerText };
@@ -1326,7 +1326,7 @@ test('iframe(T-111): 같은 출처 iframe 안 문장도 Alt+호버로 그 프레
   const frame = await altHoverFrame(page, '#fr-same', '#fa');
   await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
   expect(calls.some(c => c.user.includes('같은출처프레임테스트 변동금리 대출은'))).toBe(true);
-  const hl = await frame.evaluate(() => [...CSS.highlights.get('analogy-helper-hl')][0].toString());
+  const hl = await frame.evaluate(() => [...CSS.highlights.get('good-metaphor-hl')][0].toString());
   expect(hl).toContain('같은출처프레임테스트');
   expect(await tooltip(page), '최상위 문서에는 말풍선 없음').toBeFalsy();
 });
@@ -1347,7 +1347,7 @@ test('iframe(T-111): 다른 출처 iframe 안 문장도 동작, 최상위 호스
   frame = await altHoverFrame(page, '#fr-cross', '#fb', 8);
   await page.waitForTimeout(1500);
   expect(await tooltip(frame), 'iframe 말풍선 없음').toBeFalsy();
-  expect(await frame.evaluate(() => CSS.highlights.has('analogy-helper-hl')), '강조도 없음').toBe(false);
+  expect(await frame.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
   expect(sentCount() - before, '최상위가 제외면 iframe 문장도 보내지 않음').toBe(0);
 });
 
@@ -1399,7 +1399,7 @@ test('iframe(T-111): 최상위 호스트를 알 수 없는 프레임(가려진 �
   await altHoverFrame(page, '#fr-masked', '#fa');
   await page.waitForTimeout(1500);
   expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
-  expect(await frame.evaluate(() => CSS.highlights.has('analogy-helper-hl')), '강조도 없음').toBe(false);
+  expect(await frame.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
   expect(sentCount() - before, '요청 0').toBe(0);
 });
 
@@ -1446,7 +1446,7 @@ async function altHoverAt(page, { x, y }) {
   await page.mouse.move(x + 1, y);
   await page.keyboard.up('Alt');
 }
-const hlText = page => page.evaluate(() => { const h = CSS.highlights.get('analogy-helper-hl'); return h ? [...h][0].toString() : null; });
+const hlText = page => page.evaluate(() => { const h = CSS.highlights.get('good-metaphor-hl'); return h ? [...h][0].toString() : null; });
 
 test('Shadow DOM(T-111): 열린 shadow 안 문장 → 그 문장만 요청, 강조 규칙은 adoptedStyleSheets 에 한 번만 덧붙고 페이지 시트는 보존', async ({ context, ext }) => {
   const page = await context.newPage();
@@ -1463,7 +1463,7 @@ test('Shadow DOM(T-111): 열린 shadow 안 문장 → 그 문장만 요청, 강�
   let list = await sheets();
   expect(list).toHaveLength(2);
   expect(list[0]).toContain('rgb(0, 0, 200)'); // 페이지 시트가 그대로 앞에
-  expect(list[1]).toContain('::highlight(analogy-helper-hl)');
+  expect(list[1]).toContain('::highlight(good-metaphor-hl)');
   expect(await page.evaluate(() => getComputedStyle(document.getElementById('sh-open').shadowRoot.getElementById('so')).color)).toBe('rgb(0, 0, 200)');
 
   // 같은 shadow 의 다른 문장을 다시 호버해도 시트는 늘지 않는다
@@ -1479,7 +1479,7 @@ test('Shadow DOM(T-111): 열린 shadow 안 문장 → 그 문장만 요청, 강�
   await expect.poll(() => hlText(page)).toContain('열린섀도테스트');
   list = await sheets();
   expect(list).toHaveLength(2);
-  expect(list.filter(t => t.includes('::highlight(analogy-helper-hl)'))).toHaveLength(1);
+  expect(list.filter(t => t.includes('::highlight(good-metaphor-hl)'))).toHaveLength(1);
 });
 
 test('Shadow DOM(T-111): shadow root 바로 아래 텍스트 노드(parentElement 없음)도 동작', async ({ context, ext }) => {
@@ -1540,7 +1540,7 @@ test('말풍선 닫은 뒤(T-111 CI): 숨은 말풍선 자리 아래 글자도 �
   await expect.poll(() => tooltip(page)).toBe('');
   // 닫힌 말풍선이 있던 자리(.box rect) 안에 들어오는 #p1 글자를 고른다(말풍선은 호버한 줄 바로 아래에 뜬다)
   const target = await page.evaluate(() => {
-    const r = document.getElementById('analogy-helper-host').shadowRoot.querySelector('.box').getBoundingClientRect();
+    const r = document.getElementById('good-metaphor-host').shadowRoot.querySelector('.box').getBoundingClientRect();
     const t = document.querySelector('#p1').firstChild, g = document.createRange();
     for (let i = 0; i < t.length; i++) {
       g.setStart(t, i); g.setEnd(t, i + 1);

@@ -28,9 +28,9 @@ test('collectShadowRoots: shadow 가 없거나(닫힘 포함) 커서 아래 요�
 });
 
 test('collectShadowRoots: skip 이 참인 호스트(우리 말풍선)는 들어가지 않는다', () => {
-  const host = el('analogy-helper-host');
+  const host = el('good-metaphor-host');
   host.shadowRoot = root(el('box'), host);
-  assert.deepEqual(collectShadowRoots({ elementFromPoint: () => host }, 0, 0, { skip: e => e.id === 'analogy-helper-host' }), []);
+  assert.deepEqual(collectShadowRoots({ elementFromPoint: () => host }, 0, 0, { skip: e => e.id === 'good-metaphor-host' }), []);
 });
 
 test('collectShadowRoots: 깊이 상한(기본 10), 자기 자신을 돌려주는 root 에서 멈춘다', () => {

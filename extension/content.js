@@ -3,7 +3,7 @@
   if (window.__analogyHelperLoaded) return;
   window.__analogyHelperLoaded = true;
 
-  const HL_NAME = 'analogy-helper-hl';
+  const HL_NAME = 'good-metaphor-hl';
   let settings = { enabled: true, triggerMode: 'modifier', modifierKey: 'Alt', dwellMs: 900 };
   let mouse = { x: 0, y: 0, alt: false, shift: false, ctrl: false, meta: false };
   let dwellTimer = null;
@@ -95,7 +95,7 @@
   function caretAt(x, y) {
     if (document.caretPositionFromPoint) {
       let p = null;
-      const shadowRoots = AS.collectShadowRoots(document, x, y, { skip: el => el.id === 'analogy-helper-host' });
+      const shadowRoots = AS.collectShadowRoots(document, x, y, { skip: el => el.id === 'good-metaphor-host' });
       if (shadowRoots.length) {
         try { p = document.caretPositionFromPoint(x, y, { shadowRoots }); } catch { p = null; }
         if (p?.offsetNode?.nodeType !== Node.TEXT_NODE) p = null;
@@ -130,7 +130,7 @@
   // shadow 안이면 호스트를 거쳐 문서까지 올라가 본다(shadow root 직속 텍스트는 parentElement 가 null, T-111)
   function isSkippable(node) {
     for (let el = AS.composedParent(node); el; el = AS.composedParent(el)) {
-      if (SKIP_TAGS.has(el.tagName) || el.isContentEditable || el.id === 'analogy-helper-host') return true;
+      if (SKIP_TAGS.has(el.tagName) || el.isContentEditable || el.id === 'good-metaphor-host') return true;
     }
     return false;
   }
@@ -261,7 +261,7 @@
   function ensureTooltip() {
     if (host) return;
     host = document.createElement('div');
-    host.id = 'analogy-helper-host';
+    host.id = 'good-metaphor-host';
     host.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;';
     shadow = host.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
