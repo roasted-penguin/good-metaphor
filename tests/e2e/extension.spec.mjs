@@ -1411,3 +1411,85 @@ test('피드백 👍(T-111): rerun 이 없어도 record.topHost 가 제외면 �
   expect(recs.length).toBe(n0 + 1);
   expect(recs.some(r => 'topHost' in r), '기록에 topHost 없음').toBe(false);
 });
+
+/* ───────── 열린 Shadow DOM (T-111) ───────── */
+// 경로 [호스트 선택자, (shadow 안) 선택자, ...]를 따라 내려가 마지막 요소(또는 shadow root)의 첫 텍스트 노드 idx 글자 좌표
+async function pointInShadow(page, steps, idx) {
+  return page.evaluate(([steps, i]) => {
+    // '@shadow' = 지금 요소의 shadowRoot, '#closed' = 페이지가 쥔 닫힌 root(window.__closedRoot)
+    let scope = document, node = null;
+    for (const s of steps) {
+      if (s === '#closed') node = window.__closedRoot;
+      else if (s === '@shadow') node = node.shadowRoot;
+      else node = scope.querySelector(s);
+      scope = node;
+    }
+    (node.host ?? node).scrollIntoView({ block: 'center' }); // shadow root 는 호스트를 스크롤
+    const t = node.firstChild;
+    const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 1);
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  }, [steps, idx]);
+}
+async function altHoverAt(page, { x, y }) {
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+}
+const hlText = page => page.evaluate(() => { const h = CSS.highlights.get('analogy-helper-hl'); return h ? [...h][0].toString() : null; });
+
+test('Shadow DOM(T-111): 열린 shadow 안 문장 → 그 문장만 요청, 강조 규칙은 adoptedStyleSheets 에 한 번만 덧붙고 페이지 시트는 보존', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('열린섀도테스트 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.'))).toBe(true);
+  expect(calls.some(c => c.user.includes('두번째 문장이에요')), '문장 하나만').toBe(false);
+  expect(await hlText(page)).toBe('열린섀도테스트 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  const sheets = () => page.evaluate(() => {
+    const root = document.getElementById('sh-open').shadowRoot;
+    return root.adoptedStyleSheets.map(s => [...s.cssRules].map(r => r.cssText).join(' '));
+  });
+  let list = await sheets();
+  expect(list).toHaveLength(2);
+  expect(list[0]).toContain('rgb(0, 0, 200)'); // 페이지 시트가 그대로 앞에
+  expect(list[1]).toContain('::highlight(analogy-helper-hl)');
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('sh-open').shadowRoot.getElementById('so')).color)).toBe('rgb(0, 0, 200)');
+
+  // 같은 shadow 의 다른 문장을 다시 호버해도 시트는 늘지 않는다
+  await page.keyboard.press('Escape');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 50));
+  await expect.poll(() => hlText(page)).toBe('두번째 문장이에요.');
+  expect(await sheets()).toHaveLength(2);
+});
+
+test('Shadow DOM(T-111): shadow root 바로 아래 텍스트 노드(parentElement 없음)도 동작', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-text', '@shadow'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('섀도직속텍스트테스트 고정금리는'))).toBe(true);
+  expect(await hlText(page)).toBe('섀도직속텍스트테스트 고정금리는 약정 기간 동안 금리가 바뀌지 않는다.');
+});
+
+test('Shadow DOM(T-111): shadow 안 shadow(중첩) 문장도 동작', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-nested', '@shadow', '#inner-host', '@shadow', '#sn'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('중첩섀도테스트 API 서버는'))).toBe(true);
+  expect(await hlText(page)).toBe('중첩섀도테스트 API 서버는 분당 요청 수에 상한을 두어 자원 독점을 막는다.');
+});
+
+test('Shadow DOM(T-111): 닫힌 shadow 안 문장은 요청 0(접근 불가)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // content.js 가 준비된 뒤 호버
+  const before = sentCount();
+  await altHoverAt(page, await pointInShadow(page, ['#closed', '#sc'], 5));
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('닫힌섀도테스트'))).toBe(false);
+});

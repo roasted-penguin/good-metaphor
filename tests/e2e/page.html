@@ -12,6 +12,28 @@
 <div id="p8"><form onsubmit="return false"><label>폼라벨비밀문구 비밀번호를 입력하세요</label><input type="password"></form><span id="p8i">도입문장테스트 이 글은 계좌 정보를 다룬다.</span></div>
 <div id="narrow" style="width:220px;margin-top:120px"><p id="p10">여러줄테스트 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어나서 가계의 부담이 커지고 결국 소비가 줄어든다.</p><p id="p11">로딩지연테스트 고정금리 대출은 약정 기간 동안 금리가 바뀌지 않아서 매달 내는 이자를 미리 알 수 있고 계획을 세우기 쉽다.</p></div>
 <div style="height:900px"></div>
+<!-- T-111 Shadow DOM 픽스처(기존 문장 위치에 영향 없게 여백 뒤): (c) 열린 shadow, (c2) shadow root 바로 아래 텍스트,
+     (d) shadow 안 shadow, (e) 닫힌 shadow. sh-open 은 페이지 자신의 adoptedStyleSheets 를 갖는다(보존 확인용) -->
+<div id="sh-open"></div>
+<div id="sh-text"></div>
+<div id="sh-nested"></div>
+<div id="sh-closed"></div>
+<script>
+  (() => {
+    const own = new CSSStyleSheet();
+    own.replaceSync('p { color: rgb(0, 0, 200); }');
+    const a = document.getElementById('sh-open').attachShadow({ mode: 'open' });
+    a.adoptedStyleSheets = [own];
+    a.innerHTML = '<p id="so">열린섀도테스트 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다. 두번째 문장이에요.</p>';
+    document.getElementById('sh-text').attachShadow({ mode: 'open' }).textContent = '섀도직속텍스트테스트 고정금리는 약정 기간 동안 금리가 바뀌지 않는다.';
+    const outer = document.getElementById('sh-nested').attachShadow({ mode: 'open' });
+    outer.innerHTML = '<div id="inner-host"></div>';
+    outer.getElementById('inner-host').attachShadow({ mode: 'open' }).innerHTML = '<p id="sn">중첩섀도테스트 API 서버는 분당 요청 수에 상한을 두어 자원 독점을 막는다.</p>';
+    const closed = document.getElementById('sh-closed').attachShadow({ mode: 'closed' });
+    closed.innerHTML = '<p id="sc">닫힌섀도테스트 펭귄은 날지 못하지만 헤엄을 아주 잘 친다.</p>';
+    window.__closedRoot = closed; // 테스트가 좌표를 구할 때만 쓴다(확장은 못 봄)
+  })();
+</script>
 <!-- T-111: 기존 문장 위치에 영향 없게 맨 아래. 같은 출처·다른 출처(localhost ≠ 127.0.0.1) iframe -->
 <iframe id="fr-same" src="/frame.html" style="border:0;width:700px;height:200px;display:block"></iframe>
 <iframe id="fr-cross" src="http://localhost:8766/frame.html" style="border:0;width:700px;height:200px;display:block"></iframe>
