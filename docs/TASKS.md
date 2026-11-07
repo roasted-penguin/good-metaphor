@@ -68,9 +68,10 @@
 | T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 대기 | T-402 |
 | T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 완료 | T-402 |
 | T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 대기 | T-403 |
-| T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 리뷰 | T-402 |
+| T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 완료 | T-402 |
 | T-141 | 서버 모드 실사용 준비: 서버 도메인 `host_permissions` + 서버 CORS(chrome-extension), `managed_schema.json`에 `analogyServer`, 서버 장애 중 로컬 결과는 세션 캐시에 안 남기기, 규칙 1을 로컬 그래프 노드로도 확인 | L 서버 | P1 | 대기 | T-404, T-401 |
-| T-405 | [L0] 평가 도구에 서버 모드 추가, 관문: 서버 hit@1 ≥ 브라우저 | L 서버 | P0 | 대기 | T-403 |
+| T-405 | [L0] 평가 도구에 서버 모드 추가 (관문 측정은 T-142로 분리) | L 서버 | P0 | 진행 | T-403 |
+| T-142 | [L0] 관문 측정: bge-m3 서버로 `npm run eval -- --server` → 서버 hit@1 ≥ 브라우저면 ADR 0006 채택 (T-405에서 분리) | L 서버 | P0 | 대기 | T-405, T-401 |
 | T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
 | T-412 | [L1] 추출 프롬프트: 통제 어휘·용어 사전, JSON 모드 | L 서버 | P0 | 대기 | T-403 |
 | T-413 | [L1] 20청크 A/B 하네스 (모델 × thinking) | L 서버 | P0 | 대기 | T-411, T-412 |
@@ -489,7 +490,12 @@ LightRAG 엔티티 이름은 공통 그래프 노드 id 또는 label과 같아�
 
 ### T-405 [L0] 평가 도구 서버 모드 · L0 관문
 `tools/eval.mjs --server <url>`: 같은 평가셋을 서버 `/v1/analogy`(debug 후보)로 돌려 hit@1·hit@3 비교. 결과를 EVAL_LOG에.
-**완료 기준** 서버 hit@1 ≥ 브라우저 hit@1. 통과하면 ADR 0006 상태를 "채택"으로.
+**분리 (2026-11-08 판정)** 관문 측정에는 실제 bge-m3 임베딩 인덱스가 필요한데 이 맥에 Ollama가 없고 EC2(T-401)도 아직이다. 해시 임베딩 인덱스로 재면 의미가 없어 도구까지만 T-405, 측정과 ADR 0006 채택 판단은 T-142.
+**완료 기준** `npm run eval -- --server <url>`이 서버 결과를 브라우저와 같은 방식(hit@1·hit@3·금융·새 문장·회귀)으로 출력하고 관문 한 줄을 낸다. 요청 한도·429·503을 처리한다. 단위 테스트.
+
+### T-142 [L0] 관문 측정 (T-405에서 분리)
+**할 일** bge-m3로 시드한 서버(T-401 EC2 또는 Ollama 있는 환경, T-403 `python -m app.seed` with `EMBEDDING_PROVIDER=ollama`)에 `npm run eval -- --server <url> --guard`. EVAL_LOG에 서버·브라우저 나란히.
+**완료 기준** 서버 hit@1 ≥ 브라우저 hit@1(실제 확장 기준 27/35). 통과하면 ADR 0006 상태를 "채택"으로, 미달이면 원인과 다음 수단을 ADR에.
 
 ### T-411 [L1] 맥 추출 노드
 `infra/mac/`에 launchd plist 두 개(시간창 시작·끝), Ollama 환경 변수(`OLLAMA_HOST=127.0.0.1:11434`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_KEEP_ALIVE=5m`, `OLLAMA_CONTEXT_LENGTH=16384`), `tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434`, `tag:llm-node`. Tailscale 정책 파일은 `infra/tailscale-policy.json`.
