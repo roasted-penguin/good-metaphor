@@ -15,6 +15,7 @@
 
   /* ───────── 설정 ───────── */
   const SF = globalThis.AnalogySiteFilter; // lib/site-filter.js (manifest에서 먼저 주입)
+  const AP = globalThis.AnalogyPlace;      // lib/place.js (manifest에서 먼저 주입, T-109)
   let theme = 'maple';      // 말풍선 테마. 미리 받기(graph:info)·stage·결과 순으로 고쳐진다
   let themeStale = true;    // 테마를 (다시) 받아야 함
   // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
@@ -299,16 +300,20 @@
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function place(rect) {
+  // 말풍선 배치(T-109): 호버한 순간의 커서(anchorX·anchorY)가 있던 줄 rect 아래, 넘치면 그 줄 위.
+  // 결과가 와서 말풍선이 커져 다시 부를 때도 같은 앵커라, 커서가 움직여도 따라다니지 않는다.
+  // 줄 rect를 못 고르면 문장 전체 bounding rect(한 줄 문장은 둘이 같다)
+  function place(cur) {
     const pad = 10;
     const w = Math.min(380, window.innerWidth - 2 * pad);
     box.style.maxWidth = w + 'px';
-    const bw = box.offsetWidth || 300, bh = box.offsetHeight || 120;
-    let left = Math.min(Math.max(pad, mouse.x - bw / 2), window.innerWidth - bw - pad);
-    let topPos = rect.bottom + 8;
-    if (topPos + bh > window.innerHeight - pad) topPos = Math.max(pad, rect.top - bh - 8);
+    const rect = AP.pickLineRect(cur.range.getClientRects(), cur.anchorY) || cur.range.getBoundingClientRect();
+    const { left, top } = AP.placeBox({
+      rect, mouseX: cur.anchorX, bw: box.offsetWidth || 300, bh: box.offsetHeight || 120,
+      vw: window.innerWidth, vh: window.innerHeight, pad
+    });
     box.style.left = left + 'px';
-    box.style.top = topPos + 'px';
+    box.style.top = top + 'px';
   }
 
   const STAGE_TEXT = {
@@ -445,7 +450,7 @@
       else if (act === 'options') chrome.runtime.sendMessage({ type: 'open-options' });
       else onFeedback(act, b.dataset);
     }));
-    if (current) place(current.range.getBoundingClientRect());
+    if (current) place(current);
     requestAnimationFrame(() => box.classList.add('show'));
   }
 
@@ -487,7 +492,7 @@
     if (current && current.key === s.key) return;
     const reqId = ++reqSeq;
     const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120) };
-    current = { key: s.key, range: s.range, reqId, pending: true, payload };
+    current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, anchorY: mouse.y };
     highlight(s.range);
     render({ loading: true, stage: 'graph' });
     try {
