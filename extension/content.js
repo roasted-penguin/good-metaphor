@@ -14,10 +14,16 @@
   let modifierUsed = false;
 
   /* ───────── 설정 ───────── */
+  const SF = globalThis.AnalogySiteFilter; // lib/site-filter.js (manifest에서 먼저 주입)
+  // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
+  let siteExcluded = SF.isExcludedHost(location.hostname, SF.DEFAULT_EXCLUDED_HOSTS);
+  // 켜져 있고 이 사이트가 제외 목록에 없을 때만 동작한다
+  const active = () => settings.enabled && !siteExcluded;
   function loadSettings() {
     chrome.storage.local.get('settings', ({ settings: s }) => {
       settings = { ...settings, ...(s || {}) };
-      if (!settings.enabled) hideTooltip();
+      siteExcluded = SF.isExcludedHost(location.hostname, settings.excludedHosts ?? SF.DEFAULT_EXCLUDED_HOSTS);
+      if (!active()) hideTooltip();
     });
   }
   loadSettings();
@@ -49,6 +55,12 @@
     return document.body;
   }
 
+  // 비밀번호 칸이 있는 폼 안 문장은 설정과 무관하게 보내지 않는다(T-107)
+  function inPasswordForm(node) {
+    const form = node.parentElement?.closest('form');
+    return !!form && [...form.elements].some(el => el.type === 'password');
+  }
+
   function isSkippable(node) {
     for (let el = node.parentElement; el; el = el.parentElement) {
       if (SKIP_TAGS.has(el.tagName) || el.isContentEditable || el.id === 'analogy-helper-host') return true;
@@ -63,6 +75,8 @@
         if (!n.nodeValue) return NodeFilter.FILTER_REJECT;
         const p = n.parentElement;
         if (!p || SKIP_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+        // 같은 블록 안 비밀번호 폼 글자가 문장·앞 문장으로 새지 않게 뺀다(T-107)
+        if (inPasswordForm(n)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
     });
@@ -103,7 +117,7 @@
   function sentenceAt(x, y) {
     const hit = caretAt(x, y);
     if (!hit || hit.node?.nodeType !== Node.TEXT_NODE) return null;
-    if (isSkippable(hit.node)) return null;
+    if (isSkippable(hit.node) || inPasswordForm(hit.node)) return null;
     if (!pointOnText(hit.node, hit.offset, x, y)) return null;
 
     const block = blockOf(hit.node);
@@ -431,7 +445,7 @@
   }
 
   function trigger() {
-    if (!settings.enabled) return;
+    if (!active()) return;
     const s = sentenceAt(mouse.x, mouse.y);
     if (!s) return;
     if (current && current.key === s.key) return;
@@ -474,7 +488,7 @@
   let moveRaf = 0;
   document.addEventListener('mousemove', e => {
     mouse.x = e.clientX; mouse.y = e.clientY;
-    if (!settings.enabled) return;
+    if (!active()) return;
     if (moveRaf) return;
     moveRaf = requestAnimationFrame(() => {
       moveRaf = 0;
@@ -496,7 +510,7 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { hideTooltip(); return; }
-    if (!settings.enabled || settings.triggerMode !== 'modifier') return;
+    if (!active() || settings.triggerMode !== 'modifier') return;
     if (e.key === settings.modifierKey && !e.repeat) { modifierUsed = true; trigger(); }
   }, true);
 

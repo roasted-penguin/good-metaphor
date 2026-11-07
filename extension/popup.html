@@ -11,12 +11,16 @@
   .top b { font-size: 15px; }
   .line { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
   .line span:last-child { color: var(--ink); font-weight: 600; text-align: right; }
+  .site { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .site label { font-weight: 600; }
+  .site small { color: var(--muted); margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
   .howto { font-size: 12.5px; background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top"><img src="icons/48.png" alt=""><b>비유 도우미</b><span style="flex:1"></span><input type="checkbox" id="enabled" title="켜기/끄기"></div>
+  <div class="site"><input type="checkbox" id="siteOff" disabled><label for="siteOff">이 사이트에서 끄기</label><small id="siteHost"></small></div>
   <div class="howto" id="howto"></div>
   <div class="line"><span>관심사</span><span id="domain">…</span></div>
   <div class="line"><span>AI</span><span id="provider">…</span></div>

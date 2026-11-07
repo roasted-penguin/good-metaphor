@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "description": "모르는 문장에 커서를 올리면 내 관심사(기본: 메이플스토리)에 빗대 한 줄로 풀어 줍니다.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "offscreen", "unlimitedStorage", "identity"],
+  "permissions": ["storage", "offscreen", "unlimitedStorage", "identity", "activeTab"],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",
     "https://api.groq.com/*",
@@ -21,7 +21,7 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [{
     "matches": ["<all_urls>"],
-    "js": ["content.js"],
+    "js": ["lib/site-filter.js", "content.js"],
     "css": ["content.css"],
     "run_at": "document_idle"
   }],
