@@ -53,6 +53,7 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 - LLM은 부르지 않아요. LightRAG가 LLM을 부르려 하면 오류로 멈춰요(버그라는 뜻이에요).
 - 해시 임베딩은 네트워크 없이 도는 개발·테스트용이에요. 실제 검색 품질은 `ollama`로 넣은 인덱스로 봐요. 임베딩을 바꾸면 작업 디렉터리를 지우고 다시 넣어요(벡터 차원·모델이 섞이면 안 돼요).
 - `server/rag_storage/`는 커밋하지 않고 도커 이미지에도 넣지 않아요.
+- 서버는 `LIGHTRAG_WORKING_DIR/WORKSPACE/`에 인덱스 파일(`graph_chunk_entity_relation.graphml`, `vdb_entities.json`)이 있으면 첫 검색 때 LightRAG를 한 번 열어 써요. 없으면 `/v1/analogy`가 503("검색 인덱스가 아직 준비되지 않았어요.")이고, 나중에 시드하면 재시작 없이 잡아요. 서버와 시드의 `EMBEDDING_*` 설정이 같아야 해요.
 
 ## 환경변수
 

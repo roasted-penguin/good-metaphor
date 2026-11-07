@@ -239,11 +239,13 @@ def test_real_parts_without_key_is_503(monkeypatch):
     assert res.json() == {"error": "서버에 AI 키가 설정되지 않았어요."}
 
 
-def test_real_parts_with_key_but_no_index_is_503():
+def test_real_parts_with_key_but_no_index_is_503(tmp_path):
     """키는 있어도 LightRAG 인덱스(T-403)가 없으면 검색 단계에서 명확히 막는다. 네트워크는 쓰지 않는다."""
     from app.main import create_app
 
-    app = create_app(deps={"settings": _settings(gemini_api_key="dummy-not-a-key"), "llm": FakeLLM()})
+    # 기본 작업 디렉터리(server/rag_storage)에 로컬 시드가 있어도 흔들리지 않게 빈 임시 디렉터리를 쓴다
+    settings = _settings(gemini_api_key="dummy-not-a-key", lightrag_working_dir=str(tmp_path / "rag"))
+    app = create_app(deps={"settings": settings, "llm": FakeLLM()})
     res = _post(TestClient(app), "강화 문장이에요.")
     assert res.status_code == 503
     assert res.json() == {"error": "검색 인덱스가 아직 준비되지 않았어요."}

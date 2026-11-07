@@ -2,14 +2,18 @@
 
 Candidate 필드는 확장 extension/lib/retrieval.js retrieve() 결과 항목과 같다.
 LightRAG 맥락 속 개체는 공통 그래프 노드로 바꿔서만 쓴다. 그래프에 없는 개체는 버린다(근거 밖 사실 금지).
-실제 인덱스 만들기는 T-403. 여기서는 생성자와 "맥락 문자열 → 후보" 변환까지다.
+LazyLightRAGRetriever는 시드된 인덱스(T-403)를 첫 검색 때 한 번만 열어 LightRAGRetriever에 넘긴다.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -149,9 +153,63 @@ class LightRAGRetriever:
             # 둘 다 비면 LightRAG가 자기 키워드 LLM(get_keywords_from_query)을 부른다.
             # 그러면 클라우드 밖 LLM·통제 어휘 밖 키워드가 끼어들 수 있어(규칙 8·9) 문장 자체를 ll로 넘긴다
             ll = [sentence]
-        param = QueryParam(mode="hybrid", hl_keywords=hl, ll_keywords=ll, only_need_context=True)
+        # 리랭커 모델을 두지 않는다(켜 두면 매 검색마다 "모델 없음" 경고가 남는다)
+        param = QueryParam(mode="hybrid", hl_keywords=hl, ll_keywords=ll, only_need_context=True,
+                           enable_rerank=False)
         try:
             context = await self._rag.aquery(sentence, param=param)
         except Exception as e:  # LightRAG 내부 오류는 종류가 많아 한 가지로 감싼다
             raise RetrieverError(f"LightRAG 검색 실패: {type(e).__name__}") from e
         return context_to_candidates(context if isinstance(context, str) else "", self._graph, hl, top_k)
+
+
+class LazyLightRAGRetriever:
+    """설정의 작업 디렉터리에 시드된 인덱스가 있으면 첫 검색 때 LightRAG를 열어 검색한다.
+
+    - 앱 생성·import 때는 아무것도 열지 않는다.
+    - 인덱스 파일이 없으면 RetrieverUnavailable(503). 없다는 결과는 기억하지 않아, 나중에 시드하면 재시작 없이 쓴다.
+      없을 때 열지 않으므로 빈 인덱스를 만들지도 않는다.
+    - 동시에 들어온 첫 요청들은 잠금으로 줄 세워 LightRAG를 한 번만 연다.
+    - 열다가 실패하면 RetrieverUnavailable(503)로 바꾸고, 다음 요청 때 다시 시도한다.
+    - 시드 주입과 같은 open_rag(토크나이저·임베딩 함수)를 쓴다. 차원·토크나이저가 달라지면 벡터가 안 맞는다.
+    """
+
+    def __init__(self, settings: Any, graph: dict[str, Any]) -> None:
+        self._settings = settings
+        self._graph = graph
+        self._rag: Any = None
+        self._inner: LightRAGRetriever | None = None
+        self._lock: asyncio.Lock | None = None
+
+    async def _ensure(self) -> LightRAGRetriever:
+        if self._inner is not None:
+            return self._inner
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        async with self._lock:
+            if self._inner is not None:  # 기다리는 동안 다른 요청이 열었다
+                return self._inner
+            # lightrag는 무거워서 실제로 열 때만 불러온다
+            from . import rag as rag_mod
+
+            if not rag_mod.index_exists(self._settings):
+                raise RetrieverUnavailable(f"인덱스 파일이 없어요: {rag_mod.workspace_dir(self._settings)}")
+            try:
+                rag = await rag_mod.open_rag(self._settings)
+            except Exception as e:  # 저장소 파일 손상·권한 등
+                log.error("LightRAG를 열지 못함: %s: %s", type(e).__name__, e)
+                raise RetrieverUnavailable(f"LightRAG를 열지 못했어요: {type(e).__name__}") from e
+            self._rag = rag
+            self._inner = LightRAGRetriever(rag=rag, graph=self._graph)
+            log.info("LightRAG 인덱스를 열었어요: %s", rag_mod.workspace_dir(self._settings))
+            return self._inner
+
+    async def candidates(self, sentence: str, hl: list[str], ll: list[str], top_k: int = 3) -> list[Candidate]:
+        inner = await self._ensure()
+        return await inner.candidates(sentence, hl, ll, top_k)
+
+    async def close(self) -> None:
+        """앱 종료 때 저장소를 닫는다. 열지 않았으면 아무것도 하지 않는다."""
+        rag, self._rag, self._inner = self._rag, None, None
+        if rag is not None:
+            await rag.finalize_storages()

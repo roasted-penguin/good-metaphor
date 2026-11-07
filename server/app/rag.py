@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -100,6 +101,21 @@ def make_embedding_func(settings: Settings, transport: httpx.AsyncBaseTransport 
         return EmbeddingFunc(embedding_dim=dim, func=_ollama, max_token_size=MAX_TOKEN_SIZE, model_name=model)
 
     raise ValueError(f"EMBEDDING_PROVIDER는 hash 또는 ollama여야 해요: {provider!r}")
+
+
+# 시드 주입이 워크스페이스 폴더에 남기는 파일. 그래프와 개체 벡터가 둘 다 있어야 검색할 수 있다.
+# open_rag는 빈 워크스페이스 폴더를 만들기만 하므로(파일 없음) 폴더 존재로는 판단하지 않는다.
+INDEX_FILES = ("graph_chunk_entity_relation.graphml", "vdb_entities.json")
+
+
+def workspace_dir(settings: Settings) -> Path:
+    return Path(settings.lightrag_working_dir) / settings.workspace
+
+
+def index_exists(settings: Settings) -> bool:
+    """시드된 인덱스가 작업 디렉터리에 있는지. 파일만 본다(LightRAG를 열지 않는다)."""
+    d = workspace_dir(settings)
+    return all((d / name).is_file() for name in INDEX_FILES)
 
 
 async def open_rag(settings: Settings) -> LightRAG:
