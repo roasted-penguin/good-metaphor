@@ -13,6 +13,13 @@ DEFAULT_WORKSPACE = "common_maplestory"
 DEFAULT_RATE_LIMIT_PER_MIN = 30
 # 확장 config/admin.json의 defaultModels.gemini와 같게 둔다
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+# LightRAG 인덱스 폴더(커밋·도커 이미지에 넣지 않는다). 워크스페이스별 하위 폴더가 생긴다
+DEFAULT_LIGHTRAG_WORKING_DIR = REPO_ROOT / "server" / "rag_storage"
+# 시드 주입 임베딩: hash(네트워크 없음, 테스트·개발용) | ollama(맥의 Ollama /api/embed, 규칙 8·10)
+DEFAULT_EMBEDDING_PROVIDER = "hash"
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+DEFAULT_EMBEDDING_MODEL = "bge-m3"
+DEFAULT_EMBEDDING_DIM = 1024
 
 
 def read_graph_version(path: str | os.PathLike) -> str | None:
@@ -34,6 +41,11 @@ class Settings:
     common_graph_path: str
     keyword_model: str = DEFAULT_GEMINI_MODEL
     analogy_model: str = DEFAULT_GEMINI_MODEL
+    lightrag_working_dir: str = str(DEFAULT_LIGHTRAG_WORKING_DIR)
+    embedding_provider: str = DEFAULT_EMBEDDING_PROVIDER
+    ollama_url: str = DEFAULT_OLLAMA_URL
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    embedding_dim: int = DEFAULT_EMBEDDING_DIM
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Settings":
@@ -50,4 +62,9 @@ class Settings:
             common_graph_path=graph_path,
             keyword_model=env.get("GEMINI_KEYWORD_MODEL") or DEFAULT_GEMINI_MODEL,
             analogy_model=env.get("GEMINI_ANALOGY_MODEL") or DEFAULT_GEMINI_MODEL,
+            lightrag_working_dir=env.get("LIGHTRAG_WORKING_DIR") or str(DEFAULT_LIGHTRAG_WORKING_DIR),
+            embedding_provider=env.get("EMBEDDING_PROVIDER") or DEFAULT_EMBEDDING_PROVIDER,
+            ollama_url=env.get("OLLAMA_URL") or DEFAULT_OLLAMA_URL,
+            embedding_model=env.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL,
+            embedding_dim=int(env.get("EMBEDDING_DIM") or DEFAULT_EMBEDDING_DIM),
         )

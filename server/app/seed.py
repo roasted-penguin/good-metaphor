@@ -98,3 +98,53 @@ def seed_counts(custom_kg: dict[str, Any]) -> dict[str, int]:
         "entities": len(custom_kg.get("entities", [])),
         "relationships": len(custom_kg.get("relationships", [])),
     }
+
+
+async def seed(settings: Any) -> dict[str, Any]:
+    """공통 그래프를 LightRAG 워크스페이스에 넣고, 그래프 저장소에 실제로 있는 엔티티·관계 수를 돌려준다.
+
+    멱등: ainsert_custom_kg(1.5.7)는 엔티티·관계·청크를 이름/쌍/내용 해시로 덮어쓴다(설명을 이어 붙이지 않는다).
+    그래서 같은 그래프를 다시 넣어도 수와 설명이 그대로다(test_seed_inject가 확인).
+    """
+    import json
+    from pathlib import Path
+
+    from app.rag import open_rag  # LightRAG는 무거워서 실제로 넣을 때만 불러온다
+
+    graph = json.loads(Path(settings.common_graph_path).read_text(encoding="utf-8"))
+    custom_kg = graph_to_custom_kg(graph)
+    rag = await open_rag(settings)
+    try:
+        await rag.ainsert_custom_kg(custom_kg)
+        store = rag.chunk_entity_relation_graph
+        nodes = await store.get_all_nodes()
+        edges = await store.get_all_edges()
+    finally:
+        await rag.finalize_storages()
+    return {
+        "entities": len(nodes),
+        "relationships": len(edges),
+        "workspace": settings.workspace,
+        "working_dir": settings.lightrag_working_dir,
+    }
+
+
+def main() -> None:
+    import asyncio
+    import logging
+
+    import lightrag.utils  # noqa: F401  불러올 때 로거를 INFO로 다시 맞추므로 먼저 불러 둔다
+
+    from app.config import Settings
+
+    # LightRAG·nano-vectordb의 INFO 로그는 줄이고 경고 이상만 남긴다(출력은 요약 한 줄)
+    for name in ("lightrag", "nano-vectordb"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+    out = asyncio.run(seed(Settings.from_env()))
+    print(f"시드 주입 완료: 엔티티 {out['entities']}, 관계 {out['relationships']}, "
+          f"워크스페이스 {out['workspace']}, 작업 디렉터리 {out['working_dir']}")
+
+
+if __name__ == "__main__":
+    main()
