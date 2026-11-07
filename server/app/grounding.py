@@ -46,12 +46,14 @@ def _alt(words: Iterable[str]) -> str:
 
 _AFTER = f"(?=$|[^가-힣]|[{_AFTER_COUNTER}])"
 _SP = "[ \\t\\r\\n]"
+# 자리 단위. "200만큼"의 만은 단위가 아니다
+_UNIT = "(?:[억천백]|만(?!큼))"
 _NUMBER_RE = re.compile("|".join([
     # 아라비아 숫자 + 자리 단위: 1만, 3천, 1만 2천, 1.5만, 1천만
-    rf"(?P<au>[0-9]+(?:\.[0-9]+)?[억만천백](?:{_SP}?[0-9]+(?:\.[0-9]+)?[억만천백]|[억만천백])*)",
+    rf"(?P<au>[0-9]+(?:\.[0-9]+)?{_UNIT}(?:{_SP}?[0-9]+(?:\.[0-9]+)?{_UNIT}|{_UNIT})*)",
     r"(?P<d>[0-9]+)",
-    # 고유어 수 + 세는 말: 두 번, 열한 번째, 스물두 살
-    rf"(?<![가-힣])(?:(?P<tens>{_alt(_NATIVE_TENS)})(?P<u1>{_alt(_NATIVE_UNITS)})?"
+    # 고유어 수 + 세는 말: 두 번, 열한 번째, 스물두 살, 열 두 번
+    rf"(?<![가-힣])(?:(?P<tens>{_alt(_NATIVE_TENS)})(?:{_SP}?(?P<u1>{_alt(_NATIVE_UNITS)}))?"
     rf"|(?P<u2>{_alt(_NATIVE_UNITS)}))(?P<sp1>{_SP}?)(?P<c1>{_alt(COUNTERS)}){_AFTER}",
     # 한자어 수 + 세는 말·단위. 한자어 글자 연속은 통째로만 본다("만일"을 "만"+"일"로 쪼개지 않음)
     rf"(?<![가-힣])(?=(?P<run>[일이삼사오육칠팔구십백천만억]+))(?P=run)(?P<sp2>{_SP}?)"
@@ -69,17 +71,21 @@ def _eval_pieces(pieces: list[tuple[str | None, str | None]]) -> str | None:
         i, _, f = n.partition(".")
         return int(i + f.ljust(dec, "0"))
 
-    total = section = current = 0
+    # current가 None이면 "수가 없음"(단독 "만" = 1만). 0은 수가 있는 것이다("0만" = 0)
+    total = section = 0
+    current: int | None = None
+    has_section = False
     for num, unit in pieces:
         if num is not None:
             current = scaled(num)
         if unit in _SMALL_UNITS:
-            section += (current or D) * _SMALL_UNITS[unit]
-            current = 0
+            section += (D if current is None else current) * _SMALL_UNITS[unit]
+            current, has_section = None, True
         elif unit in _BIG_UNITS:
-            total += ((section + current) or D) * _BIG_UNITS[unit]
-            section = current = 0
-    total += section + current
+            base = section + (current or 0) if current is not None or has_section else D
+            total += base * _BIG_UNITS[unit]
+            section, current, has_section = 0, None, False
+    total += section + (current or 0)
     return str(total // D) if total % D == 0 else None
 
 

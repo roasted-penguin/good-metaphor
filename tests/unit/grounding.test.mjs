@@ -162,14 +162,15 @@ test('usedFact가 fact가 아닌 label과 같으면 여전히 fact-mismatch', ()
 // T-143: 한글 수사·만/천 단위 수. 서버 server/tests/test_grounding.py와 같은 공유 사례를 읽는다
 const SHARED = JSON.parse(readFileSync(new URL('../fixtures/grounding-numbers.json', import.meta.url), 'utf8'));
 
-test('공유 사례: numbersIn이 한글 수사·단위 수를 아라비아 숫자로 바꾼다', () => {
-  for (const { text, numbers } of SHARED.numbers) {
-    assert.deepEqual(numbersIn(text), numbers, text);
-  }
-});
+// 사례마다 test()를 하나씩 만들어 실패를 사례별로 알린다(Python parametrize와 같게)
+for (const { text, numbers } of SHARED.numbers) {
+  test(`공유 사례 numbersIn: ${text}`, () => {
+    assert.deepEqual(numbersIn(text), numbers);
+  });
+}
 
-test('공유 사례: checkGrounding 판정', () => {
-  for (const { note, input, ok, reason } of SHARED.checks) {
-    assert.deepEqual(checkGrounding(input), ok ? { ok: true } : { ok: false, reason }, note);
-  }
-});
+for (const { note, input, ok, reason } of SHARED.checks) {
+  test(`공유 사례 checkGrounding: ${note}`, () => {
+    assert.deepEqual(checkGrounding(input), ok ? { ok: true } : { ok: false, reason });
+  });
+}

@@ -32,16 +32,20 @@ const SINO_DIGITS = { 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 칠: 7, �
 const SMALL_UNITS = { 십: 10, 백: 100, 천: 1000 };
 const BIG_UNITS = { 만: 10000, 억: 100000000 };
 
-const alt = (words) => [...words].sort((a, b) => b.length - a.length).join('|');
+// 정규식 특수문자는 이스케이프한다(Python re.escape와 같게)
+const esc = (w) => w.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&');
+const alt = (words) => [...words].sort((a, b) => b.length - a.length).map(esc).join('|');
 const COUNTER_ALT = alt(COUNTERS);
 const AFTER = `(?=$|[^가-힣]|[${AFTER_COUNTER}])`;
 const SP = '[ \\t\\r\\n]';
+// 자리 단위. "200만큼"의 만은 단위가 아니다
+const UNIT = '(?:[억천백]|만(?!큼))';
 const NUMBER_RE = new RegExp([
   // 아라비아 숫자 + 자리 단위: 1만, 3천, 1만 2천, 1.5만, 1천만
-  `(?<au>\\d+(?:\\.\\d+)?[억만천백](?:${SP}?\\d+(?:\\.\\d+)?[억만천백]|[억만천백])*)`,
+  `(?<au>\\d+(?:\\.\\d+)?${UNIT}(?:${SP}?\\d+(?:\\.\\d+)?${UNIT}|${UNIT})*)`,
   `(?<d>\\d+)`,
-  // 고유어 수 + 세는 말: 두 번, 열한 번째, 스물두 살
-  `(?<![가-힣])(?:(?<tens>${alt(Object.keys(NATIVE_TENS))})(?<u1>${alt(Object.keys(NATIVE_UNITS))})?` +
+  // 고유어 수 + 세는 말: 두 번, 열한 번째, 스물두 살, 열 두 번
+  `(?<![가-힣])(?:(?<tens>${alt(Object.keys(NATIVE_TENS))})(?:${SP}?(?<u1>${alt(Object.keys(NATIVE_UNITS))}))?` +
     `|(?<u2>${alt(Object.keys(NATIVE_UNITS))}))(?<sp1>${SP}?)(?<c1>${COUNTER_ALT})${AFTER}`,
   // 한자어 수 + 세는 말·단위. 한자어 글자 연속은 통째로만 본다("만일"을 "만"+"일"로 쪼개지 않음)
   `(?<![가-힣])(?=(?<run>[일이삼사오육칠팔구십백천만억]+))\\k<run>(?<sp2>${SP}?)(?<c2>${alt([...COUNTERS, ...SINO_UNITS])})${AFTER}`
@@ -54,13 +58,18 @@ function evalPieces(pieces) {
   const dec = Math.max(0, ...pieces.map(([n]) => (n?.split('.')[1] ?? '').length));
   const D = 10n ** BigInt(dec);
   const scaled = (n) => { const [i, f = ''] = n.split('.'); return BigInt(i + f.padEnd(dec, '0')); };
-  let total = 0n, section = 0n, current = 0n;
+  // current가 null이면 "수가 없음"(단독 "만" = 1만). 0은 수가 있는 것이다("0만" = 0)
+  let total = 0n, section = 0n, current = null, hasSection = false;
   for (const [num, unit] of pieces) {
     if (num != null) current = scaled(num);
-    if (unit in SMALL_UNITS) { section += (current || D) * BigInt(SMALL_UNITS[unit]); current = 0n; }
-    else if (unit in BIG_UNITS) { total += ((section + current) || D) * BigInt(BIG_UNITS[unit]); section = current = 0n; }
+    if (unit in SMALL_UNITS) {
+      section += (current ?? D) * BigInt(SMALL_UNITS[unit]); current = null; hasSection = true;
+    } else if (unit in BIG_UNITS) {
+      total += (current != null || hasSection ? section + (current ?? 0n) : D) * BigInt(BIG_UNITS[unit]);
+      section = 0n; current = null; hasSection = false;
+    }
   }
-  const sum = total + section + current;
+  const sum = total + section + (current ?? 0n);
   return sum % D === 0n ? String(sum / D) : null;
 }
 
