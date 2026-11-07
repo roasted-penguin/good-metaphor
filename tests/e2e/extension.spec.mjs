@@ -820,10 +820,22 @@ test('비밀번호 폼(T-107): 폼 안 문장은 안 보내고, 같은 페이지
   expect(sentCount() - before).toBeGreaterThan(0);
 });
 
-test('팝업(T-107): http(s)가 아닌 탭에서는 "이 사이트에서 끄기"를 끄고 안내 문구', async ({ context, extId }) => {
+test('팝업(T-107): 탭 주소를 못 읽으면(확장 페이지로 연 팝업, activeTab 없음) "이 사이트에서 끄기"를 끄고 안내 문구', async ({ context, extId }) => {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extId}/popup.html`); // 현재 탭이 확장 페이지
   await expect(page.locator('#siteOff')).toBeDisabled();
   await expect(page.locator('label[for="siteOff"]')).toHaveText('이 사이트에서 끄기');
   await expect(page.locator('#siteHost')).toHaveText('이 페이지에서는 쓸 수 없어요.');
+});
+
+test('비밀번호 폼(T-107): 같은 블록 안 비밀번호 폼 글자는 문장·앞 문장으로 새지 않는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const before = calls.length, serverBefore = analogyCalls.length;
+  await altHover(page, '#p8i');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  const mine = calls.slice(before);
+  expect(mine.some(c => c.user.includes('도입문장테스트'))).toBe(true);
+  expect(mine.filter(c => c.user.includes('폼라벨비밀문구')), 'LLM에 폼 글자가 가면 안 됨').toEqual([]);
+  expect(analogyCalls.slice(serverBefore).filter(c => JSON.stringify(c.body).includes('폼라벨비밀문구')), '서버에도 안 감').toEqual([]);
 });

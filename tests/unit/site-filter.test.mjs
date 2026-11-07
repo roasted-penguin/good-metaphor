@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import '../../extension/lib/site-filter.js';
 import { DEFAULT_SETTINGS } from '../../extension/lib/config.js';
 
-const { normalizeHost, isExcludedHost, toggleHost, DEFAULT_EXCLUDED_HOSTS } = globalThis.AnalogySiteFilter;
+const { normalizeHost, isExcludedHost, toggleHost, isBlockedSender, DEFAULT_EXCLUDED_HOSTS } = globalThis.AnalogySiteFilter;
 const LIST = ['kbstar.com', 'mail.google.com'];
 
 test('normalizeHost: 소문자·끝 점·www. 제거, 포트·URL 무시, 빈 값은 빈 문자열', () => {
@@ -70,4 +70,15 @@ test('기본 목록: 판정된 항목 그대로, 설정 기본값과 같고 테�
   assert.deepEqual(DEFAULT_SETTINGS.excludedHosts, DEFAULT_EXCLUDED_HOSTS);
   assert.equal(isExcludedHost('127.0.0.1', DEFAULT_SETTINGS.excludedHosts), false);
   assert.equal(isExcludedHost('obank.kbstar.com', DEFAULT_SETTINGS.excludedHosts), true);
+});
+
+test('isBlockedSender: 탭에서 온 메시지만 본다, sender.url 먼저 그다음 tab.url', () => {
+  const list = ['127.0.0.1'];
+  assert.equal(isBlockedSender(undefined, list), false, 'sender 없음');
+  assert.equal(isBlockedSender({ url: 'http://127.0.0.1:8766/' }, list), false, '탭이 없으면(확장 페이지 등) 막지 않음');
+  assert.equal(isBlockedSender({ tab: {}, url: 'http://127.0.0.1:8766/' }, list), true);
+  assert.equal(isBlockedSender({ tab: { url: 'http://127.0.0.1:8766/' } }, list), true, 'sender.url 없으면 tab.url');
+  assert.equal(isBlockedSender({ tab: { url: 'http://127.0.0.1/' }, url: 'https://example.com/' }, list), false, 'sender.url 우선');
+  assert.equal(isBlockedSender({ tab: {} }, list), false, 'URL을 모르면 막지 않음');
+  assert.equal(isBlockedSender({ tab: {}, url: 'https://example.com/' }, list), false);
 });
