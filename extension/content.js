@@ -16,6 +16,7 @@
   /* ───────── 설정 ───────── */
   const SF = globalThis.AnalogySiteFilter; // lib/site-filter.js (manifest에서 먼저 주입)
   const AP = globalThis.AnalogyPlace;      // lib/place.js (manifest에서 먼저 주입, T-109)
+  const AS = globalThis.AnalogyShadow;     // lib/shadow.js (manifest에서 먼저 주입, T-111)
   let theme = 'maple';      // 말풍선 테마. 미리 받기(graph:info)·stage·결과 순으로 고쳐진다
   let themeStale = true;    // 테마를 (다시) 받아야 함
   /* 프레임(T-111): 모든 프레임에 주입된다(all_frames). 프레임마다 자기 안에 말풍선·강조를 띄운다.
@@ -89,22 +90,26 @@
   const sentenceSeg = new Intl.Segmenter(undefined, { granularity: 'sentence' });
   const wordSeg = new Intl.Segmenter(undefined, { granularity: 'word' });
 
+  // 열린 Shadow DOM(T-111): 커서 아래 열린 shadow root 들을 모아 caretPositionFromPoint 에 넘긴다.
+  // 옵션을 지원하지 않거나(예외) 캐럿이 여전히 글자가 아닌 곳(호스트)을 가리키면 지금 방식으로 대체
   function caretAt(x, y) {
     if (document.caretPositionFromPoint) {
-      const p = document.caretPositionFromPoint(x, y);
+      let p = null;
+      const shadowRoots = AS.collectShadowRoots(document, x, y, { skip: el => el.id === 'analogy-helper-host' });
+      if (shadowRoots.length) {
+        try { p = document.caretPositionFromPoint(x, y, { shadowRoots }); } catch { p = null; }
+        if (p?.offsetNode?.nodeType !== Node.TEXT_NODE) p = null;
+      }
+      p ??= document.caretPositionFromPoint(x, y);
       return p ? { node: p.offsetNode, offset: p.offset } : null;
     }
     const r = document.caretRangeFromPoint?.(x, y);
     return r ? { node: r.startContainer, offset: r.startOffset } : null;
   }
 
+  // 문장 블록. shadow 경계를 넘지 않는다(블록 요소가 없으면 그 shadow root 가 블록, T-111)
   function blockOf(node) {
-    let el = node.parentElement;
-    while (el && el !== document.body) {
-      if (BLOCK_DISPLAYS.has(getComputedStyle(el).display)) return el;
-      el = el.parentElement;
-    }
-    return document.body;
+    return AS.blockFor(node, { isBlock: el => BLOCK_DISPLAYS.has(getComputedStyle(el).display), stopAt: document.body });
   }
 
   // 비밀번호 칸이 있는 폼 안 문장은 설정과 무관하게 보내지 않는다(T-107)
@@ -113,8 +118,9 @@
     return !!form && [...form.elements].some(el => el.type === 'password');
   }
 
+  // shadow 안이면 호스트를 거쳐 문서까지 올라가 본다(shadow root 직속 텍스트는 parentElement 가 null, T-111)
   function isSkippable(node) {
-    for (let el = node.parentElement; el; el = el.parentElement) {
+    for (let el = AS.composedParent(node); el; el = AS.composedParent(el)) {
       if (SKIP_TAGS.has(el.tagName) || el.isContentEditable || el.id === 'analogy-helper-host') return true;
     }
     return false;
@@ -126,7 +132,8 @@
       acceptNode(n) {
         if (!n.nodeValue) return NodeFilter.FILTER_REJECT;
         const p = n.parentElement;
-        if (!p || SKIP_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+        // shadow root 바로 아래 텍스트(T-111)는 부모 요소가 없어도 받는다
+        if (p ? SKIP_TAGS.has(p.tagName) : !AS.isShadowRoot(n.parentNode)) return NodeFilter.FILTER_REJECT;
         // 같은 블록 안 비밀번호 폼 글자가 문장·앞 문장으로 새지 않게 뺀다(T-107)
         if (inPasswordForm(n)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
@@ -216,8 +223,24 @@
   }
 
   /* ───────── 강조 ───────── */
+  // CSS.highlights 는 문서 전체 레지스트리지만 ::highlight 스타일은 shadow tree 안에 따로 있어야 보인다(T-111).
+  // 열린 shadow root 에 처음 강조할 때 우리 규칙 한 줄짜리 시트를 adoptedStyleSheets 에 덧붙인다(기존 시트 보존, root 마다 한 번).
+  // 페이지가 adoptedStyleSheets 를 갈아 끼워 우리 시트가 빠졌으면 같은 시트를 다시 덧붙인다. 실패하면 강조 없이 말풍선만
+  const HL_RULE = `::highlight(${HL_NAME}) { background-color: rgba(255, 196, 40, .30); }`; // content.css 와 같은 색
+  const shadowHlSheets = new WeakMap(); // shadow root → 우리 시트
+  function ensureShadowHlStyle(root) {
+    try {
+      let sheet = shadowHlSheets.get(root);
+      if (sheet && root.adoptedStyleSheets.includes(sheet)) return true;
+      if (!sheet) { sheet = new CSSStyleSheet(); sheet.replaceSync(HL_RULE); shadowHlSheets.set(root, sheet); }
+      root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+      return true;
+    } catch { return false; }
+  }
   function highlight(range) {
     if (!window.CSS?.highlights) return;
+    const root = range.startContainer.getRootNode();
+    if (AS.isShadowRoot(root) && !ensureShadowHlStyle(root)) { clearHighlight(); return; }
     CSS.highlights.set(HL_NAME, new Highlight(range));
   }
   function clearHighlight() {
