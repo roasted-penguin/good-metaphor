@@ -1,4 +1,4 @@
-import { localDay } from './lib/feedback.js';
+import { localDay, formatFeedbackStats } from './lib/feedback.js';
 
 const $ = s => document.querySelector(s);
 const send = (type, extra = {}) => new Promise((resolve, reject) => {
@@ -271,29 +271,52 @@ function renderSharePreview() {
   $('#fbSharePreview').textContent = fbItems.length ? '이렇게 가려서 보내요: ' + fbItems[0].masked : '보낼 피드백이 아직 없어요.';
 }
 
+// 목록·통계를 읽어 그린다. 읽기만 하고 저장하지 않는다(storage.onChanged 갱신이 루프를 만들지 않게).
+// 여러 번 겹쳐 불려도 마지막 요청 결과만 그린다. 읽기가 실패하면 이전 목록을 그대로 두고 던진다
+let fbLoadSeq = 0;
 async function loadFeedback() {
+  const seq = ++fbLoadSeq;
   const [list, st] = await Promise.all([send('feedback:list'), send('feedback:stats')]);
+  if (seq !== fbLoadSeq) return;
   fbItems = list.items;
-  $('#fbStats').textContent = `지난 7일 · 호버 ${st.hovers}번 · 👍 ${st.up} · 👎 ${st.down} · 교정 ${st.pick}`;
-  $('#fbList').innerHTML = fbItems.length ? fbItems.map(it => `
+  $('#fbStats').textContent = formatFeedbackStats(st);
+  $('#fbList').innerHTML = fbItems.map(it => {
+    // 라벨이 없으면(고른 개념 없음 등) 날짜만. 구분점이 홀로 남지 않게
+    const meta = [it.vote === 'pick' ? it.pickedLabel : it.nodeLabel, localDay(it.ts)].filter(Boolean).join(' · ');
+    return `
     <li data-id="${esc(it.id)}">
       <span class="fb-vote v-${esc(it.vote)}">${esc(VOTE_MARK[it.vote] || it.vote)}</span>
       <span class="fb-text"><span class="fb-sentence" title="${esc(it.sentence)}">${esc(clip(it.sentence))}</span>
-        <span class="hint">${esc(it.vote === 'pick' ? it.pickedLabel : it.nodeLabel)} · ${localDay(it.ts)}</span></span>
+        <span class="hint">${esc(meta)}</span></span>
       <button class="fb-undo">되돌리기</button>
-    </li>`).join('') : '<li class="empty hint">아직 남긴 피드백이 없어요.</li>';
+    </li>`;
+  }).join('');
+  // 빈 목록 안내는 목록 밖 문단으로(접근성)
+  $('#fbList').hidden = !fbItems.length;
+  $('#fbEmpty').hidden = !!fbItems.length;
   $('#fbShare').checked = list.share;
   renderSharePreview();
   $('#fbExport').disabled = !fbItems.length;
   $('#fbClear').disabled = !fbItems.length;
 }
+// 되돌리기·지우기 뒤 다시 읽기. 실패하면 이전 목록을 두고 오류 문구
+const reloadFeedback = () => loadFeedback().catch(() => setStatus($('#fbStatus'), '목록을 다시 읽지 못했어요.', 'err'));
+
+// 다른 탭에서 남긴 피드백·호버도 열린 화면에 반영한다. loadFeedback은 읽기만 해서 다시 이벤트가 나지 않는다.
+// 호버가 이어질 때 매번 읽지 않게 짧게 모아서 한 번만 읽는다
+let fbChangeTimer = null;
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !(changes.feedback || changes.hoverCounts)) return;
+  clearTimeout(fbChangeTimer);
+  fbChangeTimer = setTimeout(reloadFeedback, 150);
+});
 
 $('#fbList').addEventListener('click', async e => {
   const li = e.target.closest('.fb-undo')?.closest('li');
   if (!li) return;
   try { await send('feedback-undo', { id: li.dataset.id }); setStatus($('#fbStatus'), '되돌렸어요.', 'ok'); }
   catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
-  await loadFeedback();
+  await reloadFeedback();
 });
 
 $('#fbExport').addEventListener('click', () => {
@@ -310,13 +333,19 @@ $('#fbClear').addEventListener('click', async () => {
   if (!confirm('남긴 피드백을 모두 지울까요? 되돌릴 수 없어요.')) return;
   try { await send('feedback:clear'); setStatus($('#fbStatus'), '모두 지웠어요.', 'ok'); }
   catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
-  await loadFeedback();
+  await reloadFeedback();
 });
 
 $('#fbShare').addEventListener('change', async () => {
+  const on = $('#fbShare').checked;
   renderSharePreview();
-  try { state.settings = await send('settings:save', { patch: { feedbackShare: $('#fbShare').checked } }); }
-  catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+  try { state.settings = await send('settings:save', { patch: { feedbackShare: on } }); }
+  catch {
+    // 저장하지 못했으면 체크를 되돌린다
+    $('#fbShare').checked = !on;
+    renderSharePreview();
+    setStatus($('#fbStatus'), '저장하지 못했어요. 다시 시도해 주세요.', 'err');
+  }
 });
 
 /* ───────── 초기화 ───────── */
