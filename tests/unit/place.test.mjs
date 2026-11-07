@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import '../../extension/lib/place.js';
 
-const { pickLineRect, placeBox } = globalThis.AnalogyPlace;
+const { pickLineIndex, pickLineRect, placeBox } = globalThis.AnalogyPlace;
 const R = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
 // 줄 세 개: 100~120, 130~150, 160~180 (줄 사이 10px 틈)
 const LINES = [R(10, 100, 200, 120), R(10, 130, 200, 150), R(10, 160, 120, 180)];
@@ -57,4 +57,31 @@ test('placeBox: 좌우는 pad 안으로 clamp', () => {
   assert.equal(placeBox({ rect: LINES[0], mouseX: 20, bw: 200, bh: 50, vw: 1000, vh: 800 }).left, 10);
   assert.equal(placeBox({ rect: LINES[0], mouseX: 990, bw: 200, bh: 50, vw: 1000, vh: 800 }).left, 790);
   assert.equal(placeBox({ rect: LINES[0], mouseX: 990, bw: 200, bh: 50, vw: 1000, vh: 800, gap: 4 }).top, 124);
+});
+
+test('pickLineIndex: 0크기를 뺀 목록 기준 index, 줄 안·줄 사이·끝 바깥, 비면 -1', () => {
+  assert.equal(pickLineIndex(LINES, 140), 1);
+  assert.equal(pickLineIndex(LINES, 123), 0);
+  assert.equal(pickLineIndex(LINES, 128), 1);
+  assert.equal(pickLineIndex(LINES, 50), 0);
+  assert.equal(pickLineIndex(LINES, 400), 2);
+  const zero = R(50, 100, 50, 120);
+  assert.equal(pickLineIndex([zero, LINES[0], zero, LINES[1]], 140), 1, '0크기 rect는 index에서도 빠짐');
+  assert.equal(pickLineIndex([zero], 140), -1);
+  assert.equal(pickLineIndex([], 140), -1);
+  assert.equal(pickLineIndex(undefined, 140), -1);
+});
+
+test('pickLineIndex: 같은 y라도 스크롤 뒤에는 이웃 줄이 된다 → index를 호버 때 한 번만 정해야 하는 이유', () => {
+  const lines = [R(0, 200, 100, 220), R(0, 224, 100, 244), R(0, 248, 100, 268)];
+  assert.equal(pickLineIndex(lines, 236), 1);
+  const scrolled = lines.map(r => R(r.left, r.top - 40, r.right, r.bottom - 40));
+  assert.equal(pickLineIndex(scrolled, 236), 2);
+});
+
+test('lineRects: 0크기 rect를 뺀 배열(배치 때 index로 다시 꺼내는 목록)', () => {
+  const { lineRects } = globalThis.AnalogyPlace;
+  const zero = R(50, 100, 50, 120);
+  assert.deepEqual(lineRects([zero, LINES[0], LINES[1]]), [LINES[0], LINES[1]]);
+  assert.deepEqual(lineRects(null), []);
 });

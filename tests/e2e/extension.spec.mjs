@@ -1187,8 +1187,8 @@ test('테마(T-108): 페이지를 연 뒤 로그인해 중립 관심사로 바�
 
 /* ───────── 여러 줄 문장 말풍선 위치 (T-109) ───────── */
 // #p10(좁은 칸, 여러 줄)의 줄 rect들과, 줄마다 가운데 글자 index
-const lineInfo = page => page.evaluate(() => {
-  const t = document.querySelector('#p10').firstChild;
+const lineInfo = (page, sel = '#p10') => page.evaluate(s => {
+  const t = document.querySelector(s).firstChild;
   const r = document.createRange();
   const lines = [];
   for (let i = 0; i < t.nodeValue.length; i++) {
@@ -1200,7 +1200,7 @@ const lineInfo = page => page.evaluate(() => {
     line.idx.push(i);
   }
   return lines.map(l => ({ top: l.top, bottom: l.bottom, mid: l.idx[Math.floor(l.idx.length / 2)] }));
-});
+}, sel);
 // 말풍선 위치. 나타날 때 transform 애니메이션이 있어 style 값(배치 결과)을 읽는다
 const boxPos = page => page.evaluate(() => {
   const box = document.getElementById('analogy-helper-host')?.shadowRoot.querySelector('.box');
@@ -1209,12 +1209,12 @@ const boxPos = page => page.evaluate(() => {
   return { top, bottom: top + box.offsetHeight, text: box.innerText };
 });
 // #p10의 2번째 줄이 뷰포트 y에 오도록 스크롤
-async function scrollLine2To(page, y) {
-  await page.evaluate(target => {
-    const t = document.querySelector('#p10').firstChild;
+async function scrollLine2To(page, y, sel = '#p10') {
+  await page.evaluate(([target, s]) => {
+    const t = document.querySelector(s).firstChild;
     const rects = (() => { const r = document.createRange(); r.selectNodeContents(t); return [...r.getClientRects()]; })();
     window.scrollBy(0, rects[1].top - target);
-  }, y);
+  }, [y, sel]);
 }
 
 test('말풍선 위치(T-109): 여러 줄 문장 2번째 줄에서 호버하면 그 줄 바로 아래, 결과 뒤에도 같은 줄 기준', async ({ context, ext }) => {
@@ -1246,4 +1246,29 @@ test('말풍선 위치(T-109): 화면 아래쪽 줄에서 호버하면 그 줄 �
     const p = await boxPos(page);
     return p && Math.abs(p.bottom - (lines[1].top - 8)) <= 3;
   }, { message: '말풍선 bottom이 2번째 줄 top - 8' }).toBe(true);
+});
+
+test('말풍선 위치(T-109): 로딩 중 조금(40px) 스크롤해도 결과 뒤 재배치는 호버한 2번째 줄의 지금 위치 기준', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await scrollLine2To(page, 200, '#p11');
+  const lines = await lineInfo(page, '#p11');
+  expect(lines.length).toBeGreaterThanOrEqual(3);
+  // 줄 아래쪽 가장자리 근처를 호버해, 40px 스크롤 뒤 같은 y가 다음 줄에 걸리게 한다
+  const { x } = await pointOnChar(page, '#p11', lines[1].mid);
+  const y = lines[1].bottom - 2;
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  await expect.poll(async () => { const p = await boxPos(page); return p && Math.abs(p.top - (lines[1].bottom + 8)) <= 3; }, { message: '로딩 말풍선이 2번째 줄 아래' }).toBe(true);
+  // 가짜 LLM이 이 문장은 늦게 답한다(로딩지연테스트). 그 사이 40px 스크롤(닫히는 80px보다 적게)
+  await page.evaluate(() => window.scrollBy(0, 40));
+  await expect.poll(async () => (await boxPos(page))?.text ?? '', { timeout: 15_000 }).toContain('같은 구조예요');
+  const live = await lineInfo(page, '#p11');
+  expect(Math.abs(live[1].top - (lines[1].top - 40)), '스크롤이 실제로 됨').toBeLessThanOrEqual(1);
+  await expect.poll(async () => {
+    const p = await boxPos(page);
+    return p && Math.abs(p.top - (live[1].bottom + 8));
+  }, { message: '결과 뒤 말풍선 top ≈ 지금 2번째 줄 bottom + 8' }).toBeLessThanOrEqual(3);
 });
