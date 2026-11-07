@@ -462,6 +462,7 @@ D-4 결정(식당, 로그인 없이 선택 가능). [naming-meme.md](naming-meme
 
 ### T-403 [L0] 시드 주입
 `maplestory.json` → `insert_custom_kg` 변환 스크립트. 태그 18개는 `entity_type="추상구조"` 엔티티, 노드는 `게임시스템` 등, 노드–태그 연결은 `keywords`에 태그 라벨이 들어간 관계, 기존 엣지는 `rel`을 설명으로. `source_id`는 `seed:<id>`.
+LightRAG 엔티티 이름은 공통 그래프 노드 id 또는 label과 같아야 서버 검색기가 후보로 바꾼다(T-402 retriever 규칙).
 **완료 기준** 워크스페이스 `common_maplestory`에 엔티티 36개, 관계(노드–태그 + 기존 엣지) 적재 확인. 재실행해도 중복이 생기지 않음.
 
 ### T-404 [L0] 확장 서버 모드
