@@ -42,12 +42,13 @@ function matchesFact(usedFact, facts) {
   });
 }
 
-// { analogy, usedFact, facts, sentence, context } → { ok: true } | { ok: false, reason }
+// { analogy, usedFact, facts, sentence, context, labels = [] } → { ok: true } | { ok: false, reason }
+// - labels: 고른 노드 label과 이웃 label. 숫자 검사의 허용 숫자에만 쓰고 usedFact 대조에는 쓰지 않는다.
 // - 비유가 비었으면 검사하지 않는다.
 // - usedFact가 있으면 고른 노드 facts 중 하나와 일치해야 한다(아니면 fact-mismatch).
 // - usedFact가 없거나 비었으면 숫자 검사만 한다(옛 모델·데모 호환, 오탐 방지).
-// - 비유의 숫자가 facts·원문 문장·앞 문장 어디에도 없으면 number-outside.
-export function checkGrounding({ analogy, usedFact, facts, sentence, context } = {}) {
+// - 비유의 숫자가 facts·labels·원문 문장·앞 문장 어디에도 없으면 number-outside.
+export function checkGrounding({ analogy, usedFact, facts, sentence, context, labels = [] } = {}) {
   if (!normalizeText(analogy)) return { ok: true };
   const factList = Array.isArray(facts) ? facts.filter(f => typeof f === 'string') : [];
 
@@ -55,7 +56,8 @@ export function checkGrounding({ analogy, usedFact, facts, sentence, context } =
     return { ok: false, reason: 'fact-mismatch' };
   }
 
-  const known = new Set([...factList, sentence, context].flatMap(numbersIn));
+  const labelList = Array.isArray(labels) ? labels.filter(l => typeof l === 'string') : [];
+  const known = new Set([...factList, ...labelList, sentence, context].flatMap(numbersIn));
   if (numbersIn(analogy).some(n => !known.has(n))) {
     return { ok: false, reason: 'number-outside' };
   }

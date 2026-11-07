@@ -259,7 +259,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // 근거 검사(T-123): 고른 노드 facts 밖의 사실(usedFact 불일치, 지어낸 숫자)이면 비유를 버린다
   let grounding = null;
   if (answer.analogy && chosen) {
-    grounding = checkGrounding({ analogy: answer.analogy, usedFact: answer.usedFact, facts: chosen.facts, sentence, context });
+    const labels = [chosen.label, ...(chosen.neighbors || []).map(n => n.label)];
+    grounding = checkGrounding({ analogy: answer.analogy, usedFact: answer.usedFact, facts: chosen.facts, sentence, context, labels });
     if (!grounding.ok) {
       answer.analogy = '';
       answer.rejected = GROUNDING_REJECTED_TEXT;

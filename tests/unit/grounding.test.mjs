@@ -130,3 +130,30 @@ test('numbersIn: 전각 숫자도 아라비아 숫자와 같게 본다(NFKC)', (
   assert.deepEqual(numbersIn('１，０００ 메소'), ['1000']);
   assert.equal(check({ analogy: '１０번 시도하는 것과 같아요.', usedFact: '', sentence: '10번까지 할 수 있어요.' }).ok, true);
 });
+
+// 컨트롤러 판정(T-123 fix 1): 규칙 1이 neighbors를 허용하므로 노드·이웃 label의 숫자도 숫자 검사에 넣는다
+const SOL_ERDA = [
+  'HEXA 매트릭스의 스킬을 강화하려면 솔 에르다와 솔 에르다 조각이 필요하다.',
+  "솔 에르다는 어센틱 지역 사냥이나 특정 보스로 '솔 에르다의 기운' 게이지를 채워 얻고, 보유할 수 있는 양에 상한이 있다."
+];
+const solCheck = (over) => checkGrounding({
+  analogy: '6차 전직 뒤 HEXA 매트릭스를 키우는 솔 에르다와 같아요.', usedFact: SOL_ERDA[0], facts: SOL_ERDA,
+  sentence: SENTENCE, context: '', ...over
+});
+
+test('숫자 검사: 이웃 label의 숫자는 통과', () => {
+  assert.deepEqual(solCheck({ labels: ['솔 에르다', '6차 전직과 HEXA 매트릭스'] }), { ok: true });
+  assert.deepEqual(solCheck(), { ok: false, reason: 'number-outside' }, 'labels 없으면 기존대로');
+});
+
+test('숫자 검사: 노드 label의 숫자는 통과', () => {
+  assert.deepEqual(checkGrounding({
+    analogy: '6차 전직을 해야 새 성장 시스템이 열리는 것과 같아요.', usedFact: '', facts: ['전직하면 새 스킬 성장 시스템이 열린다.'],
+    sentence: SENTENCE, labels: ['6차 전직과 HEXA 매트릭스']
+  }), { ok: true });
+});
+
+test('usedFact가 fact가 아닌 label과 같으면 여전히 fact-mismatch', () => {
+  assert.deepEqual(solCheck({ usedFact: '6차 전직과 HEXA 매트릭스', labels: ['솔 에르다', '6차 전직과 HEXA 매트릭스'] }),
+    { ok: false, reason: 'fact-mismatch' });
+});

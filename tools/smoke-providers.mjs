@@ -113,7 +113,8 @@ for (const p of runs) {
       // 근거 검사(T-123): 확장과 같은 검사. 실패해도 스모크 실패로 세지 않고 결과만 보인다(확장은 비유를 숨김)
       if (answer.analogy) {
         const chosen = candidates.find(c => c.id === answer.nodeId);
-        const g = checkGrounding({ analogy: answer.analogy, usedFact: answer.usedFact, facts: chosen.facts, sentence: s.sentence, context: s.context });
+        const labels = chosen ? [chosen.label, ...(chosen.neighbors || []).map(n => n.label)] : [];
+        const g = checkGrounding({ analogy: answer.analogy, usedFact: answer.usedFact, facts: chosen?.facts ?? [], sentence: s.sentence, context: s.context, labels });
         console.log(`      근거 검사: ${g.ok ? '통과' : `숨김(${g.reason})`}  usedFact: ${answer.usedFact || '(없음)'}`);
       }
     }

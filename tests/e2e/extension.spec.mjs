@@ -167,6 +167,7 @@ test('근거 검사(T-123): 프롬프트에 usedFact, 정상은 통과, 숫자·
   const fact = await ext.send({ type: 'explain', sentence: '사실조작테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
   expect(fact.data.analogy).toBe('');
   expect(fact.data.rejected).toBe(GROUNDING_REJECTED);
+  expect(fact.data.evidence).toBeNull();
   expect(fact.data.debug.grounding).toEqual({ ok: false, reason: 'fact-mismatch' });
 });
 
