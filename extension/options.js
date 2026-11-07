@@ -274,6 +274,7 @@ function renderSharePreview() {
 // 목록·통계를 읽어 그린다. 읽기만 하고 저장하지 않는다(storage.onChanged 갱신이 루프를 만들지 않게).
 // 여러 번 겹쳐 불려도 마지막 요청 결과만 그린다. 읽기가 실패하면 이전 목록을 그대로 두고 던진다
 let fbLoadSeq = 0;
+let fbSharePending = false; // 보내기 토글 저장 중
 async function loadFeedback() {
   const seq = ++fbLoadSeq;
   const [list, st] = await Promise.all([send('feedback:list'), send('feedback:stats')]);
@@ -294,7 +295,7 @@ async function loadFeedback() {
   // 빈 목록 안내는 목록 밖 문단으로(접근성)
   $('#fbList').hidden = !fbItems.length;
   $('#fbEmpty').hidden = !!fbItems.length;
-  $('#fbShare').checked = list.share;
+  if (!fbSharePending) $('#fbShare').checked = list.share; // 저장 중이면 누른 값을 덮지 않는다
   renderSharePreview();
   $('#fbExport').disabled = !fbItems.length;
   $('#fbClear').disabled = !fbItems.length;
@@ -339,13 +340,14 @@ $('#fbClear').addEventListener('click', async () => {
 $('#fbShare').addEventListener('change', async () => {
   const on = $('#fbShare').checked;
   renderSharePreview();
+  fbSharePending = true;
   try { state.settings = await send('settings:save', { patch: { feedbackShare: on } }); }
   catch {
     // 저장하지 못했으면 체크를 되돌린다
     $('#fbShare').checked = !on;
     renderSharePreview();
     setStatus($('#fbStatus'), '저장하지 못했어요. 다시 시도해 주세요.', 'err');
-  }
+  } finally { fbSharePending = false; }
 });
 
 /* ───────── 초기화 ───────── */
