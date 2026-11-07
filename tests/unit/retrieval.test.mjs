@@ -151,3 +151,29 @@ test('feedbackAdjust: 노드 합은 마지막에 한 번만 잘라 순서와 무
 test('retrieve: feedbackMemory가 null이어도 예외 없이 이전과 같음', () => {
   assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: null }), retrieve(q, gClose, vecs));
 });
+
+// T-138: 정밀 모드는 검색 벡터(추상 구조 + 원문)와 피드백 기록 벡터(원문)가 달라, 비슷한 문장 판정만 원문 벡터로 한다
+const sentenceVec = [0, 0, 1]; // q와 코사인 약 0.29 — 검색 벡터로는 임계값에 못 미친다
+
+test('retrieve: feedbackQuery를 주면 그 벡터로 비슷한 문장 가감(검색 점수는 q 그대로)', () => {
+  const mem = [{ vec: [...sentenceVec], nodeId: 'n1', vote: 'down' }];
+  const base = retrieve(q, gClose, vecs);
+  // q로는 걸리지 않는다
+  assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: mem }), base);
+  // 원문 벡터로는 같은 방향이라 -0.1
+  const r = retrieve(q, gClose, vecs, { feedbackMemory: mem, feedbackQuery: sentenceVec });
+  const n1 = r.find(x => x.id === 'n1');
+  assert.equal(n1.feedback, -0.1);
+  close(n1.score, base.find(x => x.id === 'n1').score - 0.1, 2e-4);
+  // 직접·태그 유사도는 q로 계산한 값 그대로
+  assert.equal(n1.direct, base.find(x => x.id === 'n1').direct);
+  assert.deepEqual(n1.tag, base.find(x => x.id === 'n1').tag);
+});
+
+test('retrieve: feedbackQuery 미지정·null이면 결과가 이전과 완전히 같음', () => {
+  const mem = [{ vec: [...q], nodeId: 'n1', vote: 'down' }];
+  const before = retrieve(q, gClose, vecs, { feedbackMemory: mem });
+  assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: mem, feedbackQuery: undefined }), before);
+  assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: mem, feedbackQuery: null }), before);
+  assert.deepEqual(retrieve(q, gClose, vecs, { feedbackQuery: sentenceVec }), retrieve(q, gClose, vecs));
+});
