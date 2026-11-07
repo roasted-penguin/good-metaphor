@@ -1530,3 +1530,26 @@ test('비밀번호 폼 × Shadow DOM(T-111): 비밀번호 칸이 있는 폼 안 
   await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
   await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
 });
+
+test('말풍선 닫은 뒤(T-111 CI): 숨은 말풍선 자리 아래 글자도 바로 호버된다(투명 상자가 커서를 가로채지 않음)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  await page.keyboard.press('Escape');
+  await expect.poll(() => tooltip(page)).toBe('');
+  // 닫힌 말풍선이 있던 자리(.box rect) 안에 들어오는 #p1 글자를 고른다(말풍선은 호버한 줄 바로 아래에 뜬다)
+  const target = await page.evaluate(() => {
+    const r = document.getElementById('analogy-helper-host').shadowRoot.querySelector('.box').getBoundingClientRect();
+    const t = document.querySelector('#p1').firstChild, g = document.createRange();
+    for (let i = 0; i < t.length; i++) {
+      g.setStart(t, i); g.setEnd(t, i + 1);
+      const b = g.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2;
+      if (b.width && x > r.left + 4 && x < r.right - 4 && y > r.top + 2 && y < r.bottom - 2) return { i, x, y };
+    }
+    return null;
+  });
+  expect(target, '닫힌 말풍선 자리 아래에 #p1 글자가 있어야 재현됨').not.toBeNull();
+  await altHoverAt(page, target);
+  await expect.poll(() => hlText(page)).toBe('반면 고정금리는 약정 기간 동안 금리가 바뀌지 않는다.');
+});

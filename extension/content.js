@@ -294,10 +294,11 @@
         .box { position: fixed; max-width: 380px; min-width: 240px; box-sizing: border-box;
           font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
           color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
-          box-shadow: var(--shadow); padding: 12px 14px 10px; pointer-events: auto;
+          box-shadow: var(--shadow); padding: 12px 14px 10px; pointer-events: none;
           opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s; }
         .box.t-maple { border-radius: 6px; box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06); }
-        .box.show { opacity: 1; transform: none; }
+        /* 보일 때만 커서를 받는다. 닫힌(투명·빈) 상자가 그 자리 아래 글자의 호버를 가로채지 않게(T-111 CI) */
+        .box.show { opacity: 1; transform: none; pointer-events: auto; }
         .row { margin: 0 0 8px; }
         .label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--label); margin-bottom: 2px; }
         .analogy { font-weight: 600; color: var(--em); }
