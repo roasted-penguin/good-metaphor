@@ -1096,3 +1096,88 @@ test('이중 방어(T-144): content.js를 건너뛰어도 background가 port·se
   expect(okRes.result.analogy).toContain('같은 구조예요');
   expect(sentCount() - before).toBeGreaterThan(0);
 });
+
+/* ───────── 첫 결과 전 테마 깜빡임 (T-108) ───────── */
+// 말풍선 .box 클래스가 바뀔 때마다 기록한다(처음 그려질 때 포함). 로딩 중인지(spin)도 함께
+async function recordBoxClasses(page) {
+  await page.evaluate(() => {
+    window.__boxLog = [];
+    const log = box => window.__boxLog.push({ cls: box.className, loading: !!box.querySelector('.spin') });
+    const watch = host => {
+      const box = host.shadowRoot.querySelector('.box');
+      log(box);
+      new MutationObserver(() => log(box)).observe(box, { attributes: true, attributeFilter: ['class'], childList: true });
+    };
+    const host = document.getElementById('analogy-helper-host');
+    if (host) return watch(host);
+    new MutationObserver((_, obs) => {
+      const h = document.getElementById('analogy-helper-host');
+      if (h) { obs.disconnect(); watch(h); }
+    }).observe(document.documentElement, { childList: true });
+  });
+}
+const boxLog = page => page.evaluate(() => window.__boxLog);
+const NEUTRAL_OVERLAY = {
+  useCommon: false, domain: '축구', analogyPrefix: '축구로 치면', theme: 'neutral',
+  nodes: [
+    { id: 'u:offside', label: '오프사이드', facts: ['공격수가 마지막 수비수보다 앞에 있으면 반칙이다.'], tags: ['threshold_req'] },
+    { id: 'u:transfer', label: '이적 시장', facts: ['인기 선수는 원하는 구단이 많아 이적료가 오른다.'], tags: ['market_price', 'scarcity_value'] }
+  ]
+};
+
+test('테마(T-108): 중립 관심사면 로딩 말풍선부터 t-neutral, t-maple은 한 번도 없음', async ({ context, ext }) => {
+  await ext.send({ type: 'auth:login', nickname: '테스터' });
+  expect((await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY })).data.ok).toBe(true);
+  expect((await ext.send({ type: 'graph:info' })).data.merged.theme, 'graph:info에 테마').toBe('neutral');
+
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await page.waitForTimeout(500); // 시작할 때 테마를 미리 받는 시간
+  await recordBoxClasses(page);
+  await altHover(page, '#p9');
+  await expect.poll(async () => (await boxLog(page)).some(e => e.loading && e.cls.includes('show')), { message: '로딩 말풍선이 보임' }).toBe(true);
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('축구로 보면');
+  const log = await boxLog(page);
+  expect(log.filter(e => e.loading).length).toBeGreaterThan(0);
+  expect(log.filter(e => e.cls.includes('t-maple')), '메이플 테마가 한 번도 보이면 안 됨').toEqual([]);
+  expect(log.every(e => e.cls.includes('t-neutral'))).toBe(true);
+});
+
+test('테마(T-108): content.js를 거치지 않아도 explain 포트의 stage 메시지마다 theme(중립)이 실린다', async ({ context, ext }) => {
+  await ext.send({ type: 'auth:login', nickname: '테스터' });
+  await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const r = await hook(page, 'explain-port', { sentence: '로딩지연테스트 테마 확인용 문장이에요.', word: '', context: '', pageTitle: 't', noCache: true });
+  expect(r.type).toBe('result');
+  expect(r.stageThemes.length).toBeGreaterThan(0);
+  expect(r.stageThemes.every(t => t === 'neutral'), JSON.stringify(r.stageThemes)).toBe(true);
+  expect(r.result.theme).toBe('neutral');
+});
+
+test('테마(T-108): 메이플 기본이면 로딩 말풍선도 t-maple (바뀌지 않음)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await page.waitForTimeout(500);
+  await recordBoxClasses(page);
+  await altHover(page, '#p9');
+  await expect.poll(async () => (await boxLog(page)).some(e => e.loading), { message: '로딩 말풍선' }).toBe(true);
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('메이플스토리로 보면');
+  const log = await boxLog(page);
+  expect(log.every(e => e.cls.includes('t-maple')), JSON.stringify(log)).toBe(true);
+});
+
+test('테마(T-108): 페이지를 연 뒤 로그인해 중립 관심사로 바꿔도 새로고침 없이 로딩부터 t-neutral', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await page.waitForTimeout(500); // 메이플 테마를 먼저 받아 둔 상태
+  await ext.send({ type: 'auth:login', nickname: '테스터' });
+  await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY });
+  await page.waitForTimeout(500); // 세션·오버레이 키 변경으로 다시 받는 시간
+  await recordBoxClasses(page);
+  await altHover(page, '#p9');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('축구로 보면');
+  const log = await boxLog(page);
+  expect(log.some(e => e.loading)).toBe(true);
+  expect(log.filter(e => e.cls.includes('t-maple')), JSON.stringify(log)).toEqual([]);
+});

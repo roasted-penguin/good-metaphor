@@ -9,10 +9,12 @@
   function viaPort(id, payload) {
     const port = chrome.runtime.connect({ name: 'explain' });
     const stages = [];
+    const stageThemes = []; // stage 메시지마다 실린 theme (T-108)
     port.onMessage.addListener(m => {
+      if (m.type === 'stage') stageThemes.push(m.theme ?? null);
       if (m.type === 'stage' || m.type === 'partial') { stages.push(m.type === 'stage' ? m.stage : 'partial'); return; }
       if (m.type === 'result' || m.type === 'error') {
-        reply({ id, kind: 'explain-port', ok: m.type === 'result', type: m.type, error: m.error ?? null, result: m.result ?? null, stages });
+        reply({ id, kind: 'explain-port', ok: m.type === 'result', type: m.type, error: m.error ?? null, result: m.result ?? null, stages, stageThemes });
         port.disconnect();
       }
     });

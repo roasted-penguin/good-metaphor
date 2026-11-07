@@ -1,5 +1,6 @@
 // e2e용 서버 세 개: 가짜 LLM(OpenAI 호환, :8765), 테스트 페이지(:8766), 가짜 analogy-api(:8767, T-404)
 // 가짜 LLM은 stream:true 면 SSE로, meaning 까지 먼저 보내고 나머지는 STREAM_GAP_MS 뒤에 보낸다.
+// "로딩지연테스트" 문장은 SLOW_MS 뒤에 답한다(로딩 상태 붙잡기).
 // 모델이 'mock-busy'면 429(Retry-After 60)를 낸다(fallback 체인 확인용).
 // 문장에 "Leverage"가 있으면 후보에 없는 nodeId 로 답한다(근거 검증 확인용)
 // 정상 답에는 usedFact = 후보 [1]의 첫 fact 를 넣는다(T-123). 근거 검사 확인용 표시어:
@@ -10,6 +11,8 @@ import { readFileSync } from 'node:fs';
 export const calls = [];
 export const analogyCalls = []; // 가짜 analogy-api 요청 기록 { headers, body }
 export const STREAM_GAP_MS = 1500;
+// 문장에 "로딩지연테스트"가 있으면 응답을 이만큼 늦춘다(로딩 말풍선을 붙잡아 두는 용도, T-108)
+export const SLOW_MS = 2500;
 
 function mockLLM(req, res) {
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS' };
@@ -39,9 +42,13 @@ function mockLLM(req, res) {
       else if (user.includes('사실조작테스트')) content = answer('메이플로 치면 보스에 하루 세 번 들어가는 것과 같아요.', '보스는 하루에 세 번까지 입장할 수 있다.');
       else content = answer(`메이플로 치면 ${label}과 같은 구조예요.`);
     }
-    if (stream) return streamOut(res, cors, content);
-    res.writeHead(200, { ...cors, 'content-type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));
+    const out = () => {
+      if (stream) return streamOut(res, cors, content);
+      res.writeHead(200, { ...cors, 'content-type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));
+    };
+    if (user.includes('로딩지연테스트')) return void setTimeout(out, SLOW_MS);
+    out();
   });
 }
 
