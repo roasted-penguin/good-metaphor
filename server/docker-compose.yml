@@ -1,0 +1,14 @@
+# 로컬 실행용. 빌드·실행 확인은 T-402 Task 4에서 한다.
+services:
+  analogy-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      WORKSPACE: common_maplestory
+      RATE_LIMIT_PER_MIN: "30"
+      COMMON_GRAPH_PATH: /data/common/maplestory.json
+      # GEMINI_API_KEY는 실행하는 셸 환경에서 넘긴다(값을 이 파일에 쓰지 않는다)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - ../extension/data/common:/data/common:ro
