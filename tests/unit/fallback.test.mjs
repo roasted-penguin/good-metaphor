@@ -246,6 +246,10 @@ test('하루 한도 기간: Groq "try again in" 시간을 올림해 쓴다', () 
   assert.equal(cooldownMsFor(custom('5.3s'), cd126, 0), 60_000, '최소 defaultMs');
   assert.equal(cooldownMsFor(custom('2m0.0004s'), cd126, 0), 2 * MIN + 1, 'ms 미만은 올림');
   assert.equal(cooldownMsFor(custom('30h'), cd126, 0), 86_400_000, '상한 dailyMaxMs');
+  assert.equal(cooldownMsFor(custom('820ms'), cd126, 0), 60_000, 'ms 단위는 분이 아님(최소 defaultMs)');
+  assert.equal(cooldownMsFor(custom('1m30.5s'), cd126, 0), MIN + 30_500);
+  assert.equal(cooldownMsFor(custom('1h2m'), cd126, 0), HOUR + 2 * MIN);
+  assert.equal(cooldownMsFor(custom('3m500ms'), cd126, 0), 3 * MIN + 500);
 });
 
 test('분당 429 는 지금과 같다: Retry-After 또는 defaultMs, 상한 maxMs (본문의 try again·retryDelay 무시)', () => {
@@ -286,6 +290,7 @@ test('postOnce: 오류에 원문 본문(앞 4000자)을 붙이고, message 는 �
   const e = await completeWithFallback(only, 's', 'u', {}, { cooldowns: memCooldowns(), cooldown: cd126, now: () => 0 }).catch(x => x);
   assert.equal(e.message, '429 rate');
   assert.equal(e.body, JSON.stringify(long).slice(0, 4000));
+  assert.equal(Object.keys(e).includes('body'), false, 'console.error 로 펼쳐도 안 보이게 열거 안 됨');
 });
 
 test('통합: 하루 한도 429 모델은 리셋 시각까지 쿨다운, 다음 호출에서 쿨다운 중으로 빠진다', async t => {
