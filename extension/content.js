@@ -113,9 +113,18 @@
   }
 
   // 비밀번호 칸이 있는 폼 안 문장은 설정과 무관하게 보내지 않는다(T-107)
+  // shadow 안 문장(T-111)도 막도록 composed tree 를 올라간다: 각 트리에서 closest('form')을 보고 shadow 면 host 로 건너 다시.
+  // 바깥 트리의 폼도 봐야 하므로(비밀번호 없는 shadow 안 폼이 비밀번호 있는 바깥 폼 안에 있을 수 있음) 찾을 때까지 끝까지 오른다.
+  // 비밀번호 칸은 form.elements(폼 연동 호스트 포함) 또는 폼 안 input[type=password]로 본다
+  const hasPassword = form => [...form.elements].some(f => f.type === 'password') || !!form.querySelector('input[type=password]');
   function inPasswordForm(node) {
-    const form = node.parentElement?.closest('form');
-    return !!form && [...form.elements].some(el => el.type === 'password');
+    for (let el = AS.composedParent(node); el; ) {
+      const form = el.closest('form');
+      if (form && hasPassword(form)) return true;
+      const root = el.getRootNode();
+      el = AS.isShadowRoot(root) ? root.host : null;
+    }
+    return false;
   }
 
   // shadow 안이면 호스트를 거쳐 문서까지 올라가 본다(shadow root 직속 텍스트는 parentElement 가 null, T-111)
