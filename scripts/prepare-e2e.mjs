@@ -19,6 +19,13 @@ admin.fallbackChain = [{ provider: 'custom', model: 'mock-model' }];
 admin.analogyServer = { url: 'http://127.0.0.1:8767', timeoutMs: 800 };
 writeFileSync(p, JSON.stringify(admin, null, 2));
 
+// 테스트 전용 콘텐츠 스크립트(T-144): 사본 manifest에만 등록한다. 실제 extension/ 은 그대로
+copyFileSync('tests/e2e/hook-content.js', `${OUT}/e2e-hook.js`);
+const mp = `${OUT}/manifest.json`;
+const manifest = JSON.parse(readFileSync(mp, 'utf8'));
+manifest.content_scripts.push({ matches: ['http://127.0.0.1:8766/*'], js: ['e2e-hook.js'], run_at: 'document_start' });
+writeFileSync(mp, JSON.stringify(manifest, null, 2));
+
 await build({ entryPoints: ['tests/e2e/ort-smoke-src.js'], bundle: true, format: 'esm', platform: 'browser', outfile: `${OUT}/ort-smoke.js`, logLevel: 'warning' });
 copyFileSync('tests/e2e/add.onnx', `${OUT}/add.onnx`);
 writeFileSync(`${OUT}/ort-smoke.html`, '<!doctype html><meta charset="utf-8"><title>ORT_PENDING</title><script type="module" src="ort-smoke.js"></script>');

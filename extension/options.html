@@ -72,6 +72,20 @@
       </div>
     </section>
 
+    <!-- 1-1. 제외 사이트 (T-107, T-144) -->
+    <section id="sec-sites">
+      <h2>제외 사이트</h2>
+      <p class="desc">이 사이트에서는 문장을 읽지 않아요. 메일·은행·로그인 페이지는 기본으로 들어 있어요.</p>
+      <ul class="site-list" id="siteList" hidden></ul>
+      <p class="site-empty hint" id="siteEmpty" hidden>제외한 사이트가 없어요.</p>
+      <form class="row site-add" id="siteForm">
+        <input type="text" id="siteInput" placeholder="예: mail.example.com" aria-label="제외할 사이트 주소" autocomplete="off" spellcheck="false">
+        <button type="submit" id="siteAdd">추가</button>
+        <button type="button" class="link" id="siteReset">기본 목록으로 되돌리기</button>
+      </form>
+      <p class="status" id="siteStatus" role="status"></p>
+    </section>
+
     <!-- 2. AI 제공자 -->
     <section id="sec-provider">
       <h2>AI 제공자</h2>

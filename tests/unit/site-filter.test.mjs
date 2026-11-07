@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import '../../extension/lib/site-filter.js';
 import { DEFAULT_SETTINGS } from '../../extension/lib/config.js';
 
-const { normalizeHost, isExcludedHost, toggleHost, isBlockedSender, DEFAULT_EXCLUDED_HOSTS } = globalThis.AnalogySiteFilter;
+const { normalizeHost, isExcludedHost, toggleHost, isBlockedSender, validateHostInput, DEFAULT_EXCLUDED_HOSTS } = globalThis.AnalogySiteFilter;
 const LIST = ['kbstar.com', 'mail.google.com'];
 
 test('normalizeHost: 소문자·끝 점·www. 제거, 포트·URL 무시, 빈 값은 빈 문자열', () => {
@@ -81,4 +81,26 @@ test('isBlockedSender: 탭에서 온 메시지만 본다, sender.url 먼저 그�
   assert.equal(isBlockedSender({ tab: { url: 'http://127.0.0.1/' }, url: 'https://example.com/' }, list), false, 'sender.url 우선');
   assert.equal(isBlockedSender({ tab: {} }, list), false, 'URL을 모르면 막지 않음');
   assert.equal(isBlockedSender({ tab: {}, url: 'https://example.com/' }, list), false);
+});
+
+test('validateHostInput: URL이든 호스트든 정규화해서 받는다 (T-144)', () => {
+  assert.deepEqual(validateHostInput('https://WWW.Mail.Example.com/inbox?x=1', []), { ok: true, host: 'mail.example.com' });
+  assert.deepEqual(validateHostInput('  shop.example.co.kr:8443 ', []), { ok: true, host: 'shop.example.co.kr' });
+  assert.deepEqual(validateHostInput('localhost', []), { ok: true, host: 'localhost' });
+  assert.deepEqual(validateHostInput('127.0.0.1', []), { ok: true, host: '127.0.0.1' });
+  assert.deepEqual(validateHostInput('http://127.0.0.1:8766/', []), { ok: true, host: '127.0.0.1' });
+});
+
+test('validateHostInput: 빈 값·공백·점 없는 단어·이상한 글자는 invalid', () => {
+  for (const bad of ['', '   ', undefined, null, 'abc', 'a b.com', 'exa mple', 'foo..com', '.com', 'bad_host!.com', 'file:///a/b.html']) {
+    assert.deepEqual(validateHostInput(bad, []), { ok: false, error: 'invalid' }, String(bad));
+  }
+});
+
+test('validateHostInput: 같거나 상위 도메인이 이미 있으면 duplicate', () => {
+  assert.deepEqual(validateHostInput('kbstar.com', DEFAULT_EXCLUDED_HOSTS), { ok: false, error: 'duplicate' });
+  assert.deepEqual(validateHostInput('https://m.kbstar.com/x', DEFAULT_EXCLUDED_HOSTS), { ok: false, error: 'duplicate' });
+  assert.deepEqual(validateHostInput('WWW.TOSS.IM', DEFAULT_EXCLUDED_HOSTS), { ok: false, error: 'duplicate' });
+  assert.deepEqual(validateHostInput('notkbstar.com', DEFAULT_EXCLUDED_HOSTS), { ok: true, host: 'notkbstar.com' });
+  assert.deepEqual(validateHostInput('google.com', DEFAULT_EXCLUDED_HOSTS), { ok: true, host: 'google.com' }, '하위 도메인만 있으면 상위는 새로 넣을 수 있음');
 });

@@ -54,5 +54,21 @@
     return !!url && isExcludedHost(url, list);
   }
 
-  globalThis.AnalogySiteFilter = Object.freeze({ DEFAULT_EXCLUDED_HOSTS, normalizeHost, isExcludedHost, toggleHost, isBlockedSender });
+  // 설정 화면 "추가" 입력 검증(T-144). URL이든 호스트든 정규화한다.
+  // 점 없는 단어는 거부(localhost만 예외, IPv4는 점이 있어 통과). 같거나 상위 도메인이 이미 있으면 duplicate
+  const LABEL = '[a-z0-9](?:[a-z0-9-]*[a-z0-9])?';
+  const HOST_RE = new RegExp(`^${LABEL}(?:\\.${LABEL})+$`);
+  function validateHostInput(input, list) {
+    const raw = String(input ?? '').trim();
+    if (!raw || /\s/.test(raw)) return { ok: false, error: 'invalid' };
+    let host = normalizeHost(raw);
+    if (!host) return { ok: false, error: 'invalid' };
+    // 한글 도메인 등은 브라우저 location.hostname과 같은 퓨니코드로 바꾼다
+    try { host = new URL('http://' + host).hostname; } catch { return { ok: false, error: 'invalid' }; }
+    if (host !== 'localhost' && !HOST_RE.test(host)) return { ok: false, error: 'invalid' };
+    if (isExcludedHost(host, list)) return { ok: false, error: 'duplicate' };
+    return { ok: true, host };
+  }
+
+  globalThis.AnalogySiteFilter = Object.freeze({ DEFAULT_EXCLUDED_HOSTS, normalizeHost, isExcludedHost, toggleHost, isBlockedSender, validateHostInput });
 })();

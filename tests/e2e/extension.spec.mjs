@@ -989,3 +989,110 @@ test('비밀번호 폼(T-107): 같은 블록 안 비밀번호 폼 글자는 문�
   expect(mine.filter(c => c.user.includes('폼라벨비밀문구')), 'LLM에 폼 글자가 가면 안 됨').toEqual([]);
   expect(analogyCalls.slice(serverBefore).filter(c => JSON.stringify(c.body).includes('폼라벨비밀문구')), '서버에도 안 감').toEqual([]);
 });
+
+/* ───────── 제외 사이트 다듬기 (T-144) ───────── */
+const siteItems = p => p.locator('#siteList li');
+
+test('설정 화면 제외 사이트(T-144): 기본 17개, 추가하면 열린 탭이 바로 꺼지고 지우면 다시 동작', async ({ context, ext }) => {
+  const opt = ext.page;
+  await expect(siteItems(opt)).toHaveCount(17);
+  await expect(opt.locator('#sec-sites h2')).toHaveText('제외 사이트');
+  await expect(opt.locator('#sec-sites .desc')).toHaveText('이 사이트에서는 문장을 읽지 않아요. 메일·은행·로그인 페이지는 기본으로 들어 있어요.');
+  await expect(opt.locator('#siteInput')).toHaveAttribute('placeholder', '예: mail.example.com');
+  await expect(siteItems(opt).first()).toContainText('mail.google.com');
+
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+
+  await opt.fill('#siteInput', 'http://127.0.0.1:8766/');
+  await opt.click('#siteAdd');
+  await expect(siteItems(opt)).toHaveCount(18);
+  await expect(siteItems(opt).last()).toContainText('127.0.0.1');
+  await expect(opt.locator('#siteInput')).toHaveValue('');
+
+  await page.waitForTimeout(300);
+  const before = sentCount();
+  await altHover(page, '#p1');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '제외 사이트에서는 말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+
+  await opt.getByRole('button', { name: '127.0.0.1 지우기' }).click();
+  await expect(siteItems(opt)).toHaveCount(17);
+  await page.waitForTimeout(300);
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+});
+
+test('설정 화면 제외 사이트(T-144): 잘못된 입력·중복 오류, 기본 목록으로 되돌리기, 다른 곳에서 바뀌면 다시 그림', async ({ ext }) => {
+  const opt = ext.page;
+  await expect(siteItems(opt)).toHaveCount(17);
+  await opt.fill('#siteInput', 'abc');
+  await opt.click('#siteAdd');
+  await expect(opt.locator('#siteStatus')).toHaveText('주소를 확인해 주세요.');
+  await expect(opt.locator('#siteInput')).toHaveValue('abc');
+  await opt.fill('#siteInput', 'https://m.kbstar.com/x');
+  await opt.press('#siteInput', 'Enter');
+  await expect(opt.locator('#siteStatus')).toHaveText('이미 들어 있어요.');
+  await expect(siteItems(opt)).toHaveCount(17);
+
+  await opt.getByRole('button', { name: 'kbstar.com 지우기', exact: true }).click();
+  await opt.getByRole('button', { name: 'toss.im 지우기' }).click();
+  await expect(siteItems(opt)).toHaveCount(15);
+  const saved = async () => (await ext.page.evaluate(async () => (await chrome.storage.local.get('settings')).settings.excludedHosts));
+  expect(await saved()).not.toContain('kbstar.com');
+
+  await opt.click('#siteReset');
+  await expect(siteItems(opt)).toHaveCount(17);
+  expect((await saved()).length).toBe(17);
+
+  // 팝업 토글처럼 다른 곳에서 저장해도 다시 그린다. 빈 목록 안내는 목록 밖 문단
+  await ext.setSettings({ excludedHosts: [] });
+  await expect(opt.locator('#siteEmpty')).toBeVisible();
+  await expect(opt.locator('#siteEmpty')).toHaveText('제외한 사이트가 없어요.');
+  await expect(opt.locator('#siteList')).toBeHidden();
+  await ext.setSettings({ excludedHosts: ['example.com'] });
+  await expect(siteItems(opt)).toHaveCount(1);
+  await expect(opt.locator('#siteEmpty')).toBeHidden();
+});
+
+// 테스트 전용 훅(hook-content.js)으로 content.js를 거치지 않고 background에 바로 보낸다
+const hook = (page, kind, payload) => page.evaluate(([k, p]) => new Promise((resolve, reject) => {
+  const id = Math.random().toString(36).slice(2);
+  const t = setTimeout(() => reject(new Error('훅 응답 없음: ' + k)), 20000);
+  window.addEventListener('message', function on(e) {
+    if (e.source !== window || e.data?.__e2eHookResult?.id !== id) return;
+    window.removeEventListener('message', on);
+    clearTimeout(t);
+    resolve(e.data.__e2eHookResult);
+  });
+  window.postMessage({ __e2eHook: k, id, payload: p }, '*');
+}), [kind, payload]);
+
+test('이중 방어(T-144): content.js를 건너뛰어도 background가 port·sendMessage·피드백 rerun 모두 막고, 빼면 정상', async ({ context, ext }) => {
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const q = { sentence: '이중방어테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', word: '', context: '', pageTitle: 't', noCache: true };
+  const before = sentCount();
+  const fbBefore = (await ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback || [])).length;
+
+  const port = await hook(page, 'explain-port', q);
+  expect(port).toMatchObject({ ok: false, type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+  expect(port.stages, '임베딩·검색 단계도 없음').toEqual([]);
+  const msg = await hook(page, 'explain-msg', q);
+  expect(msg).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  const fb = await hook(page, 'feedback', q);
+  expect(fb).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+
+  expect(sentCount() - before, '가짜 LLM·가짜 analogy-api 요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('이중방어테스트'))).toBe(false);
+  const fbAfter = (await ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback || [])).length;
+  expect(fbAfter, '막힌 피드백은 기록도 안 남김').toBe(fbBefore);
+
+  await ext.setSettings({ excludedHosts: [] });
+  const okRes = await hook(page, 'explain-port', q);
+  expect(okRes.type).toBe('result');
+  expect(okRes.result.analogy).toContain('같은 구조예요');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});

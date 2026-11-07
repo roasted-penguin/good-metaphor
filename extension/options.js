@@ -1,4 +1,7 @@
 import { localDay, formatFeedbackStats } from './lib/feedback.js';
+import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
+
+const SF = globalThis.AnalogySiteFilter;
 
 const $ = s => document.querySelector(s);
 const send = (type, extra = {}) => new Promise((resolve, reject) => {
@@ -40,6 +43,56 @@ function renderTrigger(s) {
   $('#preciseMode').checked = s.preciseMode;
   syncTriggerUI();
 }
+
+/* ───────── 제외 사이트 (T-107, T-144) ───────── */
+// 저장된 순서 그대로 그린다. 읽기·그리기만 하고 저장하지 않는다(onChanged 갱신이 루프를 만들지 않게)
+let siteHosts = [];
+function renderSites(list) {
+  siteHosts = Array.isArray(list) ? [...list] : [...SF.DEFAULT_EXCLUDED_HOSTS];
+  $('#siteList').innerHTML = siteHosts.map((h, i) => `
+    <li><span class="site-host" title="${esc(h)}">${esc(h)}</span>
+      <button type="button" class="site-del" data-i="${i}" aria-label="${esc(h)} 지우기">×</button></li>`).join('');
+  // 빈 목록 안내는 목록 밖 문단으로(접근성)
+  $('#siteList').hidden = !siteHosts.length;
+  $('#siteEmpty').hidden = !!siteHosts.length;
+}
+// 저장 실패면 화면을 저장 전 목록으로 되돌린다
+async function saveSites(next) {
+  const prev = siteHosts;
+  renderSites(next);
+  try {
+    state.settings = await send('settings:save', { patch: { excludedHosts: next } });
+    return true;
+  } catch {
+    renderSites(prev);
+    setStatus($('#siteStatus'), '저장하지 못했어요. 다시 시도해 주세요.', 'err');
+    return false;
+  }
+}
+const SITE_ERR = { invalid: '주소를 확인해 주세요.', duplicate: '이미 들어 있어요.' };
+$('#siteForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const v = SF.validateHostInput($('#siteInput').value, siteHosts);
+  if (!v.ok) return setStatus($('#siteStatus'), SITE_ERR[v.error], 'err');
+  setStatus($('#siteStatus'), '');
+  if (await saveSites([...siteHosts, v.host])) $('#siteInput').value = '';
+});
+$('#siteList').addEventListener('click', e => {
+  const b = e.target.closest('.site-del');
+  if (!b) return;
+  setStatus($('#siteStatus'), '');
+  saveSites(siteHosts.filter((_, i) => i !== +b.dataset.i));
+});
+$('#siteReset').addEventListener('click', () => {
+  setStatus($('#siteStatus'), '');
+  saveSites([...SF.DEFAULT_EXCLUDED_HOSTS]);
+});
+// 팝업 "이 사이트에서 끄기" 등 다른 곳에서 바뀌면 다시 그린다(읽기만)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  const next = changes.settings.newValue?.excludedHosts;
+  if (JSON.stringify(next ?? SF.DEFAULT_EXCLUDED_HOSTS) !== JSON.stringify(siteHosts)) renderSites(next);
+});
 
 /* ───────── 첫 실행 안내 (T-116) ───────── */
 async function initOnboarding() {
@@ -354,6 +407,7 @@ $('#fbShare').addEventListener('change', async () => {
 (async function init() {
   state = await send('settings:get');
   renderTrigger(state.settings);
+  renderSites(state.settings.excludedHosts);
   initOnboarding();
 
   const allowed = state.admin.allowedProviders || Object.keys(state.providers);
