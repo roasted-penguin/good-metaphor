@@ -270,23 +270,25 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
 
 /* ───────────── 메시지 ───────────── */
 
+// 이중 방어(T-107): content.js가 막지만, 보낸 탭 호스트가 제외 목록이면 임베딩·LLM 없이 끝낸다.
+// explain()을 부르는 모든 길(포트, sendMessage explain, 피드백 rerun)에서 먼저 확인한다
+const SITE_OFF = '이 사이트에서는 꺼져 있어요.';
+async function siteBlocked(sender) {
+  if (!sender?.tab) return false; // 확장 페이지 등은 설정을 읽지 않고 통과
+  const { excludedHosts } = await getSettings();
+  return globalThis.AnalogySiteFilter.isBlockedSender(sender, excludedHosts);
+}
+async function assertSiteAllowed(sender) {
+  if (await siteBlocked(sender)) throw new Error(SITE_OFF);
+}
+
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'explain') return;
   port.onMessage.addListener(async msg => {
     if (msg.type !== 'explain') return;
     try {
       const post = m => { try { port.postMessage({ id: msg.id, ...m }); } catch {} };
-      // 이중 방어(T-107): content.js가 막지만, 보낸 탭 호스트가 제외 목록이면 임베딩·LLM 없이 끝낸다.
-      // 탭에서 온 연결이 아니거나 URL을 모르면(확장 페이지 등) 막지 않는다.
-      // sender.url은 권한 없이도 오는 보낸 문서 주소, tab.url은 tabs·호스트 권한이 있을 때만 온다
-      const tabUrl = port.sender?.tab ? (port.sender.url || port.sender.tab.url) : null;
-      if (tabUrl) {
-        const { excludedHosts } = await getSettings();
-        if (globalThis.AnalogySiteFilter.isExcludedHost(tabUrl, excludedHosts)) {
-          post({ type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
-          return;
-        }
-      }
+      if (await siteBlocked(port.sender)) { post({ type: 'error', error: SITE_OFF }); return; }
       countHover();
       const result = await explain(msg.payload, stage => post({ type: 'stage', stage }), partial => post({ type: 'partial', partial }));
       port.postMessage({ type: 'result', id: msg.id, result });
@@ -395,9 +397,10 @@ const handlers = {
     const text = await complete(provider, '짧게 답하는 도우미다.', '"연결 성공"이라고만 답해.', { json: false });
     return { ok: true, text: text.trim().slice(0, 80), provider: `${provider.id}/${provider.model}` };
   },
-  async explain(payload) { countHover(); return explain(payload); },
+  async explain(payload, sender) { await assertSiteAllowed(sender); countHover(); return explain(payload); },
   // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
-  async feedback({ record, rerun }) {
+  async feedback({ record, rerun }, sender) {
+    await assertSiteAllowed(sender);
     const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
     delete r.vec; // 벡터는 받지 않고 여기서 만든다
     if (r.vote === 'down' || r.vote === 'pick') {
@@ -414,7 +417,8 @@ const handlers = {
     await feedbackStore.set(setReason(await feedbackStore.get(), id, reason));
     return true;
   },
-  async 'feedback-undo'({ id, rerun }) {
+  async 'feedback-undo'({ id, rerun }, sender) {
+    if (rerun) await assertSiteAllowed(sender);
     const before = await feedbackStore.get();
     const undone = before.find(r => r.id === id);
     const records = removeRecord(before, id);
@@ -446,11 +450,11 @@ const handlers = {
   async 'open-options'() { await chrome.runtime.openOptionsPage(); return true; }
 };
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.target === 'offscreen') return;
   const h = handlers[msg.type];
   if (!h) return;
-  h(msg).then(r => sendResponse({ ok: true, data: r }), e => sendResponse({ ok: false, error: String(e?.message || e) }));
+  h(msg, sender).then(r => sendResponse({ ok: true, data: r }), e => sendResponse({ ok: false, error: String(e?.message || e) }));
   return true;
 });
 

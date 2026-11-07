@@ -45,5 +45,14 @@
     return [...arr, h];
   }
 
-  globalThis.AnalogySiteFilter = Object.freeze({ DEFAULT_EXCLUDED_HOSTS, normalizeHost, isExcludedHost, toggleHost });
+  // background 이중 방어: 메시지를 보낸 쪽이 제외 사이트의 탭인가.
+  // 탭에서 온 게 아니거나(확장 페이지 등) URL을 모르면 막지 않는다.
+  // sender.url은 권한 없이도 오는 보낸 문서 주소, tab.url은 tabs·호스트 권한이 있을 때만 온다
+  function isBlockedSender(sender, list) {
+    if (!sender?.tab) return false;
+    const url = sender.url || sender.tab.url;
+    return !!url && isExcludedHost(url, list);
+  }
+
+  globalThis.AnalogySiteFilter = Object.freeze({ DEFAULT_EXCLUDED_HOSTS, normalizeHost, isExcludedHost, toggleHost, isBlockedSender });
 })();

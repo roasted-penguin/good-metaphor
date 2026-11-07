@@ -42,9 +42,15 @@ $('#enabled').addEventListener('change', e => send('settings:save', { patch: { e
 $('#siteOff').addEventListener('change', async e => {
   if (!siteHost) return;
   const want = e.target.checked;
-  const { settings } = await send('settings:get'); // 다른 곳에서 바뀌었을 수 있어 최신 목록으로
-  const list = settings.excludedHosts || [];
-  if (SF.isExcludedHost(siteHost, list) === want) return;
-  await send('settings:save', { patch: { excludedHosts: SF.toggleHost(list, siteHost) } });
+  try {
+    const { settings } = await send('settings:get'); // 다른 곳에서 바뀌었을 수 있어 최신 목록으로
+    const list = settings.excludedHosts || [];
+    if (SF.isExcludedHost(siteHost, list) === want) return;
+    await send('settings:save', { patch: { excludedHosts: SF.toggleHost(list, siteHost) } });
+  } catch (err) {
+    // 저장 못 했으면 체크를 되돌리고, 팝업이 오류를 보이는 자리(#howto)에 알린다
+    e.target.checked = !want;
+    $('#howto').textContent = `사이트 설정을 저장하지 못했어요. ${err?.message || ''}`.trim();
+  }
 });
 $('#open').addEventListener('click', () => chrome.runtime.openOptionsPage());
