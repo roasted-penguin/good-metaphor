@@ -21,8 +21,14 @@ export const COUNTERS = ['번', '회', '개', '명', '마리', '장', '권', '�
   '세트', '묶음', '바퀴'];
 // 한자어 수 뒤에만 오는 단위
 export const SINO_UNITS = ['원', '메소', '포인트', '퍼센트', '%'];
-// 수와 붙여 쓰면(공백 0개) 다른 낱말이 되는 세는 말: 세일·세대·두통·열등·열위·석회·넉살·세분·세배·십분·만회
+// 수와 붙여 쓰면(공백 0개) 다른 낱말이 되는 세는 말: 세일·세대·두통·열등·열위·석회·세분·십분·만회
 const ATTACHED_BLOCK = ['일', '대', '통', '등', '위', '분', '판', '회', '살', '배', '주', '년'];
+// 고유어 수에는 붙여 써도 되는 세는 말(T-145): 두배·세살·열살. 단, 아래 낱말은 수가 아니다
+const NATIVE_ATTACHED_OK = ['배', '살'];
+// 고유어 수 + 붙여 쓴 세는 말이 다른 낱말일 때: 넉살은 수가 아님(null), 세배(새해 인사)는 수가 아닐 수도 있음(optional)
+const NATIVE_ATTACHED_WORDS = { 넉살: null, 세배: 'optional' };
+// "네"가 "너의"일 수도 있는 세는 말(T-145): 네 차례, 네 일
+const NE_YOUR_COUNTERS = ['차례', '일'];
 // 세는 말 바로 뒤에 와도 되는 글자(조사·접미사 첫 글자). 그 밖의 한글이 오면 다른 낱말("두 대상", "네 주인")
 const AFTER_COUNTER = '이가을를은는에의도만씩째쯤과와로으까부마밖뿐나랑짜동간께요엔예';
 const NATIVE_TENS = { 열: 10, 스물: 20, 스무: 20, 서른: 30, 마흔: 40, 쉰: 50 };
@@ -48,8 +54,12 @@ const NUMBER_RE = new RegExp([
   `(?<![가-힣])(?:(?<tens>${alt(Object.keys(NATIVE_TENS))})(?:${SP}?(?<u1>${alt(Object.keys(NATIVE_UNITS))}))?` +
     `|(?<u2>${alt(Object.keys(NATIVE_UNITS))}))(?<sp1>${SP}?)(?<c1>${COUNTER_ALT})${AFTER}`,
   // 한자어 수 + 세는 말·단위. 한자어 글자 연속은 통째로만 본다("만일"을 "만"+"일"로 쪼개지 않음)
-  `(?<![가-힣])(?=(?<run>[일이삼사오육칠팔구십백천만억]+))\\k<run>(?<sp2>${SP}?)(?<c2>${alt([...COUNTERS, ...SINO_UNITS])})${AFTER}`
+  // 세는 말이 없어도 "이십일"처럼 일로 끝나면 잡아 두고 코드에서 가린다(T-145)
+  `(?<![가-힣])(?=(?<run>[일이삼사오육칠팔구십백천만억]+))\\k<run>(?:(?<sp2>${SP}?)(?<c2>${alt([...COUNTERS, ...SINO_UNITS])}))?${AFTER}`
 ].join('|'), 'g');
+// 단독 "N만" 뒤에 세는 말·화폐가 오는지(오면 N×10000 하나, 아니면 "N만(=N뿐)"일 수도 있음)
+const COUNTED_AFTER_RE = new RegExp(`^${SP}?(?:${alt([...COUNTERS, ...SINO_UNITS])})${AFTER}`);
+const LONE_MAN_RE = /^(\d+)만$/;
 const PIECE_RE = /(\d+(?:\.\d+)?)?[ \t\r\n]?([억만천백])/g;
 
 // 자리 단위 계산: [[수(문자열)|null, 단위|null], ...] → 정수 문자열, 정수가 아니면 null.
@@ -80,32 +90,62 @@ function sinoValue(run) {
   return evalPieces([...run].map(ch => ch in SINO_DIGITS ? [String(SINO_DIGITS[ch]), null] : [null, ch]));
 }
 
-// 숫자를 등장 순으로 뽑아 정수의 10진 표기 배열로 돌려준다.
+// 수 표현을 등장 순으로 읽기 후보 묶음 { readings, optional }으로 돌려준다(T-145).
+// - readings: 정수의 10진 표기. 확실하면 하나, 뜻이 둘이면 둘("200만 쓰면" → 2000000 또는 200).
+// - optional: 숫자가 아닐 수도 있음("네 차례" = 너의 차례, "세배" = 새해 인사).
+// 규칙(T-143):
 // - 아라비아 숫자 연속. "1,000"처럼 천 단위 쉼표는 붙여 하나로 본다. NFKC로 전각 숫자("１０")도 같게 본다.
 // - 아라비아 숫자 + 자리 단위("1만 2천" → 12000). 바뀐 수 하나만 낸다("1만"이 "1"을 따로 내지 않음).
 // - 고유어 수 + 세는 말("두 번" → 2). 단독 "한/하나"는 관용 표현("한 번에")이 많아 바꾸지 않는다.
 // - 한자어 수 + 세는 말·원·메소 등("삼천 원" → 3000).
-export function numbersIn(text) {
+export function numberGroups(text) {
   const s = String(text ?? '').normalize('NFKC').replace(/(\d),(?=\d{3}(?!\d))/g, '$1');
   const out = [];
+  const push = (readings, optional = false) => out.push({ readings, optional });
   for (const m of s.matchAll(NUMBER_RE)) {
     const g = m.groups;
     if (g.au) {
       const v = evalPieces([...g.au.matchAll(PIECE_RE)].map(p => [p[1] ?? null, p[2]]));
-      out.push(...(v != null ? [v] : g.au.match(/\d+/g)));
+      if (v == null) { for (const d of g.au.match(/\d+/g)) push([d]); continue; }
+      // 단독 "N만" 뒤에 세는 말·화폐가 없으면 "N뿐"일 수도 있다("레벨 200만 입장")
+      const lone = g.au.match(LONE_MAN_RE);
+      const counted = COUNTED_AFTER_RE.test(s.slice(m.index + g.au.length));
+      push(lone && !counted ? [v, String(BigInt(lone[1]))] : [v]);
     } else if (g.d) {
-      out.push(g.d);
+      push([g.d]);
     } else if (g.c1) {
-      if (!g.sp1 && ATTACHED_BLOCK.includes(g.c1)) continue;
+      const unit = g.u1 ?? g.u2;
       if (!g.tens && NATIVE_UNITS[g.u2] === 1) continue;
-      out.push(String((NATIVE_TENS[g.tens] ?? 0) + (NATIVE_UNITS[g.u1 ?? g.u2] ?? 0)));
+      let optional = false;
+      if (!g.sp1 && ATTACHED_BLOCK.includes(g.c1)) {
+        if (!NATIVE_ATTACHED_OK.includes(g.c1)) continue;
+        const word = NATIVE_ATTACHED_WORDS[(g.tens ?? '') + (g.u1 ?? g.u2 ?? '') + g.c1];
+        if (word === null) continue;
+        optional = word === 'optional';
+      }
+      if (!g.tens && g.u2 === '네' && NE_YOUR_COUNTERS.includes(g.c1)) optional = true;
+      push([String((NATIVE_TENS[g.tens] ?? 0) + (NATIVE_UNITS[unit] ?? 0))], optional);
     } else if (g.c2) {
       if (!g.sp2 && ATTACHED_BLOCK.includes(g.c2)) continue;
+      // "백일장"처럼 일로 끝나는 한자어 수에 세는 말이 붙으면 다른 낱말이다(띄어 쓴 "이십일 장"은 수)
+      if (!g.sp2 && g.run.length >= 2 && g.run.endsWith('일')) continue;
       const v = sinoValue(g.run);
-      if (v != null) out.push(v);
+      if (v != null) push([v]);
+    } else if (g.run) {
+      // 세는 말 없이 "이십일·삼십일·백일": 21(수 전체) 또는 20+일(날짜 세는 말). 앞 글자가 십·백·천일 때만
+      // ("만일"은 "만약"의 뜻이라 빼고, 단독 "일"도 수가 아니다)
+      const run = g.run;
+      if (run.length < 2 || !run.endsWith('일') || !(run[run.length - 2] in SMALL_UNITS)) continue;
+      const whole = sinoValue(run), day = sinoValue(run.slice(0, -1));
+      if (whole != null && day != null) push([whole, day]);
     }
   }
   return out;
+}
+
+// 숫자를 등장 순으로 뽑아 정수의 10진 표기 배열로 돌려준다. 모든 묶음의 readings를 펼친 것(허용 숫자 쪽에 쓴다)
+export function numbersIn(text) {
+  return numberGroups(text).flatMap(g => g.readings);
 }
 
 function trigrams(text) {
@@ -138,6 +178,7 @@ function matchesFact(usedFact, facts) {
 // - usedFact가 있으면 고른 노드 facts 중 하나와 일치해야 한다(아니면 fact-mismatch).
 // - usedFact가 없거나 비었으면 숫자 검사만 한다(옛 모델·데모 호환, 오탐 방지).
 // - 비유의 숫자가 facts·labels·원문 문장·앞 문장 어디에도 없으면 number-outside.
+//   뜻이 둘인 수는 둘 중 하나만 있으면 되고, 숫자가 아닐 수도 있는 표현(optional)은 통과(T-145).
 export function checkGrounding({ analogy, usedFact, facts, sentence, context, labels = [] } = {}) {
   if (!normalizeText(analogy)) return { ok: true };
   const factList = Array.isArray(facts) ? facts.filter(f => typeof f === 'string') : [];
@@ -148,7 +189,8 @@ export function checkGrounding({ analogy, usedFact, facts, sentence, context, la
 
   const labelList = Array.isArray(labels) ? labels.filter(l => typeof l === 'string') : [];
   const known = new Set([...factList, ...labelList, sentence, context].flatMap(numbersIn));
-  if (numbersIn(analogy).some(n => !known.has(n))) {
+  // 비유 쪽은 묶음마다: 읽기 후보 하나라도 허용 숫자에 있거나 숫자가 아닐 수도 있으면(optional) 통과
+  if (numberGroups(analogy).some(g => !g.optional && !g.readings.some(n => known.has(n)))) {
     return { ok: false, reason: 'number-outside' };
   }
   return { ok: true };
