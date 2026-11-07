@@ -21,9 +21,11 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [{
     "matches": ["<all_urls>"],
-    "js": ["lib/site-filter.js", "lib/place.js", "content.js"],
+    "js": ["lib/site-filter.js", "lib/place.js", "lib/shadow.js", "content.js"],
     "css": ["content.css"],
-    "run_at": "document_idle"
+    "run_at": "document_idle",
+    "all_frames": true,
+    "match_about_blank": true
   }],
   "options_page": "options.html",
   "action": { "default_popup": "popup.html", "default_title": "비유 도우미", "default_icon": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" } },

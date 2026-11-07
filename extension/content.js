@@ -16,16 +16,33 @@
   /* ───────── 설정 ───────── */
   const SF = globalThis.AnalogySiteFilter; // lib/site-filter.js (manifest에서 먼저 주입)
   const AP = globalThis.AnalogyPlace;      // lib/place.js (manifest에서 먼저 주입, T-109)
+  const AS = globalThis.AnalogyShadow;     // lib/shadow.js (manifest에서 먼저 주입, T-111)
   let theme = 'maple';      // 말풍선 테마. 미리 받기(graph:info)·stage·결과 순으로 고쳐진다
   let themeStale = true;    // 테마를 (다시) 받아야 함
+  /* 프레임(T-111): 모든 프레임에 주입된다(all_frames). 프레임마다 자기 안에 말풍선·강조를 띄운다.
+     iframe이면 자기 호스트와 최상위 페이지 호스트 중 하나라도 제외 목록에 있으면 꺼진다
+     (은행 페이지 안 다른 출처 iframe 문장이 새지 않게). topHost는 background 이중 방어용으로 페이로드에 싣는다 */
+  const isTop = window === window.top;
+  const { hosts, topHost, topKnown } = isTop
+    ? { hosts: [SF.normalizeHost(location.hostname)], topHost: SF.normalizeHost(location.hostname), topKnown: true }
+    : SF.frameHosts({
+      selfHost: location.hostname,
+      topHostname: (() => { try { return window.top.location.hostname; } catch { return ''; } })(), // 같은 출처 사슬만 읽힘
+      ancestorOrigins: location.ancestorOrigins,
+      referrer: document.referrer
+    });
+  // 최상위를 모르는 서브프레임(불투명·가려진 출처 + referrer 없음)은 실패 시 닫힘: 강조·말풍선·메시지 모두 없음
+  const excludedBy = list => !topKnown || hosts.some(h => SF.isExcludedHost(h, list));
+  // 서브프레임(광고 등)은 시작 시 테마를 미리 받지 않고 처음 보조키를 누를 때(trigger) 받는다(프레임 많은 페이지의 메시지 폭주 방지)
+  let themeWanted = isTop;
   // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
-  let siteExcluded = SF.isExcludedHost(location.hostname, SF.DEFAULT_EXCLUDED_HOSTS);
+  let siteExcluded = excludedBy(SF.DEFAULT_EXCLUDED_HOSTS);
   // 켜져 있고 이 사이트가 제외 목록에 없을 때만 동작한다
   const active = () => settings.enabled && !siteExcluded;
   function loadSettings() {
     chrome.storage.local.get('settings', ({ settings: s }) => {
       settings = { ...settings, ...(s || {}) };
-      siteExcluded = SF.isExcludedHost(location.hostname, settings.excludedHosts ?? SF.DEFAULT_EXCLUDED_HOSTS);
+      siteExcluded = excludedBy(settings.excludedHosts ?? SF.DEFAULT_EXCLUDED_HOSTS);
       if (!active()) hideTooltip();
       else refreshIfStale();
     });
@@ -34,7 +51,7 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.settings) loadSettings();
-    if (Object.keys(changes).some(isGraphKey)) { themeStale = true; markTheme(); if (active()) refreshTheme(); }
+    if (Object.keys(changes).some(isGraphKey)) { themeStale = true; markTheme(); if (active() && themeWanted) refreshTheme(); }
   });
 
   /* ───────── 테마 미리 받기 (T-108) ─────────
@@ -49,7 +66,7 @@
   let themeLoading = false; // 받는 중(같은 요청을 겹쳐 보내지 않게)
   // 지금 테마와 미리 받기 완료 여부. 콘텐츠 스크립트 격리 월드의 window라 페이지 스크립트에는 안 보인다(e2e가 기다릴 때 씀)
   const markTheme = () => { window.__analogyHelperTheme = { theme, ready: !themeStale }; };
-  const refreshIfStale = () => { if (themeStale && !themeLoading && active()) refreshTheme(); };
+  const refreshIfStale = () => { if (themeWanted && themeStale && !themeLoading && active()) refreshTheme(); };
   function refreshTheme() {
     const seq = ++themeSeq; // 늦게 온 옛 응답은 버린다(키가 바뀌어 다시 받은 경우)
     themeLoading = true;
@@ -73,32 +90,46 @@
   const sentenceSeg = new Intl.Segmenter(undefined, { granularity: 'sentence' });
   const wordSeg = new Intl.Segmenter(undefined, { granularity: 'word' });
 
+  // 열린 Shadow DOM(T-111): 커서 아래 열린 shadow root 들을 모아 caretPositionFromPoint 에 넘긴다.
+  // 옵션을 지원하지 않거나(예외) 캐럿이 여전히 글자가 아닌 곳(호스트)을 가리키면 지금 방식으로 대체
   function caretAt(x, y) {
     if (document.caretPositionFromPoint) {
-      const p = document.caretPositionFromPoint(x, y);
+      let p = null;
+      const shadowRoots = AS.collectShadowRoots(document, x, y, { skip: el => el.id === 'analogy-helper-host' });
+      if (shadowRoots.length) {
+        try { p = document.caretPositionFromPoint(x, y, { shadowRoots }); } catch { p = null; }
+        if (p?.offsetNode?.nodeType !== Node.TEXT_NODE) p = null;
+      }
+      p ??= document.caretPositionFromPoint(x, y);
       return p ? { node: p.offsetNode, offset: p.offset } : null;
     }
     const r = document.caretRangeFromPoint?.(x, y);
     return r ? { node: r.startContainer, offset: r.startOffset } : null;
   }
 
+  // 문장 블록. shadow 경계를 넘지 않는다(블록 요소가 없으면 그 shadow root 가 블록, T-111)
   function blockOf(node) {
-    let el = node.parentElement;
-    while (el && el !== document.body) {
-      if (BLOCK_DISPLAYS.has(getComputedStyle(el).display)) return el;
-      el = el.parentElement;
-    }
-    return document.body;
+    return AS.blockFor(node, { isBlock: el => BLOCK_DISPLAYS.has(getComputedStyle(el).display), stopAt: document.body });
   }
 
   // 비밀번호 칸이 있는 폼 안 문장은 설정과 무관하게 보내지 않는다(T-107)
+  // shadow 안 문장(T-111)도 막도록 composed tree 를 올라간다: 각 트리에서 closest('form')을 보고 shadow 면 host 로 건너 다시.
+  // 바깥 트리의 폼도 봐야 하므로(비밀번호 없는 shadow 안 폼이 비밀번호 있는 바깥 폼 안에 있을 수 있음) 찾을 때까지 끝까지 오른다.
+  // 비밀번호 칸은 form.elements(폼 연동 호스트 포함) 또는 폼 안 input[type=password]로 본다
+  const hasPassword = form => [...form.elements].some(f => f.type === 'password') || !!form.querySelector('input[type=password]');
   function inPasswordForm(node) {
-    const form = node.parentElement?.closest('form');
-    return !!form && [...form.elements].some(el => el.type === 'password');
+    for (let el = AS.composedParent(node); el; ) {
+      const form = el.closest('form');
+      if (form && hasPassword(form)) return true;
+      const root = el.getRootNode();
+      el = AS.isShadowRoot(root) ? root.host : null;
+    }
+    return false;
   }
 
+  // shadow 안이면 호스트를 거쳐 문서까지 올라가 본다(shadow root 직속 텍스트는 parentElement 가 null, T-111)
   function isSkippable(node) {
-    for (let el = node.parentElement; el; el = el.parentElement) {
+    for (let el = AS.composedParent(node); el; el = AS.composedParent(el)) {
       if (SKIP_TAGS.has(el.tagName) || el.isContentEditable || el.id === 'analogy-helper-host') return true;
     }
     return false;
@@ -110,7 +141,8 @@
       acceptNode(n) {
         if (!n.nodeValue) return NodeFilter.FILTER_REJECT;
         const p = n.parentElement;
-        if (!p || SKIP_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+        // shadow root 바로 아래 텍스트(T-111)는 부모 요소가 없어도 받는다
+        if (p ? SKIP_TAGS.has(p.tagName) : !AS.isShadowRoot(n.parentNode)) return NodeFilter.FILTER_REJECT;
         // 같은 블록 안 비밀번호 폼 글자가 문장·앞 문장으로 새지 않게 뺀다(T-107)
         if (inPasswordForm(n)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
@@ -200,8 +232,24 @@
   }
 
   /* ───────── 강조 ───────── */
+  // CSS.highlights 는 문서 전체 레지스트리지만 ::highlight 스타일은 shadow tree 안에 따로 있어야 보인다(T-111).
+  // 열린 shadow root 에 처음 강조할 때 우리 규칙 한 줄짜리 시트를 adoptedStyleSheets 에 덧붙인다(기존 시트 보존, root 마다 한 번).
+  // 페이지가 adoptedStyleSheets 를 갈아 끼워 우리 시트가 빠졌으면 같은 시트를 다시 덧붙인다. 실패하면 강조 없이 말풍선만
+  const HL_RULE = `::highlight(${HL_NAME}) { background-color: rgba(255, 196, 40, .30); }`; // content.css 와 같은 색
+  const shadowHlSheets = new WeakMap(); // shadow root → 우리 시트
+  function ensureShadowHlStyle(root) {
+    try {
+      let sheet = shadowHlSheets.get(root);
+      if (sheet && root.adoptedStyleSheets.includes(sheet)) return true;
+      if (!sheet) { sheet = new CSSStyleSheet(); sheet.replaceSync(HL_RULE); shadowHlSheets.set(root, sheet); }
+      root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+      return true;
+    } catch { return false; }
+  }
   function highlight(range) {
     if (!window.CSS?.highlights) return;
+    const root = range.startContainer.getRootNode();
+    if (AS.isShadowRoot(root) && !ensureShadowHlStyle(root)) { clearHighlight(); return; }
     CSS.highlights.set(HL_NAME, new Highlight(range));
   }
   function clearHighlight() {
@@ -246,10 +294,11 @@
         .box { position: fixed; max-width: 380px; min-width: 240px; box-sizing: border-box;
           font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
           color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
-          box-shadow: var(--shadow); padding: 12px 14px 10px; pointer-events: auto;
+          box-shadow: var(--shadow); padding: 12px 14px 10px; pointer-events: none;
           opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s; }
         .box.t-maple { border-radius: 6px; box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06); }
-        .box.show { opacity: 1; transform: none; }
+        /* 보일 때만 커서를 받는다. 닫힌(투명·빈) 상자가 그 자리 아래 글자의 호버를 가로채지 않게(T-111 CI) */
+        .box.show { opacity: 1; transform: none; pointer-events: auto; }
         .row { margin: 0 0 8px; }
         .label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--label); margin-bottom: 2px; }
         .analogy { font-weight: 600; color: var(--em); }
@@ -353,7 +402,7 @@
   async function onFeedback(act, data) {
     if (!current || !view?.result) return;
     const key = current.key, r = view.result, fb = view.fb || {};
-    const sent = { sentence: current.payload.sentence, provider: r.debug?.provider || '' };
+    const sent = { sentence: current.payload.sentence, provider: r.debug?.provider || '', topHost }; // topHost: rerun 없는 👍도 background가 검사(T-111)
     const stillHere = () => current && current.key === key;
     const done = (res, nextFb, extra = {}) => {
       if (!stillHere()) return;
@@ -487,12 +536,13 @@
 
   function trigger() {
     if (!active()) return;
+    themeWanted = true; // 서브프레임은 여기(처음 보조키를 누르거나 머무른 순간)서 처음 받는다(T-111)
     refreshIfStale(); // 미리 받기가 실패했으면 호버 때 다시(이번 말풍선은 stage theme이 고침)
     const s = sentenceAt(mouse.x, mouse.y);
     if (!s) return;
     if (current && current.key === s.key) return;
     const reqId = ++reqSeq;
-    const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120) };
+    const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120), topHost };
     // 줄은 호버한 순간 한 번만 고른다(뷰포트 y는 스크롤하면 다른 줄을 가리킴)
     const lineIndex = AP.pickLineIndex(s.range.getClientRects(), mouse.y);
     current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, lineIndex };

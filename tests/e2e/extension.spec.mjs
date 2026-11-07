@@ -10,7 +10,8 @@ const EXT = path.resolve('.tmp/ext-e2e');
 
 const test = base.extend({
   context: async ({}, use) => {
-    const args = [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`];
+    // localhost iframe(T-111)이 CI의 IPv6 우선 해석에 기대지 않게 127.0.0.1 로 고정한다
+    const args = [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, '--host-resolver-rules=MAP localhost 127.0.0.1'];
     const opts = process.env.CHROMIUM_PATH
       ? { executablePath: process.env.CHROMIUM_PATH, headless: false, args: ['--headless=new', ...args] }
       : { channel: 'chromium', headless: !process.env.HEADED, args };
@@ -1294,4 +1295,261 @@ test('말풍선 위치(T-109): 로딩 중 조금(40px) 스크롤해도 결과 �
     const p = await boxPos(page);
     return p && Math.abs(p.top - (live[1].bottom + 8));
   }, { message: '결과 뒤 말풍선 top ≈ 지금 2번째 줄 bottom + 8' }).toBeLessThanOrEqual(3);
+});
+
+/* ───────── iframe (T-111) ───────── */
+// page.html 맨 아래의 iframe. 마우스 좌표 = iframe 위치(테두리 0) + 프레임 안 글자 위치
+async function frameOf(page, frameSel) {
+  const el = page.locator(frameSel);
+  await el.scrollIntoViewIfNeeded();
+  const frame = await (await el.elementHandle()).contentFrame();
+  await frame.waitForSelector('p');
+  // content.js 는 document_idle 에 주입된다. 주입 전에 호버하면 무시되니 주입될 때까지 기다린다
+  await expect.poll(async () => (await hook(frame, 'content-loaded')).data, { message: `${frameSel} content.js 주입` }).toBe(true);
+  return { el, frame };
+}
+async function altHoverFrame(page, frameSel, sel, idx = 5) {
+  const { el, frame } = await frameOf(page, frameSel);
+  const box = await el.boundingBox();
+  const p = await pointOnChar(frame, sel, idx);
+  const x = box.x + p.x, y = box.y + p.y;
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  return frame;
+}
+
+test('iframe(T-111): 같은 출처 iframe 안 문장도 Alt+호버로 그 프레임 안에 말풍선, 최상위 문서에는 안 뜸', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const frame = await altHoverFrame(page, '#fr-same', '#fa');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('같은출처프레임테스트 변동금리 대출은'))).toBe(true);
+  const hl = await frame.evaluate(() => [...CSS.highlights.get('analogy-helper-hl')][0].toString());
+  expect(hl).toContain('같은출처프레임테스트');
+  expect(await tooltip(page), '최상위 문서에는 말풍선 없음').toBeFalsy();
+});
+
+test('iframe(T-111): 다른 출처 iframe 안 문장도 동작, 최상위 호스트가 제외면 iframe 문장도 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  let frame = await altHoverFrame(page, '#fr-cross', '#fb');
+  expect(new URL(frame.url()).hostname).toBe('localhost');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('다른출처프레임테스트 API 서버는'))).toBe(true);
+
+  // 최상위(127.0.0.1)만 제외. iframe 호스트(localhost)는 목록에 없다
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  await expect.poll(() => tooltip(frame), { message: '최상위가 제외되면 iframe 말풍선도 닫힘' }).toBe('');
+  await page.reload();
+  const before = sentCount();
+  frame = await altHoverFrame(page, '#fr-cross', '#fb', 8);
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), 'iframe 말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('analogy-helper-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '최상위가 제외면 iframe 문장도 보내지 않음').toBe(0);
+});
+
+test('iframe 이중 방어(T-111): content.js를 건너뛴 iframe 요청도 payload.topHost 가 제외면 background가 막는다', async ({ context, ext }) => {
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { frame } = await frameOf(page, '#fr-cross');
+  const q = { sentence: '프레임이중방어테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', word: '', context: '', pageTitle: 't', noCache: true, topHost: '127.0.0.1' };
+  const before = sentCount();
+  expect(await hook(frame, 'explain-port', q)).toMatchObject({ ok: false, type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+  expect(await hook(frame, 'explain-msg', q)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(await hook(frame, 'feedback', q)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(sentCount() - before, '요청 0').toBe(0);
+
+  // topHost 를 속여도(example.com) 탭 주소(tab.url, 127.0.0.1 호스트 권한으로 옴)가 제외면 막는다
+  expect(await hook(frame, 'explain-port', { ...q, topHost: 'example.com' })).toMatchObject({ ok: false, type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+  // topHost 를 안 실은 서브프레임 요청은 실패 시 닫힘
+  const { topHost: _omit, ...noTop } = q;
+  expect(await hook(frame, 'explain-msg', noTop)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(sentCount() - before, '요청 0').toBe(0);
+
+  // 제외를 풀면 같은 프레임에서 정상(topHost 는 실어야 함)
+  await ext.setSettings({ excludedHosts: [] });
+  const okRes = await hook(frame, 'explain-port', q);
+  expect(okRes.type).toBe('result');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});
+
+test('iframe(T-111): 서브프레임은 시작 시 테마를 미리 받지 않고, 처음 보조키 호버 때 받는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // 최상위는 지금처럼 시작 시 받음
+  const { frame } = await frameOf(page, '#fr-cross');
+  expect(await contentTheme(frame), '서브프레임은 아직 graph:info 를 보내지 않음').toBeNull();
+  await altHoverFrame(page, '#fr-cross', '#fb');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  await waitTheme(frame, 'maple');
+});
+
+test('iframe(T-111): 최상위 호스트를 알 수 없는 프레임(가려진 출처·referrer 없음)은 실패 시 닫힘, 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/masked.html');
+  const { frame } = await frameOf(page, '#fr-masked');
+  // 전제: 크롬이 출처를 가리고 referrer 도 없으며, content.js 는 이 프레임에 주입돼 있다
+  expect(await frame.evaluate(() => ({ ao: [...location.ancestorOrigins], ref: document.referrer }))).toEqual({ ao: ['null'], ref: '' });
+  expect((await hook(frame, 'content-loaded')).data, 'content.js 주입됨').toBe(true);
+  const before = sentCount();
+  await altHoverFrame(page, '#fr-masked', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('analogy-helper-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '요청 0').toBe(0);
+});
+
+test('피드백 👍(T-111): rerun 이 없어도 record.topHost 가 제외면 막고, 저장되는 기록에는 topHost 를 남기지 않는다', async ({ context, ext }) => {
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { frame } = await frameOf(page, '#fr-cross');
+  const getFb = () => ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback || []);
+  const n0 = (await getFb()).length;
+  expect(await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: '127.0.0.1' })).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect((await getFb()).length).toBe(n0);
+
+  await ext.setSettings({ excludedHosts: [] });
+  const ok = await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: '127.0.0.1' });
+  expect(ok.ok).toBe(true);
+  const recs = await getFb();
+  expect(recs.length).toBe(n0 + 1);
+  expect(recs.some(r => 'topHost' in r), '기록에 topHost 없음').toBe(false);
+});
+
+/* ───────── 열린 Shadow DOM (T-111) ───────── */
+// 경로 [호스트 선택자, (shadow 안) 선택자, ...]를 따라 내려가 마지막 요소(또는 shadow root)의 첫 텍스트 노드 idx 글자 좌표
+async function pointInShadow(page, steps, idx) {
+  return page.evaluate(([steps, i]) => {
+    // '@shadow' = 지금 요소의 shadowRoot, '#closed' = 페이지가 쥔 닫힌 root(window.__closedRoot)
+    let scope = document, node = null;
+    for (const s of steps) {
+      if (s === '#closed') node = window.__closedRoot;
+      else if (s === '@shadow') node = node.shadowRoot;
+      else node = scope.querySelector(s);
+      scope = node;
+    }
+    (node.host ?? node).scrollIntoView({ block: 'center' }); // shadow root 는 호스트를 스크롤
+    const t = node.firstChild;
+    const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 1);
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  }, [steps, idx]);
+}
+async function altHoverAt(page, { x, y }) {
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+}
+const hlText = page => page.evaluate(() => { const h = CSS.highlights.get('analogy-helper-hl'); return h ? [...h][0].toString() : null; });
+
+test('Shadow DOM(T-111): 열린 shadow 안 문장 → 그 문장만 요청, 강조 규칙은 adoptedStyleSheets 에 한 번만 덧붙고 페이지 시트는 보존', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('열린섀도테스트 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.'))).toBe(true);
+  expect(calls.some(c => c.user.includes('두번째 문장이에요')), '문장 하나만').toBe(false);
+  expect(await hlText(page)).toBe('열린섀도테스트 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  const sheets = () => page.evaluate(() => {
+    const root = document.getElementById('sh-open').shadowRoot;
+    return root.adoptedStyleSheets.map(s => [...s.cssRules].map(r => r.cssText).join(' '));
+  });
+  let list = await sheets();
+  expect(list).toHaveLength(2);
+  expect(list[0]).toContain('rgb(0, 0, 200)'); // 페이지 시트가 그대로 앞에
+  expect(list[1]).toContain('::highlight(analogy-helper-hl)');
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('sh-open').shadowRoot.getElementById('so')).color)).toBe('rgb(0, 0, 200)');
+
+  // 같은 shadow 의 다른 문장을 다시 호버해도 시트는 늘지 않는다
+  await page.keyboard.press('Escape');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 50));
+  await expect.poll(() => hlText(page)).toBe('두번째 문장이에요.');
+  expect(await sheets()).toHaveLength(2);
+  // 페이지가 adoptedStyleSheets 를 우리 시트 없이 갈아 끼우면, 다음 호버에서 다시 덧붙인다(그래도 하나)
+  await page.evaluate(() => { const r = document.getElementById('sh-open').shadowRoot; r.adoptedStyleSheets = [r.adoptedStyleSheets[0]]; });
+  expect(await sheets()).toHaveLength(1);
+  await page.keyboard.press('Escape');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => hlText(page)).toContain('열린섀도테스트');
+  list = await sheets();
+  expect(list).toHaveLength(2);
+  expect(list.filter(t => t.includes('::highlight(analogy-helper-hl)'))).toHaveLength(1);
+});
+
+test('Shadow DOM(T-111): shadow root 바로 아래 텍스트 노드(parentElement 없음)도 동작', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-text', '@shadow'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('섀도직속텍스트테스트 고정금리는'))).toBe(true);
+  expect(await hlText(page)).toBe('섀도직속텍스트테스트 고정금리는 약정 기간 동안 금리가 바뀌지 않는다.');
+});
+
+test('Shadow DOM(T-111): shadow 안 shadow(중첩) 문장도 동작', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-nested', '@shadow', '#inner-host', '@shadow', '#sn'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('중첩섀도테스트 API 서버는'))).toBe(true);
+  expect(await hlText(page)).toBe('중첩섀도테스트 API 서버는 분당 요청 수에 상한을 두어 자원 독점을 막는다.');
+});
+
+test('Shadow DOM(T-111): 닫힌 shadow 안 문장은 요청 0(접근 불가)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // content.js 가 준비된 뒤 호버
+  const before = sentCount();
+  await altHoverAt(page, await pointInShadow(page, ['#closed', '#sc'], 5));
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('닫힌섀도테스트'))).toBe(false);
+});
+
+test('비밀번호 폼 × Shadow DOM(T-111): 비밀번호 칸이 있는 폼 안 호스트의 shadow 문장, shadow 안 폼 문장 모두 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple');
+  const before = sentCount();
+  // (f) light DOM <form><input type=password><호스트> → 호스트의 열린 shadow 안 문장
+  await altHoverAt(page, await pointInShadow(page, ['#sh-inform', '@shadow', '#sif'], 5));
+  // (g) shadow 안 <form> 에 문장 + 비밀번호 칸
+  await altHoverAt(page, await pointInShadow(page, ['#sh-form', '@shadow', '#sf'], 5));
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('폼안섀도테스트') || c.user.includes('섀도폼테스트'))).toBe(false);
+
+  // 같은 페이지의 보통 shadow 문장은 정상(검사가 모든 shadow 를 막는 게 아님)
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+});
+
+test('말풍선 닫은 뒤(T-111 CI): 숨은 말풍선 자리 아래 글자도 바로 호버된다(투명 상자가 커서를 가로채지 않음)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  await page.keyboard.press('Escape');
+  await expect.poll(() => tooltip(page)).toBe('');
+  // 닫힌 말풍선이 있던 자리(.box rect) 안에 들어오는 #p1 글자를 고른다(말풍선은 호버한 줄 바로 아래에 뜬다)
+  const target = await page.evaluate(() => {
+    const r = document.getElementById('analogy-helper-host').shadowRoot.querySelector('.box').getBoundingClientRect();
+    const t = document.querySelector('#p1').firstChild, g = document.createRange();
+    for (let i = 0; i < t.length; i++) {
+      g.setStart(t, i); g.setEnd(t, i + 1);
+      const b = g.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2;
+      if (b.width && x > r.left + 4 && x < r.right - 4 && y > r.top + 2 && y < r.bottom - 2) return { i, x, y };
+    }
+    return null;
+  });
+  expect(target, '닫힌 말풍선 자리 아래에 #p1 글자가 있어야 재현됨').not.toBeNull();
+  await altHoverAt(page, target);
+  await expect.poll(() => hlText(page)).toBe('반면 고정금리는 약정 기간 동안 금리가 바뀌지 않는다.');
 });

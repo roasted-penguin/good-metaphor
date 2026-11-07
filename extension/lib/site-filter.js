@@ -47,11 +47,35 @@
 
   // background 이중 방어: 메시지를 보낸 쪽이 제외 사이트의 탭인가.
   // 탭에서 온 게 아니거나(확장 페이지 등) URL을 모르면 막지 않는다.
-  // sender.url은 권한 없이도 오는 보낸 문서 주소, tab.url은 tabs·호스트 권한이 있을 때만 온다
-  function isBlockedSender(sender, list) {
+  // sender.url은 권한 없이도 오는 보낸 문서 주소(iframe이면 그 프레임 주소), tab.url은 tabs·호스트 권한이 있을 때만 온다.
+  // topHost(T-111): content.js가 explain 페이로드에 실어 보내는 최상위 페이지 호스트. 은행 페이지 안 다른 출처
+  // iframe처럼 보낸 문서 호스트는 제외가 아니어도 최상위가 제외면 막는다
+  // 서브프레임(frameId > 0)이 topHost 를 싣지 않았거나 비어 있으면 실패 시 닫힘으로 막는다(content.js는 최상위를 알 때만 보냄).
+  // tab.url 은 sender.url 과 따로 본다(프레임이면 sender.url 은 그 프레임 주소라 탭 주소를 대신하지 못함)
+  function isBlockedSender(sender, list, topHost) {
     if (!sender?.tab) return false;
-    const url = sender.url || sender.tab.url;
-    return !!url && isExcludedHost(url, list);
+    if (sender.frameId > 0 && !normalizeHost(topHost)) return true;
+    if (sender.url && isExcludedHost(sender.url, list)) return true;
+    if (sender.tab.url && isExcludedHost(sender.tab.url, list)) return true;
+    return !!topHost && isExcludedHost(topHost, list);
+  }
+
+  // 프레임에서 제외 판정에 쓸 호스트들(T-111) → { hosts: [자기 호스트, 최상위 호스트], topHost, topKnown }.
+  // 최상위 = topHostname(같은 출처 사슬이면 content.js가 window.top.location 에서 읽음) → ancestorOrigins 마지막(크롬)
+  // → referrer 순. http(s) 출처·주소만 믿고 'null'(불투명·가려진 출처)·about:·data:·file: 은 모르는 것으로 본다.
+  // topKnown=false 면 content.js가 그 프레임을 꺼 둔다(실패 시 닫힘: 은행 페이지 안 프레임일 수도 있어서).
+  // 최상위 프레임에서는 부르지 않는다(최상위의 referrer는 이전 페이지라서)
+  const httpHost = v => {
+    const t = String(v ?? '').trim();
+    return /^https?:\/\//i.test(t) ? normalizeHost(t) : '';
+  };
+  function frameHosts({ selfHost, topHostname, ancestorOrigins, referrer } = {}) {
+    const origins = ancestorOrigins ? [...ancestorOrigins] : [];
+    // referrer 는 바로 위 부모 주소라, 부모가 최상위일 때(ancestorOrigins 길이 ≤ 1)나 ancestorOrigins 미지원일 때만 쓴다
+    const referrerIsTop = !ancestorOrigins || origins.length <= 1;
+    const topHost = normalizeHost(topHostname) || httpHost(origins.at(-1)) || (referrerIsTop ? httpHost(referrer) : '');
+    const hosts = [...new Set([normalizeHost(selfHost), topHost].filter(Boolean))];
+    return { hosts, topHost, topKnown: !!topHost };
   }
 
   // 설정 화면 "추가" 입력 검증(T-144). URL이든 호스트든 정규화한다.
@@ -70,5 +94,5 @@
     return { ok: true, host };
   }
 
-  globalThis.AnalogySiteFilter = Object.freeze({ DEFAULT_EXCLUDED_HOSTS, normalizeHost, isExcludedHost, toggleHost, isBlockedSender, validateHostInput });
+  globalThis.AnalogySiteFilter = Object.freeze({ DEFAULT_EXCLUDED_HOSTS, normalizeHost, isExcludedHost, toggleHost, isBlockedSender, frameHosts, validateHostInput });
 })();
