@@ -1,14 +1,13 @@
 // 서비스 워커: 저장소 병합 → 임베딩 → 그래프 검색 → LLM 비유 생성
 import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './lib/config.js';
-import { complete, parseJSONLoose, PROVIDERS } from './lib/providers.js';
+import { complete, PROVIDERS } from './lib/providers.js';
 import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode } from './lib/feedback.js';
-import { callAnalogyServer, serverSkipReason, getInstallToken, REJECTED_TEXT } from './lib/analogy-server.js';
-import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './lib/prompt.js';
-import { checkGrounding, GROUNDING_REJECTED_TEXT } from './lib/grounding.js';
+import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
+import { runAbstract, runAnalogy } from './lib/pipeline.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -207,10 +206,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   let queryText = sentence;
   let abstractText = null;
   if (settings.preciseMode && provider.def.kind !== 'demo') {
-    onStage('abstract');
-    const p = buildAbstractPrompt({ sentence, word, pageTitle });
-    abstractText = (await ask(p.system, p.user, { json: false })).trim();
-    queryText = rewriteQueryText(abstractText, sentence);
+    ({ abstractText, queryText } = await runAbstract({ sentence, word, pageTitle, ask, onStage }));
   }
 
   onStage('search');
@@ -233,52 +229,18 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   }
   const tags = topTags(q, graph, vecs, 5);
 
-  onStage('generate');
-  let answer;
-  if (provider.def.kind === 'demo') {
-    answer = demoAnswer({ candidates, analogyPrefix: graph.analogyPrefix });
-  } else {
-    const p = buildAnalogyPrompt({ sentence, context, word, pageTitle, domain: graph.domain, analogyPrefix: graph.analogyPrefix, candidates });
-    let sentMeaning = false;
-    const onText = onPartial && (text => {
-      if (sentMeaning) return;
-      const meaning = extractMeaning(text);
-      if (meaning) { sentMeaning = true; onPartial({ meaning }); }
-    });
-    const raw = await ask(p.system, p.user, { json: true, onText });
-    answer = parseJSONLoose(raw);
-    if (!answer) throw new Error('모델 응답을 해석하지 못했어요: ' + raw.slice(0, 120));
-  }
-
-  // 근거 검증: 후보에 없는 노드를 댔으면 비유를 버린다
-  let chosen = candidates.find(c => c.id === answer.nodeId) || null;
-  if (answer.analogy && !chosen) {
-    answer.analogy = '';
-    answer.rejected = REJECTED_TEXT;
-  }
-  // 근거 검사(T-123): 고른 노드 facts 밖의 사실(usedFact 불일치, 지어낸 숫자)이면 비유를 버린다
-  let grounding = null;
-  if (answer.analogy && chosen) {
-    const labels = [chosen.label, ...(chosen.neighbors || []).map(n => n.label)];
-    grounding = checkGrounding({ analogy: answer.analogy, usedFact: answer.usedFact, facts: chosen.facts, sentence, context, labels });
-    if (!grounding.ok) {
-      answer.analogy = '';
-      answer.rejected = GROUNDING_REJECTED_TEXT;
-      chosen = null;
-    }
-  }
+  // 비유 프롬프트 → LLM → 파싱 → 규칙 1 nodeId 검증 → 근거 검사(T-123)는 lib/pipeline.js(T-104)
+  const { answer, grounding, evidence } = await runAnalogy({
+    sentence, word, context, pageTitle, graph, candidates, ask,
+    providerKind: provider.def.kind, onStage, onPartial
+  });
 
   const result = {
     meaning: answer.meaning || '',
     analogy: answer.analogy || '',
     mapping: answer.mapping || '',
     rejected: answer.rejected || null,
-    evidence: chosen ? {
-      nodeId: chosen.id,
-      nodeLabel: chosen.label,
-      source: chosen.source,
-      tagLabel: graph.tags.find(t => t.id === answer.tagId)?.label || chosen.tag?.label || null
-    } : null,
+    evidence,
     domain: graph.domain,
     theme: graph.theme,
     feedbackApplied: fb.applied || similarChanged,

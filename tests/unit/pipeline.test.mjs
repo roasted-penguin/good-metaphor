@@ -18,8 +18,8 @@ const GRAPH = {
   tags: [{ id: 'periodic-limit', label: '주기별 횟수 제한' }]
 };
 const CANDIDATES = [
-  { id: 'weekly-boss', label: '주간 보스', facts: WEEKLY_BOSS, source: 'common', tag: { id: 'periodic-limit', label: '주기별 횟수 제한', sim: 0.8 }, neighbors: [{ id: 'meso', label: '메소' }], score: 0.9, direct: 0.7 },
-  { id: 'meso', label: '메소', facts: ['게임 안의 기본 화폐다.'], source: 'common', tag: null, neighbors: [], score: 0.5, direct: 0.5 }
+  { id: 'weekly-boss', label: '주간 보스', facts: WEEKLY_BOSS, source: 'common', tag: { id: 'periodic-limit', label: '주기별 횟수 제한', desc: '정해진 주기마다 횟수가 제한된다', sim: 0.8 }, otherTags: [], neighbors: [{ id: 'meso', label: '메소', rel: '보상' }], score: 0.9, direct: 0.7 },
+  { id: 'meso', label: '메소', facts: ['게임 안의 기본 화폐다.'], source: 'common', tag: null, otherTags: [], neighbors: [], score: 0.5, direct: 0.5 }
 ];
 const SENTENCE = '이 적금은 한 달에 한 번만 납입할 수 있어요.';
 const OK_ANSWER = {
@@ -92,7 +92,7 @@ test('근거 검사: facts 밖 숫자면 비유를 지우고 근거 문구, chos
 });
 
 test('근거 검사: 이웃 label의 숫자는 허용한다', async () => {
-  const cands = [{ ...CANDIDATES[0], neighbors: [{ id: 'x', label: '5차 전직' }] }];
+  const cands = [{ ...CANDIDATES[0], neighbors: [{ id: 'x', label: '5차 전직', rel: '조건' }] }];
   const { ask } = fakeAsk(JSON.stringify({ ...OK_ANSWER, analogy: '메이플로 치면 5차 전직 뒤 주간 보스 보상처럼요.' }));
   const r = await runAnalogy(base({ ask, candidates: cands }));
   assert.deepEqual(r.grounding, { ok: true });
