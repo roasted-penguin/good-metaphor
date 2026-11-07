@@ -281,10 +281,11 @@ chrome.runtime.onConnect.addListener(port => {
 });
 
 // 로그인 사용자만: 같은 노드에 서로 다른 문장 👎가 쌓이면 오버레이 feedbackBoosts를 낮춘다(T-130).
-// 값은 지금 기록으로 다시 계산한다(boostForNode). 👎 뒤와 되돌리기 뒤에 부르고, 값이 바뀔 때만 저장한다.
+// feedbackBoosts는 지금 기록만으로 정해진다(boostForNode). 기록이 바뀌는 모든 길(👎·되돌리기·전부 지우기,
+// 500건 상한으로 오래된 기록이 밀려남)에서 부른다. 이미 있는 키 전부 + 이번에 건드린 노드를 다시 계산하고,
+// 0이 된 키는 지우며, 값이 바뀔 때만 저장한다.
 // 오버레이 변경은 로그인 세션의 saveOverlay로만(규칙 3). 실패해도 피드백 기록은 이미 저장돼 있다.
-async function syncNodeBoost(records, nodeId) {
-  if (!nodeId) return;
+async function syncBoosts(records, touchedNodeIds = []) {
   try {
     // getSessionAndOverlay()는 읽기 실패를 null로 삼키므로, 빈 오버레이로 덮어쓰지 않게 여기서 직접 읽는다
     const store = await getUserStore();
@@ -293,12 +294,14 @@ async function syncNodeBoost(records, nodeId) {
     const ov = normalizeOverlay(await store.loadOverlay(session));
     // 손으로 넣은 nodeBoosts는 건드리지 않고 feedbackBoosts에만 쓴다. 둘은 mergeGraphs가 더한다
     const current = ov.feedbackBoosts || {};
-    const target = boostForNode(records, nodeId);
-    if ((current[nodeId] ?? 0) === target && (target !== 0 || !(nodeId in current))) return;
-    const feedbackBoosts = { ...current };
-    if (target === 0) delete feedbackBoosts[nodeId];
-    else feedbackBoosts[nodeId] = target;
-    await store.saveOverlay(session, { ...ov, feedbackBoosts });
+    const next = {};
+    for (const id of new Set([...Object.keys(current), ...touchedNodeIds.filter(Boolean)])) {
+      const v = boostForNode(records, id);
+      if (v !== 0) next[id] = v;
+    }
+    const same = Object.keys(next).length === Object.keys(current).length && Object.entries(next).every(([id, v]) => current[id] === v);
+    if (same) return;
+    await store.saveOverlay(session, { ...ov, feedbackBoosts: next });
   } catch (e) {
     console.warn('[feedback] 오버레이 가중치를 못 바꿨어요', e);
   }
@@ -386,7 +389,8 @@ const handlers = {
     }
     const records = addRecord(await feedbackStore.get(), r);
     await feedbackStore.set(records);
-    if (r.vote === 'down') await syncNodeBoost(records, r.nodeId);
+    // 👍·고정이어도 500건 상한으로 오래된 👎가 밀려났을 수 있어 항상 맞춘다
+    await syncBoosts(records, r.vote === 'down' ? [r.nodeId] : []);
     return { id: r.id, result: rerun ? await explain(rerun) : null };
   },
   async 'feedback-reason'({ id, reason }) {
@@ -398,7 +402,7 @@ const handlers = {
     const undone = before.find(r => r.id === id);
     const records = removeRecord(before, id);
     await feedbackStore.set(records);
-    if (undone?.vote === 'down') await syncNodeBoost(records, undone.nodeId);
+    if (undone?.vote === 'down') await syncBoosts(records, [undone.nodeId]);
     return { id, result: rerun ? await explain(rerun) : null };
   },
   // "내 피드백" 설정 화면(T-132). 최신순, 라벨은 지금 병합 그래프에서 찾고 없으면 id 그대로
@@ -419,6 +423,7 @@ const handlers = {
   // 결과 캐시 키에 피드백 지문이 있어서 캐시는 따로 안 지워도 된다
   async 'feedback:clear'() {
     await feedbackStore.set([]);
+    await syncBoosts([]);
     return true;
   },
   async 'open-options'() { await chrome.runtime.openOptionsPage(); return true; }

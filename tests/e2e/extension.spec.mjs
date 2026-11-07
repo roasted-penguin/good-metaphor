@@ -570,6 +570,32 @@ test('로그인 시 👎 누적은 손으로 넣은 nodeBoosts를 건드리지 �
   expect(ov.feedbackBoosts.meso).toBe(-0.05);
 });
 
+test('로그인 시 피드백 전부 지우기 → feedbackBoosts도 비워진다(가중치는 기록으로만 정해짐) (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: { nodeBoosts: { meso: 0.1 } } })).data.ok).toBe(true);
+  for (const sentence of DOWN_SENTENCES) await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  expect((await send({ type: 'feedback:clear' })).ok).toBe(true);
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.feedbackBoosts).toEqual({});
+  expect(ov.nodeBoosts).toEqual({ meso: 0.1 }); // 손으로 넣은 값은 그대로
+});
+
+test('로그인 시 500건 상한으로 오래된 👎가 밀려나면 feedbackBoosts도 풀린다 (T-130)', async ({ ext }) => {
+  const { send, page } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  for (const sentence of DOWN_SENTENCES) await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  // 👍 497건 뒤에는 👎 3건이 남고(3 + 497 = 500), 498번째 👍에서 가장 오래된 👎가 밀려난다
+  await page.evaluate(async () => {
+    for (let i = 0; i < 497; i++) await chrome.runtime.sendMessage({ type: 'feedback', record: { sentence: `문장 ${i}`, nodeId: 'auction', vote: 'up' } });
+  });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  await send({ type: 'feedback', record: { sentence: '마지막 문장', nodeId: 'auction', vote: 'up' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({});
+});
+
 test('로그아웃 상태의 같은 노드 👎 3건은 오버레이를 바꾸지 않는다 (T-130)', async ({ ext }) => {
   const { send } = ext;
   for (const sentence of DOWN_SENTENCES) {
