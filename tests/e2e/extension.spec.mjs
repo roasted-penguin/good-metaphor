@@ -1295,3 +1295,84 @@ test('말풍선 위치(T-109): 로딩 중 조금(40px) 스크롤해도 결과 �
     return p && Math.abs(p.top - (live[1].bottom + 8));
   }, { message: '결과 뒤 말풍선 top ≈ 지금 2번째 줄 bottom + 8' }).toBeLessThanOrEqual(3);
 });
+
+/* ───────── iframe (T-111) ───────── */
+// page.html 맨 아래의 iframe. 마우스 좌표 = iframe 위치(테두리 0) + 프레임 안 글자 위치
+async function frameOf(page, frameSel) {
+  const el = page.locator(frameSel);
+  await el.scrollIntoViewIfNeeded();
+  const frame = await (await el.elementHandle()).contentFrame();
+  await frame.waitForSelector('p');
+  return { el, frame };
+}
+async function altHoverFrame(page, frameSel, sel, idx = 5) {
+  const { el, frame } = await frameOf(page, frameSel);
+  const box = await el.boundingBox();
+  const p = await pointOnChar(frame, sel, idx);
+  const x = box.x + p.x, y = box.y + p.y;
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  return frame;
+}
+
+test('iframe(T-111): 같은 출처 iframe 안 문장도 Alt+호버로 그 프레임 안에 말풍선, 최상위 문서에는 안 뜸', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const frame = await altHoverFrame(page, '#fr-same', '#fa');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('같은출처프레임테스트 변동금리 대출은'))).toBe(true);
+  const hl = await frame.evaluate(() => [...CSS.highlights.get('analogy-helper-hl')][0].toString());
+  expect(hl).toContain('같은출처프레임테스트');
+  expect(await tooltip(page), '최상위 문서에는 말풍선 없음').toBeFalsy();
+});
+
+test('iframe(T-111): 다른 출처 iframe 안 문장도 동작, 최상위 호스트가 제외면 iframe 문장도 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  let frame = await altHoverFrame(page, '#fr-cross', '#fb');
+  expect(new URL(frame.url()).hostname).toBe('localhost');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('다른출처프레임테스트 API 서버는'))).toBe(true);
+
+  // 최상위(127.0.0.1)만 제외. iframe 호스트(localhost)는 목록에 없다
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  await expect.poll(() => tooltip(frame), { message: '최상위가 제외되면 iframe 말풍선도 닫힘' }).toBe('');
+  await page.reload();
+  const before = sentCount();
+  frame = await altHoverFrame(page, '#fr-cross', '#fb', 8);
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), 'iframe 말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('analogy-helper-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '최상위가 제외면 iframe 문장도 보내지 않음').toBe(0);
+});
+
+test('iframe 이중 방어(T-111): content.js를 건너뛴 iframe 요청도 payload.topHost 가 제외면 background가 막는다', async ({ context, ext }) => {
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { frame } = await frameOf(page, '#fr-cross');
+  const q = { sentence: '프레임이중방어테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', word: '', context: '', pageTitle: 't', noCache: true, topHost: '127.0.0.1' };
+  const before = sentCount();
+  expect(await hook(frame, 'explain-port', q)).toMatchObject({ ok: false, type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+  expect(await hook(frame, 'explain-msg', q)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(await hook(frame, 'feedback', q)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(sentCount() - before, '요청 0').toBe(0);
+
+  // topHost 가 제외 목록 밖이면 같은 프레임에서 정상
+  const okRes = await hook(frame, 'explain-port', { ...q, topHost: 'example.com' });
+  expect(okRes.type).toBe('result');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});
+
+test('iframe(T-111): 서브프레임은 시작 시 테마를 미리 받지 않고, 처음 보조키 호버 때 받는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // 최상위는 지금처럼 시작 시 받음
+  const { frame } = await frameOf(page, '#fr-cross');
+  expect(await contentTheme(frame), '서브프레임은 아직 graph:info 를 보내지 않음').toBeNull();
+  await altHoverFrame(page, '#fr-cross', '#fb');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  await waitTheme(frame, 'maple');
+});

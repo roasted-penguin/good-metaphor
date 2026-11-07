@@ -24,6 +24,8 @@ copyFileSync('tests/e2e/hook-content.js', `${OUT}/e2e-hook.js`);
 const mp = `${OUT}/manifest.json`;
 const manifest = JSON.parse(readFileSync(mp, 'utf8'));
 manifest.content_scripts.push({ matches: ['http://127.0.0.1:8766/*'], js: ['e2e-hook.js'], run_at: 'document_start' });
+// 다른 출처 iframe(localhost, T-111) 안에서 background 이중 방어(topHost)를 확인할 때 쓴다
+manifest.content_scripts.push({ matches: ['http://localhost:8766/*'], js: ['e2e-hook.js'], run_at: 'document_start', all_frames: true });
 writeFileSync(mp, JSON.stringify(manifest, null, 2));
 
 await build({ entryPoints: ['tests/e2e/ort-smoke-src.js'], bundle: true, format: 'esm', platform: 'browser', outfile: `${OUT}/ort-smoke.js`, logLevel: 'warning' });

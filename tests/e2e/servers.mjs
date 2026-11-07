@@ -66,9 +66,11 @@ function streamOut(res, cors, content) {
   }, cut > 1 ? STREAM_GAP_MS : 0);
 }
 
-function staticPage(_req, res) {
+// /frame.html 은 iframe 픽스처(T-111), 그 밖의 주소는 모두 테스트 페이지
+function staticPage(req, res) {
+  const file = new URL(req.url, 'http://x').pathname === '/frame.html' ? './frame.html' : './page.html';
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  res.end(readFileSync(new URL('./page.html', import.meta.url)));
+  res.end(readFileSync(new URL(file, import.meta.url)));
 }
 
 // 가짜 analogy-api(T-404). 응답 모양은 server/app/pipeline.py 반환값과 같다.

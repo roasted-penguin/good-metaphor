@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import '../../extension/lib/site-filter.js';
 import { DEFAULT_SETTINGS } from '../../extension/lib/config.js';
 
-const { normalizeHost, isExcludedHost, toggleHost, isBlockedSender, validateHostInput, DEFAULT_EXCLUDED_HOSTS } = globalThis.AnalogySiteFilter;
+const { normalizeHost, isExcludedHost, toggleHost, isBlockedSender, validateHostInput, frameHosts, DEFAULT_EXCLUDED_HOSTS } = globalThis.AnalogySiteFilter;
 const LIST = ['kbstar.com', 'mail.google.com'];
 
 test('normalizeHost: 소문자·끝 점·www. 제거, 포트·URL 무시, 빈 값은 빈 문자열', () => {
@@ -81,6 +81,39 @@ test('isBlockedSender: 탭에서 온 메시지만 본다, sender.url 먼저 그�
   assert.equal(isBlockedSender({ tab: { url: 'http://127.0.0.1/' }, url: 'https://example.com/' }, list), false, 'sender.url 우선');
   assert.equal(isBlockedSender({ tab: {} }, list), false, 'URL을 모르면 막지 않음');
   assert.equal(isBlockedSender({ tab: {}, url: 'https://example.com/' }, list), false);
+});
+
+test('isBlockedSender: 프레임이 실어 보낸 최상위 호스트(topHost)가 제외면 막는다 (T-111)', () => {
+  const list = ['127.0.0.1'];
+  const frame = { tab: {}, url: 'http://localhost:8766/frame.html', frameId: 3 };
+  assert.equal(isBlockedSender(frame, list), false, '프레임 호스트만 보면 통과');
+  assert.equal(isBlockedSender(frame, list, '127.0.0.1'), true, '최상위가 제외면 막음');
+  assert.equal(isBlockedSender(frame, list, 'http://127.0.0.1:8766/'), true, 'URL 꼴도 정규화');
+  assert.equal(isBlockedSender(frame, list, 'example.com'), false);
+  assert.equal(isBlockedSender(frame, list, ''), false, '빈 topHost 는 무시');
+  assert.equal(isBlockedSender({ tab: {}, url: 'http://127.0.0.1:8766/' }, list, 'example.com'), true, '보낸 문서가 제외면 topHost 와 무관하게 막음');
+  assert.equal(isBlockedSender({ url: 'http://localhost/' }, list, '127.0.0.1'), false, '탭이 없으면(확장 페이지) 막지 않음');
+});
+
+test('frameHosts: 자기 호스트 + 최상위 호스트(ancestorOrigins 마지막), 정규화·중복 제거 (T-111)', () => {
+  assert.deepEqual(frameHosts({ selfHost: 'localhost', ancestorOrigins: ['http://127.0.0.1:8766'], referrer: '' }), ['localhost', '127.0.0.1']);
+  assert.deepEqual(
+    frameHosts({ selfHost: 'ads.example.com', ancestorOrigins: ['https://mid.example.net', 'https://WWW.KBStar.com'], referrer: 'https://mid.example.net/x' }),
+    ['ads.example.com', 'kbstar.com'], '중첩이면 마지막(최상위)만, referrer 보다 ancestorOrigins 가 먼저');
+  assert.deepEqual(frameHosts({ selfHost: '127.0.0.1', ancestorOrigins: ['http://127.0.0.1:8766'], referrer: '' }), ['127.0.0.1'], '같은 출처면 하나');
+});
+
+test('frameHosts: ancestorOrigins 가 없으면 referrer, 둘 다 없으면 자기 호스트만 (T-111)', () => {
+  assert.deepEqual(frameHosts({ selfHost: 'localhost', ancestorOrigins: [], referrer: 'https://kbstar.com/login' }), ['localhost', 'kbstar.com']);
+  assert.deepEqual(frameHosts({ selfHost: 'localhost', referrer: 'https://kbstar.com/' }), ['localhost', 'kbstar.com'], 'ancestorOrigins 미지원');
+  assert.deepEqual(frameHosts({ selfHost: 'localhost', ancestorOrigins: [], referrer: '' }), ['localhost']);
+  assert.deepEqual(frameHosts({ selfHost: 'localhost' }), ['localhost']);
+});
+
+test('frameHosts: about:blank 처럼 자기 호스트가 비면 최상위만, ancestorOrigins 가 "null"이면 referrer (T-111)', () => {
+  assert.deepEqual(frameHosts({ selfHost: '', ancestorOrigins: ['https://kbstar.com'], referrer: '' }), ['kbstar.com']);
+  assert.deepEqual(frameHosts({ selfHost: 'a.com', ancestorOrigins: ['null'], referrer: 'https://kbstar.com/' }), ['a.com', 'kbstar.com']);
+  assert.deepEqual(frameHosts({ selfHost: '', ancestorOrigins: [], referrer: '' }), []);
 });
 
 test('validateHostInput: URL이든 호스트든 정규화해서 받는다 (T-144)', () => {
