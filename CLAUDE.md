@@ -63,6 +63,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/stores.js              공통 저장소 로더 + 사용자 저장소 어댑터(none / local-dev / remote)
   lib/graph.js               그래프 병합(공통 + 오버레이), 검증, 임베딩 텍스트
   lib/retrieval.js           점수 = 직접 유사도 × w1 + 최고 태그 유사도 × w2 + boost
+  lib/grounding.js           근거 검사: usedFact가 고른 노드 facts와 맞는지 + 비유 숫자가 facts·라벨·원문에 있는지 (T-123)
   lib/feedback.js            말풍선 피드백 층: 문장별 👎 제외·고른 개념 고정, 500건, 캐시 지문 (ADR 0010)
   lib/embed-each.js          임베딩은 항상 한 문장씩 (q8 묶음 차이, ADR 0011)
   lib/prompt.js              프롬프트, 데모 응답, 조사 처리
@@ -76,7 +77,7 @@ tests/e2e/                   Playwright: 가짜 LLM(:8765) + 테스트 페이지
 scripts/                     build, prepare-e2e
 ```
 
-호버 한 번의 흐름: content.js가 문장·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
+호버 한 번의 흐름: content.js가 문장·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 근거 검사(usedFact·숫자) → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
 
 ## 지켜야 할 규칙
 
