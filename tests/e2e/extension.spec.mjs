@@ -248,7 +248,6 @@ test('정밀 모드 비슷한 문장(T-138): 검색은 추상 구조 + 원문, �
   expect(r2.data.debug.abstractText).toBeTruthy();
   expect(r2.data.debug.feedback.queryVec).toBe('sentence');
   expect(r2.data.debug.feedback.extraEmbedMs).toBeGreaterThanOrEqual(0);
-  console.log('[T-138] extraEmbedMs', r2.data.debug.feedback.extraEmbedMs);
   expect(r2.data.debug.feedback.similar.find(s => s.nodeId === x)?.delta).toBeLessThan(0);
   expect(r2.data.feedbackApplied).toBe(true);
 });

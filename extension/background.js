@@ -216,16 +216,29 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const topK = admin.retrieval?.topK ?? 3;
   // 다른 문장의 👎·고정 중 지금 문장과 코사인이 임계값 이상인 것만 점수를 가감한다(T-130)
   const memory = similarMemory(feedbackRecords, sentenceHash);
-  const fb = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackMemory: memory }), feedbackRecords, sentenceHash, topK);
+  // 정밀 모드는 q가 추상 구조 + 원문이라 원문으로 만든 기록 벡터(queryVector)와 코사인이 낮다.
+  // 메모리가 있을 때만 원문을 한 번 더 임베딩해(LLM 호출 없음) 비슷한 문장 판정에만 쓴다(T-138). 실패하면 q로 대체
+  let fq = q, queryVec = 'query', extraEmbedMs = 0;
+  if (memory.length && queryText !== sentence) {
+    const te = Date.now();
+    try {
+      const { vectors: [v] } = await offscreen('embed', { texts: [sentence], kind: 'query' });
+      if (Array.isArray(v) && v.length) { fq = v; queryVec = 'sentence'; }
+    } catch (e) {
+      console.warn('[feedback] 정밀 모드 원문 벡터를 못 만들어 검색 벡터로 판정해요', e);
+    }
+    extraEmbedMs = Date.now() - te;
+  }
+  const fb = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq }), feedbackRecords, sentenceHash, topK);
   const candidates = fb.candidates;
   const similar = memory.length
-    ? [...feedbackAdjust(q, memory, { sim: admin.retrieval?.feedbackSim ?? 0.92, max: admin.retrieval?.feedbackMax ?? 0.1 })]
+    ? [...feedbackAdjust(fq, memory, { sim: admin.retrieval?.feedbackSim ?? 0.92, max: admin.retrieval?.feedbackMax ?? 0.1 })]
       .filter(([, d]) => d).map(([nodeId, d]) => ({ nodeId, delta: +d.toFixed(4) }))
     : [];
   // 비슷한 문장 가감이 상위 topK 순서를 바꿨는지는 메모리 없이 한 번 더 뽑아 비교한다(검색은 가볍다)
   let similarChanged = false;
   if (similar.length) {
-    const plain = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5 }), feedbackRecords, sentenceHash, topK);
+    const plain = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackQuery: fq }), feedbackRecords, sentenceHash, topK);
     similarChanged = plain.candidates.map(c => c.id).join() !== candidates.map(c => c.id).join();
   }
   const tags = topTags(q, graph, vecs, 5);
@@ -246,7 +259,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     theme: graph.theme,
     feedbackApplied: fb.applied || similarChanged,
     debug: {
-      feedback: { excluded: fb.excluded, pinned: fb.pinned, similar },
+      feedback: { excluded: fb.excluded, pinned: fb.pinned, similar, queryVec, extraEmbedMs },
       candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagSim: c.tag?.sim, source: c.source })),
       topTags: tags,
       abstractText,

@@ -35,16 +35,18 @@ export function feedbackAdjust(q, memory, { sim = 0.92, max = 0.1 } = {}) {
  * @param {number[]} q        질의 벡터
  * @param {object} graph      mergeGraphs 결과
  * @param {Map} vecs          'tag:<id>' | 'node:<id>' -> 벡터
- * @param {object} opts       { topK, directWeight, tagWeight, tagAgg, tagPenalty, feedbackMemory, feedbackSim, feedbackMax }
+ * @param {object} opts       { topK, directWeight, tagWeight, tagAgg, tagPenalty, feedbackMemory, feedbackQuery, feedbackSim, feedbackMax }
  *   tagAgg      'max'(가장 높은 태그) | 'top2mean'(상위 2개 평균, 태그 1개면 그 값)
  *   tagPenalty  태그 id -> 태그 유사도에서 뺄 값. 주제가 넓은 태그(예: 경제)로 쏠리는 것을 줄인다 (T-113)
  *   feedbackMemory  비슷한 문장 피드백 기록. 비어 있으면 결과가 이전과 같다 (T-130, feedbackAdjust)
+ *   feedbackQuery   비슷한 문장 판정에만 쓰는 벡터. 없으면 q. 정밀 모드는 q가 추상 구조 + 원문이라
+ *                   원문으로 만든 기록 벡터와 맞추려 원문 벡터를 넘긴다 (T-138)
  */
 export function retrieve(q, graph, vecs, {
   topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {},
-  feedbackMemory = [], feedbackSim = 0.92, feedbackMax = 0.1
+  feedbackMemory = [], feedbackQuery = null, feedbackSim = 0.92, feedbackMax = 0.1
 } = {}) {
-  const fb = feedbackMemory?.length ? feedbackAdjust(q, feedbackMemory, { sim: feedbackSim, max: feedbackMax }) : null;
+  const fb = feedbackMemory?.length ? feedbackAdjust(feedbackQuery || q, feedbackMemory, { sim: feedbackSim, max: feedbackMax }) : null;
   const tagSim = new Map();
   for (const t of graph.tags) {
     const v = vecs.get('tag:' + t.id);
