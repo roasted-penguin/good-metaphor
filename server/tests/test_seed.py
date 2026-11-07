@@ -61,11 +61,35 @@ def test_node_entities_named_by_label_and_hold_only_facts(graph, kg):
         assert e["source_id"] == f"seed:{n['id']}"
         for fact in n["facts"]:
             assert fact in e["description"]
-        # 새 문장을 지어내지 않는다: facts를 빼고 나면 남는 글자가 없어야 한다
+        # 새 문장을 지어내지 않는다: facts(와 별칭 머리줄)를 빼고 나면 남는 글자가 없어야 한다
         rest = e["description"]
+        if n.get("aliases"):
+            head = f"{n['label']}({', '.join(n['aliases'])})"
+            assert rest.startswith(head + "\n")
+            rest = rest[len(head):]
         for fact in n["facts"]:
             rest = rest.replace(fact, "")
         assert rest.strip() == ""
+
+
+def test_node_without_aliases_unchanged():
+    """T-114: 별칭이 없는 노드는 설명·청크가 예전과 같다(facts만, 청크는 라벨 + facts)."""
+    g = {"tags": [], "nodes": [{"id": "x", "label": "라벨", "facts": ["가.", "나."], "tags": []}], "edges": []}
+    kg = graph_to_custom_kg(g)
+    assert kg["entities"][0]["description"] == "가.\n나."
+    assert kg["chunks"][0]["content"] == "라벨\n가.\n나."
+    g["nodes"][0]["aliases"] = []
+    assert graph_to_custom_kg(g) == kg
+
+
+def test_node_aliases_go_after_label_in_description_and_chunk():
+    """T-114: 별칭은 확장 nodeText와 같은 방식(라벨 뒤 괄호, 쉼표)으로 설명·청크 첫 줄에 붙는다. 엔티티 이름은 라벨 그대로."""
+    g = {"tags": [], "nodes": [{"id": "x", "label": "스타포스 강화", "facts": ["가."], "tags": [], "aliases": ["펑", "프텍"]}], "edges": []}
+    kg = graph_to_custom_kg(g)
+    e = kg["entities"][0]
+    assert e["entity_name"] == "스타포스 강화"
+    assert e["description"] == "스타포스 강화(펑, 프텍)\n가."
+    assert kg["chunks"][0]["content"] == "스타포스 강화(펑, 프텍)\n가."
 
 
 def test_node_entity_names_are_found_by_retriever(graph, kg):

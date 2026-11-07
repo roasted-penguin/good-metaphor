@@ -67,7 +67,25 @@ def test_glossary_one_line_per_node_with_first_fact(graph):
     lines = glossary(graph)
     assert len(lines) == len(graph["nodes"]) == 18
     for line, node in zip(lines, graph["nodes"]):
-        assert line == f"{node['label']}: {node['facts'][0]}"
+        aliases = node.get("aliases") or []
+        label = f"{node['label']}({', '.join(aliases)})" if aliases else node["label"]
+        assert line == f"{label}: {node['facts'][0]}"
+
+
+def test_glossary_puts_aliases_after_label():
+    """T-114: 은어(aliases)는 "라벨(별칭들): facts[0]". 별칭이 없으면 예전 형식 그대로."""
+    fake = {"nodes": [
+        {"id": "a", "label": "스타포스 강화", "facts": ["첫 사실.", "둘째."], "aliases": ["펑", "프텍"]},
+        {"id": "b", "label": "큐브", "facts": ["큐브 사실."]},
+        {"id": "c", "label": "파티", "facts": ["파티 사실."], "aliases": []},
+    ]}
+    assert glossary(fake) == ["스타포스 강화(펑, 프텍): 첫 사실.", "큐브: 큐브 사실.", "파티: 파티 사실."]
+
+
+def test_glossary_has_slang_from_graph(graph):
+    text = "\n".join(glossary(graph))
+    for word in ["재획", "펑", "세금", "메요일"]:
+        assert word in text
 
 
 def test_glossary_and_config_have_no_banned_words(graph, config):
