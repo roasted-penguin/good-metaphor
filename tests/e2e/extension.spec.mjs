@@ -136,6 +136,40 @@ test('스트리밍: 후보 밖 nodeId 면 비유가 끝까지 안 보인다 (규
   expect(seen.at(-1)).toContain('테스트 뜻 풀이예요.');
 });
 
+// 근거 검사(T-123): 가짜 LLM은 "입장횟수테스트"면 facts 밖 숫자를, "사실조작테스트"면 facts에 없는 usedFact를 댄다
+const GROUNDING_REJECTED = '근거에 없는 내용이 섞여 있어서 비유를 숨겼어요.';
+
+test('근거 검사(T-123): facts 밖 숫자를 쓴 비유는 끝까지 안 보이고 근거 문구, 뜻은 먼저', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p6');
+  const seen = await recordTooltip(page, t => t.includes(GROUNDING_REJECTED));
+  expect(seen.filter(t => t.includes('7번만')), '지어낸 비유가 한 번도 보이면 안 됨').toEqual([]);
+  expect(seen.some(t => t.includes('테스트 뜻 풀이예요.') && !t.includes(GROUNDING_REJECTED)), '검사 전에 뜻은 먼저 보임').toBe(true);
+  expect(seen.at(-1)).toContain('테스트 뜻 풀이예요.');
+});
+
+test('근거 검사(T-123): 프롬프트에 usedFact, 정상은 통과, 숫자·usedFact 불일치는 숨김', async ({ ext }) => {
+  const ok = await ext.send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(calls.at(-1).system).toContain('usedFact에 글자 그대로 옮긴다');
+  expect(ok.data.analogy).toContain('같은 구조예요');
+  expect(ok.data.evidence).not.toBeNull();
+  expect(ok.data.rejected).toBeNull();
+  expect(ok.data.debug.grounding).toEqual({ ok: true });
+
+  const num = await ext.send({ type: 'explain', sentence: '입장횟수테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
+  expect(num.data.meaning).toBe('테스트 뜻 풀이예요.');
+  expect(num.data.analogy).toBe('');
+  expect(num.data.rejected).toBe(GROUNDING_REJECTED);
+  expect(num.data.evidence).toBeNull();
+  expect(num.data.debug.grounding).toEqual({ ok: false, reason: 'number-outside' });
+
+  const fact = await ext.send({ type: 'explain', sentence: '사실조작테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
+  expect(fact.data.analogy).toBe('');
+  expect(fact.data.rejected).toBe(GROUNDING_REJECTED);
+  expect(fact.data.debug.grounding).toEqual({ ok: false, reason: 'fact-mismatch' });
+});
+
 test('피드백(T-129): 👎 → 다른 근거로 다시, 다시 물어도 반영, 되돌리기', async ({ ext }) => {
   const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
   const r1 = await ext.send({ type: 'explain', ...q });

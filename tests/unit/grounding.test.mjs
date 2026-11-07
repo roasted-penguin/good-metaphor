@@ -124,3 +124,9 @@ test('헬퍼: charJaccard', () => {
   assert.equal(charJaccard('가나다라', '마바사아'), 0);
   assert.equal(charJaccard('', ''), 0);
 });
+
+test('numbersIn: 전각 숫자도 아라비아 숫자와 같게 본다(NFKC)', () => {
+  assert.deepEqual(numbersIn('확률 １０%'), ['10']);
+  assert.deepEqual(numbersIn('１，０００ 메소'), ['1000']);
+  assert.equal(check({ analogy: '１０번 시도하는 것과 같아요.', usedFact: '', sentence: '10번까지 할 수 있어요.' }).ok, true);
+});
