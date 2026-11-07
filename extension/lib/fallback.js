@@ -26,19 +26,20 @@ const passes = e => e.status === 429 || e.status === 503 || e.network || /시간
 // ── 429 쿨다운 기간(T-126) ──
 // 하루 한도인지는 제공자 id가 아니라 본문 모양으로 판정한다(규칙 7: 제공자별 분기 금지, 표 하나).
 // 표에 없는 모양(분당 TPM·RPM·PerMinute, 모르는 429)은 분당으로 본다.
+const GEMINI_PER_DAY = /PerDay/; // Gemini quotaId 모양 (…PerDayPerProjectPerModel…), 판정·기간이 같이 쓴다
 const DAILY_PATTERNS = [
   /on (?:tokens|requests) per day \((?:TPD|RPD)\)/i, // Groq 모양
-  /PerDay/                                           // Gemini quotaId 모양 (…PerDayPerProjectPerModel…)
+  GEMINI_PER_DAY
 ];
 const errText = e => `${e?.message || ''}\n${e?.body || ''}`;
 
 export const isDailyLimit = e => DAILY_PATTERNS.some(re => re.test(errText(e)));
 
-// "Please try again in 1h12m3s" → ms(올림). 없으면 null
+// "Please try again in 1h12m3s" / "820ms" → ms(올림). 없으면 null. 분(m) 뒤에 s가 오면 ms 단위다
 function tryAgainMs(text) {
-  const m = /try again in\s+(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i.exec(text);
-  if (!m || !(m[1] || m[2] || m[3])) return null;
-  const sec = (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (parseFloat(m[3]) || 0);
+  const m = /try again in\s+(?:(\d+)h)?(?:(\d+)m(?!s))?(?:([\d.]+)s)?(?:([\d.]+)ms)?/i.exec(text);
+  if (!m || !(m[1] || m[2] || m[3] || m[4])) return null;
+  const sec = (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (parseFloat(m[3]) || 0) + (parseFloat(m[4]) || 0) / 1000;
   return Math.ceil(Math.round(sec * 1e6) / 1e3); // 부동소수 오차(21.6*1000 등)를 지운 뒤 올림
 }
 
@@ -65,7 +66,7 @@ function nextLaMidnight(now) {
 // 하루 한도 기간을 정하는 규칙 표. 앞에서부터 처음 값이 나오는 것을 쓴다
 const DAILY_RULES = [
   (text) => tryAgainMs(text),                                 // Groq: 본문의 남은 시간
-  (text, now) => (/PerDay/.test(text) ? nextLaMidnight(now) - now : null) // Gemini 무료: LA 자정 리셋(retryDelay 는 짧아서 안 씀)
+  (text, now) => (GEMINI_PER_DAY.test(text) ? nextLaMidnight(now) - now : null) // Gemini 무료: LA 자정 리셋(retryDelay 는 짧아서 안 씀)
 ];
 
 // 429 하나에 대해 쿨다운할 시간(ms). 분당은 예전 그대로, 하루 한도는 리셋까지(최소 defaultMs, 상한 dailyMaxMs)
