@@ -128,3 +128,16 @@ test('admin.json 임베딩 모델은 e5-base q8 (T-113 결정)', () => {
   assert.equal(admin.embedding.model, 'Xenova/multilingual-e5-base');
   assert.equal(admin.embedding.dtype, 'q8');
 });
+
+test('바꿔 말한 문장 쌍: 24쌍 이상, 같음·다름 각 12쌍 이상, a는 평가셋·검증셋 문장, a !== b (T-130)', () => {
+  const pairs = read('tools/paraphrase-pairs.json');
+  const all = new Set([...evalSet, ...holdout].map(c => c.sentence));
+  assert.ok(Array.isArray(pairs) && pairs.length >= 24, `쌍 ${pairs.length}개`);
+  assert.ok(pairs.filter(p => p.same === true).length >= 12, '같은 뜻 쌍 부족');
+  assert.ok(pairs.filter(p => p.same === false).length >= 12, '다른 뜻 쌍 부족');
+  for (const p of pairs) {
+    assert.equal(typeof p.same, 'boolean', p.a);
+    assert.ok(typeof p.a === 'string' && all.has(p.a), `평가셋·검증셋에 없음: ${p.a}`);
+    assert.ok(typeof p.b === 'string' && p.b.trim() && p.a !== p.b, p.a);
+  }
+});

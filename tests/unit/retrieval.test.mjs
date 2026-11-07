@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cosine, retrieve, topTags } from '../../extension/lib/retrieval.js';
+import { cosine, retrieve, topTags, feedbackAdjust } from '../../extension/lib/retrieval.js';
 
 // 3차원 장난감 그래프: 태그 경유 점수가 순위를 뒤집는지 본다
 const graph = {
@@ -74,4 +74,80 @@ test('tagPenalty는 그 태그 경유 점수를 깎고, 결과 tag.sim은 감점
   assert.equal(two.score, 0.4); // A 0.9-0.5=0.4 > B 0.1
   assert.equal(two.tag.id, 'A');
   assert.equal(two.tag.sim, 0.9);
+});
+
+// 비슷한 문장 피드백 (T-130): 질의와 코사인이 임계값 이상인 기록만 그 노드 점수를 가감한다
+const near = (c) => [c, Math.sqrt(1 - c * c), 0]; // [1,0,0]과 코사인 c
+const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
+
+test('feedbackAdjust: 같은 방향 down은 -max, 직교는 영향 없음', () => {
+  const m = feedbackAdjust([1, 0, 0], [
+    { vec: [1, 0, 0], nodeId: 'a', vote: 'down' },
+    { vec: [0, 1, 0], nodeId: 'b', vote: 'down' }
+  ]);
+  close(m.get('a'), -0.1);
+  close(m.get('b') ?? 0, 0);
+});
+
+test('feedbackAdjust: pick은 +max*w, 노드 합은 +max를 넘지 않음', () => {
+  const same = { vec: [1, 0, 0], nodeId: 'a', vote: 'pick' };
+  close(feedbackAdjust([1, 0, 0], [same]).get('a'), 0.1);
+  close(feedbackAdjust([1, 0, 0], [same, same, same]).get('a'), 0.1);
+  // w = (0.96 - 0.92) / 0.08 = 0.5
+  close(feedbackAdjust([1, 0, 0], [{ vec: near(0.96), nodeId: 'a', vote: 'pick' }]).get('a'), 0.05, 1e-6);
+});
+
+test('feedbackAdjust: 경계 sim=0.9에서 코사인 0.9 → 0, 0.95 → -0.05', () => {
+  close(feedbackAdjust([1, 0, 0], [{ vec: near(0.9), nodeId: 'a', vote: 'down' }], { sim: 0.9 }).get('a') ?? 0, 0, 1e-6);
+  close(feedbackAdjust([1, 0, 0], [{ vec: near(0.95), nodeId: 'a', vote: 'down' }], { sim: 0.9 }).get('a'), -0.05, 1e-6);
+});
+
+test('feedbackAdjust: vec 없거나 길이가 다른 기록은 건너뜀', () => {
+  const m = feedbackAdjust([1, 0, 0], [
+    { nodeId: 'a', vote: 'down' },
+    { vec: null, nodeId: 'a', vote: 'down' },
+    { vec: [1, 0], nodeId: 'a', vote: 'down' },
+    { vec: [1, 0, 0], nodeId: 'b', vote: 'down' }
+  ]);
+  assert.equal(m.has('a'), false);
+  close(m.get('b'), -0.1);
+});
+
+// n2에 boost를 줘 n1(0.552)과 n2(0.511)를 가깝게 만든다
+const gClose = { ...graph, boosts: { n2: 0.3 } };
+
+test('retrieve: 메모리가 비면 결과가 옵션 없을 때와 완전히 같음(feedback 필드 없음)', () => {
+  const base = retrieve(q, gClose, vecs);
+  assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: [] }), base);
+  assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: [{ vec: [0, 1, 0], nodeId: 'n1', vote: 'down' }] }), base);
+  assert.ok(base.every(r => !('feedback' in r)));
+});
+
+test('retrieve: 같은 방향 down은 그 노드 점수를 정확히 -0.1, 순위가 내려감', () => {
+  const base = retrieve(q, gClose, vecs);
+  assert.equal(base[0].id, 'n1');
+  const r = retrieve(q, gClose, vecs, { feedbackMemory: [{ vec: [...q], nodeId: 'n1', vote: 'down' }] });
+  assert.equal(r[0].id, 'n2');
+  const n1 = r.find(x => x.id === 'n1');
+  assert.equal(n1.feedback, -0.1);
+  close(n1.score, base.find(x => x.id === 'n1').score - 0.1, 2e-4);
+  assert.equal('feedback' in r.find(x => x.id === 'n2'), false);
+});
+
+test('retrieve: feedbackSim·feedbackMax 옵션과 vec 없는 기록', () => {
+  const mem = [{ nodeId: 'n1', vote: 'down' }, { vec: [...q], nodeId: 'n2', vote: 'pick' }];
+  const r = retrieve(q, gClose, vecs, { feedbackMemory: mem, feedbackSim: 0.5, feedbackMax: 0.2 });
+  assert.equal(r.find(x => x.id === 'n2').feedback, 0.2);
+  assert.equal('feedback' in r.find(x => x.id === 'n1'), false);
+});
+
+test('feedbackAdjust: 노드 합은 마지막에 한 번만 잘라 순서와 무관', () => {
+  const pick = { vec: [1, 0, 0], nodeId: 'a', vote: 'pick' };
+  const down = { vec: [1, 0, 0], nodeId: 'a', vote: 'down' };
+  close(feedbackAdjust([1, 0, 0], [pick, pick, pick, down]).get('a'), 0.1);
+  close(feedbackAdjust([1, 0, 0], [down, pick, pick, pick]).get('a'), 0.1);
+});
+
+test('retrieve: feedbackMemory가 null이어도 예외 없이 이전과 같음', () => {
+  assert.deepEqual(retrieve(q, gClose, vecs, { feedbackMemory: null }), retrieve(q, gClose, vecs));
 });

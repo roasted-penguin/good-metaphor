@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback } from '../../extension/lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, similarMemory, boostForNode } from '../../extension/lib/feedback.js';
 
 // 검색 후보(retrieve 결과 모양만 흉내)
 const cands = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, label: id.toUpperCase(), score: 1 - i * 0.1 }));
@@ -127,4 +127,99 @@ test('summarizeFeedback: 오늘 포함 지난 7일만 센다', () => {
 
 test('summarizeFeedback: 빈 입력이면 모두 0', () => {
   assert.deepEqual(summarizeFeedback([], {}, '2026-11-08'), { hovers: 0, up: 0, down: 0, pick: 0 });
+});
+
+// ── 비슷한 문장 메모리 (T-130) ──
+
+test('similarMemory: 다른 문장의 👎만 넣고 지금 문장·벡터 없는 기록·👍은 뺀다', () => {
+  const v = [0.1, 0.2];
+  const m = similarMemory([
+    rec({ sentenceHash: 'h1', nodeId: 'a', vote: 'down', vec: v }),
+    rec({ sentenceHash: 'h2', nodeId: 'b', vote: 'down', vec: v }),
+    rec({ sentenceHash: 'h3', nodeId: 'c', vote: 'down' }),
+    rec({ sentenceHash: 'h4', nodeId: 'd', vote: 'up', vec: v })
+  ], 'h1');
+  assert.deepEqual(m, [{ vec: v, nodeId: 'b', vote: 'down' }]);
+});
+
+test('similarMemory: pick은 pickedNodeId를 nodeId로 쓴다', () => {
+  const v = [1, 0];
+  const m = similarMemory([rec({ sentenceHash: 'h2', nodeId: 'a', vote: 'pick', pickedNodeId: 'c', vec: v })], 'h1');
+  assert.deepEqual(m, [{ vec: v, nodeId: 'c', vote: 'pick' }]);
+});
+
+test('similarMemory: 같은 문장·노드는 나중 기록이 이긴다, 고정은 문장마다 하나', () => {
+  const v = [1, 0];
+  // pick c 다음에 c를 👎 → 그 문장의 c는 down만
+  const m1 = similarMemory([
+    rec({ ts: 2, sentenceHash: 'h2', nodeId: 'c', vote: 'down', vec: v }),
+    rec({ ts: 1, sentenceHash: 'h2', nodeId: 'a', vote: 'pick', pickedNodeId: 'c', vec: v })
+  ], 'h1');
+  assert.deepEqual(m1, [{ vec: v, nodeId: 'c', vote: 'down' }]);
+  // pick b 다음에 pick c → c만 고정
+  const m2 = similarMemory([
+    rec({ ts: 1, sentenceHash: 'h2', nodeId: 'a', vote: 'pick', pickedNodeId: 'b', vec: v }),
+    rec({ ts: 2, sentenceHash: 'h2', nodeId: 'a', vote: 'pick', pickedNodeId: 'c', vec: v })
+  ], 'h1');
+  assert.deepEqual(m2, [{ vec: v, nodeId: 'c', vote: 'pick' }]);
+  // 서로 다른 문장의 같은 노드 👎는 각각 남는다
+  const m3 = similarMemory([
+    rec({ sentenceHash: 'h2', nodeId: 'a', vote: 'down', vec: v }),
+    rec({ sentenceHash: 'h3', nodeId: 'a', vote: 'down', vec: [0, 1] })
+  ], 'h1');
+  assert.equal(m3.length, 2);
+});
+
+test('similarMemory: 기록이 없으면 빈 배열', () => {
+  assert.deepEqual(similarMemory([], 'h1'), []);
+  assert.deepEqual(similarMemory(undefined, 'h1'), []);
+});
+
+// 로그인 사용자 노드 가중치 (T-130). 가중치는 기록만으로 정해진다(0 = 가중치 없음).
+const down = (h, nodeId = 'cube', ts = 0) => ({ id: `${h}-${ts}`, ts, sentenceHash: h, nodeId, vote: 'down' });
+
+test('boostForNode: 서로 다른 문장 👎 2건이면 0', () => {
+  assert.equal(boostForNode([down('a', 'cube', 1), down('b', 'cube', 2)], 'cube'), 0);
+  assert.equal(boostForNode([], 'cube'), 0);
+});
+
+test('boostForNode: 3문장이면 -0.05, 4문장이면 -0.10', () => {
+  const three = [down('a', 'cube', 1), down('b', 'cube', 2), down('c', 'cube', 3)];
+  assert.equal(boostForNode(three, 'cube'), -0.05);
+  assert.equal(boostForNode([...three, down('d', 'cube', 4)], 'cube'), -0.1);
+});
+
+test('boostForNode: 같은 문장 반복 👎는 값을 바꾸지 않는다', () => {
+  const three = [down('a', 'cube', 1), down('b', 'cube', 2), down('c', 'cube', 3)];
+  assert.equal(boostForNode([...three, down('b', 'cube', 4), down('a', 'cube', 5)], 'cube'), -0.05);
+});
+
+test('boostForNode: 다른 노드·👍·고정 기록은 세지 않는다', () => {
+  const recs = [
+    down('a', 'cube', 1), down('b', 'meso', 2),
+    { id: 'u', ts: 3, sentenceHash: 'c', nodeId: 'cube', vote: 'up' },
+    { id: 'p', ts: 4, sentenceHash: 'd', nodeId: 'cube', vote: 'pick', pickedNodeId: 'star' },
+    down('e', 'cube', 5)
+  ];
+  assert.equal(boostForNode(recs, 'cube'), 0);
+});
+
+test('boostForNode: 하한 -0.2, 부동소수 오차 없음', () => {
+  const recs = n => 'abcdefghij'.slice(0, n).split('').map((h, i) => down(h, 'cube', i));
+  assert.equal(boostForNode(recs(5), 'cube'), -0.15);
+  assert.equal(boostForNode(recs(6), 'cube'), -0.2);
+  assert.equal(boostForNode(recs(10), 'cube'), -0.2);
+});
+
+test('boostForNode: 👎 → 되돌리기 → 다시 👎를 반복해도 더 내려가지 않는다', () => {
+  let recs = [down('s1', 'cube', 1), down('s2', 'cube', 2), down('s3', 'cube', 3)];
+  assert.equal(boostForNode(recs, 'cube'), -0.05);
+  recs = removeRecord(recs, 's3-3');
+  assert.equal(boostForNode(recs, 'cube'), 0);
+  for (let t = 4; t < 8; t++) {
+    recs = addRecord(recs, down('s3', 'cube', t));
+    assert.equal(boostForNode(recs, 'cube'), -0.05);
+    recs = removeRecord(recs, `s3-${t}`);
+    assert.equal(boostForNode(recs, 'cube'), 0);
+  }
 });

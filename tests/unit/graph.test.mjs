@@ -39,6 +39,18 @@ test('오버레이: 숨김·추가·가중치가 합쳐진다', () => {
   assert.ok(!g.edges.some(e => e.from === 'sol_erda' || e.to === 'sol_erda'), '숨긴 노드의 엣지도 빠진다');
 });
 
+test('가중치: 손으로 넣은 nodeBoosts와 피드백 feedbackBoosts를 더하고 -0.2~0.2로 자른다 (T-130)', () => {
+  const g = mergeGraphs(common, {
+    nodeBoosts: { starforce: 0.1, cube: -0.2, meso: 0.15 },
+    feedbackBoosts: { starforce: -0.05, cube: -0.1, auction: -0.05, meso: 0.1 }
+  });
+  assert.equal(g.boosts.starforce, 0.05);
+  assert.equal(g.boosts.cube, -0.2, '하한');
+  assert.equal(g.boosts.meso, 0.2, '상한');
+  assert.equal(g.boosts.auction, -0.05, '피드백만 있으면 그 값');
+  assert.equal(mergeGraphs(common, null).boosts.starforce, undefined);
+});
+
 test('관심사 변경(useCommon=false): 공통 노드는 빠지고 공통 태그 사전은 재사용', () => {
   const g = mergeGraphs(common, {
     useCommon: false, domain: '축구', theme: 'neutral',

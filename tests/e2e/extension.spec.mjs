@@ -168,6 +168,29 @@ test('피드백(T-129): 다른 개념을 고르면 그 개념이 근거, 후보 
   expect(lf.data.result.rejected).toMatch(/근거 목록에 없는/);
 });
 
+test('비슷한 문장(T-130): 👎 기록에 벡터 저장(목록엔 없음) → 거의 같은 문장은 감점, 무관한 문장은 그대로', async ({ ext }) => {
+  const a = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...a });
+  const x = r1.data.evidence.nodeId;
+  await ext.send({ type: 'feedback', record: { sentence: a.sentence, nodeId: x, tagId: null, vote: 'down', provider: r1.data.debug.provider } });
+  // 기록에는 벡터가 붙지만 설정 화면·내보내기용 목록에는 싣지 않는다
+  const stored = await ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback);
+  expect(Array.isArray(stored[0].vec) && stored[0].vec.length > 0).toBe(true);
+  const l = await ext.send({ type: 'feedback:list' });
+  expect(Object.keys(l.data.items[0])).not.toContain('vec');
+  // 끝 마침표만 다른 문장: 대체 임베더 코사인 ≥ 임계값 → X 감점
+  const a2 = { ...a, sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다' };
+  const r2 = await ext.send({ type: 'explain', ...a2 });
+  const sim = r2.data.debug.feedback.similar;
+  expect(sim.find(s => s.nodeId === x)?.delta).toBeLessThan(0);
+  expect(r2.data.feedbackApplied).toBe(true);
+  // 무관한 문장은 가감 없음
+  const b = { ...a, sentence: '근력 운동은 초보 때는 빨리 늘지만 숙련될수록 같은 노력 대비 성장이 더뎌진다.' };
+  const r3 = await ext.send({ type: 'explain', ...b });
+  expect(r3.data.debug.feedback.similar).toEqual([]);
+  expect(r3.data.feedbackApplied).toBe(false);
+});
+
 test('내 피드백(T-132): 목록·공유 설정·7일 통계·지운 노드 라벨·전부 지우기 메시지', async ({ ext }) => {
   const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
   const r1 = await ext.send({ type: 'explain', ...q });
@@ -498,6 +521,91 @@ test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async
 
   await send({ type: 'auth:logout' });
   expect((await send({ type: 'graph:info' })).data.merged).toMatchObject({ domain: '메이플스토리', usesCommon: true });
+});
+
+// 같은 개념 👎 누적 → 로그인 사용자 오버레이 가중치 (T-130)
+const DOWN_SENTENCES = ['예금 금리가 오르면 이자가 늘어난다.', '환율이 오르면 수입품 값이 비싸진다.', '물가가 오르면 같은 돈으로 살 수 있는 것이 줄어든다.'];
+
+test('로그인 시 같은 노드에 서로 다른 문장 👎 3건 → 오버레이 feedbackBoosts -0.05, 같은 문장 반복은 세지 않음 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  expect((await send({ type: 'auth:login', nickname: '테스터' })).data.adapter).toBe('local-dev');
+  const boost = async () => (await send({ type: 'overlay:get' })).data.feedbackBoosts.meso;
+  for (const [i, sentence] of DOWN_SENTENCES.entries()) {
+    expect(await boost()).toBeUndefined();
+    expect((await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).ok).toBe(true);
+    if (i < 2) expect(await boost()).toBeUndefined();
+  }
+  expect(await boost()).toBe(-0.05);
+  // 이미 센 문장을 다시 👎해도 그대로
+  await send({ type: 'feedback', record: { sentence: DOWN_SENTENCES[0], nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect(await boost()).toBe(-0.05);
+  // 다른 노드에는 번지지 않는다
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts.auction).toBeUndefined();
+});
+
+test('로그인 시 👎 되돌리기는 가중치도 되돌리고, 다시 👎해도 더 내려가지 않는다 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  const boosts = async () => (await send({ type: 'overlay:get' })).data.feedbackBoosts;
+  const downMeso = async sentence => (await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).data.id;
+  await downMeso(DOWN_SENTENCES[0]);
+  await downMeso(DOWN_SENTENCES[1]);
+  let id = await downMeso(DOWN_SENTENCES[2]);
+  expect((await boosts()).meso).toBe(-0.05);
+  for (let i = 0; i < 3; i++) {
+    expect((await send({ type: 'feedback-undo', id })).ok).toBe(true);
+    expect('meso' in (await boosts())).toBe(false); // 키를 지운다
+    id = await downMeso(DOWN_SENTENCES[2]);
+    expect((await boosts()).meso).toBe(-0.05);
+  }
+});
+
+test('로그인 시 👎 누적은 손으로 넣은 nodeBoosts를 건드리지 않고 feedbackBoosts에만 쓴다 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: { nodeBoosts: { meso: 0.1 } } })).data.ok).toBe(true);
+  for (const sentence of DOWN_SENTENCES) await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } });
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodeBoosts.meso).toBe(0.1);
+  expect(ov.feedbackBoosts.meso).toBe(-0.05);
+});
+
+test('로그인 시 피드백 전부 지우기 → feedbackBoosts도 비워진다(가중치는 기록으로만 정해짐) (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: { nodeBoosts: { meso: 0.1 } } })).data.ok).toBe(true);
+  for (const sentence of DOWN_SENTENCES) await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  expect((await send({ type: 'feedback:clear' })).ok).toBe(true);
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.feedbackBoosts).toEqual({});
+  expect(ov.nodeBoosts).toEqual({ meso: 0.1 }); // 손으로 넣은 값은 그대로
+});
+
+test('로그인 시 500건 상한으로 오래된 👎가 밀려나면 feedbackBoosts도 풀린다 (T-130)', async ({ ext }) => {
+  const { send, page } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  for (const sentence of DOWN_SENTENCES) await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  // 👍 497건 뒤에는 👎 3건이 남고(3 + 497 = 500), 498번째 👍에서 가장 오래된 👎가 밀려난다
+  await page.evaluate(async () => {
+    for (let i = 0; i < 497; i++) await chrome.runtime.sendMessage({ type: 'feedback', record: { sentence: `문장 ${i}`, nodeId: 'auction', vote: 'up' } });
+  });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  await send({ type: 'feedback', record: { sentence: '마지막 문장', nodeId: 'auction', vote: 'up' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({});
+});
+
+test('로그아웃 상태의 같은 노드 👎 3건은 오버레이를 바꾸지 않는다 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  for (const sentence of DOWN_SENTENCES) {
+    expect((await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).ok).toBe(true);
+  }
+  expect((await send({ type: 'feedback:list' })).data.items).toHaveLength(3); // 피드백 기록은 남는다
+  await send({ type: 'auth:login', nickname: '테스터' });
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodeBoosts).toEqual({});
+  expect(ov.feedbackBoosts).toEqual({});
 });
 
 test('정밀 모드, 데모 제공자, 키 없음 오류', async ({ ext }) => {
