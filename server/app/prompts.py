@@ -1,7 +1,7 @@
 """프롬프트. 비유 프롬프트는 확장 extension/lib/prompt.js의 buildAnalogyPrompt를 그대로 옮긴 것이다.
 
 규칙 문장을 고치면 prompt.js도 함께 고친다(tests/test_prompts.py가 두 파일의 고정 문구를 비교한다).
-핵심 규칙: 관심사 쪽 내용은 [근거]에 있는 사실만 쓴다(규칙 1).
+핵심 규칙: 관심사 쪽 내용은 [근거]에 있는 사실만 쓴다(규칙 1). 쓴 사실은 usedFact로 옮긴다(규칙 7, T-123).
 """
 from __future__ import annotations
 
@@ -21,8 +21,9 @@ _ANALOGY_SYSTEM_LINES = [
     "3. 구조가 맞는 후보가 없으면 analogy를 빈 문자열로 두고 nodeId를 null로 둔다. 억지 비유는 틀린 설명보다 나쁘다.",
     f'4. analogy는 "{_PREFIX}" 문구로 시작하는 1~2문장, 120자 안쪽. 원문과 {_DOMAIN}의 어떤 부분이 대응하는지 드러나게 쓴다.',
     "5. meaning은 원문 문장의 뜻을 중학생도 알 쉬운 말로 1문장. 원문이 영어여도 한국어로 쓴다.",
-    "6. 존댓말(~요)을 쓴다. JSON 객체만 출력한다. 필드는 meaning, analogy, nodeId, tagId, mapping 순서로 쓴다.",
-    '출력 형식: {"meaning": string, "analogy": string, "nodeId": string|null, "tagId": string|null, "mapping": string}',
+    "6. 존댓말(~요)을 쓴다. JSON 객체만 출력한다. 필드는 meaning, analogy, nodeId, tagId, usedFact, mapping 순서로 쓴다.",
+    f"7. analogy에 쓴 {_DOMAIN} 쪽 사실은 고른 후보의 facts 문장 하나를 usedFact에 글자 그대로 옮긴다. 비유가 없으면 usedFact는 빈 문자열이다.",
+    '출력 형식: {"meaning": string, "analogy": string, "nodeId": string|null, "tagId": string|null, "usedFact": string, "mapping": string}',
     'mapping은 "원문 개념 ↔ 관심사 개념" 형태의 짧은 대응 한 줄이다.',
 ]
 

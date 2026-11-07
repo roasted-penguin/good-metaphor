@@ -1,6 +1,7 @@
 """/v1/analogy 파이프라인: 키워드 LLM → 검색기(상위 3) → 비유 LLM → 근거 검증 → 확장 explain() 모양 응답.
 
 규칙 1: LLM이 고른 nodeId가 후보에 없으면 비유를 숨긴다(문구는 확장 background.js와 같다).
+그 뒤 근거 검사(T-123): usedFact·숫자가 고른 노드 facts 밖이면 비유를 숨긴다(app/grounding.py).
 """
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from .grounding import GROUNDING_REJECTED_TEXT, check_grounding
 from .llm import LLM, LLMError
 from .prompts import build_analogy_prompt, build_keyword_prompt, parse_json_object, parse_keywords
 from .retriever import Retriever, RetrieverError, RetrieverUnavailable
@@ -90,6 +92,18 @@ class AnalogyPipeline:
             analogy = ""
             rejected = REJECTED_TEXT
 
+        # 5) 근거 검사(T-123): 비유가 고른 노드 facts 밖 사실·숫자를 쓰면 숨긴다. 비유가 비었으면 건너뛴다
+        grounding = None
+        if analogy and chosen:
+            labels = [chosen.label, *[n.get("label") for n in (chosen.neighbors or [])]]
+            ok, reason = check_grounding(analogy, answer.get("usedFact"), chosen.facts, req.sentence,
+                                         req.context, labels=labels)
+            grounding = {"ok": True} if ok else {"ok": False, "reason": reason}
+            if not ok:
+                analogy = ""
+                rejected = GROUNDING_REJECTED_TEXT
+                chosen = None
+
         tag_label_by_id = {t["id"]: t.get("label") for t in graph.get("tags", [])}
         evidence = None
         if chosen:
@@ -126,6 +140,7 @@ class AnalogyPipeline:
                 "llmRetries": 0,
                 "user": None,
                 "keywords": {"hl": hl, "ll": ll},
+                **({"grounding": grounding} if grounding is not None else {}),
                 "ms": int((time.monotonic() - t0) * 1000),
             },
         }
