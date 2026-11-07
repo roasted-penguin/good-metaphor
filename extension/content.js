@@ -18,14 +18,25 @@
   const AP = globalThis.AnalogyPlace;      // lib/place.js (manifest에서 먼저 주입, T-109)
   let theme = 'maple';      // 말풍선 테마. 미리 받기(graph:info)·stage·결과 순으로 고쳐진다
   let themeStale = true;    // 테마를 (다시) 받아야 함
+  /* 프레임(T-111): 모든 프레임에 주입된다(all_frames). 프레임마다 자기 안에 말풍선·강조를 띄운다.
+     iframe이면 자기 호스트와 최상위 페이지 호스트 중 하나라도 제외 목록에 있으면 꺼진다
+     (은행 페이지 안 다른 출처 iframe 문장이 새지 않게). topHost는 background 이중 방어용으로 페이로드에 싣는다 */
+  const isTop = window === window.top;
+  const hosts = isTop
+    ? [SF.normalizeHost(location.hostname)]
+    : SF.frameHosts({ selfHost: location.hostname, ancestorOrigins: location.ancestorOrigins, referrer: document.referrer });
+  const topHost = isTop ? hosts[0] : (hosts.at(-1) ?? '');
+  const excludedBy = list => hosts.some(h => SF.isExcludedHost(h, list));
+  // 서브프레임(광고 등)은 시작 시 테마를 미리 받지 않고 처음 보조키를 누를 때(trigger) 받는다(프레임 많은 페이지의 메시지 폭주 방지)
+  let themeWanted = isTop;
   // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
-  let siteExcluded = SF.isExcludedHost(location.hostname, SF.DEFAULT_EXCLUDED_HOSTS);
+  let siteExcluded = excludedBy(SF.DEFAULT_EXCLUDED_HOSTS);
   // 켜져 있고 이 사이트가 제외 목록에 없을 때만 동작한다
   const active = () => settings.enabled && !siteExcluded;
   function loadSettings() {
     chrome.storage.local.get('settings', ({ settings: s }) => {
       settings = { ...settings, ...(s || {}) };
-      siteExcluded = SF.isExcludedHost(location.hostname, settings.excludedHosts ?? SF.DEFAULT_EXCLUDED_HOSTS);
+      siteExcluded = excludedBy(settings.excludedHosts ?? SF.DEFAULT_EXCLUDED_HOSTS);
       if (!active()) hideTooltip();
       else refreshIfStale();
     });
@@ -34,7 +45,7 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.settings) loadSettings();
-    if (Object.keys(changes).some(isGraphKey)) { themeStale = true; markTheme(); if (active()) refreshTheme(); }
+    if (Object.keys(changes).some(isGraphKey)) { themeStale = true; markTheme(); if (active() && themeWanted) refreshTheme(); }
   });
 
   /* ───────── 테마 미리 받기 (T-108) ─────────
@@ -49,7 +60,7 @@
   let themeLoading = false; // 받는 중(같은 요청을 겹쳐 보내지 않게)
   // 지금 테마와 미리 받기 완료 여부. 콘텐츠 스크립트 격리 월드의 window라 페이지 스크립트에는 안 보인다(e2e가 기다릴 때 씀)
   const markTheme = () => { window.__analogyHelperTheme = { theme, ready: !themeStale }; };
-  const refreshIfStale = () => { if (themeStale && !themeLoading && active()) refreshTheme(); };
+  const refreshIfStale = () => { if (themeWanted && themeStale && !themeLoading && active()) refreshTheme(); };
   function refreshTheme() {
     const seq = ++themeSeq; // 늦게 온 옛 응답은 버린다(키가 바뀌어 다시 받은 경우)
     themeLoading = true;
@@ -487,12 +498,13 @@
 
   function trigger() {
     if (!active()) return;
+    themeWanted = true; // 서브프레임은 여기(처음 보조키를 누르거나 머무른 순간)서 처음 받는다(T-111)
     refreshIfStale(); // 미리 받기가 실패했으면 호버 때 다시(이번 말풍선은 stage theme이 고침)
     const s = sentenceAt(mouse.x, mouse.y);
     if (!s) return;
     if (current && current.key === s.key) return;
     const reqId = ++reqSeq;
-    const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120) };
+    const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120), topHost };
     // 줄은 호버한 순간 한 번만 고른다(뷰포트 y는 스크롤하면 다른 줄을 가리킴)
     const lineIndex = AP.pickLineIndex(s.range.getClientRects(), mouse.y);
     current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, lineIndex };

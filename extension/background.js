@@ -296,15 +296,18 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
 /* ───────────── 메시지 ───────────── */
 
 // 이중 방어(T-107): content.js가 막지만, 보낸 탭 호스트가 제외 목록이면 임베딩·LLM 없이 끝낸다.
-// explain()을 부르는 모든 길(포트, sendMessage explain, 피드백 rerun)에서 먼저 확인한다
+// explain()을 부르는 모든 길(포트, sendMessage explain, 피드백 rerun)에서 먼저 확인한다.
+// topHost(T-111): iframe이면 content.js가 페이로드에 싣는 최상위 페이지 호스트. 보낸 문서(sender.url)가
+// 제외가 아니어도 최상위가 제외면 막는다. explain 포트·메시지는 우리 콘텐츠 스크립트만 보낼 수 있어
+// (externally_connectable 없음, 페이지 스크립트는 chrome.runtime에 못 닿음) 이 값을 믿어도 된다
 const SITE_OFF = '이 사이트에서는 꺼져 있어요.';
-async function siteBlocked(sender) {
+async function siteBlocked(sender, topHost) {
   if (!sender?.tab) return false; // 확장 페이지 등은 설정을 읽지 않고 통과
   const { excludedHosts } = await getSettings();
-  return globalThis.AnalogySiteFilter.isBlockedSender(sender, excludedHosts);
+  return globalThis.AnalogySiteFilter.isBlockedSender(sender, excludedHosts, topHost);
 }
-async function assertSiteAllowed(sender) {
-  if (await siteBlocked(sender)) throw new Error(SITE_OFF);
+async function assertSiteAllowed(sender, topHost) {
+  if (await siteBlocked(sender, topHost)) throw new Error(SITE_OFF);
 }
 
 chrome.runtime.onConnect.addListener(port => {
@@ -313,7 +316,7 @@ chrome.runtime.onConnect.addListener(port => {
     if (msg.type !== 'explain') return;
     try {
       const post = m => { try { port.postMessage({ id: msg.id, ...m }); } catch {} };
-      if (await siteBlocked(port.sender)) { post({ type: 'error', error: SITE_OFF }); return; }
+      if (await siteBlocked(port.sender, msg.payload?.topHost)) { post({ type: 'error', error: SITE_OFF }); return; }
       countHover();
       // 병합 그래프를 먼저 읽어 모든 stage 메시지에 테마를 싣는다(T-108). 첫 결과 전 말풍선이 다른 테마로 뜨지 않게.
       // 읽은 그래프는 explain에 넘겨 다시 읽지 않는다
@@ -426,10 +429,10 @@ const handlers = {
     const text = await complete(provider, '짧게 답하는 도우미다.', '"연결 성공"이라고만 답해.', { json: false });
     return { ok: true, text: text.trim().slice(0, 80), provider: `${provider.id}/${provider.model}` };
   },
-  async explain(payload, sender) { await assertSiteAllowed(sender); countHover(); return explain(payload); },
+  async explain(payload, sender) { await assertSiteAllowed(sender, payload?.topHost); countHover(); return explain(payload); },
   // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
   async feedback({ record, rerun }, sender) {
-    await assertSiteAllowed(sender);
+    await assertSiteAllowed(sender, rerun?.topHost ?? record?.topHost);
     const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
     delete r.vec; // 벡터는 받지 않고 여기서 만든다
     if (r.vote === 'down' || r.vote === 'pick') {
@@ -447,7 +450,7 @@ const handlers = {
     return true;
   },
   async 'feedback-undo'({ id, rerun }, sender) {
-    if (rerun) await assertSiteAllowed(sender);
+    if (rerun) await assertSiteAllowed(sender, rerun.topHost);
     const before = await feedbackStore.get();
     const undone = before.find(r => r.id === id);
     const records = removeRecord(before, id);

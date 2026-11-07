@@ -47,11 +47,24 @@
 
   // background 이중 방어: 메시지를 보낸 쪽이 제외 사이트의 탭인가.
   // 탭에서 온 게 아니거나(확장 페이지 등) URL을 모르면 막지 않는다.
-  // sender.url은 권한 없이도 오는 보낸 문서 주소, tab.url은 tabs·호스트 권한이 있을 때만 온다
-  function isBlockedSender(sender, list) {
+  // sender.url은 권한 없이도 오는 보낸 문서 주소(iframe이면 그 프레임 주소), tab.url은 tabs·호스트 권한이 있을 때만 온다.
+  // topHost(T-111): content.js가 explain 페이로드에 실어 보내는 최상위 페이지 호스트. 은행 페이지 안 다른 출처
+  // iframe처럼 보낸 문서 호스트는 제외가 아니어도 최상위가 제외면 막는다
+  function isBlockedSender(sender, list, topHost) {
     if (!sender?.tab) return false;
     const url = sender.url || sender.tab.url;
-    return !!url && isExcludedHost(url, list);
+    if (url && isExcludedHost(url, list)) return true;
+    return !!topHost && isExcludedHost(topHost, list);
+  }
+
+  // 프레임에서 제외 판정에 쓸 호스트들(T-111): [자기 호스트, 최상위 호스트]. 정규화·빈 값·중복 제거.
+  // 최상위 = ancestorOrigins 마지막 항목(크롬), 없거나 "null"(sandbox)이면 referrer, 둘 다 없으면 자기 호스트만.
+  // 최상위 프레임에서는 부르지 않는다(최상위의 referrer는 이전 페이지라서)
+  function frameHosts({ selfHost, ancestorOrigins, referrer } = {}) {
+    const origins = ancestorOrigins ? [...ancestorOrigins] : [];
+    const last = String(origins.at(-1) ?? '');
+    const top = (last.includes('://') ? normalizeHost(last) : '') || normalizeHost(referrer); // 'null' 출처는 버린다
+    return [...new Set([normalizeHost(selfHost), top].filter(Boolean))];
   }
 
   // 설정 화면 "추가" 입력 검증(T-144). URL이든 호스트든 정규화한다.
@@ -70,5 +83,5 @@
     return { ok: true, host };
   }
 
-  globalThis.AnalogySiteFilter = Object.freeze({ DEFAULT_EXCLUDED_HOSTS, normalizeHost, isExcludedHost, toggleHost, isBlockedSender, validateHostInput });
+  globalThis.AnalogySiteFilter = Object.freeze({ DEFAULT_EXCLUDED_HOSTS, normalizeHost, isExcludedHost, toggleHost, isBlockedSender, frameHosts, validateHostInput });
 })();
