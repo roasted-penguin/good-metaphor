@@ -523,6 +523,36 @@ test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async
   expect((await send({ type: 'graph:info' })).data.merged).toMatchObject({ domain: '메이플스토리', usesCommon: true });
 });
 
+// 같은 개념 👎 누적 → 로그인 사용자 오버레이 가중치 (T-130)
+const DOWN_SENTENCES = ['예금 금리가 오르면 이자가 늘어난다.', '환율이 오르면 수입품 값이 비싸진다.', '물가가 오르면 같은 돈으로 살 수 있는 것이 줄어든다.'];
+
+test('로그인 시 같은 노드에 서로 다른 문장 👎 3건 → 오버레이 nodeBoosts -0.05, 같은 문장 반복은 세지 않음 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  expect((await send({ type: 'auth:login', nickname: '테스터' })).data.adapter).toBe('local-dev');
+  const boost = async () => (await send({ type: 'overlay:get' })).data.nodeBoosts.meso;
+  for (const [i, sentence] of DOWN_SENTENCES.entries()) {
+    expect(await boost()).toBeUndefined();
+    expect((await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).ok).toBe(true);
+    if (i < 2) expect(await boost()).toBeUndefined();
+  }
+  expect(await boost()).toBe(-0.05);
+  // 이미 센 문장을 다시 👎해도 그대로
+  await send({ type: 'feedback', record: { sentence: DOWN_SENTENCES[0], nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect(await boost()).toBe(-0.05);
+  // 다른 노드에는 번지지 않는다
+  expect((await send({ type: 'overlay:get' })).data.nodeBoosts.auction).toBeUndefined();
+});
+
+test('로그아웃 상태의 같은 노드 👎 3건은 오버레이를 바꾸지 않는다 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  for (const sentence of DOWN_SENTENCES) {
+    expect((await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).ok).toBe(true);
+  }
+  expect((await send({ type: 'feedback:list' })).data.items).toHaveLength(3); // 피드백 기록은 남는다
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:get' })).data.nodeBoosts).toEqual({});
+});
+
 test('정밀 모드, 데모 제공자, 키 없음 오류', async ({ ext }) => {
   const { send, setSettings } = ext;
   await setSettings({ preciseMode: true });
