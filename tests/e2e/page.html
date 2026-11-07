@@ -18,6 +18,8 @@
 <div id="sh-text"></div>
 <div id="sh-nested"></div>
 <div id="sh-closed"></div>
+<form id="pw-host-form" onsubmit="return false"><input type="password"><div id="sh-inform"></div></form>
+<div id="sh-form"></div>
 <script>
   (() => {
     const own = new CSSStyleSheet();
@@ -32,6 +34,9 @@
     const closed = document.getElementById('sh-closed').attachShadow({ mode: 'closed' });
     closed.innerHTML = '<p id="sc">닫힌섀도테스트 펭귄은 날지 못하지만 헤엄을 아주 잘 친다.</p>';
     window.__closedRoot = closed; // 테스트가 좌표를 구할 때만 쓴다(확장은 못 봄)
+    // 비밀번호 폼(T-107) × shadow: (f) light DOM 폼(비밀번호 칸 있음) 안의 호스트, (g) shadow 안 폼 + 비밀번호 칸
+    document.getElementById('sh-inform').attachShadow({ mode: 'open' }).innerHTML = '<p id="sif">폼안섀도테스트 계좌 비밀번호는 다른 사람에게 알려 주면 안 된다.</p>';
+    document.getElementById('sh-form').attachShadow({ mode: 'open' }).innerHTML = '<form onsubmit="return false"><p id="sf">섀도폼테스트 입력한 비밀번호는 안전하게 보내져야 한다.</p><input type="password"></form>';
   })();
 </script>
 <!-- T-111: 기존 문장 위치에 영향 없게 맨 아래. 같은 출처·다른 출처(localhost ≠ 127.0.0.1) iframe -->

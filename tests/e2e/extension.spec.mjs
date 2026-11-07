@@ -1462,6 +1462,15 @@ test('Shadow DOM(T-111): 열린 shadow 안 문장 → 그 문장만 요청, 강�
   await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 50));
   await expect.poll(() => hlText(page)).toBe('두번째 문장이에요.');
   expect(await sheets()).toHaveLength(2);
+  // 페이지가 adoptedStyleSheets 를 우리 시트 없이 갈아 끼우면, 다음 호버에서 다시 덧붙인다(그래도 하나)
+  await page.evaluate(() => { const r = document.getElementById('sh-open').shadowRoot; r.adoptedStyleSheets = [r.adoptedStyleSheets[0]]; });
+  expect(await sheets()).toHaveLength(1);
+  await page.keyboard.press('Escape');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => hlText(page)).toContain('열린섀도테스트');
+  list = await sheets();
+  expect(list).toHaveLength(2);
+  expect(list.filter(t => t.includes('::highlight(analogy-helper-hl)'))).toHaveLength(1);
 });
 
 test('Shadow DOM(T-111): shadow root 바로 아래 텍스트 노드(parentElement 없음)도 동작', async ({ context, ext }) => {
@@ -1492,4 +1501,23 @@ test('Shadow DOM(T-111): 닫힌 shadow 안 문장은 요청 0(접근 불가)', a
   expect(await tooltip(page), '말풍선 없음').toBeFalsy();
   expect(sentCount() - before, '요청 0').toBe(0);
   expect(calls.some(c => c.user.includes('닫힌섀도테스트'))).toBe(false);
+});
+
+test('비밀번호 폼 × Shadow DOM(T-111): 비밀번호 칸이 있는 폼 안 호스트의 shadow 문장, shadow 안 폼 문장 모두 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple');
+  const before = sentCount();
+  // (f) light DOM <form><input type=password><호스트> → 호스트의 열린 shadow 안 문장
+  await altHoverAt(page, await pointInShadow(page, ['#sh-inform', '@shadow', '#sif'], 5));
+  // (g) shadow 안 <form> 에 문장 + 비밀번호 칸
+  await altHoverAt(page, await pointInShadow(page, ['#sh-form', '@shadow', '#sf'], 5));
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('폼안섀도테스트') || c.user.includes('섀도폼테스트'))).toBe(false);
+
+  // 같은 페이지의 보통 shadow 문장은 정상(검사가 모든 shadow 를 막는 게 아님)
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
 });
