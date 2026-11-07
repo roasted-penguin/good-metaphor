@@ -103,6 +103,17 @@ def test_every_fragment_is_checked_against_prompt_js():
         assert frag in missing_fragments(changed), frag
 
 
+def test_prompt_forbids_slurs_and_real_people_without_listing_terms():
+    # 규칙 11: 규칙 문장만 넣고 금칙어 자체는 프롬프트에 넣지 않는다
+    import json as _j
+    system, _ = _build()
+    assert "커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다." in system
+    bl = _j.loads((Path(__file__).resolve().parents[2] / "extension/data/common/blocklist.json").read_text("utf-8"))
+    for card in bl["terms"]:
+        for t in [card["term"], *card["variants"]]:
+            assert t not in system and t not in _js_text()
+
+
 def test_system_prompt_substitutes_domain_and_prefix():
     system, _ = _build(domain="요리", analogy_prefix="요리로 치면")
     assert '잘 아는 "요리"에 빗대' in system

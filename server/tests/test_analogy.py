@@ -139,6 +139,80 @@ def test_grounding_check_skipped_when_node_check_rejects_or_no_analogy():
     assert "grounding" not in penguin["debug"]
 
 
+# --- 금칙어 필터(T-114): 규칙 1·근거 검사 뒤, meaning·analogy·mapping 검사 ---
+
+BLOCKED_REJECTED = "부적절한 표현이 섞여 있어서 비유를 숨겼어요."
+# 실제 금칙어 대신 테스트용 가짜 낱말
+_TEST_BL = [{"term": "금칙테스트말", "variants": ["금칙우회말"], "meaning": "테스트용", "category": "D",
+             "links": [], "first_seen": "2026-10-11", "sources": [], "status": "승인"},
+            {"term": "제안테스트말", "variants": [], "meaning": "테스트용", "category": "D",
+             "links": [], "first_seen": "2026-10-11", "sources": [], "status": "제안"}]
+
+
+class _PatchLLM(FakeLLM):
+    """FakeLLM 비유 답의 필드 끝에 글을 덧붙인다."""
+
+    def __init__(self, **suffix):
+        super().__init__()
+        self.suffix = suffix
+
+    async def complete(self, system, user, json):
+        raw = await super().complete(system, user, json)
+        if "검색용 키워드" in system:
+            return raw
+        import json as _j
+        ans = _j.loads(raw.strip().removeprefix("```json").removesuffix("```"))
+        for k, v in self.suffix.items():
+            ans[k] = (ans.get(k) or "") + v
+        return _j.dumps(ans, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("field", ["analogy", "mapping"])
+def test_blocked_analogy_or_mapping_is_hidden(field):
+    client, *_ = _client(llm=_PatchLLM(**{field: " 금.칙 테스트말"}), blocklist=_TEST_BL)
+    res = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.")
+    body = res.json()
+    assert body["analogy"] == "" and body["mapping"] == ""
+    assert body["meaning"] == "테스트 뜻 풀이예요."
+    assert body["rejected"] == BLOCKED_REJECTED
+    assert body["evidence"] is None
+    assert body["debug"]["blocked"] == {"field": field, "term": "(가림)"}
+    assert "테스트말" not in res.text
+
+
+def test_blocked_meaning_clears_meaning_too():
+    client, *_ = _client(llm=_PatchLLM(meaning=" 금칙우회말"), blocklist=_TEST_BL)
+    res = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.")
+    body = res.json()
+    assert body["meaning"] == "" and body["analogy"] == "" and body["mapping"] == ""
+    assert body["rejected"] == BLOCKED_REJECTED
+    assert body["debug"]["blocked"] == {"field": "meaning", "term": "(가림)"}
+    assert "우회말" not in res.text
+
+
+def test_suggested_terms_and_clean_answers_pass():
+    client, *_ = _client(llm=_PatchLLM(analogy=" (제안테스트말)"), blocklist=_TEST_BL)
+    body = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.").json()
+    assert body["analogy"].endswith("(제안테스트말)")
+    assert body["rejected"] is None
+    assert "blocked" not in body["debug"]
+
+
+def test_default_blocklist_file_is_loaded():
+    # 주입 없이 실제 blocklist.json(DEFAULT_BLOCKLIST_PATH)을 읽는다. 우회 표기도 잡는다
+    client, *_ = _client(llm=_PatchLLM(analogy=" 리.선.족"))
+    res = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.")
+    body = res.json()
+    assert body["analogy"] == "" and body["rejected"] == BLOCKED_REJECTED
+    assert "선.족" not in res.text and "리선족" not in res.text
+
+
+def test_missing_blocklist_file_still_answers(tmp_path):
+    client, *_ = _client(settings=_settings(blocklist_path=str(tmp_path / "없음.json")))
+    body = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.").json()
+    assert body["analogy"].startswith("메이플로 치면")
+
+
 def test_null_node_means_no_analogy():
     client, *_ = _client()
     body = _post(client, "펭귄은 남극에 살아요.").json()
