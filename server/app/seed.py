@@ -9,7 +9,7 @@
 
 이름 규칙(T-402): 노드 엔티티 이름 = 노드 label. retriever.context_to_candidates가 label(또는 id)로 노드를 찾는다.
 label은 사람이 읽는 이름이라 엔티티 벡터(이름 + 설명)에도 id보다 낫다. 태그 엔티티 이름 = 태그 label.
-설명에는 facts·desc를 그대로 쓰고 새 사실을 만들지 않는다(규칙 1·2). 태그는 graph["tags"]만 쓴다(규칙 9).
+설명에는 facts·desc를 그대로 쓰고 새 사실을 만들지 않는다(규칙 1·2). 노드 별칭(aliases)은 라벨 뒤 괄호로만 붙인다(T-114). 태그는 graph["tags"]만 쓴다(규칙 9).
 """
 from __future__ import annotations
 
@@ -26,6 +26,12 @@ def _node_source(node_id: str) -> str:
 
 def _tag_source(tag_id: str) -> str:
     return f"seed:tag:{tag_id}"
+
+
+def label_with_aliases(node: dict[str, Any]) -> str:
+    """라벨 뒤 괄호에 별칭(게임 은어)을 붙인다: "스타포스 강화(펑, 프텍)". 확장 nodeText와 같은 방식(T-114)."""
+    aliases = node.get("aliases") or []
+    return f"{node['label']}({', '.join(aliases)})" if aliases else node["label"]
 
 
 def graph_to_custom_kg(graph: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -53,11 +59,13 @@ def graph_to_custom_kg(graph: dict[str, Any]) -> dict[str, list[dict[str, Any]]]
     for n in nodes:
         sid = _node_source(n["id"])
         facts = list(n.get("facts", []))
-        chunks.append({"content": "\n".join([n["label"], *facts]), "source_id": sid, "file_path": FILE_PATH})
+        head = label_with_aliases(n)
+        chunks.append({"content": "\n".join([head, *facts]), "source_id": sid, "file_path": FILE_PATH})
+        # 별칭이 있으면 설명 첫 줄에 "라벨(별칭들)"을 둔다. 없으면 예전처럼 facts만(T-114)
         entities.append({
             "entity_name": n["label"],
             "entity_type": NODE_ENTITY_TYPE,
-            "description": "\n".join(facts),
+            "description": "\n".join([head, *facts] if n.get("aliases") else facts),
             "source_id": sid,
             "file_path": FILE_PATH,
         })
