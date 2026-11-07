@@ -2,6 +2,8 @@
 // 가짜 LLM은 stream:true 면 SSE로, meaning 까지 먼저 보내고 나머지는 STREAM_GAP_MS 뒤에 보낸다.
 // 모델이 'mock-busy'면 429(Retry-After 60)를 낸다(fallback 체인 확인용).
 // 문장에 "Leverage"가 있으면 후보에 없는 nodeId 로 답한다(근거 검증 확인용)
+// 정상 답에는 usedFact = 후보 [1]의 첫 fact 를 넣는다(T-123). 근거 검사 확인용 표시어:
+//   "입장횟수테스트" → facts·문장에 없는 숫자를 쓴 비유, "사실조작테스트" → facts에 없는 usedFact
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 
@@ -29,9 +31,13 @@ function mockLLM(req, res) {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
       const tag = user.match(/맞은 추상 태그: .+? \(id=(\S+)\)/);
       const nodeId = user.includes('Leverage') ? 'not-a-candidate' : id;
+      const usedFact = user.match(/\[1\] id=[\s\S]*?facts:\n\s+- (.+)/)?.[1] ?? '';
+      const answer = (analogy, fact = usedFact) => '```json\n' + JSON.stringify({ meaning: '테스트 뜻 풀이예요.', analogy, nodeId, tagId: tag?.[1] ?? null, usedFact: fact, mapping: `원문 ↔ ${label}` }) + '\n```';
       // "펭귄" 문장: 후보가 여럿이면 맞는 비유 없음, 사용자가 하나를 골라 후보가 1개면 그 개념으로 (T-106)
       if (user.includes('펭귄') && /\[2\] id=/.test(user)) content = '```json\n' + JSON.stringify({ meaning: '테스트 뜻 풀이예요.', analogy: '', nodeId: null, tagId: null, mapping: '' }) + '\n```';
-      else content = '```json\n' + JSON.stringify({ meaning: '테스트 뜻 풀이예요.', analogy: `메이플로 치면 ${label}과 같은 구조예요.`, nodeId, tagId: tag?.[1] ?? null, mapping: `원문 ↔ ${label}` }) + '\n```';
+      else if (user.includes('입장횟수테스트')) content = answer('메이플로 치면 일주일에 7번만 입장할 수 있는 것과 같아요.');
+      else if (user.includes('사실조작테스트')) content = answer('메이플로 치면 보스에 하루 세 번 들어가는 것과 같아요.', '보스는 하루에 세 번까지 입장할 수 있다.');
+      else content = answer(`메이플로 치면 ${label}과 같은 구조예요.`);
     }
     if (stream) return streamOut(res, cors, content);
     res.writeHead(200, { ...cors, 'content-type': 'application/json' });

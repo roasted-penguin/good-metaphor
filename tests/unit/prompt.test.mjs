@@ -25,7 +25,15 @@ test('extractMeaning: meaning이 없거나 비어 있으면 null', () => {
 
 test('비유 프롬프트: 필드 순서를 meaning → analogy → nodeId 로 고정한다', () => {
   const { system } = buildAnalogyPrompt({ sentence: 's', domain: '메이플스토리', analogyPrefix: '메이플로 치면', candidates: [] });
-  assert.match(system, /meaning, analogy, nodeId, tagId, mapping 순서로/);
+  assert.match(system, /meaning, analogy, nodeId, tagId, usedFact, mapping 순서로/);
+  assert.match(system, /"tagId": string\|null, "usedFact": string, "mapping": string\}/);
+});
+
+test('비유 프롬프트: analogy에 쓴 사실을 고른 후보 facts 한 문장 그대로 usedFact에 옮기게 한다 (T-123)', () => {
+  const { system } = buildAnalogyPrompt({ sentence: 's', domain: '메이플스토리', analogyPrefix: '메이플로 치면', candidates: [] });
+  assert.ok(system.includes('analogy에 쓴 메이플스토리 쪽 사실은 고른 후보의 facts 문장 하나를 usedFact에 글자 그대로 옮긴다.'));
+  assert.match(system, /근거에 없는 메이플스토리의 수치, 이름, 규칙을 지어내지 않는다/, '규칙 1 유지');
+  assert.ok(system.indexOf('"meaning"') < system.indexOf('"usedFact"'), '뜻 먼저 스트리밍(T-117)');
 });
 
 test('rewriteQueryText: 정밀 모드는 추상 + 원문, abstract 모드는 추상만, 추상이 비면 원문 (T-113 (4))', () => {

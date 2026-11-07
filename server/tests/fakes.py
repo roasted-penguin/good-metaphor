@@ -2,13 +2,16 @@
 
 FakeLLM은 확장 e2e 가짜 LLM(tests/e2e/servers.mjs)과 비슷한 규칙으로 답한다.
 - 키워드 프롬프트("검색용 키워드"): 허용 태그 하나 + 목록 밖 태그 하나 + 문장 낱말
-- 비유 프롬프트: 후보 1번을 고른다
+- 비유 프롬프트: 후보 1번을 고르고 usedFact에 후보 1번의 첫 fact를 넣는다
+  - 문장에 "입장횟수테스트"가 있으면 facts 밖 숫자를 넣은 비유(숫자 근거 검사 확인용)
+  - 문장에 "사실조작테스트"가 있으면 facts에 없는 usedFact(사실 근거 검사 확인용)
   - 문장에 "Leverage"가 있으면 후보 밖 nodeId(근거 검증 확인용)
   - 문장에 "펭귄"이 있으면 맞는 비유 없음(nodeId null)
   - 문장에 "깨진응답"이 있으면 JSON이 아닌 글
 """
 from __future__ import annotations
 
+import json as _json
 import re
 
 from app.retriever import Candidate, build_candidate
@@ -31,14 +34,21 @@ class FakeLLM:
         tag = re.search(r"맞은 추상 태그: .+? \(id=(\S+)\)", user)
         if "펭귄" in user or not m:
             return ('```json\n{"meaning": "테스트 뜻 풀이예요.", "analogy": "", "nodeId": null, '
-                    '"tagId": null, "mapping": ""}\n```')
+                    '"tagId": null, "usedFact": "", "mapping": ""}\n```')
         node_id, label = m.group(1), m.group(2)
         if "Leverage" in user:
             node_id = "not-a-candidate"
-        tag_id = f'"{tag.group(1)}"' if tag else "null"
-        return ('```json\n{"meaning": "테스트 뜻 풀이예요.", '
-                f'"analogy": "메이플로 치면 {label}과 같은 구조예요.", "nodeId": "{node_id}", '
-                f'"tagId": {tag_id}, "mapping": "원문 ↔ {label}"}}\n```')
+        # 후보 1번 facts의 첫 줄
+        first_fact = re.search(r"\[1\] id=.*?\n  facts:\n   - ([^\n]+)", user, re.S)
+        used_fact = first_fact.group(1) if first_fact else ""
+        analogy = f"메이플로 치면 {label}과 같은 구조예요."
+        if "입장횟수테스트" in user:
+            analogy = "메이플로 치면 일주일에 7번만 입장할 수 있는 것과 같아요."
+        if "사실조작테스트" in user:
+            used_fact = "보스는 하루에 세 번까지 입장할 수 있다."
+        answer = {"meaning": "테스트 뜻 풀이예요.", "analogy": analogy, "nodeId": node_id,
+                  "tagId": tag.group(1) if tag else None, "usedFact": used_fact, "mapping": f"원문 ↔ {label}"}
+        return "```json\n" + _json.dumps(answer, ensure_ascii=False) + "\n```"
 
     def count(self, kind: str) -> int:
         """kind: 'keyword' 또는 'analogy'."""
