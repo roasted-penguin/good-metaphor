@@ -11,6 +11,7 @@
     "test:e2e": "node scripts/prepare-e2e.mjs && playwright test",
     "eval": "node tools/eval.mjs",
     "eval:fallback": "node tools/eval.mjs --fallback",
+    "eval:gen": "node tools/eval-gen.mjs",
     "smoke:providers": "node tools/smoke-providers.mjs",
     "check:embed": "node tools/check-real-embed.mjs",
     "sim:feedback": "node tools/feedback-sim.mjs"
