@@ -1,5 +1,6 @@
 // 설정 우선순위: config/admin.json  <  chrome.storage.managed(조직 정책)  <  사용자 설정(잠금이 아닐 때만)
 import { PROVIDERS } from './providers.js';
+import './site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 let adminCache = null;
 
@@ -38,7 +39,9 @@ export const DEFAULT_SETTINGS = {
   provider: null,              // null이면 관리자 기본값
   models: {},                  // 제공자별 사용자가 고른 모델
   apiKeys: {},                 // 제공자별 사용자 키 (이 브라우저에만 저장)
-  customBaseUrl: ''
+  customBaseUrl: '',
+  // 이 호스트(와 하위 도메인)에서는 문장을 보내지 않는다(T-107). 팝업 "이 사이트에서 끄기"로 더하고 뺀다
+  excludedHosts: [...globalThis.AnalogySiteFilter.DEFAULT_EXCLUDED_HOSTS]
 };
 
 export async function getSettings() {

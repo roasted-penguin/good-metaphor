@@ -8,6 +8,7 @@ import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
+import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -275,6 +276,17 @@ chrome.runtime.onConnect.addListener(port => {
     if (msg.type !== 'explain') return;
     try {
       const post = m => { try { port.postMessage({ id: msg.id, ...m }); } catch {} };
+      // 이중 방어(T-107): content.js가 막지만, 보낸 탭 호스트가 제외 목록이면 임베딩·LLM 없이 끝낸다.
+      // 탭에서 온 연결이 아니거나 URL을 모르면(확장 페이지 등) 막지 않는다.
+      // sender.url은 권한 없이도 오는 보낸 문서 주소, tab.url은 tabs·호스트 권한이 있을 때만 온다
+      const tabUrl = port.sender?.tab ? (port.sender.url || port.sender.tab.url) : null;
+      if (tabUrl) {
+        const { excludedHosts } = await getSettings();
+        if (globalThis.AnalogySiteFilter.isExcludedHost(tabUrl, excludedHosts)) {
+          post({ type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+          return;
+        }
+      }
       countHover();
       const result = await explain(msg.payload, stage => post({ type: 'stage', stage }), partial => post({ type: 'partial', partial }));
       port.postMessage({ type: 'result', id: msg.id, result });
