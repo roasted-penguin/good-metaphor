@@ -66,10 +66,14 @@ function streamOut(res, cors, content) {
   }, cut > 1 ? STREAM_GAP_MS : 0);
 }
 
-// /frame.html 은 iframe 픽스처(T-111), 그 밖의 주소는 모두 테스트 페이지
+// /frame.html·/masked.html 은 iframe 픽스처(T-111), 그 밖의 주소는 모두 테스트 페이지
+const FIXTURES = { '/frame.html': './frame.html', '/masked.html': './masked.html' };
 function staticPage(req, res) {
-  const file = new URL(req.url, 'http://x').pathname === '/frame.html' ? './frame.html' : './page.html';
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+  const file = FIXTURES[new URL(req.url, 'http://x').pathname] ?? './page.html';
+  // masked.html: 최상위를 불투명 출처(CSP sandbox, allow-same-origin 없음)·no-referrer 로 →
+  // 그 안 iframe 의 ancestorOrigins 는 "null", referrer 는 빈 값(최상위를 모르는 프레임 재현)
+  const masked = file === './masked.html' ? { 'content-security-policy': 'sandbox allow-scripts', 'referrer-policy': 'no-referrer' } : {};
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...masked });
   res.end(readFileSync(new URL(file, import.meta.url)));
 }
 

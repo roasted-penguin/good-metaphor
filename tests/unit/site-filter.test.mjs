@@ -95,25 +95,35 @@ test('isBlockedSender: 프레임이 실어 보낸 최상위 호스트(topHost)�
   assert.equal(isBlockedSender({ url: 'http://localhost/' }, list, '127.0.0.1'), false, '탭이 없으면(확장 페이지) 막지 않음');
 });
 
+const fh = o => frameHosts(o);
 test('frameHosts: 자기 호스트 + 최상위 호스트(ancestorOrigins 마지막), 정규화·중복 제거 (T-111)', () => {
-  assert.deepEqual(frameHosts({ selfHost: 'localhost', ancestorOrigins: ['http://127.0.0.1:8766'], referrer: '' }), ['localhost', '127.0.0.1']);
+  assert.deepEqual(fh({ selfHost: 'localhost', ancestorOrigins: ['http://127.0.0.1:8766'], referrer: '' }), { hosts: ['localhost', '127.0.0.1'], topHost: '127.0.0.1', topKnown: true });
   assert.deepEqual(
-    frameHosts({ selfHost: 'ads.example.com', ancestorOrigins: ['https://mid.example.net', 'https://WWW.KBStar.com'], referrer: 'https://mid.example.net/x' }),
-    ['ads.example.com', 'kbstar.com'], '중첩이면 마지막(최상위)만, referrer 보다 ancestorOrigins 가 먼저');
-  assert.deepEqual(frameHosts({ selfHost: '127.0.0.1', ancestorOrigins: ['http://127.0.0.1:8766'], referrer: '' }), ['127.0.0.1'], '같은 출처면 하나');
+    fh({ selfHost: 'ads.example.com', ancestorOrigins: ['https://mid.example.net', 'https://WWW.KBStar.com'], referrer: 'https://mid.example.net/x' }),
+    { hosts: ['ads.example.com', 'kbstar.com'], topHost: 'kbstar.com', topKnown: true }, '중첩이면 마지막(최상위)만, referrer 보다 ancestorOrigins 가 먼저');
+  assert.deepEqual(fh({ selfHost: '127.0.0.1', ancestorOrigins: ['http://127.0.0.1:8766'], referrer: '' }), { hosts: ['127.0.0.1'], topHost: '127.0.0.1', topKnown: true }, '같은 출처면 하나');
 });
 
-test('frameHosts: ancestorOrigins 가 없으면 referrer, 둘 다 없으면 자기 호스트만 (T-111)', () => {
-  assert.deepEqual(frameHosts({ selfHost: 'localhost', ancestorOrigins: [], referrer: 'https://kbstar.com/login' }), ['localhost', 'kbstar.com']);
-  assert.deepEqual(frameHosts({ selfHost: 'localhost', referrer: 'https://kbstar.com/' }), ['localhost', 'kbstar.com'], 'ancestorOrigins 미지원');
-  assert.deepEqual(frameHosts({ selfHost: 'localhost', ancestorOrigins: [], referrer: '' }), ['localhost']);
-  assert.deepEqual(frameHosts({ selfHost: 'localhost' }), ['localhost']);
+test('frameHosts: 같은 출처 사슬에서 읽은 window.top 호스트(topHostname)가 가장 먼저 (T-111)', () => {
+  assert.deepEqual(fh({ selfHost: 'ads.x.com', topHostname: 'WWW.kbstar.com', ancestorOrigins: ['null'], referrer: '' }), { hosts: ['ads.x.com', 'kbstar.com'], topHost: 'kbstar.com', topKnown: true });
+  assert.deepEqual(fh({ selfHost: '', topHostname: 'kbstar.com' }), { hosts: ['kbstar.com'], topHost: 'kbstar.com', topKnown: true }, 'about:blank 프레임');
 });
 
-test('frameHosts: about:blank 처럼 자기 호스트가 비면 최상위만, ancestorOrigins 가 "null"이면 referrer (T-111)', () => {
-  assert.deepEqual(frameHosts({ selfHost: '', ancestorOrigins: ['https://kbstar.com'], referrer: '' }), ['kbstar.com']);
-  assert.deepEqual(frameHosts({ selfHost: 'a.com', ancestorOrigins: ['null'], referrer: 'https://kbstar.com/' }), ['a.com', 'kbstar.com']);
-  assert.deepEqual(frameHosts({ selfHost: '', ancestorOrigins: [], referrer: '' }), []);
+test('frameHosts: ancestorOrigins 가 없거나 "null"이면 http(s) referrer (T-111)', () => {
+  assert.deepEqual(fh({ selfHost: 'localhost', ancestorOrigins: [], referrer: 'https://kbstar.com/login' }), { hosts: ['localhost', 'kbstar.com'], topHost: 'kbstar.com', topKnown: true });
+  assert.deepEqual(fh({ selfHost: 'localhost', referrer: 'https://kbstar.com/' }).topHost, 'kbstar.com', 'ancestorOrigins 미지원');
+  assert.deepEqual(fh({ selfHost: 'a.com', ancestorOrigins: ['null'], referrer: 'https://kbstar.com/' }).topHost, 'kbstar.com');
+});
+
+test('frameHosts: 최상위를 모르면 topKnown=false(실패 시 닫힘), http(s) 밖 출처·referrer 는 모르는 것으로 (T-111)', () => {
+  const unknown = (o, msg) => assert.deepEqual(fh(o), { hosts: o.selfHost ? [o.selfHost] : [], topHost: '', topKnown: false }, msg);
+  unknown({ selfHost: 'ads.x.com', ancestorOrigins: ['null'], referrer: '' }, '가려진 출처 + referrer 없음');
+  unknown({ selfHost: 'ads.x.com', ancestorOrigins: [], referrer: '' }, '정보 없음');
+  unknown({ selfHost: 'ads.x.com' }, '인자 없음');
+  unknown({ selfHost: 'ads.x.com', ancestorOrigins: ['chrome-extension://abc'], referrer: 'about:blank' }, 'http(s) 아님');
+  unknown({ selfHost: 'ads.x.com', ancestorOrigins: ['file://'], referrer: 'file:///a.html' }, 'file 은 호스트 없음');
+  unknown({ selfHost: 'ads.x.com', topHostname: '', ancestorOrigins: ['null'], referrer: 'data:text/html,x' }, 'data: referrer');
+  unknown({ selfHost: '', ancestorOrigins: [], referrer: '' }, 'about:blank + 정보 없음');
 });
 
 test('validateHostInput: URL이든 호스트든 정규화해서 받는다 (T-144)', () => {

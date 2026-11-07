@@ -10,7 +10,8 @@ const EXT = path.resolve('.tmp/ext-e2e');
 
 const test = base.extend({
   context: async ({}, use) => {
-    const args = [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`];
+    // localhost iframe(T-111)이 CI의 IPv6 우선 해석에 기대지 않게 127.0.0.1 로 고정한다
+    const args = [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, '--host-resolver-rules=MAP localhost 127.0.0.1'];
     const opts = process.env.CHROMIUM_PATH
       ? { executablePath: process.env.CHROMIUM_PATH, headless: false, args: ['--headless=new', ...args] }
       : { channel: 'chromium', headless: !process.env.HEADED, args };
@@ -1303,6 +1304,8 @@ async function frameOf(page, frameSel) {
   await el.scrollIntoViewIfNeeded();
   const frame = await (await el.elementHandle()).contentFrame();
   await frame.waitForSelector('p');
+  // content.js 는 document_idle 에 주입된다. 주입 전에 호버하면 무시되니 주입될 때까지 기다린다
+  await expect.poll(async () => (await hook(frame, 'content-loaded')).data, { message: `${frameSel} content.js 주입` }).toBe(true);
   return { el, frame };
 }
 async function altHoverFrame(page, frameSel, sel, idx = 5) {
@@ -1375,4 +1378,36 @@ test('iframe(T-111): 서브프레임은 시작 시 테마를 미리 받지 않�
   await altHoverFrame(page, '#fr-cross', '#fb');
   await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
   await waitTheme(frame, 'maple');
+});
+
+test('iframe(T-111): 최상위 호스트를 알 수 없는 프레임(가려진 출처·referrer 없음)은 실패 시 닫힘, 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/masked.html');
+  const { frame } = await frameOf(page, '#fr-masked');
+  // 전제: 크롬이 출처를 가리고 referrer 도 없으며, content.js 는 이 프레임에 주입돼 있다
+  expect(await frame.evaluate(() => ({ ao: [...location.ancestorOrigins], ref: document.referrer }))).toEqual({ ao: ['null'], ref: '' });
+  expect((await hook(frame, 'content-loaded')).data, 'content.js 주입됨').toBe(true);
+  const before = sentCount();
+  await altHoverFrame(page, '#fr-masked', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('analogy-helper-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '요청 0').toBe(0);
+});
+
+test('피드백 👍(T-111): rerun 이 없어도 record.topHost 가 제외면 막고, 저장되는 기록에는 topHost 를 남기지 않는다', async ({ context, ext }) => {
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { frame } = await frameOf(page, '#fr-cross');
+  const getFb = () => ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback || []);
+  const n0 = (await getFb()).length;
+  expect(await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: '127.0.0.1' })).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect((await getFb()).length).toBe(n0);
+
+  const ok = await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: 'example.com' });
+  expect(ok.ok).toBe(true);
+  const recs = await getFb();
+  expect(recs.length).toBe(n0 + 1);
+  expect(recs.some(r => 'topHost' in r), '기록에 topHost 없음').toBe(false);
 });
