@@ -15,6 +15,7 @@
 
   /* ───────── 설정 ───────── */
   const SF = globalThis.AnalogySiteFilter; // lib/site-filter.js (manifest에서 먼저 주입)
+  const AP = globalThis.AnalogyPlace;      // lib/place.js (manifest에서 먼저 주입, T-109)
   let theme = 'maple';      // 말풍선 테마. 미리 받기(graph:info)·stage·결과 순으로 고쳐진다
   let themeStale = true;    // 테마를 (다시) 받아야 함
   // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
@@ -299,16 +300,21 @@
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function place(rect) {
+  // 말풍선 배치(T-109): 호버할 때 정한 줄(lineIndex)의 지금 rect 아래, 넘치면 그 줄 위. 가로는 호버 때 커서 x(anchorX).
+  // 결과가 와서 다시 부를 때도 같은 줄·같은 x라, 커서가 움직이거나 조금 스크롤해도 다른 줄로 옮겨 가지 않는다.
+  // 줄 목록이 비면 문장 전체 bounding rect(한 줄 문장은 둘이 같다). 줄 수가 줄었으면 마지막 줄로
+  function place(cur) {
     const pad = 10;
     const w = Math.min(380, window.innerWidth - 2 * pad);
     box.style.maxWidth = w + 'px';
-    const bw = box.offsetWidth || 300, bh = box.offsetHeight || 120;
-    let left = Math.min(Math.max(pad, mouse.x - bw / 2), window.innerWidth - bw - pad);
-    let topPos = rect.bottom + 8;
-    if (topPos + bh > window.innerHeight - pad) topPos = Math.max(pad, rect.top - bh - 8);
+    const lines = AP.lineRects(cur.range.getClientRects());
+    const rect = lines.length ? lines[Math.min(Math.max(cur.lineIndex, 0), lines.length - 1)] : cur.range.getBoundingClientRect();
+    const { left, top } = AP.placeBox({
+      rect, mouseX: cur.anchorX, bw: box.offsetWidth || 300, bh: box.offsetHeight || 120,
+      vw: window.innerWidth, vh: window.innerHeight, pad
+    });
     box.style.left = left + 'px';
-    box.style.top = topPos + 'px';
+    box.style.top = top + 'px';
   }
 
   const STAGE_TEXT = {
@@ -445,7 +451,7 @@
       else if (act === 'options') chrome.runtime.sendMessage({ type: 'open-options' });
       else onFeedback(act, b.dataset);
     }));
-    if (current) place(current.range.getBoundingClientRect());
+    if (current) place(current);
     requestAnimationFrame(() => box.classList.add('show'));
   }
 
@@ -487,7 +493,9 @@
     if (current && current.key === s.key) return;
     const reqId = ++reqSeq;
     const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120) };
-    current = { key: s.key, range: s.range, reqId, pending: true, payload };
+    // 줄은 호버한 순간 한 번만 고른다(뷰포트 y는 스크롤하면 다른 줄을 가리킴)
+    const lineIndex = AP.pickLineIndex(s.range.getClientRects(), mouse.y);
+    current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, lineIndex };
     highlight(s.range);
     render({ loading: true, stage: 'graph' });
     try {
