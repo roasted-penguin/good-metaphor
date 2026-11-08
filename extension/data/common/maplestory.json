@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.08-1",
+  "version": "2026.11.08-2",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -170,7 +170,7 @@
       "tags": ["shared_bonus"]
     },
     {
-      "id": "party", "label": "파티 플레이", "aliases": ["기사", "버스"],
+      "id": "party", "label": "파티 플레이",
       "facts": [
         "여러 명이 파티를 맺어 함께 보스를 잡는다.",
         "파티원마다 딜, 버프, 보조처럼 맡는 역할이 다르다."

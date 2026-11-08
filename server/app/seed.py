@@ -29,7 +29,11 @@ def _tag_source(tag_id: str) -> str:
 
 
 def label_with_aliases(node: dict[str, Any]) -> str:
-    """라벨 뒤 괄호에 별칭(게임 은어)을 붙인다: "스타포스 강화(펑, 프텍)". 확장 nodeText와 같은 방식(T-114)."""
+    """라벨 뒤 괄호에 별칭(게임 은어)을 붙인다: "스타포스 강화(펑, 프텍)" (T-114).
+
+    서버는 별칭을 엔티티 설명·청크 글에 넣어 LightRAG가 검색하게 한다. 확장은 nodeText에 넣지 않고
+    검색 어휘 가산(retrieval.js aliasBoost)으로 쓴다(임베딩 벡터·기존 검색 결과를 바꾸지 않으려고).
+    """
     aliases = node.get("aliases") or []
     return f"{node['label']}({', '.join(aliases)})" if aliases else node["label"]
 

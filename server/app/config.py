@@ -9,8 +9,10 @@ from pathlib import Path
 # 저장소 루트 = server/app/config.py 에서 두 단계 위. 실행 위치(cwd)와 무관하게 찾는다.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_COMMON_GRAPH_PATH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
-# 금칙어 목록(T-114, 규칙 11). 공통 그래프 옆, 확장과 같은 파일
-DEFAULT_BLOCKLIST_PATH = DEFAULT_COMMON_GRAPH_PATH.parent / "blocklist.json"
+# 금칙어 목록(T-114, 규칙 11). 공통 그래프 옆, 확장과 같은 파일.
+# 실제 기본값은 설정된 공통 그래프 파일의 옆이다(도커 이미지 안에서는 REPO_ROOT가 / 라서)
+BLOCKLIST_FILENAME = "blocklist.json"
+DEFAULT_BLOCKLIST_PATH = DEFAULT_COMMON_GRAPH_PATH.parent / BLOCKLIST_FILENAME
 DEFAULT_WORKSPACE = "common_maplestory"
 DEFAULT_RATE_LIMIT_PER_MIN = 30
 # 확장 config/admin.json의 defaultModels.gemini와 같게 둔다
@@ -48,7 +50,12 @@ class Settings:
     ollama_url: str = DEFAULT_OLLAMA_URL
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     embedding_dim: int = DEFAULT_EMBEDDING_DIM
-    blocklist_path: str = str(DEFAULT_BLOCKLIST_PATH)
+    # 비우면 common_graph_path 옆 blocklist.json
+    blocklist_path: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.blocklist_path:
+            object.__setattr__(self, "blocklist_path", str(Path(self.common_graph_path).parent / BLOCKLIST_FILENAME))
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Settings":
@@ -70,5 +77,5 @@ class Settings:
             ollama_url=env.get("OLLAMA_URL") or DEFAULT_OLLAMA_URL,
             embedding_model=env.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL,
             embedding_dim=int(env.get("EMBEDDING_DIM") or DEFAULT_EMBEDDING_DIM),
-            blocklist_path=env.get("BLOCKLIST_PATH") or str(DEFAULT_BLOCKLIST_PATH),
+            blocklist_path=env.get("BLOCKLIST_PATH") or None,
         )

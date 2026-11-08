@@ -4,7 +4,7 @@
 import { parseJSONLoose } from './providers.js';
 import { REJECTED_TEXT } from './analogy-server.js';
 import { checkGrounding, GROUNDING_REJECTED_TEXT } from './grounding.js';
-import { activeTerms, findBlocked, BLOCKED_REJECTED_TEXT } from './blocklist.js';
+import { activeTerms, findBlocked, applyBlocklist } from './blocklist.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText } from './prompt.js';
 
 // 정밀 모드의 추상화 단계. 검색 전에 부른다(질의 문장을 바꾸므로).
@@ -68,18 +68,9 @@ export async function runAnalogy({ sentence, word, context, pageTitle, graph, ca
 
   // 금칙어 검사(T-114, 규칙 11): 규칙 1·근거 검사 뒤 출력 직전. 어느 필드든 걸리면 비유·대응을 숨기고,
   // 뜻에서 걸리면 뜻도 지운다. debug 에는 필드 이름만 남긴다
-  let blocked = null;
-  for (const field of ['meaning', 'analogy', 'mapping']) {
-    if (!findBlocked(answer[field], terms)) continue;
-    blocked ||= { field, term: '(가림)' };
-    if (field === 'meaning') answer.meaning = '';
-  }
-  if (blocked) {
-    answer.analogy = '';
-    answer.mapping = '';
-    answer.rejected = BLOCKED_REJECTED_TEXT;
-    chosen = null;
-  }
+  let blocked;
+  ({ answer, blocked } = applyBlocklist(answer, terms));
+  if (blocked) chosen = null;
 
   const evidence = chosen ? {
     nodeId: chosen.id,

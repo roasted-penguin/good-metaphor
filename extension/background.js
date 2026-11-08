@@ -8,6 +8,7 @@ import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
+import { applyBlocklist, findBlocked } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
@@ -184,6 +185,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     sentenceRecords: feedbackRecords.filter(r => r.sentenceHash === sentenceHash)
   });
   let serverInfo = skip === 'off' ? null : { used: false, reason: skip };
+  // 금칙어 목록(T-114): 서버 결과 재검사·로컬 생성·정밀 모드 추상 구조에 같이 쓴다
+  const blocklist = await loadBlocklist();
   if (!skip) {
     onStage('server');
     const token = await getInstallToken(chrome.storage.local);
@@ -194,8 +197,11 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       payload: { sentence, word: word || '', context: context || '', pageTitle: pageTitle || '' }
     });
     if (r.ok) {
-      // callAnalogyServer 가 이미 규칙 1 검증(checkServerResult)을 거쳤다. 서버 경로에는 partial 이 없다
-      const result = { ...r.result, source: 'server', feedbackApplied: false, debug: { ...r.result.debug, server: { used: true, ms: r.ms } } };
+      // callAnalogyServer 가 이미 규칙 1 검증(checkServerResult)을 거쳤다. 서버 경로에는 partial 이 없다.
+      // 금칙어는 서버도 검사하지만 규칙 1처럼 확장이 한 번 더 검사한다(T-114)
+      const { answer: checked, blocked } = applyBlocklist(r.result, blocklist);
+      const result = { ...checked, source: 'server', feedbackApplied: false, debug: { ...checked.debug, server: { used: true, ms: r.ms } } };
+      if (blocked) result.debug.blocked = blocked; // 필드 이름만
       await cachePut(cacheKey, result);
       return result;
     }
@@ -220,6 +226,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   let abstractText = null;
   if (settings.preciseMode && provider.def.kind !== 'demo') {
     ({ abstractText, queryText } = await runAbstract({ sentence, word, pageTitle, ask, onStage }));
+    // 추상 구조는 검색 질의로만 쓰고, debug 로 보일 때 금칙어가 섞였으면 지운다(T-114)
+    if (findBlocked(abstractText, blocklist)) abstractText = '';
   }
 
   onStage('search');
@@ -256,7 +264,6 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const tags = topTags(q, graph, vecs, 5);
 
   // 비유 프롬프트 → LLM → 파싱 → 규칙 1 nodeId 검증 → 근거 검사(T-123) → 금칙어 검사(T-114)는 lib/pipeline.js(T-104)
-  const blocklist = await loadBlocklist();
   const { answer, grounding, evidence, blocked } = await runAnalogy({
     sentence, word, context, pageTitle, graph, candidates, ask,
     providerKind: provider.def.kind, onStage, onPartial, blocklist

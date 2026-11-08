@@ -20,6 +20,7 @@ BLOCKED_REJECTED_TEXT = "부적절한 표현이 섞여 있어서 비유를 숨�
 _EXTRA_STRIP = set("\t\n\v\f\r﻿​‌‍­⁠ᅟᅠㅤﾠ")
 
 
+# P*·S* 범주는 unicodedata의 Unicode 버전을 따른다. Node(ICU)와 버전이 달라 새로 배정된 기호 몇 개만 다를 수 있다(실제 글은 차이 0)
 def _strip(ch: str) -> bool:
     # JS [\s\p{P}\p{S}...] 와 같게: 공백(Zs·Zl·Zp), 문장부호(P*), 기호(S*)
     cat = unicodedata.category(ch)

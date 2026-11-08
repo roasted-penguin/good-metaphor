@@ -6,6 +6,7 @@
 export const BLOCKED_REJECTED_TEXT = '부적절한 표현이 섞여 있어서 비유를 숨겼어요.';
 
 // 지우는 글자: 공백, 문장부호, 기호, 제로폭 문자, 소프트 하이픈·단어 결합자, 한글 채움 문자(ㅤ 등)
+// \p{P}·\p{S} 범주는 런타임의 Unicode 버전을 따른다. Node(ICU)와 Python unicodedata 버전이 달라 새로 배정된 기호 몇 개만 다르게 지워질 수 있다(실제 글에서는 차이 0, T-114)
 const STRIP = /[\s\p{P}\p{S}​-‍﻿­⁠ᅟᅠㅤﾠ]/gu;
 
 // NFKC → 소문자 → 사이에 끼워 넣은 공백·점·기호 제거. "리.선 족" 같은 우회 표기를 붙여 쓴 꼴로 만든다
@@ -31,4 +32,23 @@ export function findBlocked(text, terms) {
     }
   }
   return null;
+}
+
+// 답(LLM 답 또는 서버 결과)의 meaning·analogy·mapping 을 검사한다. 원본은 바꾸지 않고 사본을 돌려준다.
+// 어느 필드든 걸리면 analogy·mapping 을 비우고 evidence = null, rejected 에 숨김 문구. meaning 에서 걸리면 meaning 도 비운다.
+// blocked = 처음 걸린 필드 { field, term: '(가림)' } 또는 null(금칙어 자체는 담지 않는다)
+export function applyBlocklist(answer, terms) {
+  let blocked = null;
+  const out = { ...answer };
+  for (const field of ['meaning', 'analogy', 'mapping']) {
+    if (!findBlocked(out[field], terms)) continue;
+    blocked ||= { field, term: '(가림)' };
+    if (field === 'meaning') out.meaning = '';
+  }
+  if (!blocked) return { answer, blocked: null };
+  out.analogy = '';
+  out.mapping = '';
+  out.evidence = null;
+  out.rejected = BLOCKED_REJECTED_TEXT;
+  return { answer: out, blocked };
 }

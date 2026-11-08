@@ -40,6 +40,7 @@ export async function loadBlocklist() {
   if (blocklistCache) return blocklistCache;
   try {
     const res = await fetch(chrome.runtime.getURL('data/common/blocklist.json'));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     blocklistCache = Array.isArray(data?.terms) ? data.terms : [];
     return blocklistCache;
