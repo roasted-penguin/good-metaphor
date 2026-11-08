@@ -1,4 +1,5 @@
 // 평가 채점 (순수 함수). eval.mjs와 단위 테스트가 함께 쓴다
+import { retrievalFor } from '../extension/lib/retrieval.js';
 
 /**
  * @param {object[]} cases          { sentence, expectNodes, group?, forbidNodes? }. expectNodes가 []면 "맞는 비유가 없어야 하는" 문장.
@@ -36,9 +37,9 @@ export function scoreCases(cases, rank) {
   return { n, hit1, hit3, groups, misses, noMatch, hitScores, negative };
 }
 
-// 혼합 설정 = 확장이 실제로 쓰는 admin.json retrieval 그대로
-export function mixedSetting(admin) {
-  return { name: '혼합 (현재 기본값)', ...admin.retrieval };
+// 혼합 설정 = 확장이 실제로 쓰는 admin.json retrieval 그대로. graph를 주면 관심사별 감점을 덮어쓴다(T-156, 확장과 같은 retrievalFor)
+export function mixedSetting(admin, graph = null) {
+  return { name: '혼합 (현재 기본값)', ...(graph ? retrievalFor(admin.retrieval, graph) : admin.retrieval) };
 }
 
 // 회귀: 지켜야 할 문장(tools/eval-guard.json) 중 hit@1을 놓친 문장
@@ -108,11 +109,19 @@ export function marginThreshold(argv) {
   return v;
 }
 
+// 관심사별 평가 파일 이름(tools/ 아래, T-156). 메이플은 예전 이름 그대로
+export function interestEvalFiles(interest) {
+  if (!interest || interest.id === 'maplestory') return { evalSet: 'eval-set.json', holdout: 'eval-unseen.json', guard: 'eval-guard.json' };
+  const id = interest.id;
+  return { evalSet: `eval-set-${id}.json`, holdout: `eval-unseen-${id}.json`, guard: `eval-guard-${id}.json` };
+}
+
 // 채점할 문장 묶음. --holdout이면 홀드아웃만(예문 고를 때 보지 않는 문장, 회귀 가드 대상 아님)
-// interest = 고른 공통 관심사(graph.js commonInterest). 메이플이 아니면 그 관심사 평가셋 하나만, 가드 없음(T-302, 처음 기준선)
-// 메이플 전용 옵션(T-302): 가드·홀드아웃·여유 가드는 메이플 평가셋 기준이고, 서버(analogy-api)는 메이플 그래프만 안다.
+// interest = 고른 공통 관심사(graph.js commonInterest). 메이플이 아니면 그 관심사 평가셋 하나(그 관심사 가드 대상, T-156),
+// --holdout이면 그 관심사 홀드아웃만
+// 메이플 전용 옵션: 여유 가드는 메이플 평가셋 기준이고, 서버(analogy-api)는 메이플 그래프만 안다.
 // 다른 관심사와 같이 주면 조용히 무시하지 않고 오류 문구를 돌려준다. 괜찮으면 null
-const MAPLE_ONLY_FLAGS = ['--guard', '--holdout', '--margin-guard', '--server'];
+const MAPLE_ONLY_FLAGS = ['--margin-guard', '--server'];
 export function interestArgError(argv, interest) {
   if (!interest || interest.id === 'maplestory') return null;
   const bad = MAPLE_ONLY_FLAGS.filter(f => argv.includes(f));
@@ -120,7 +129,10 @@ export function interestArgError(argv, interest) {
 }
 
 export function pickSets(argv, { evalSet, validation, holdout, interestSet }, interest = null) {
-  if (interest && interest.id !== 'maplestory') return [{ name: `${interest.label} 평가셋`, cases: interestSet || [], guarded: false }];
+  if (interest && interest.id !== 'maplestory') {
+    if (argv.includes('--holdout')) return [{ name: `${interest.label} 홀드아웃`, cases: holdout || [], guarded: false }];
+    return [{ name: `${interest.label} 평가셋`, cases: interestSet || [], guarded: true }];
+  }
   if (argv.includes('--holdout')) return [{ name: '홀드아웃', cases: holdout, guarded: false }];
   return [
     { name: '평가셋', cases: evalSet, guarded: true },

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.09-2",
+  "version": "2026.11.09-3",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -103,8 +103,7 @@
       ],
       "tags": [
         "daily_accumulation",
-        "shared_bonus",
-        "loss_risk"
+        "shared_bonus"
       ],
       "sources": [
         "https://www.korea.kr/news/policyNewsView.do?newsId=156667089",
@@ -121,8 +120,7 @@
         "같은 위반을 되풀이할수록 영업정지 기간이 길어진다."
       ],
       "tags": [
-        "escalating_cost",
-        "loss_risk"
+        "escalating_cost"
       ],
       "sources": [
         "https://www.korea.kr/news/policyNewsView.do?newsId=148901589",
@@ -242,8 +240,7 @@
         "영업을 시작한 뒤에도 영업자는 해마다 위생교육을 받아야 한다."
       ],
       "tags": [
-        "progression_gate",
-        "threshold_req"
+        "progression_gate"
       ],
       "sources": [
         "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=839&ccfNo=5&cciNo=1&cnpClsNo=1",
@@ -260,8 +257,7 @@
         "해마다 다시 심사하고, 영업정지 이상의 처분을 받으면 지정이 취소된다."
       ],
       "tags": [
-        "threshold_req",
-        "loss_risk"
+        "threshold_req"
       ],
       "sources": [
         "https://www.easylaw.go.kr/CSP/CnpClsMain.laf?csmSeq=840&ccfNo=1&cciNo=3&cnpClsNo=1",

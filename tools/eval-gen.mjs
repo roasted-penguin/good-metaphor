@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
-import { retrieve } from '../extension/lib/retrieval.js';
+import { retrieve, retrievalFor } from '../extension/lib/retrieval.js';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildChain, completeWithFallback } from '../extension/lib/fallback.js';
 import { providerFor } from '../extension/lib/config.js';
@@ -133,7 +133,7 @@ async function generate(cases) {
   }
 
   for (const [i, c] of cases.entries()) {
-    const candidates = retrieve(qs[i], graph, vecs, { ...admin.retrieval, aliasText: c.sentence });
+    const candidates = retrieve(qs[i], graph, vecs, { ...retrievalFor(admin.retrieval, graph), aliasText: c.sentence });
     let used = null, fallbacks = [];
     const ask = async (system, user, opts) => {
       const r = await withLimitRetry(() => completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown }));

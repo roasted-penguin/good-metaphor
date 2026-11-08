@@ -370,3 +370,29 @@ test('retrieve·topTags: 예문 벡터가 있으면 태그 유사도는 설명·
   assert.equal(r[0].tag.sim, 1);
   assert.deepEqual(topTags(q, graph, vm, 2).map(t => [t.id, t.sim]), [['B', 1], ['A', +cosine(q, [1, 0, 0]).toFixed(4)]]);
 });
+
+// 관심사별 감점 (T-156): admin.retrieval.tagPenalty 위에 관심사 그래프의 tagPenalty를 덮어쓴다
+import { retrievalFor } from '../../extension/lib/retrieval.js';
+
+test('retrievalFor: 그래프에 tagPenalty가 없으면 admin.retrieval 그대로(메이플 불변)', () => {
+  const r = { topK: 3, directWeight: 0.45, tagWeight: 0.55, tagPenalty: { inflation: 0.03, market_price: 0.02 } };
+  assert.deepEqual(retrievalFor(r, { nodes: [] }), r);
+  assert.deepEqual(retrievalFor(r, { nodes: [], tagPenalty: {} }), r);
+  assert.deepEqual(retrievalFor(r, null), r);
+  assert.deepEqual(retrievalFor({ topK: 3 }, null), { topK: 3, tagPenalty: {} });
+});
+
+test('retrievalFor: 그래프 tagPenalty가 있으면 그 태그는 그래프 값(0이면 감점 없음), 나머지는 admin 값, 입력은 바꾸지 않는다', () => {
+  const r = { topK: 3, tagPenalty: { inflation: 0.03, market_price: 0.02 } };
+  const g = { tagPenalty: { scarcity_value: 0.02, inflation: 0 } };
+  const out = retrievalFor(r, g);
+  assert.deepEqual(out.tagPenalty, { inflation: 0, market_price: 0.02, scarcity_value: 0.02 });
+  assert.equal(out.topK, 3);
+  assert.deepEqual(r.tagPenalty, { inflation: 0.03, market_price: 0.02 });
+  assert.deepEqual(g.tagPenalty, { scarcity_value: 0.02, inflation: 0 });
+});
+
+test('retrievalFor 결과를 retrieve에 넘기면 그래프 감점이 순위에 반영된다', () => {
+  const r = retrieve(q2, { ...g2, tagPenalty: { A: 0.5 } }, v2, retrievalFor({ ...tagOnly }, { tagPenalty: { A: 0.5 } }));
+  assert.equal(r[0].id, 'one');
+});

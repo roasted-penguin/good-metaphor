@@ -150,6 +150,15 @@ export function tagSimilarity(q, id, vecs) {
 }
 
 /**
+ * 관심사별 검색 설정 (T-156). admin.retrieval 위에 관심사 그래프의 tagPenalty(선택)를 태그별로 덮어쓴다.
+ * 그래프에 값이 있는 태그는 그래프 값(0이면 감점 없음), 나머지는 admin 값. 메이플 그래프는 tagPenalty가 없어 그대로다.
+ * 확장(background.js)과 평가 도구가 모두 이것으로 retrieve 옵션을 만든다. 입력은 바꾸지 않는다
+ */
+export function retrievalFor(retrieval, graph) {
+  return { ...retrieval, tagPenalty: { ...(retrieval?.tagPenalty || {}), ...(graph?.tagPenalty || {}) } };
+}
+
+/**
  * @param {number[]} q        질의 벡터
  * @param {object} graph      mergeGraphs 결과
  * @param {Map} vecs          'tag:<id>' | 'tag:<id>#<n>'(예문 벡터, T-154) | 'node:<id>' -> 벡터

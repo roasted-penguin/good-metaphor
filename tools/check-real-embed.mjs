@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
-import { retrieve } from '../extension/lib/retrieval.js';
+import { retrieve, retrievalFor } from '../extension/lib/retrieval.js';
 
 const admin = JSON.parse(readFileSync('extension/config/admin.json', 'utf8'));
 const cases = [...JSON.parse(readFileSync('tools/eval-set.json', 'utf8')), ...JSON.parse(readFileSync('tools/eval-holdout.json', 'utf8'))];
@@ -23,7 +23,7 @@ async function check(label, fresh) {
     let same = 0; const ms = []; const diff = [];
     for (const c of cases) {
       const [q] = await be.embed([c.sentence], 'query');
-      const evalTop = retrieve(q, graph, vecs, { ...admin.retrieval, aliasText: c.sentence })[0].id;
+      const evalTop = retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), aliasText: c.sentence })[0].id;
       const r = await be.send('explain', { sentence: c.sentence, word: '', context: '', pageTitle: 'check', noCache: true });
       if (!r.ok) throw new Error(r.error);
       const d = r.data.debug;
