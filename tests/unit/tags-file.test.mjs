@@ -40,10 +40,11 @@ test('nodeText 스냅숏: 분리 전과 바이트 단위로 같다 (벡터 캐�
   const g = mergeGraphs(loadCommonGraphFromDisk(), null);
   const tagMap = new Map(g.tags.map(t => [t.id, t]));
   const text = id => nodeText(g.nodes.find(n => n.id === id), tagMap);
-  // T-152: loss_risk 예문 추가로 starforce·전체 해시만 바뀐다(태그 예문을 바꾸면 여기 값을 새로 잰다)
+  // T-152: loss_risk 예문 추가로 starforce·전체 해시가 바뀌었다(태그 예문을 바꾸면 여기 값을 새로 잰다)
+  // T-153: sol_erda에서 scarcity_value 태그를 빼 sol_erda·전체 해시가 바뀐다
   assert.equal(sha1(text('starforce')), '5303d3c5de5c878933c1db407d87d32f8a07d9ba');
-  assert.equal(sha1(text('sol_erda')), '8b60250a8de7d3ef2ecc165840b36d736b9c2a70');
-  assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), '26c0b9bb603db449b15fad055eb379bdcff63eca');
+  assert.equal(sha1(text('sol_erda')), '7d32aa20155a45a6f7e367d6412601fdb8222384');
+  assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), '1cf28ae805c9be067d763aea3d79da940d5841da');
   assert.equal(g.tags.length, 18);
 });
 

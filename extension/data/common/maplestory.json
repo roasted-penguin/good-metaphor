@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.09-2",
+  "version": "2026.11.09-3",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -187,7 +187,7 @@
         "HEXA 매트릭스의 스킬을 강화하려면 솔 에르다와 솔 에르다 조각이 필요하다.",
         "솔 에르다는 어센틱 지역 사냥이나 특정 보스로 '솔 에르다의 기운' 게이지를 채워 얻고, 보유할 수 있는 양에 상한이 있다."
       ],
-      "tags": ["daily_accumulation", "scarcity_value"],
+      "tags": ["daily_accumulation"],
       "sources": ["https://maplestory.nexon.com/News/Update/806", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/405"],
       "verifiedAt": "2026-10-11"
     }
