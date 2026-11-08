@@ -168,7 +168,7 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
     party: []
   };
   for (const [id, aliases] of Object.entries(expected)) assert.deepEqual(byId[id], aliases, id);
-  assert.equal(common.version, '2026.11.08-2');
+  assert.equal(common.version, '2026.11.08-3');
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {
