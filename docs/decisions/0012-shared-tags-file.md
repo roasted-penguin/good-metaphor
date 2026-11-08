@@ -19,5 +19,5 @@
 - 식당·커스텀 관심사가 같은 태그 파일을 참조할 수 있다. 관심사 파일은 노드·엣지만 가진다.
 - 검색 결과는 분리 전과 같다(`npm run eval:fallback` 출력 동일, `nodeText` 스냅숏 동일).
 - 추출 어휘와 키워드 프롬프트 어휘가 같은 `tags.json`에서 나오는지 서버 테스트가 확인한다(규칙 9).
-- 서버 결과 캐시 키와 `/health` 판본은 여전히 관심사 그래프의 `version`이다. 태그를 바꾸면 `tags.json` `version`과 함께 관심사 그래프 `version`도 올린다(시드를 다시 넣고 캐시를 비우기 위해).
+- 서버 판본(`workspace_version`, 결과 캐시 키)은 `"그래프 판본+태그 판본"`이라 `tags.json`의 `version`만 올려도 캐시가 갈린다(`WORKSPACE_VERSION`이 있으면 그 값, 인라인 tags·태그 파일을 못 읽으면 그래프 판본만). 확장도 `sources.common.tagsVersion`이 결과 캐시 키(`graphKey`)에 들어간다. 태그를 바꾸면 `tags.json` `version`을 올리고, 서버 인덱스는 시드를 다시 넣는다.
 - 공통 그래프를 직접 `JSON.parse`/`json.loads`로 읽으면 태그가 빠진다. 새 도구·테스트는 위 로더를 쓴다.
