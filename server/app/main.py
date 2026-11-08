@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from . import __version__
+from .blocklist import load_blocklist
 from .cache import ResultCache, cache_key
 from .config import Settings
 from .pipeline import AnalogyPipeline, AnalogyRequest, PipelineError
@@ -86,7 +87,11 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
             else:
                 # 시드된 인덱스(LIGHTRAG_WORKING_DIR/WORKSPACE)를 첫 검색 때 연다. 없으면 검색 단계에서 503
                 retriever = app.state.owned_retriever = LazyLightRAGRetriever(s, graph)
-        app.state.pipeline = AnalogyPipeline(graph, keyword_llm, analogy_llm, retriever, s.analogy_model)
+        blocklist = deps.get("blocklist")
+        if blocklist is None:
+            blocklist = load_blocklist(s.blocklist_path)
+        app.state.pipeline = AnalogyPipeline(graph, keyword_llm, analogy_llm, retriever, s.analogy_model,
+                                             blocklist=blocklist)
         return app.state.pipeline
 
     @app.exception_handler(Exception)

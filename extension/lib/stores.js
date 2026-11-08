@@ -31,6 +31,24 @@ export async function loadCommonGraph({ fresh = false } = {}) {
   return graph;
 }
 
+/* ───────────── 금칙어 목록(T-114, 규칙 11) ───────────── */
+// 번들 파일만 읽는다(원격 목록 없음). 승인된 카드만 거르는 일은 runAnalogy(blocklist.js)가 한다.
+// 못 읽으면 빈 목록(프롬프트 규칙은 남는다). 다음 호출 때 다시 읽는다
+let blocklistCache = null;
+
+export async function loadBlocklist() {
+  if (blocklistCache) return blocklistCache;
+  try {
+    const res = await fetch(chrome.runtime.getURL('data/common/blocklist.json'));
+    const data = await res.json();
+    blocklistCache = Array.isArray(data?.terms) ? data.terms : [];
+    return blocklistCache;
+  } catch (e) {
+    console.error('[blocklist] 금칙어 목록을 못 읽었어요', e);
+    return [];
+  }
+}
+
 /* ───────────── 사용자 저장소 어댑터 ───────────── */
 // 모든 어댑터는 같은 모양: getSession, login, logout, loadOverlay, saveOverlay
 

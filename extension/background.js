@@ -3,7 +3,7 @@ import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './li
 import { complete, PROVIDERS } from './lib/providers.js';
 import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
-import { loadCommonGraph, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
+import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
@@ -255,10 +255,11 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   }
   const tags = topTags(q, graph, vecs, 5);
 
-  // 비유 프롬프트 → LLM → 파싱 → 규칙 1 nodeId 검증 → 근거 검사(T-123)는 lib/pipeline.js(T-104)
-  const { answer, grounding, evidence } = await runAnalogy({
+  // 비유 프롬프트 → LLM → 파싱 → 규칙 1 nodeId 검증 → 근거 검사(T-123) → 금칙어 검사(T-114)는 lib/pipeline.js(T-104)
+  const blocklist = await loadBlocklist();
+  const { answer, grounding, evidence, blocked } = await runAnalogy({
     sentence, word, context, pageTitle, graph, candidates, ask,
-    providerKind: provider.def.kind, onStage, onPartial
+    providerKind: provider.def.kind, onStage, onPartial, blocklist
   });
 
   const result = {
@@ -285,6 +286,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     }
   };
   if (grounding) result.debug.grounding = grounding;
+  if (blocked) result.debug.blocked = blocked; // 필드 이름만, 금칙어 자체는 없다
   if (serverInfo) {
     result.source = 'local';
     result.debug.server = serverInfo;
