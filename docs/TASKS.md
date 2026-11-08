@@ -74,8 +74,8 @@
 | D-4 | 두 번째 공통 관심사 | 결정 | P1 | 완료 | 식당 |
 | T-301 | AI로 관심사 그래프 초안 만들기 + 사용자 검수 | 3 확장 | P0 | 완료 | T-202, T-304 |
 | T-304 | 추상 태그를 공통 파일로 분리 (`tags.json`) | 3 확장 | P1 | 완료 | |
-| T-302 | 두 번째 공통 관심사: 식당 그래프 + 로그인 없이 관심사 선택 | 3 확장 | P1 | 리뷰 | T-304 |
-| T-156 | 식당 관심사 1위 정답률 높이기: hit@1 10/21(48%)·hit@3 17/21(여유 한 문장). 넓은 태그(scarcity_value·efficiency_metric·expected_value)가 엉뚱한 노드를 끌어올림, 억지 태그 연결(fifo_storage·model_restaurant의 loss_risk, delivery_fee의 expected_value, price_board의 threshold_req) 재검토, 관심사별 감점 검토. 메이플 가드 회귀 0, 식당 가드 파일 만들기 | 3 확장 | P1 | 대기 | T-302 |
+| T-302 | 두 번째 공통 관심사: 식당 그래프 + 로그인 없이 관심사 선택 | 3 확장 | P1 | 완료 | T-304 |
+| T-156 | 식당 관심사 1위 정답률 높이기: hit@1 10/21(48%)·hit@3 17/21(여유 한 문장). 넓은 태그(scarcity_value·efficiency_metric·expected_value)가 엉뚱한 노드를 끌어올림, 억지 태그 연결(fifo_storage·model_restaurant의 loss_risk, delivery_fee의 expected_value, price_board의 threshold_req) 재검토, 관심사별 감점 검토. 메이플 가드 회귀 0, 식당 가드 파일 만들기 | 3 확장 | P1 | 진행 | T-302 |
 | T-157 | 식당 교정 내보내기: `corrections:export`가 메이플로 고정돼 식당 👎·"더 맞는 개념"이 운영자 파일에 안 들어감. 내보내기에 관심사 표시, 승인 절차가 식당 평가셋으로 가게 | 3 확장 | P2 | 대기 | T-302, T-131 |
 | T-158 | 첫 실행 화면(T-116)에서 관심사(메이플/식당) 고르기 | 3 확장 | P2 | 대기 | T-302 |
 | T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 대기 | T-107, T-402 |
