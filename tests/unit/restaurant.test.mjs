@@ -7,7 +7,7 @@ import {
   validateGraph, mergeGraphs, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest
 } from '../../extension/lib/graph.js';
 import { loadCommonGraphFromDisk, commonGraphPath, loadInterestGraph, interestFromArgv } from '../../tools/load-graph.mjs';
-import { pickSets } from '../../tools/eval-lib.mjs';
+import { pickSets, interestArgError } from '../../tools/eval-lib.mjs';
 
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
 const rawRestaurant = read('extension/data/common/restaurant.json');
@@ -220,4 +220,16 @@ test('설정 기본값: interest는 기본 관심사(메이플), 목록에 있�
   const { DEFAULT_SETTINGS } = await import('../../extension/lib/config.js');
   assert.equal(DEFAULT_SETTINGS.interest, DEFAULT_INTEREST);
   assert.ok(commonInterest(DEFAULT_SETTINGS.interest));
+});
+
+test('interestArgError: 메이플이 아닌 관심사에 --guard·--holdout·--margin-guard·--server를 주면 오류 문구, 아니면 null', () => {
+  const r = commonInterest('restaurant'), m = commonInterest('maplestory');
+  for (const flag of ['--guard', '--holdout', '--margin-guard', '--server']) {
+    const msg = interestArgError(['node', 'eval', '--interest', 'restaurant', flag], r);
+    assert.match(msg, new RegExp(flag));
+    assert.match(msg, /메이플 관심사에서만/);
+    assert.equal(interestArgError(['node', 'eval', flag], m), null, '메이플이면 그대로');
+  }
+  assert.equal(interestArgError(['node', 'eval', '--interest', 'restaurant', '-v'], r), null);
+  assert.equal(interestArgError(['node', 'eval'], null), null);
 });
