@@ -548,6 +548,7 @@ async function loadFeedback() {
   if (!fbSharePending) $('#fbShare').checked = list.share; // 저장 중이면 누른 값을 덮지 않는다
   renderSharePreview();
   $('#fbExport').disabled = !fbItems.length;
+  $('#fbCorrections').disabled = !fbItems.length;
   $('#fbClear').disabled = !fbItems.length;
 }
 // 되돌리기·지우기 뒤 다시 읽기. 실패하면 이전 목록을 두고 오류 문구
@@ -570,14 +571,26 @@ $('#fbList').addEventListener('click', async e => {
   await reloadFeedback();
 });
 
-$('#fbExport').addEventListener('click', () => {
-  // 목록 응답의 items 배열을 그대로 파일로
-  const blob = new Blob([JSON.stringify(fbItems, null, 2)], { type: 'application/json' });
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `good-metaphor-feedback-${localDay(Date.now())}.json`;
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// 목록 응답의 items 배열을 그대로 파일로
+$('#fbExport').addEventListener('click', () => downloadJson(fbItems, `good-metaphor-feedback-${localDay(Date.now())}.json`));
+
+// 운영자용 교정 내보내기(T-131). 공통 노드·공통 태그 대상만, 문장은 가린 것만. 로컬 파일로만 받는다
+$('#fbCorrections').addEventListener('click', async () => {
+  try {
+    const data = await send('corrections:export');
+    downloadJson(data, `good-metaphor-corrections-${localDay(Date.now())}.json`);
+    const n = data.exampleCandidates.length;
+    setStatus($('#fbStatus'), n ? `예문 후보 ${n}개를 내보냈어요.` : '공통 그래프 교정이 아직 없어요. 빈 파일을 내보냈어요.', 'ok');
+  } catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
 });
 
 $('#fbClear').addEventListener('click', async () => {

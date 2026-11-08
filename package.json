@@ -14,7 +14,8 @@
     "eval:gen": "node tools/eval-gen.mjs",
     "smoke:providers": "node tools/smoke-providers.mjs",
     "check:embed": "node tools/check-real-embed.mjs",
-    "sim:feedback": "node tools/feedback-sim.mjs"
+    "sim:feedback": "node tools/feedback-sim.mjs",
+    "check:corrections": "node tools/check-corrections.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"
