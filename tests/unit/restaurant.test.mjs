@@ -306,3 +306,16 @@ test('validateGraph: tagPenalty는 그래프 태그 id → 0~0.1 숫자인 객�
   assert.match(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: '0.02' } }).join(), /tagPenalty/);
   assert.match(validateGraph({ ...restaurant, tagPenalty: [0.02] }).join(), /tagPenalty/);
 });
+
+/* ───────────── 식당 가드 (T-156) ───────────── */
+
+test('식당 가드: 식당 평가셋에서 지금 맞히는 문장 목록(문자열 배열, 중복 없음, 홀드아웃·메이플 가드와 겹치지 않음)', () => {
+  const guard = read('tools/eval-guard-restaurant.json');
+  const sentences = new Set(evalSet.map(c => c.sentence));
+  assert.ok(Array.isArray(guard) && guard.length >= 10, `${guard.length}문장`);
+  assert.equal(new Set(guard).size, guard.length, '중복');
+  for (const s of guard) assert.ok(sentences.has(s), `식당 평가셋에 없는 문장: ${s}`);
+  const unseen = new Set(unseenRestaurant.map(c => c.sentence));
+  const mapleGuard = new Set(read('tools/eval-guard.json'));
+  for (const s of guard) assert.ok(!unseen.has(s) && !mapleGuard.has(s), s);
+});
