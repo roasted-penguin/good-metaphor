@@ -37,7 +37,7 @@ curl -s localhost:8000/health
 docker compose down
 ```
 
-- 공통 그래프는 저장소의 `extension/data/common/`을 컨테이너 `/data/common`에 읽기 전용으로 마운트하고, `COMMON_GRAPH_PATH=/data/common/maplestory.json`으로 가리켜요.
+- 공통 그래프는 저장소의 `extension/data/common/`을 컨테이너 `/data/common`에 읽기 전용으로 마운트하고, `COMMON_GRAPH_PATH=/data/common/maplestory.json`으로 가리켜요. 추상 태그는 같은 폴더의 `tags.json`(`TAGS_PATH`)에서 읽어 `load_common_graph`가 합쳐요(T-304).
 - `.env`가 없으면 compose가 멈춰요(Compose v2.24 미만은 `env_file`의 `required: false`를 몰라요). `GEMINI_API_KEY=`를 비워 두어도 서버는 뜨고 `/health`는 200이에요.
 
 ## 공통 그래프 주입(시드)
@@ -48,7 +48,7 @@ cd server
 EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3로
 ```
 
-- 공통 그래프(`COMMON_GRAPH_PATH`)를 LightRAG 사용자 정의 KG로 바꿔 넣어요(태그 18 + 노드 18 = 엔티티 36). 끝나면 한 줄 요약(엔티티·관계 수, 워크스페이스, 작업 디렉터리)을 찍어요.
+- 공통 그래프(`COMMON_GRAPH_PATH` + 태그 파일 `TAGS_PATH`)를 LightRAG 사용자 정의 KG로 바꿔 넣어요(태그 18 + 노드 18 = 엔티티 36). 끝나면 한 줄 요약(엔티티·관계 수, 워크스페이스, 작업 디렉터리)을 찍어요.
 - 다시 돌려도 같아요. LightRAG가 같은 이름의 엔티티·관계를 덮어써서 설명이 겹치지 않아요.
 - 시드는 덮어쓰기만 하고 지우지 않아요. 공통 그래프 `version`이 바뀌거나 노드·태그를 지우거나 이름을 바꾸면 작업 디렉터리(`LIGHTRAG_WORKING_DIR/WORKSPACE/`)를 지우고 다시 넣어요.
 - LLM은 부르지 않아요. LightRAG가 LLM을 부르려 하면 오류로 멈춰요(버그라는 뜻이에요).
@@ -65,6 +65,7 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 | `WORKSPACE_VERSION` | 공통 그래프의 `version` | 캐시 키에 붙는 판본 |
 | `RATE_LIMIT_PER_MIN` | `30` | 설치 토큰별 분당 요청 한도 |
 | `COMMON_GRAPH_PATH` | 저장소의 `extension/data/common/maplestory.json` | 실행 위치(cwd)와 무관하게 저장소 루트 기준으로 찾아요. 도커에서는 compose가 `/data/common/maplestory.json`으로 지정해요. |
+| `TAGS_PATH` | 공통 그래프 파일 옆 `tags.json` | 추상 태그(통제 어휘)의 원본(T-304, ADR 0012). 그래프에 `tags`가 이미 있으면 읽지 않아요. 도커에서는 `/data/common/tags.json`. |
 | `LIGHTRAG_WORKING_DIR` | `server/rag_storage` | LightRAG 인덱스 폴더. 아래에 워크스페이스별 폴더가 생겨요. |
 | `EMBEDDING_PROVIDER` | `hash` | `hash`(네트워크 없음) 또는 `ollama` |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama 주소. 맥은 테일넷(`tailscale serve`)으로만 열어요(규칙 10). |

@@ -12,7 +12,7 @@
 - EC2(`t4g.medium`)에 LightRAG를 라이브러리로 감싼 `analogy-api`(FastAPI)를 둔다. LightRAG 서버의 요청별 워크스페이스 라우팅이 아직 없어서(#3631) 워크스페이스별 인스턴스를 직접 관리한다.
 - 추출·설명 병합 요약 LLM = 맥의 Ollama(`gemma4:12b`), Tailscale(`tag:rag-server` → `tag:llm-node:11434`)로만 연결. 맥은 시간창에만 켜고, EC2 큐가 기다린다.
 - 호버 경로(키워드·비유)는 클라우드 LLM. 2026-10-18부터는 클라우드 무료 모델 fallback 체인(ADR 0008)이고, 맥의 Ollama는 그 체인 맨 뒤 최종 방어선으로만 붙는다(맥이 꺼져 있어도 앞 순위로 호버가 된다).
-- 추상 태그는 통제 어휘로 고정해 추출 프롬프트와 질의 키워드 프롬프트가 같은 목록을 쓴다. 원본은 `maplestory.json`의 `tags`.
+- 추상 태그는 통제 어휘로 고정해 추출 프롬프트와 질의 키워드 프롬프트가 같은 목록을 쓴다. 원본은 `maplestory.json`의 `tags`(T-304부터 `data/common/tags.json`, ADR 0012).
 - 임베딩은 EC2의 `bge-m3` 하나로 인덱싱·질의를 모두 처리한다.
 - 근거 검증(`nodeId`가 후보에 없으면 비유 숨김)은 서버에서 그대로 한다.
 - 공통 워크스페이스는 관심사마다 하나(`common_maplestory`, `common_restaurant`)이고 추상구조는 `tags.json` 하나에서 만든다(D-4, T-304, 2026-10-11 추가).

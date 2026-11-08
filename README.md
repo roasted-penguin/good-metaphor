@@ -28,6 +28,7 @@ extension/                 ← 크롬에 로드하는 폴더 (빌드 결과 포�
   config/admin.json        관리자(배포자) 설정: 기본 제공자, 허용 목록, 잠금, 저장소 주소
   managed_schema.json      크롬 엔터프라이즈 정책으로 admin 값을 덮어쓸 때의 스키마
   data/common/maplestory.json  공통 저장소 샘플 그래프
+  data/common/tags.json        추상 태그(통제 어휘) 원본
   lib/                     providers, stores, graph, retrieval, prompt, config
   vendor/                  onnxruntime-web wasm
 src/offscreen-src.js       오프스크린 원본 (transformers.js 번들 대상)
