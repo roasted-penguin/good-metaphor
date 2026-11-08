@@ -145,6 +145,16 @@ test('노드 aliases 검증: 문자열 배열, 각 1~20자 (T-114)', () => {
   assert.deepEqual(validateGraph(g(['가'.repeat(20)])), []);
 });
 
+test('노드 weakAliases 검증: aliases와 같은 규칙 (T-149)', () => {
+  const g = weakAliases => ({ domain: 'd', tags: [{ id: 't', label: 'l' }], nodes: [{ id: 'n', label: '라벨', facts: ['f'], tags: ['t'], weakAliases, ...PROV }] });
+  assert.deepEqual(validateGraph(g(['펑'])), []);
+  assert.deepEqual(validateGraph(g(undefined)), []);
+  assert.match(validateGraph(g('펑')).join(), /weakAliases/);
+  assert.match(validateGraph(g([''])).join(), /weakAliases/);
+  assert.match(validateGraph(g(['가'.repeat(21)])).join(), /weakAliases/);
+  assert.match(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], weakAliases: [3] }] }).join(), /weakAliases/);
+});
+
 test('오버레이 노드의 aliases도 같은 규칙으로 검사한다 (T-114)', () => {
   assert.match(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], aliases: [''] }] }).join(), /aliases/);
   assert.deepEqual(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], aliases: ['별칭'] }] }), []);
@@ -165,14 +175,17 @@ test('nodeText: 별칭은 임베딩 텍스트에 넣지 않는다. 모든 노드
 test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드에 있다 (T-114)', () => {
   const byId = Object.fromEntries(common.nodes.map(n => [n.id, n.aliases || []]));
   const expected = {
-    hunting: ['재획'], skill_cooldown: ['극딜'], starforce: ['펑', '프텍'], arcane_symbol: ['세금'],
+    hunting: ['재획'], skill_cooldown: ['극딜'], starforce: ['프텍'], arcane_symbol: [],
     meso: ['쌀먹'], auction: ['쌀먹'], boss_entry: ['데카', '풀데카', '최소컷'], arcane_force: ['최소컷'],
     cube: ['잡옵'], weekly_boss: ['메요일'],
     // 기사·버스는 뉴스·교통 글에 흔한 일상어라 뺐다(최종 리뷰, 부정 평가 문장은 T-149)
     party: []
   };
   for (const [id, aliases] of Object.entries(expected)) assert.deepEqual(byId[id], aliases, id);
-  assert.equal(common.version, '2026.11.08-5');
+  // 펑·세금은 일상어와 겹쳐 약한 별칭으로 옮겼다(T-149). 메이플 단서가 함께 있을 때만 가산
+  const weak = Object.fromEntries(common.nodes.filter(n => n.weakAliases).map(n => [n.id, n.weakAliases]));
+  assert.deepEqual(weak, { starforce: ['펑'], arcane_symbol: ['세금'] });
+  assert.equal(common.version, '2026.11.09-1');
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {

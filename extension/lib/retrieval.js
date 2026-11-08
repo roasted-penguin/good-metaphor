@@ -47,6 +47,69 @@ export function aliasMatch(text, aliases) {
 }
 
 /**
+ * 메이플 단서에서 빼는 일반어 (T-149). 공통 노드 라벨 낱말 중 다른 분야 글에도 흔한 것.
+ * 이 낱말만으로는 "메이플 이야기"라고 볼 수 없어 약한 별칭(세금·펑)의 가산 근거로 쓰지 않는다.
+ * 근거는 낱말마다 주석. 라벨이 바뀌면 단위 테스트가 죽은 항목을 알려 준다.
+ */
+export const MAPLE_GENERIC_WORDS = [
+  '강화',       // 규제·보안 강화
+  '타임',       // 런치 타임, 해피 타임
+  '잠재능력',   // 아이·선수의 잠재능력
+  '재설정',     // 비밀번호 재설정
+  '심볼',       // 회사 심볼, 기호
+  '요구치',     // 요구치·기준치 (공학·의학)
+  '보스',       // 직장 상사, 조직 보스
+  '입장',       // 입장권, 입장 표명
+  '조건',       // 계약 조건
+  '난이도',     // 시험 난이도
+  '주간',       // 주간 일정·뉴스
+  '인플레이션', // 경제 기사
+  '경매장',     // 실제 경매장
+  '레벨업',     // 자기계발 "레벨업"
+  '요구',       // 일반 동사 명사
+  '경험치',     // "경험치를 쌓다" 비유로 흔함
+  '사냥',       // 실제 사냥
+  '효율',       // 에너지 효율
+  '쿠폰',       // 할인 쿠폰
+  '스킬',       // 업무 스킬
+  '쿨타임',     // 일상 은어 "쿨타임 찼다", 다른 게임
+  '유니온',     // 노동조합, 유니온 잭
+  '링크',       // 웹 링크
+  '파티',       // 생일 파티
+  '플레이',     // 스포츠·음악 플레이
+  '6차',        // 6차 회의, 6차 산업
+  '전직',       // 직장 전직
+  '매트릭스'    // 행렬, 영화
+];
+const GENERIC = new Set(MAPLE_GENERIC_WORDS);
+
+/**
+ * 공통 노드 라벨의 핵심 낱말 (T-149): 괄호 안을 빼고 공백으로 나눈 뒤, 3글자 이상이면 끝의 과·와(이음 조사)를 떼고,
+ * 2글자 이상이며 일반어가 아닌 것. 사용자 노드(source 'common'이 아님)는 넣지 않는다.
+ */
+export function labelCueWords(graph) {
+  const out = new Set();
+  for (const n of graph?.nodes || []) {
+    if (n.source !== 'common' || !n.label) continue;
+    for (let w of n.label.replace(/\([^)]*\)/g, ' ').split(/\s+/)) {
+      if (w.length >= 3) w = w.replace(/[과와]$/, '');
+      if (w.length >= 2 && !GENERIC.has(w)) out.add(w);
+    }
+  }
+  return [...out];
+}
+
+/**
+ * 문장에 메이플 단서가 있는지 (T-149): 어떤 노드의 강한 별칭(aliases)이나 공통 라벨 핵심 낱말이 낱말로 있으면 참.
+ * 경계 규칙은 aliasMatch 그대로(앞만 경계).
+ */
+export function mapleCue(text, graph) {
+  if (!text) return false;
+  if ((graph?.nodes || []).some(n => aliasMatch(text, n.aliases))) return true;
+  return aliasMatch(text, labelCueWords(graph));
+}
+
+/**
  * @param {number[]} q        질의 벡터
  * @param {object} graph      mergeGraphs 결과
  * @param {Map} vecs          'tag:<id>' | 'node:<id>' -> 벡터
@@ -58,12 +121,16 @@ export function aliasMatch(text, aliases) {
  *                   원문으로 만든 기록 벡터와 맞추려 원문 벡터를 넘긴다 (T-138)
  *   aliasText   별칭(게임 은어) 판정에 쓰는 원문. 없으면 별칭 가산 없음 (T-114)
  *   aliasBoost  aliasText에 노드 별칭이 낱말로 있으면 그 노드 점수에 더할 값. 기본 0(영향 없음)
+ *               약한 별칭(weakAliases, 일상어와 겹치는 은어)은 mapleCue가 참일 때만 더한다. 한 노드에 한 번만 (T-149)
  */
 export function retrieve(q, graph, vecs, {
   topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {},
   feedbackMemory = [], feedbackQuery = null, feedbackSim = 0.92, feedbackMax = 0.1,
   aliasText = '', aliasBoost = 0
 } = {}) {
+  // 약한 별칭 단서는 필요할 때 한 번만 계산한다(약한 별칭이 맞은 노드가 없으면 계산하지 않음)
+  let cue;
+  const cueOk = () => (cue ??= mapleCue(aliasText, graph));
   const fb = feedbackMemory?.length ? feedbackAdjust(feedbackQuery || q, feedbackMemory, { sim: feedbackSim, max: feedbackMax }) : null;
   const tagSim = new Map();
   for (const t of graph.tags) {
@@ -83,7 +150,7 @@ export function retrieve(q, graph, vecs, {
     const bestTag = ranked[0]?.sim > 0 ? ranked[0].id : null, bestTagSim = bestTag ? ranked[0].sim : 0;
     const boost = graph.boosts?.[n.id] || 0;
     const feedback = fb?.get(n.id) || 0;
-    const alias = aliasBoost && aliasMatch(aliasText, n.aliases) ? aliasBoost : 0;
+    const alias = aliasBoost && (aliasMatch(aliasText, n.aliases) || (aliasMatch(aliasText, n.weakAliases) && cueOk())) ? aliasBoost : 0;
     return {
       node: n,
       score: directWeight * direct + tagWeight * tagScore + boost + feedback + alias,

@@ -84,10 +84,12 @@ test('scoreCases: 맞는 비유가 없어야 하는 문장(expectNodes: [])은 h
 const isEnglish = s => !/[\uac00-\ud7a3]/.test(s);
 
 test('평가셋: 40문장 이상, 영어 25% 이상, 맞는 비유 없는 문장 5개 이상 (T-103)', () => {
-  assert.ok(evalSet.length >= 40, `평가셋 ${evalSet.length}문장`);
-  const en = evalSet.filter(c => isEnglish(c.sentence)).length;
-  assert.ok(en / evalSet.length >= 0.25, `영어 ${en}/${evalSet.length}`);
-  assert.ok(evalSet.filter(c => c.expectNodes.length === 0).length >= 5);
+  // 별칭 음성 문장(forbidNodes, T-149)은 한국어 일상어 검사라 따로 센다. 비율은 기존 평가 문장으로만 본다
+  const base = evalSet.filter(c => !c.forbidNodes);
+  assert.ok(base.length >= 40, `평가셋 ${base.length}문장`);
+  const en = base.filter(c => isEnglish(c.sentence)).length;
+  assert.ok(en / base.length >= 0.25, `영어 ${en}/${base.length}`);
+  assert.ok(base.filter(c => c.expectNodes.length === 0).length >= 5);
 });
 
 test('평가셋: id는 모두 공통 그래프에 있고, 문장 중복이 없다', () => {
@@ -141,4 +143,45 @@ test('바꿔 말한 문장 쌍: 24쌍 이상, 같음·다름 각 12쌍 이상, a
     assert.ok(typeof p.a === 'string' && all.has(p.a), `평가셋·검증셋에 없음: ${p.a}`);
     assert.ok(typeof p.b === 'string' && p.b.trim() && p.a !== p.b, p.a);
   }
+});
+
+// --- T-149 별칭 음성 문장: forbidNodes가 1위가 아니면 통과. hit@1 분모·비유 없음 목록과 따로 센다 ---
+test('scoreCases: forbidNodes 문장은 negative로 따로 세고 n·noMatch를 바꾸지 않는다', () => {
+  const cases = [
+    { sentence: '가', expectNodes: ['a'] },
+    { sentence: '없음', expectNodes: [] },
+    { sentence: '음1', expectNodes: [], forbidNodes: ['a'], group: 'alias-negative' },
+    { sentence: '음2', expectNodes: [], forbidNodes: ['b', 'c'], group: 'alias-negative' }
+  ];
+  const ranks = { 가: ['a'], 없음: [{ id: 'x', score: 0.5 }], 음1: ['x', 'a'], 음2: ['c', 'x'] };
+  const r = scoreCases(cases, c => ranks[c.sentence]);
+  assert.equal(r.n, 1);
+  assert.equal(r.hit1, 1);
+  assert.equal(r.noMatch.length, 1);
+  assert.deepEqual(r.groups, {}, '음성 그룹은 hit@1 그룹 표에 넣지 않는다');
+  assert.equal(r.negative.n, 2);
+  assert.equal(r.negative.pass, 1);
+  assert.deepEqual(r.negative.fails, [{ sentence: '음2', top: 'c', forbid: ['b', 'c'] }]);
+});
+
+test('scoreCases: 음성 문장이 없으면 negative는 0/0', () => {
+  const r = scoreCases([{ sentence: '가', expectNodes: ['a'] }], () => ['a']);
+  assert.deepEqual(r.negative, { n: 0, pass: 0, fails: [] });
+});
+
+test('평가셋 alias-negative: 4문장 이상, forbidNodes는 그래프 id, expectNodes는 비어 있음, 가드에 없음 (T-149)', () => {
+  const nodeIds = new Set(common.nodes.map(n => n.id));
+  const neg = evalSet.filter(c => c.group === 'alias-negative');
+  assert.ok(neg.length >= 4, `${neg.length}문장`);
+  const guard = new Set(read('tools/eval-guard.json'));
+  for (const c of neg) {
+    assert.deepEqual(c.expectNodes, [], c.sentence);
+    assert.ok(c.forbidNodes?.length && c.forbidNodes.every(id => nodeIds.has(id)), c.sentence);
+    assert.equal(c.since, 'T-149');
+    assert.ok(!guard.has(c.sentence));
+  }
+  // 기존 지표 분모가 그대로: 음성이 아닌 문장 수와 비유 없음 문장 수
+  const plain = evalSet.filter(c => !c.forbidNodes);
+  assert.equal(plain.filter(c => c.expectNodes.length).length, 39);
+  assert.equal(plain.filter(c => !c.expectNodes.length).length, 5);
 });

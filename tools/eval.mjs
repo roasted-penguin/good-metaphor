@@ -139,6 +139,11 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
     console.log(pctLine(s.name, r));
     if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);
     if (s.name === mixedSetting(admin).name) {
+      // 음성 문장(T-149): 1위가 금지 노드가 아니면 통과. hit@1 분모와 따로
+      if (r.negative.n) {
+        console.log(`  alias-negative ${r.negative.pass}/${r.negative.n}`);
+        if (verbose) for (const f of r.negative.fails) console.log(`  ✗ ${f.sentence.slice(0, 32)}… → 1위 ${f.top} (금지: ${f.forbid.join('/')})`);
+      }
       if (name === '평가셋' && !mode) browserHit1 = r.hit1;
       printGuardAndNew(cases, r, rank);
       // 비유가 없어야 하는 문장의 1위 점수 vs 맞힌 문장의 1위 점수 (임계값 근거)

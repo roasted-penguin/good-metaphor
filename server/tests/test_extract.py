@@ -85,8 +85,17 @@ def test_glossary_puts_aliases_after_label():
 
 def test_glossary_has_slang_from_graph(graph):
     text = "\n".join(glossary(graph))
-    for word in ["재획", "펑", "세금", "메요일"]:
+    for word in ["재획", "프텍", "메요일"]:
         assert word in text
+
+
+def test_glossary_leaves_out_weak_aliases():
+    """T-149: 약한 별칭(일상어와 겹치는 은어: 펑·세금)은 용어 사전에 넣지 않는다. 일상어가 서버 검색을 끌지 않게."""
+    fake = {"nodes": [
+        {"id": "a", "label": "스타포스 강화", "facts": ["첫 사실."], "aliases": ["프텍"], "weakAliases": ["펑"]},
+        {"id": "b", "label": "아케인 심볼", "facts": ["심볼 사실."], "weakAliases": ["세금"]},
+    ]}
+    assert glossary(fake) == ["스타포스 강화(프텍): 첫 사실.", "아케인 심볼: 심볼 사실."]
 
 
 def test_glossary_and_config_have_no_banned_words(graph, config):
