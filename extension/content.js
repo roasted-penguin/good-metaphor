@@ -41,8 +41,10 @@
   let themeWanted = isTop;
   // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
   let siteExcluded = excludedBy(SF.DEFAULT_EXCLUDED_HOSTS);
+  // 부모 문서의 비밀번호 폼 안에 든 같은 출처 iframe(T-148). 시작 때 한 번, 트리거마다 다시 판정한다(아래 framedInPasswordForm)
+  let framedPw = false;
   // 켜져 있고 이 사이트가 제외 목록에 없을 때만 동작한다
-  const active = () => settings.enabled && !siteExcluded;
+  const active = () => settings.enabled && !siteExcluded && !framedPw;
   function loadSettings() {
     chrome.storage.local.get('settings', ({ settings: s }) => {
       settings = { ...settings, ...(s || {}) };
@@ -79,6 +81,8 @@
       themeLoading = false;
       if (got) { theme = got; themeStale = false; } else themeStale = true;
       markTheme();
+      // 테마를 기다리며 미뤄 둔 첫 로딩 말풍선(서브프레임 첫 호버, T-148). 실패해도 기본 테마로 띄워 영영 안 뜨는 일이 없게 한다
+      if (current?.awaitTheme) render({ loading: true, stage: 'graph' });
     };
     try {
       chrome.runtime.sendMessage({ type: 'graph:info' }, res => {
@@ -119,17 +123,43 @@
   // 비밀번호 칸이 있는 폼 안 문장은 설정과 무관하게 보내지 않는다(T-107)
   // shadow 안 문장(T-111)도 막도록 composed tree 를 올라간다: 각 트리에서 closest('form')을 보고 shadow 면 host 로 건너 다시.
   // 바깥 트리의 폼도 봐야 하므로(비밀번호 없는 shadow 안 폼이 비밀번호 있는 바깥 폼 안에 있을 수 있음) 찾을 때까지 끝까지 오른다.
-  // 비밀번호 칸은 form.elements(폼 연동 호스트 포함) 또는 폼 안 input[type=password]로 본다
-  const hasPassword = form => [...form.elements].some(f => f.type === 'password') || !!form.querySelector('input[type=password]');
-  function inPasswordForm(node) {
+  // 비밀번호 칸은 form.elements(폼 연동 호스트 포함), 폼 안 input[type=password], 그리고 폼 자손의 열린 shadow 안 칸(T-148, 상한 있음)으로 본다.
+  // cache(Map 폼→결과)를 넘기면 한 번의 문장 찾기 안에서 같은 폼을 여러 번 깊게 돌지 않는다(textNodesIn 은 텍스트 노드마다 부른다)
+  const hasPassword = (form, cache) => {
+    if (cache?.has(form)) return cache.get(form);
+    const yes = [...form.elements].some(f => f.type === 'password') || !!form.querySelector('input[type=password]') || AS.hasPasswordDeep(form);
+    cache?.set(form, yes);
+    return yes;
+  };
+  function inPasswordForm(node, cache) {
     for (let el = AS.composedParent(node); el; ) {
       const form = el.closest('form');
-      if (form && hasPassword(form)) return true;
+      if (form && hasPassword(form, cache)) return true;
       const root = el.getRootNode();
       el = AS.isShadowRoot(root) ? root.host : null;
     }
     return false;
   }
+
+  // 부모 비밀번호 폼 안 iframe(T-148): 같은 출처면 window.frameElement 가 부모 문서의 <iframe> 요소라, 거기서 부모 쪽으로
+  // inPasswordForm 과 같은 composed 검사를 하고, 부모도 서브프레임이면 그 frameElement 로 계속 오른다(최상위까지, 깊이 상한 10).
+  // 다른 출처 프레임은 frameElement 가 null 이라 검사할 수 없다(그 프레임 문서에는 부모의 비밀번호 칸이 없으니 칸 자체가 새지는 않음).
+  // 예외(접근 거부 등)는 '모름'으로 보고 막지 않는다 — 다른 출처 프레임은 원래 이 검사 밖이다
+  function framedInPasswordForm() {
+    if (isTop) return false;
+    try {
+      let w = window;
+      for (let i = 0; i < 10; i++) {
+        const fe = w.frameElement;
+        if (!fe) return false;
+        if (inPasswordForm(fe)) return true;
+        w = fe.ownerDocument?.defaultView;
+        if (!w || w === w.top) return false;
+      }
+    } catch { /* 다른 출처 부모 */ }
+    return false;
+  }
+  framedPw = framedInPasswordForm();
 
   // shadow 안이면 호스트를 거쳐 문서까지 올라가 본다(shadow root 직속 텍스트는 parentElement 가 null, T-111)
   function isSkippable(node) {
@@ -141,6 +171,7 @@
 
   function textNodesIn(block) {
     const out = [];
+    const pwCache = new Map(); // 이번 블록 안에서 폼마다 비밀번호 검사 한 번(T-148)
     const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
       acceptNode(n) {
         if (!n.nodeValue) return NodeFilter.FILTER_REJECT;
@@ -148,7 +179,7 @@
         // shadow root 바로 아래 텍스트(T-111)는 부모 요소가 없어도 받는다
         if (p ? SKIP_TAGS.has(p.tagName) : !AS.isShadowRoot(n.parentNode)) return NodeFilter.FILTER_REJECT;
         // 같은 블록 안 비밀번호 폼 글자가 문장·앞 문장으로 새지 않게 뺀다(T-107)
-        if (inPasswordForm(n)) return NodeFilter.FILTER_REJECT;
+        if (inPasswordForm(n, pwCache)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
     });
@@ -241,18 +272,33 @@
   // 페이지가 adoptedStyleSheets 를 갈아 끼워 우리 시트가 빠졌으면 같은 시트를 다시 덧붙인다. 실패하면 강조 없이 말풍선만
   const HL_RULE = `::highlight(${HL_NAME}) { background-color: rgba(255, 196, 40, .30); }`; // content.css 와 같은 색
   const shadowHlSheets = new WeakMap(); // shadow root → 우리 시트
+  // 말풍선을 닫을 때(hideTooltip) 우리 시트를 다시 빼야 하는 root 들(T-148). 페이지 shadow 에 우리 시트를 남겨 두지 않는다
+  const hlRoots = new Set();
   function ensureShadowHlStyle(root) {
     try {
       let sheet = shadowHlSheets.get(root);
+      hlRoots.add(root);
       if (sheet && root.adoptedStyleSheets.includes(sheet)) return true;
       if (!sheet) { sheet = new CSSStyleSheet(); sheet.replaceSync(HL_RULE); shadowHlSheets.set(root, sheet); }
       root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
       return true;
     } catch { return false; }
   }
+  // 우리 시트만 걸러 낸다(페이지 시트와 순서는 그대로). keep 은 지금 강조 중인 root(빼지 않음)
+  function detachShadowHlStyles(keep = null) {
+    for (const root of [...hlRoots]) {
+      if (root === keep) continue;
+      hlRoots.delete(root);
+      try {
+        const sheet = shadowHlSheets.get(root);
+        if (sheet && root.adoptedStyleSheets.includes(sheet)) root.adoptedStyleSheets = root.adoptedStyleSheets.filter(s => s !== sheet);
+      } catch { /* root 가 사라졌거나 막힘. 할 수 있는 게 없음 */ }
+    }
+  }
   function highlight(range) {
     if (!window.CSS?.highlights) return;
     const root = range.startContainer.getRootNode();
+    detachShadowHlStyles(AS.isShadowRoot(root) ? root : null); // 다른 root 로 옮겨 가면 앞 root 의 시트는 바로 뺀다
     if (AS.isShadowRoot(root) && !ensureShadowHlStyle(root)) { clearHighlight(); return; }
     CSS.highlights.set(HL_NAME, new Highlight(range));
   }
@@ -455,6 +501,7 @@
 
   function render(state) {
     ensureTooltip();
+    if (current) current.awaitTheme = false; // 한 번이라도 그렸으면 더는 테마를 기다리지 않는다(T-148)
     if (state.result?.theme) theme = state.result.theme;
     box.className = 'box t-' + (theme === 'maple' ? 'maple' : 'neutral') + (box.classList.contains('show') ? ' show' : '');
     let html = '<button class="close" data-act="close" title="닫기 (Esc)">×</button>';
@@ -515,6 +562,7 @@
     current = null;
     reqSeq++;
     clearHighlight();
+    detachShadowHlStyles();
     if (box) { box.classList.remove('show'); box.innerHTML = ''; }
   }
 
@@ -539,6 +587,8 @@
   }
 
   function trigger() {
+    // 부모 DOM 은 바뀔 수 있으니(폼에 비밀번호 칸이 나중에 생김 등) 트리거마다 다시 본다(T-148, 같은 출처 사슬만이라 가벼움)
+    if (!isTop) { framedPw = framedInPasswordForm(); if (framedPw && (current || view)) hideTooltip(); }
     if (!active() || !mouse.inside) return;
     // 작은 서브프레임(광고·위젯, T-147)은 말풍선이 잘리니 테마도 받지 않고 아무것도 보내지 않는다
     if (AP.tinyFrame({ isTop, vw: window.innerWidth, vh: window.innerHeight })) return;
@@ -551,9 +601,12 @@
     const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120), topHost };
     // 줄은 호버한 순간 한 번만 고른다(뷰포트 y는 스크롤하면 다른 줄을 가리킴)
     const lineIndex = AP.pickLineIndex(s.range.getClientRects(), mouse.y);
-    current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, lineIndex };
+    // 서브프레임이 테마를 아직 모르면(T-148) 로딩 말풍선을 바로 그리지 않고, graph:info 응답이나 첫 stage(theme 실음)·결과가 오면 그린다.
+    // 강조는 바로 한다. 최상위는 시작 때 미리 받으니 지금처럼 바로 그린다(받기 전이면 기본 테마)
+    const awaitTheme = !isTop && themeStale;
+    current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, lineIndex, awaitTheme };
     highlight(s.range);
-    render({ loading: true, stage: 'graph' });
+    if (!awaitTheme) render({ loading: true, stage: 'graph' });
     try {
       getPort().postMessage({
         type: 'explain', id: reqId, frameToken,

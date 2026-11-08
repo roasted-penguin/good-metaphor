@@ -75,3 +75,47 @@ test('blockFor: 보통 문서에서는 지금처럼 가장 가까운 블록, 없
   assert.equal(blockFor({ parentElement: loose, parentNode: loose }, { isBlock, stopAt: body }), body, 'body 는 블록 판정 없이 마지막');
   assert.equal(blockFor({ parentElement: null, parentNode: null }, { isBlock, stopAt: body }), body, '떨어진 노드');
 });
+
+/* ───────── hasPasswordDeep (T-148) ───────── */
+// 가짜 요소: children 배열, 열린 shadow 면 shadowRoot(children 을 가진 root), 닫힌 shadow 는 shadowRoot null
+const { hasPasswordDeep } = globalThis.AnalogyShadow;
+const E = (tag, { type, children = [], shadow = null } = {}) => ({ nodeType: 1, localName: tag, type, children, shadowRoot: shadow ? { nodeType: 11, children: shadow } : null });
+const pw = () => E('input', { type: 'password' });
+
+test('hasPasswordDeep: 얕은 light DOM 비밀번호 칸, 없으면 false', () => {
+  assert.equal(hasPasswordDeep(E('form', { children: [E('p'), pw()] })), true);
+  assert.equal(hasPasswordDeep(E('form', { children: [E('p'), E('input', { type: 'text' })] })), false);
+  assert.equal(hasPasswordDeep(null), false);
+});
+
+test('hasPasswordDeep: 자손 요소의 열린 shadow 안(중첩 포함) 비밀번호 칸도 찾는다', () => {
+  const deep = E('div', { shadow: [E('span', { shadow: [E('div', { children: [pw()] })] })] });
+  assert.equal(hasPasswordDeep(E('form', { children: [E('p'), E('div', { children: [deep] })] })), true);
+  // shadow root 자체에서 시작해도 된다
+  assert.equal(hasPasswordDeep({ nodeType: 11, children: [deep] }), true);
+});
+
+test('hasPasswordDeep: 닫힌 shadow(shadowRoot null)는 들어가지 않는다', () => {
+  const closed = E('div'); // 닫힌 root 는 바깥에서 shadowRoot 가 null
+  closed.__hidden = [pw()];
+  assert.equal(hasPasswordDeep(E('form', { children: [closed] })), false);
+});
+
+test('hasPasswordDeep: 깊이 상한(기본 10)을 넘는 shadow 는 보지 않는다', () => {
+  // shadow 를 n 겹 판 끝에 비밀번호 칸
+  const nest = n => (n === 0 ? pw() : E('div', { shadow: [nest(n - 1)] }));
+  assert.equal(hasPasswordDeep(E('form', { children: [nest(10)] })), true, '10겹은 찾음');
+  assert.equal(hasPasswordDeep(E('form', { children: [nest(11)] })), false, '11겹은 상한 밖');
+  assert.equal(hasPasswordDeep(E('form', { children: [nest(3)] }), { maxDepth: 2 }), false);
+});
+
+test('hasPasswordDeep: 방문 노드 상한(기본 2,000)을 넘으면 비밀번호 있음으로 보지 않고 멈춘다', () => {
+  const many = n => Array.from({ length: n }, () => E('span'));
+  let visited = 0;
+  const counting = E('form', { children: [...many(5000), pw()] });
+  counting.children = new Proxy(counting.children, { get: (t, k) => { if (/^\d+$/.test(String(k))) visited++; return t[k]; } });
+  assert.equal(hasPasswordDeep(counting), false, '상한 뒤의 칸은 못 봄');
+  assert.ok(visited <= 2001, `방문 ${visited}개`);
+  assert.equal(hasPasswordDeep(E('form', { children: [...many(100), pw()] })), true);
+  assert.equal(hasPasswordDeep(E('form', { children: [...many(100), pw()] }), { maxNodes: 50 }), false);
+});
