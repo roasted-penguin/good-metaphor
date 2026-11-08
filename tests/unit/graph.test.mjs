@@ -185,7 +185,7 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
   // 펑·세금은 일상어와 겹쳐 약한 별칭으로 옮겼다(T-149). 메이플 단서가 함께 있을 때만 가산
   const weak = Object.fromEntries(common.nodes.filter(n => n.weakAliases).map(n => [n.id, n.weakAliases]));
   assert.deepEqual(weak, { starforce: ['펑'], arcane_symbol: ['세금'] });
-  assert.equal(common.version, '2026.11.09-1');
+  assert.equal(common.version, '2026.11.09-2'); // T-152 loss_risk 예문 추가로 판본만 올림
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {

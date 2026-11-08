@@ -43,9 +43,15 @@
   { "sentence": "22성 도전하다가 또 펑 났다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "slang", "since": "T-114" },
   { "sentence": "이번 주 세금 내고 나니 메소가 바닥났다.", "expectNodes": ["arcane_symbol"], "expectTag": "daily_accumulation", "group": "slang", "since": "T-114" },
   { "sentence": "메요일이라 보스 초기화됐다.", "expectNodes": ["weekly_boss"], "expectTag": "periodic_cap", "group": "slang", "since": "T-114" },
+  { "sentence": "17성에서 터져서 장비 날렸다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "slang", "since": "T-152" },
+  { "sentence": "스타포스 누르다가 장비가 파괴됐다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "slang", "since": "T-152" },
+  { "sentence": "강화 몇 번 더 하다 결국 터졌네.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "slang", "since": "T-152" },
+  { "sentence": "21성 노리고 눌렀는데 파괴돼서 멘탈 나갔다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "slang", "since": "T-152" },
+  { "sentence": "스타포스 강화하다 장비 터져서 복구 비용만 날렸다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "slang", "since": "T-152" },
   { "sentence": "연말정산 때 세금 신고를 미리 준비해야 한다.", "expectNodes": [], "forbidNodes": ["arcane_symbol"], "group": "alias-negative", "since": "T-149" },
   { "sentence": "펑크 록 밴드의 공연이 주말에 열렸다.", "expectNodes": [], "forbidNodes": ["starforce"], "group": "alias-negative", "since": "T-149" },
   { "sentence": "달리던 차의 타이어가 펑 하고 터졌다.", "expectNodes": [], "forbidNodes": ["starforce"], "group": "alias-negative", "since": "T-149" },
   { "sentence": "버스 기사가 손님에게 길을 안내했다.", "expectNodes": [], "forbidNodes": ["party"], "group": "alias-negative", "since": "T-149" },
-  { "sentence": "오늘 신문 기사에서 금리 인상 소식을 읽었다.", "expectNodes": [], "forbidNodes": ["party"], "group": "alias-negative", "since": "T-149" }
+  { "sentence": "오늘 신문 기사에서 금리 인상 소식을 읽었다.", "expectNodes": [], "forbidNodes": ["party"], "group": "alias-negative", "since": "T-149" },
+  { "sentence": "메소포타미아 문명에서는 세금을 보리로 거두었다.", "expectNodes": [], "forbidNodes": ["arcane_symbol"], "group": "alias-negative", "since": "T-152" }
 ]

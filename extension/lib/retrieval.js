@@ -99,14 +99,37 @@ export function labelCueWords(graph) {
   return [...out];
 }
 
+// 라벨 단서 낱말 바로 뒤에 올 수 있는 조사 (T-152). 긴 것을 앞에 둔다
+const CUE_PARTICLES = ['이랑', '까지', '부터', '에서', '으로', '처럼', '보다', '하고',
+  '랑', '은', '는', '이', '가', '을', '를', '의', '에', '로', '와', '과', '도', '만'];
+// 단서 낱말에 바로 붙는 동사 어간 (스타포스하다가, 스타포스했다, 스타포스해서). 뒤는 무엇이든 된다
+const CUE_VERB_STEMS = ['하', '해', '했', '한', '할'];
+
+/**
+ * 라벨 단서 낱말이 문장에 낱말로 있는지 (T-152). 앞 경계는 aliasMatch와 같다. 뒤는 셋 중 하나:
+ * 한글이 아님(공백·문장부호·숫자·끝) / 조사 1~2개 뒤 한글이 아님(메소가, 메소에서는) / 동사 어간(스타포스하다가).
+ * 메소포타미아·샤이닝스타·아케인과학·메소도시는 다른 낱말이라 아니다.
+ * 알려진 한계: 서술격(메소다, 메소였다)은 단서로 안 잡고, 어간 뒤를 보지 않아 "메소한…" 같은 드문 합성어는 잡는다.
+ */
+export function cueWordMatch(text, words) {
+  if (!text || !words?.length) return false;
+  const t = text.normalize('NFKC');
+  const particle = `(?:${CUE_PARTICLES.join('|')})`;
+  const tail = `(?:${particle}{0,2}(?!\\p{Script=Hangul})|(?:${CUE_VERB_STEMS.join('|')}))`;
+  return words.some(w => {
+    const cw = String(w || '').normalize('NFKC').trim();
+    return cw && new RegExp(`(?:^|[\\s\\p{P}\\p{S}])${escapeRe(cw)}${tail}`, 'u').test(t);
+  });
+}
+
 /**
  * 문장에 메이플 단서가 있는지 (T-149): 어떤 노드의 강한 별칭(aliases)이나 공통 라벨 핵심 낱말이 낱말로 있으면 참.
- * 경계 규칙은 aliasMatch 그대로(앞만 경계).
+ * 강한 별칭은 aliasMatch 그대로(앞만 경계, 활용도 붙음: 재획하고), 라벨 낱말은 cueWordMatch(뒤에 조사만, T-152).
  */
 export function mapleCue(text, graph) {
   if (!text) return false;
   if ((graph?.nodes || []).some(n => aliasMatch(text, n.aliases))) return true;
-  return aliasMatch(text, labelCueWords(graph));
+  return cueWordMatch(text, labelCueWords(graph));
 }
 
 /**
