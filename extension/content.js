@@ -380,6 +380,7 @@
         .chip.fb { background: var(--fb-bg); color: var(--fb-ink); }
         .chip.alt, .chip.reason { cursor: pointer; padding: 3px 10px; background: transparent; border: 1px solid var(--line); color: var(--ink); }
         .chip.reason { color: var(--muted); }
+        .chip.ver { background: transparent; color: var(--muted); padding-left: 2px; padding-right: 2px; }
         .chip.alt:hover, .chip.reason:hover { background: var(--chip-bg); }
       </style>
       <div class="box" role="dialog" aria-live="polite"></div>`;
@@ -397,6 +398,12 @@
 
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // 근거 옆 "검수 2026-10"(T-118): 공통 노드의 검수 날짜를 연-월로. 사용자 노드·날짜 없음이면 안 보인다
+  function verifiedChip(ev) {
+    const ym = ev.source !== 'user' && /^\d{4}-\d{2}-\d{2}$/.test(ev.verifiedAt || '') ? ev.verifiedAt.slice(0, 7) : '';
+    return ym ? `<span class="chip ver" title="공식 자료로 사실을 확인한 달이에요">검수 ${esc(ym)}</span>` : '';
   }
 
   // 말풍선 배치(T-109): 호버할 때 정한 줄(lineIndex)의 지금 rect 아래, 넘치면 그 줄 위. 가로는 호버 때 커서 x(anchorX).
@@ -535,7 +542,7 @@
           : `<div class="ask">왜 안 맞았나요? (선택)</div><div class="chips">${REASON_CHIPS.map(([k, t]) => `<button class="chip reason" data-act="reason" data-reason="${k}">${t}</button>`).join('')}</div>`;
       }
       if (r.evidence && !state.busy) {
-        html += `<div class="chips"><span class="chip ${r.evidence.source === 'user' ? 'user' : ''}" title="${r.evidence.source === 'user' ? '내 저장소' : '공통 저장소'}">근거: ${esc(r.evidence.nodeLabel)}</span>${r.evidence.tagLabel ? `<span class="chip tag" title="공유하는 추상 구조">${esc(r.evidence.tagLabel)}</span>` : ''}${r.feedbackApplied ? '<span class="chip fb" title="내가 남긴 피드백으로 바뀐 결과예요">내 피드백 반영</span>' : ''}</div>`;
+        html += `<div class="chips"><span class="chip ${r.evidence.source === 'user' ? 'user' : ''}" title="${r.evidence.source === 'user' ? '내 저장소' : '공통 저장소'}">근거: ${esc(r.evidence.nodeLabel)}</span>${verifiedChip(r.evidence)}${r.evidence.tagLabel ? `<span class="chip tag" title="공유하는 추상 구조">${esc(r.evidence.tagLabel)}</span>` : ''}${r.feedbackApplied ? '<span class="chip fb" title="내가 남긴 피드백으로 바뀐 결과예요">내 피드백 반영</span>' : ''}</div>`;
       }
       const thumbs = state.thanked
         ? '<span class="thanks">고마워요</span>'

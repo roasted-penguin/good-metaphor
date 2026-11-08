@@ -76,7 +76,9 @@ export async function runAnalogy({ sentence, word, context, pageTitle, graph, ca
     nodeId: chosen.id,
     nodeLabel: chosen.label,
     source: chosen.source,
-    tagLabel: graph.tags.find(t => t.id === answer.tagId)?.label || chosen.tag?.label || null
+    tagLabel: graph.tags.find(t => t.id === answer.tagId)?.label || chosen.tag?.label || null,
+    // 공통 노드의 검수 날짜(T-118). 말풍선이 "검수 YYYY-MM"으로 보인다. 사용자 노드·날짜 없음은 null
+    verifiedAt: chosen.source === 'common' ? (graph.nodes || []).find(n => n.id === chosen.id)?.verifiedAt || null : null
   } : null;
   return { answer, chosen, rejected: answer.rejected || null, grounding, evidence, blocked };
 }

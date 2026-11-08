@@ -52,6 +52,8 @@ class AnalogyPipeline:
         self.blocklist = active_terms(blocklist or [])
         self.tags = [t for t in graph.get("tags", []) if t.get("label")]
         self.tag_labels = [t["label"] for t in self.tags]
+        # 노드 id -> 검수 날짜(T-118). sources·verifiedAt은 사실이 아니라 시드(KG)에는 넣지 않는다
+        self.verified_at = {n["id"]: n.get("verifiedAt") for n in graph.get("nodes", []) if n.get("id")}
 
     async def _complete(self, llm: LLM, system: str, user: str, json: bool) -> str:
         try:
@@ -133,6 +135,8 @@ class AnalogyPipeline:
                 "nodeLabel": chosen.label,
                 "source": chosen.source,
                 "tagLabel": tag_label_by_id.get(answer.get("tagId")) or (chosen.tag or {}).get("label"),
+                # 공통 노드의 검수 날짜(T-118). 확장 말풍선이 "검수 YYYY-MM"으로 보인다. 없으면 None
+                "verifiedAt": self.verified_at.get(chosen.id) if chosen.source == "common" else None,
             }
 
         return {

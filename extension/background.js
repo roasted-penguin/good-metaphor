@@ -5,7 +5,7 @@ import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
-import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode } from './lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked } from './lib/blocklist.js';
@@ -172,7 +172,10 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // 피드백 지문을 캐시 키에 넣어, 그 문장의 피드백이 바뀌면 캐시가 저절로 무효가 된다
   // 비슷한 문장 메모리(T-130)는 다른 문장의 기록이라, 그 기록 id 목록도 키에 넣어 새 👎·고정이 생기면 무효가 되게 한다
   const memoryKey = feedbackRecords.filter(r => r.vec && r.vote !== 'up' && r.sentenceHash !== sentenceHash).map(r => r.id).join(',');
-  const cacheKey = await sha1([sentence, word, graphKey, provider.id, provider.model, settings.preciseMode, feedbackKey(feedbackRecords, sentenceHash), memoryKey].join('|'));
+  // "사실이 틀렸어요" 제보 3건으로 빠지는 공통 노드(T-118). 다른 문장 기록으로 정해지니 캐시 키에도 넣는다
+  const reported = reportedNodes(feedbackRecords, graph);
+  const reportedKey = [...reported].sort().join(',');
+  const cacheKey = await sha1([sentence, word, graphKey, provider.id, provider.model, settings.preciseMode, feedbackKey(feedbackRecords, sentenceHash), memoryKey, reportedKey].join('|'));
   if (!noCache) {
     const hit = await cacheGet(cacheKey);
     if (hit) return { ...hit, cached: true };
@@ -196,7 +199,10 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       timeoutMs: admin.analogyServer.timeoutMs,
       payload: { sentence, word: word || '', context: context || '', pageTitle: pageTitle || '' }
     });
-    if (r.ok) {
+    // 서버는 내 제보를 모른다(ADR 0010). 근거가 제보로 빠진 노드면 서버 결과를 버리고 로컬로 간다(T-118)
+    if (r.ok && reported.has(r.result.evidence?.nodeId)) {
+      serverInfo = { used: false, reason: 'reported' };
+    } else if (r.ok) {
       // callAnalogyServer 가 이미 규칙 1 검증(checkServerResult)을 거쳤다. 서버 경로에는 partial 이 없다.
       // 금칙어는 서버도 검사하지만 규칙 1처럼 확장이 한 번 더 검사한다(T-114)
       const { answer: checked, blocked } = applyBlocklist(r.result, blocklist);
@@ -204,8 +210,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       if (blocked) result.debug.blocked = blocked; // 필드 이름만
       await cachePut(cacheKey, result);
       return result;
+    } else {
+      serverInfo = { used: false, reason: r.reason };
     }
-    serverInfo = { used: false, reason: r.reason };
   }
 
   onStage('model');
@@ -249,7 +256,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     }
     extraEmbedMs = Date.now() - te;
   }
-  const fb = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq, aliasText: sentence }), feedbackRecords, sentenceHash, topK);
+  // 제보로 빠진 공통 노드는 그 문장 👎처럼 후보에서 뺀 뒤 피드백을 적용한다(고정도 못 한다)
+  const unreported = list => list.filter(c => !reported.has(c.id));
+  const fb = applyFeedback(unreported(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq, aliasText: sentence })), feedbackRecords, sentenceHash, topK);
   const candidates = fb.candidates;
   const similar = memory.length
     ? [...feedbackAdjust(fq, memory, { sim: admin.retrieval?.feedbackSim ?? 0.92, max: admin.retrieval?.feedbackMax ?? 0.1 })]
@@ -258,7 +267,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // 비슷한 문장 가감이 상위 topK 순서를 바꿨는지는 메모리 없이 한 번 더 뽑아 비교한다(검색은 가볍다)
   let similarChanged = false;
   if (similar.length) {
-    const plain = applyFeedback(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackQuery: fq, aliasText: sentence }), feedbackRecords, sentenceHash, topK);
+    const plain = applyFeedback(unreported(retrieve(q, graph, vecs, { ...admin.retrieval, topK: topK + 5, feedbackQuery: fq, aliasText: sentence })), feedbackRecords, sentenceHash, topK);
     similarChanged = plain.candidates.map(c => c.id).join() !== candidates.map(c => c.id).join();
   }
   const tags = topTags(q, graph, vecs, 5);
@@ -279,7 +288,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     theme: graph.theme,
     feedbackApplied: fb.applied || similarChanged,
     debug: {
-      feedback: { excluded: fb.excluded, pinned: fb.pinned, similar, queryVec, extraEmbedMs },
+      feedback: { excluded: fb.excluded, pinned: fb.pinned, similar, queryVec, extraEmbedMs, reported: [...reported] },
       candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagSim: c.tag?.sim, source: c.source })),
       topTags: tags,
       abstractText,
