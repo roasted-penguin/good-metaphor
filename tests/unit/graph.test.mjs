@@ -5,6 +5,8 @@ import { mergeGraphs, validateGraph, nodeText, tagText } from '../../extension/l
 import { validateOverlay } from '../../extension/lib/stores.js';
 
 const common = JSON.parse(readFileSync('extension/data/common/maplestory.json', 'utf8'));
+// 공통 그래프 노드에 필요한 출처·검수 날짜(T-118). 검증 규칙만 보는 테스트 그래프에 붙인다
+const PROV = { sources: ['https://maplestory.nexon.com/News/Update/799'], verifiedAt: '2026-10-11' };
 
 test('공통 그래프는 스키마 검사를 통과한다', () => {
   assert.deepEqual(validateGraph(common), []);
@@ -130,7 +132,7 @@ test('태그는 통제 어휘 18개 그대로 (규칙 9)', () => {
 // --- T-114 별칭(aliases): 게임 은어로 쓴 문장도 검색되게 ---
 
 test('노드 aliases 검증: 문자열 배열, 각 1~20자 (T-114)', () => {
-  const g = aliases => ({ domain: 'd', tags: [{ id: 't', label: 'l' }], nodes: [{ id: 'n', label: '라벨', facts: ['f'], tags: ['t'], aliases }] });
+  const g = aliases => ({ domain: 'd', tags: [{ id: 't', label: 'l' }], nodes: [{ id: 'n', label: '라벨', facts: ['f'], tags: ['t'], aliases, ...PROV }] });
   assert.deepEqual(validateGraph(g(['재획', '스무 글자까지는 괜찮아요 정말로요요'])), []);
   assert.deepEqual(validateGraph(g([])), []);
   assert.match(validateGraph(g('재획')).join(), /aliases/);
@@ -168,7 +170,7 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
     party: []
   };
   for (const [id, aliases] of Object.entries(expected)) assert.deepEqual(byId[id], aliases, id);
-  assert.equal(common.version, '2026.11.08-3');
+  assert.equal(common.version, '2026.11.08-4');
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {
@@ -183,4 +185,47 @@ test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-1
   const guard = JSON.parse(readFileSync('tools/eval-guard.json', 'utf8'));
   const guardText = JSON.stringify(guard);
   for (const c of slang) assert.ok(!guardText.includes(c.sentence), '은어 문장은 회귀 가드에 넣지 않는다');
+});
+
+// --- T-118 출처(sources)·검수 날짜(verifiedAt) ---
+
+const provGraph = over => ({ domain: 'd', tags: [{ id: 't', label: 'l' }], nodes: [{ id: 'n', label: '라벨', facts: ['f'], tags: ['t'], ...PROV, ...over }] });
+
+test('공통 그래프 노드는 sources(http(s) URL 1개 이상)와 verifiedAt(YYYY-MM-DD)이 있어야 한다 (T-118)', () => {
+  assert.deepEqual(validateGraph(provGraph({})), []);
+  const { sources, ...noSources } = provGraph({}).nodes[0];
+  assert.match(validateGraph({ ...provGraph({}), nodes: [noSources] }).join(), /sources/);
+  const { verifiedAt, ...noDate } = provGraph({}).nodes[0];
+  assert.match(validateGraph({ ...provGraph({}), nodes: [noDate] }).join(), /verifiedAt/);
+  assert.match(validateGraph(provGraph({ sources: [] })).join(), /sources/);
+  assert.match(validateGraph(provGraph({ sources: 'https://maplestory.nexon.com' })).join(), /sources/);
+  assert.match(validateGraph(provGraph({ sources: ['maplestory.nexon.com/News/Update/799'] })).join(), /sources/, 'URL이 아니면 오류');
+  assert.match(validateGraph(provGraph({ sources: ['ftp://maplestory.nexon.com/x'] })).join(), /sources/, 'http(s)만');
+  assert.match(validateGraph(provGraph({ sources: ['https://ok.example/a', 'javascript:alert(1)'] })).join(), /sources/);
+  assert.match(validateGraph(provGraph({ verifiedAt: '2026-10' })).join(), /verifiedAt/);
+  assert.match(validateGraph(provGraph({ verifiedAt: '2026/10/11' })).join(), /verifiedAt/);
+  assert.match(validateGraph(provGraph({ verifiedAt: '2026-02-30' })).join(), /verifiedAt/, '없는 날짜');
+  assert.match(validateGraph(provGraph({ verifiedAt: '2026-13-01' })).join(), /verifiedAt/);
+  assert.deepEqual(validateGraph(provGraph({ sources: ['http://a.example/x', 'https://b.example/y?z=1'], verifiedAt: '2024-02-29' })), []);
+});
+
+test('오버레이(사용자 노드)는 sources·verifiedAt이 없어도 통과하고, 있으면 같은 형식을 따른다 (T-118)', () => {
+  assert.deepEqual(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'] }] }), []);
+  assert.deepEqual(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], sources: ['https://a.example/'], verifiedAt: '2026-11-08' }] }), []);
+  assert.match(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], verifiedAt: '어제' }] }).join(), /verifiedAt/);
+  assert.match(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], sources: ['아무거나'] }] }).join(), /sources/);
+});
+
+test('실제 공통 그래프: 모든 노드에 공식 출처(maplestory.nexon.com)와 검수 날짜가 있다 (T-118, D-5)', () => {
+  for (const n of common.nodes) {
+    assert.ok(Array.isArray(n.sources) && n.sources.length >= 1, `${n.id} 출처 없음`);
+    for (const u of n.sources) assert.match(u, /^https:\/\/maplestory\.nexon\.com\//, `${n.id} 출처는 공식 사이트만(D-5): ${u}`);
+    assert.match(n.verifiedAt, /^\d{4}-\d{2}-\d{2}$/, n.id);
+  }
+});
+
+test('mergeGraphs: 공통 노드의 sources·verifiedAt이 병합 결과에 남는다 (T-118)', () => {
+  const g = mergeGraphs({ ...provGraph({}), id: 'c', version: '1', analogyPrefix: 'p' }, null);
+  assert.equal(g.nodes[0].verifiedAt, '2026-10-11');
+  assert.deepEqual(g.nodes[0].sources, PROV.sources);
 });

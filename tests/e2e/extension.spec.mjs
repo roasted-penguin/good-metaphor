@@ -1,7 +1,7 @@
 // 확장 전체 흐름 e2e. 네트워크 없이: 대체 임베더 + 가짜 LLM(servers.mjs)
 // 실행: npm run test:e2e   (브라우저 경로 지정: CHROMIUM_PATH=/path/to/chrome)
 import { test as base, expect, chromium } from '@playwright/test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServers, calls, analogyCalls, SERVER_ANALOGY, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING } from './servers.mjs';
@@ -1970,4 +1970,54 @@ test('Shadow DOM(T-148): 말풍선을 닫으면 그 root 에서 우리 강조 �
   const again = await sheets();
   expect(ours(again), '다시 호버하면 하나').toBe(1);
   expect(again).toHaveLength(2);
+});
+
+/* ───────────── 출처·검수 날짜와 제보 제외 (T-118, D-3) ───────────── */
+const COMMON = JSON.parse(readFileSync('extension/data/common/maplestory.json', 'utf8'));
+const verifiedYM = label => COMMON.nodes.find(n => n.label === label)?.verifiedAt?.slice(0, 7);
+// "사실이 틀렸어요" 제보(👎 + reason fact). 문장마다 하나씩
+const reportFact = (ext, nodeId, sentence) => ext.send({ type: 'feedback', record: { sentence, nodeId, tagId: null, vote: 'down', reason: 'fact' } });
+const REPORT_SENTENCES = ['제보 문장 하나예요.', '제보 문장 둘이에요.', '제보 문장 셋이에요.'];
+
+test('검수 날짜(T-118): 말풍선 근거 옆에 공통 노드의 "검수 YYYY-MM"', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const label = await evidence(page);
+  const ym = verifiedYM(label);
+  expect(ym, `근거 라벨 "${label}"이 공통 그래프에 있고 verifiedAt이 있어요`).toMatch(/^\d{4}-\d{2}$/);
+  expect(await tooltip(page)).toContain(`검수 ${ym}`);
+});
+
+test('제보 제외(T-118): 같은 공통 노드에 서로 다른 문장 fact 제보 3건이면 그 노드가 후보·근거에서 빠진다', async ({ ext }) => {
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const x = r1.data.evidence.nodeId;
+  expect(r1.data.evidence.verifiedAt).toBe(COMMON.nodes.find(n => n.id === x).verifiedAt);
+  expect(r1.data.debug.feedback.reported).toEqual([]);
+  // 같은 문장으로 3번은 1건
+  for (let i = 0; i < 3; i++) await reportFact(ext, x, REPORT_SENTENCES[0]);
+  await reportFact(ext, x, REPORT_SENTENCES[1]);
+  const r2 = await ext.send({ type: 'explain', ...q });
+  expect(r2.data.evidence.nodeId, '2건은 아직 그대로').toBe(x);
+  await reportFact(ext, x, REPORT_SENTENCES[2]);
+  // 캐시 없이 다시 묻지 않아도(같은 문장) 바뀐 결과: 제보 제외가 결과 캐시 키에 들어간다
+  const r3 = await ext.send({ type: 'explain', ...q });
+  expect(r3.data.cached).toBeFalsy();
+  expect(r3.data.debug.feedback.reported).toEqual([x]);
+  expect(r3.data.debug.candidates.map(c => c.id)).not.toContain(x);
+  expect(r3.data.evidence?.nodeId).not.toBe(x);
+});
+
+test('제보 제외(T-118): 서버 결과 근거가 제보 제외 노드면 로컬로 대체(reason reported)', async ({ ext }) => {
+  const q = { sentence: '서버정상 제보 제외 확인 문장이에요.', word: '', context: '', pageTitle: 't', noCache: true };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  expect(r1.data.source).toBe('server');
+  expect(r1.data.evidence.nodeId).toBe('starforce');
+  for (const s of REPORT_SENTENCES) await reportFact(ext, 'starforce', s);
+  const r2 = await ext.send({ type: 'explain', ...q });
+  expect(r2.data.source).toBe('local');
+  expect(r2.data.debug.server).toEqual({ used: false, reason: 'reported' });
+  expect(r2.data.debug.candidates.map(c => c.id)).not.toContain('starforce');
 });

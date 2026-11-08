@@ -67,7 +67,7 @@ test('정상: 후보 안 nodeId + facts 안 사실이면 chosen·analogy가 남�
   assert.equal(r.answer.rejected, undefined);
   assert.equal(r.rejected, null);
   assert.deepEqual(r.grounding, { ok: true });
-  assert.deepEqual(r.evidence, { nodeId: 'weekly-boss', nodeLabel: '주간 보스', source: 'common', tagLabel: '주기별 횟수 제한' });
+  assert.deepEqual(r.evidence, { nodeId: 'weekly-boss', nodeLabel: '주간 보스', source: 'common', tagLabel: '주기별 횟수 제한', verifiedAt: null });
 });
 
 test('규칙 1: 후보 밖 nodeId면 비유를 지우고 규칙 1 문구', async () => {
@@ -215,4 +215,16 @@ test('금칙어: 정상 답은 그대로, blocked는 null', async () => {
   assert.equal(r.blocked, null);
   assert.equal(r.rejected, null);
   assert.deepEqual(partials, [{ meaning: OK_ANSWER.meaning }]);
+});
+
+test('근거에 공통 노드의 검수 날짜(verifiedAt)를 싣는다, 사용자 노드는 null (T-118)', async () => {
+  const graph = { ...GRAPH, nodes: [{ id: 'weekly-boss', source: 'common', verifiedAt: '2026-10-11' }, { id: 'meso', source: 'common' }] };
+  const { ask } = fakeAsk(JSON.stringify(OK_ANSWER));
+  const r = await runAnalogy(base({ ask, graph }));
+  assert.equal(r.evidence.verifiedAt, '2026-10-11');
+  const userCands = [{ ...CANDIDATES[0], source: 'user' }];
+  const userGraph = { ...GRAPH, nodes: [{ id: 'weekly-boss', source: 'user', verifiedAt: '2026-10-11' }] };
+  const { ask: ask2 } = fakeAsk(JSON.stringify(OK_ANSWER));
+  const r2 = await runAnalogy(base({ ask: ask2, graph: userGraph, candidates: userCands }));
+  assert.equal(r2.evidence.verifiedAt, null, '사용자 노드는 표시하지 않는다');
 });

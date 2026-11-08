@@ -60,10 +60,13 @@ def test_response_has_extension_shape():
     assert body["feedbackApplied"] is False
 
     ev = body["evidence"]
-    assert set(ev) == {"nodeId", "nodeLabel", "source", "tagLabel"}
+    assert set(ev) == {"nodeId", "nodeLabel", "source", "tagLabel", "verifiedAt"}
     top = body["debug"]["candidates"][0]
     assert ev["nodeId"] == top["id"] and ev["nodeLabel"] == top["label"]
     assert ev["source"] == "common"
+    # 공통 노드의 검수 날짜를 근거에 싣는다(T-118). 말풍선이 "검수 YYYY-MM"으로 보인다
+    node = next(n for n in GRAPH["nodes"] if n["id"] == ev["nodeId"])
+    assert ev["verifiedAt"] == node["verifiedAt"]
 
     debug = body["debug"]
     assert debug["provider"] == "server/gemini-3.5-flash-lite"
@@ -631,3 +634,18 @@ def test_unexpected_error_is_korean_json_500():
     res = _post(TestClient(app, raise_server_exceptions=False), "강화 문장이에요.")
     assert res.status_code == 500
     assert res.json() == {"error": "서버에서 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요."}
+
+
+def test_evidence_verified_at_is_none_without_field():
+    """그래프 노드에 verifiedAt이 없으면 None(확장은 표시하지 않는다) (T-118)."""
+    import copy as _copy
+
+    from app.main import create_app
+
+    graph = _copy.deepcopy(GRAPH)
+    for n in graph["nodes"]:
+        n.pop("verifiedAt", None)
+    app = create_app(deps={"settings": _settings(), "llm": FakeLLM(), "retriever": FakeRetriever(graph), "graph": graph})
+    body = TestClient(app).post("/v1/analogy", json={"sentence": "강화할 때마다 확률이 낮아지는 구조예요."}, headers=TOKEN).json()
+    assert body["evidence"] is not None
+    assert body["evidence"]["verifiedAt"] is None
