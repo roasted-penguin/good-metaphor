@@ -2339,3 +2339,96 @@ test('AI 초안 수정 1회차(T-301): 저장 안내 한 줄, 금칙어 이름�
   expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
   await expect(page.locator('#draftRun')).toBeEnabled();
 });
+
+/* ───────── 공통 관심사 선택: 메이플 / 식당 (T-302) ───────── */
+const RESTAURANT_NO_MATCH = '이건 식당으로도 비유가 안 되네요.';
+const MAPLE_NO_MATCH = '메이플스토리에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.';
+const RESTAURANT_NODE_IDS = JSON.parse(readFileSync('extension/data/common/restaurant.json', 'utf8')).nodes.map(n => n.id);
+
+test('관심사(T-302): 로그아웃 상태에서 팝업으로 식당 → "식당으로 비유하자면"·t-neutral·식당 근거·식당 비유 없음 문구, 설정 화면으로 메이플로 되돌리기', async ({ context, ext, extId }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple');
+
+  // 팝업: 관심사 두 칸, 기본은 메이플
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await expect(popup.locator('input[name=interest][value=maplestory]')).toBeChecked();
+  await popup.locator('label:has(input[name=interest][value=restaurant])').click(); // 세그먼트 라디오는 숨겨 두고 라벨을 누른다
+  await expect.poll(() => ext.page.evaluate(async () => (await chrome.storage.local.get('settings')).settings?.interest)).toBe('restaurant');
+  await expect(popup.locator('#domain')).toHaveText(/식당/);
+  // 설정 화면(열려 있던 ext.page)도 storage 변경으로 같이 바뀐다
+  await expect(ext.page.locator('input[name=interest][value=restaurant]')).toBeChecked();
+  await expect(ext.page.locator('#commonTitle')).toHaveText(/^식당 · /);
+
+  // 열린 페이지도 새로고침 없이 중립 테마를 다시 받는다
+  await waitTheme(page, 'neutral');
+  await recordBoxClasses(page);
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('식당으로 비유하자면');
+  expect(await tooltip(page)).toContain('식당으로 보면');
+  expect(await boxClass(page)).toContain('t-neutral');
+  expect((await boxLog(page)).filter(e => e.cls.includes('t-maple')), '메이플 테마가 한 번도 보이면 안 됨').toEqual([]);
+
+  const r = await ext.send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.', noCache: true });
+  expect(r.data).toMatchObject({ domain: '식당', theme: 'neutral', noMatchText: RESTAURANT_NO_MATCH });
+  expect(RESTAURANT_NODE_IDS).toContain(r.data.evidence.nodeId);
+  expect(r.data.debug.candidates.every(c => RESTAURANT_NODE_IDS.includes(c.id)), '후보도 모두 식당 노드').toBe(true);
+  expect(await tooltip(page)).toContain('근거: ' + r.data.evidence.nodeLabel);
+
+  // 비유 없음(가짜 LLM: 펭귄 문장은 빈 비유) → 식당 문구
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p4');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain(RESTAURANT_NO_MATCH);
+
+  // 설정 화면에서 메이플로 되돌리기 → 팝업도 바뀌고, 말풍선은 메이플 테마·말머리·문구
+  await ext.page.locator('label:has(input[name=interest][value=maplestory])').click();
+  await expect(popup.locator('input[name=interest][value=maplestory]')).toBeChecked();
+  await expect(ext.page.locator('#commonTitle')).toHaveText(/^메이플스토리 · /);
+  await waitTheme(page, 'maple');
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('메이플스토리로 보면');
+  expect(await tooltip(page)).toContain('메이플로 치면');
+  expect(await boxClass(page)).toContain('t-maple');
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p4');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain(MAPLE_NO_MATCH);
+});
+
+test('관심사(T-302): 식당이면 서버 모드여도 서버를 부르지 않고 로컬(reason interest), 메이플로 되돌리면 다시 서버', async ({ ext }) => {
+  await ext.setSettings({ interest: 'restaurant' });
+  const before = analogyCalls.length;
+  const r = await ext.send({ type: 'explain', sentence: '서버정상 식당 관심사 확인 문장이에요.', noCache: true });
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'interest' });
+  expect(RESTAURANT_NODE_IDS).toContain(r.data.evidence.nodeId);
+  expect(analogyCalls.length - before, '서버 요청 없음').toBe(0);
+
+  await ext.setSettings({ interest: 'maplestory' });
+  const m = await ext.send({ type: 'explain', sentence: '서버정상 식당 관심사 확인 문장이에요.', noCache: true });
+  expect(m.data.source).toBe('server');
+  expect(analogyCalls.length - before).toBe(1);
+});
+
+test('관심사(T-302): 메이플에서 남긴 👎·고정은 식당에서 조용히 빠지고, 결과 캐시도 관심사별로 갈린다', async ({ ext }) => {
+  const sentence = '물가가 오르면 같은 돈으로 살 수 있는 것이 줄어든다.';
+  const maple = await ext.send({ type: 'explain', sentence, noCache: true });
+  const mapleNode = maple.data.evidence.nodeId;
+  const alt = maple.data.debug.candidates.find(c => c.id !== mapleNode).id;
+  expect((await ext.send({ type: 'feedback', record: { sentence, nodeId: mapleNode, tagId: null, vote: 'pick', pickedNodeId: alt } })).ok).toBe(true);
+
+  await ext.setSettings({ interest: 'restaurant' });
+  const r = await ext.send({ type: 'explain', sentence });
+  expect(r.ok, r.error).toBe(true);
+  expect(r.data.cached, '메이플 결과 캐시를 쓰면 안 됨').toBeFalsy();
+  expect(r.data.domain).toBe('식당');
+  expect(r.data.feedbackApplied).toBe(false);
+  expect(r.data.debug.feedback).toMatchObject({ excluded: [], pinned: null });
+  expect(r.data.debug.candidates).toHaveLength(3);
+  expect(RESTAURANT_NODE_IDS).toContain(r.data.evidence.nodeId);
+
+  await ext.setSettings({ interest: 'maplestory' });
+  const back = await ext.send({ type: 'explain', sentence, noCache: true });
+  expect(back.data.debug.feedback.pinned, '메이플로 돌아오면 고정이 다시 적용').toBe(alt);
+});

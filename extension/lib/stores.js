@@ -1,12 +1,14 @@
 // 저장소 계층
-//  - 공통 저장소: 로그인 없이 누구나 읽는 그래프 (PoC: 메이플스토리). 번들 파일 또는 관리자가 지정한 URL.
+//  - 공통 저장소: 로그인 없이 누구나 읽는 그래프. 관심사(메이플·식당, T-302)마다 번들 파일 하나.
+//    기본 관심사(메이플)만 관리자가 지정한 URL로 바꿀 수 있다.
 //  - 사용자 저장소: 로그인한 사용자만. 공통 그래프 위에 얹는 오버레이(추가 노드, 숨김, 관심사 변경).
 import { getAdminConfig } from './config.js';
-import { EMPTY_OVERLAY, validateGraph, validateTagsFile, resolveCommonGraph } from './graph.js';
+import { EMPTY_OVERLAY, validateGraph, validateTagsFile, resolveCommonGraph, commonInterest, DEFAULT_INTEREST } from './graph.js';
 
 /* ───────────── 공통 저장소 ───────────── */
 
-let commonCache = null;
+// 관심사 id → 해석된 그래프. 관심사를 바꿔도 다른 관심사 그래프가 섞이지 않게 따로 둔다
+const commonCache = new Map();
 
 // 공통 그래프와 같은 폴더의 태그 파일(T-304). base는 그래프 파일 주소
 const TAGS_FILENAME = 'tags.json';
@@ -26,22 +28,39 @@ async function fetchResolved(graphUrl, init) {
   return resolveCommonGraph(graph, tagsFile);
 }
 
-export async function loadCommonGraph({ fresh = false } = {}) {
-  if (commonCache && !fresh) return commonCache;
-  const admin = await getAdminConfig();
-  const { url, bundled } = admin.commonStore || {};
-  let graph = null;
-  if (url) {
-    try {
-      graph = await fetchResolved(url, { cache: 'no-cache' });
-    } catch (e) {
-      console.warn('[common-store] 원격 공통 저장소를 못 읽어서 번들 파일을 씁니다.', e);
-    }
+// loadCommonGraph(interestId = 'maplestory', { fresh }). 예전 호출 모양 loadCommonGraph({ fresh })도 기본 관심사로 받는다.
+// 모르는 id(오래된 설정 값 등)는 기본 관심사로 바꾼다
+export async function loadCommonGraph(interestId = DEFAULT_INTEREST, opts = {}) {
+  let fresh = !!opts.fresh;
+  if (interestId && typeof interestId === 'object') {
+    fresh = !!interestId.fresh;
+    interestId = DEFAULT_INTEREST;
   }
-  if (!graph) graph = await fetchResolved(chrome.runtime.getURL(bundled || 'data/common/maplestory.json'));
+  let interest = commonInterest(interestId);
+  if (!interest) {
+    console.warn(`[common-store] 알 수 없는 관심사 "${interestId}"라서 기본 관심사를 써요.`);
+    interest = commonInterest(DEFAULT_INTEREST);
+  }
+  const id = interest.id;
+  if (commonCache.has(id) && !fresh) return commonCache.get(id);
+  let graph = null;
+  if (id === DEFAULT_INTEREST) {
+    const admin = await getAdminConfig();
+    const { url, bundled } = admin.commonStore || {};
+    if (url) {
+      try {
+        graph = await fetchResolved(url, { cache: 'no-cache' });
+      } catch (e) {
+        console.warn('[common-store] 원격 공통 저장소를 못 읽어서 번들 파일을 씁니다.', e);
+      }
+    }
+    if (!graph) graph = await fetchResolved(chrome.runtime.getURL(bundled || 'data/common/' + interest.file));
+  } else {
+    graph = await fetchResolved(chrome.runtime.getURL('data/common/' + interest.file));
+  }
   const errors = validateGraph(graph);
   if (errors.length) throw new Error('공통 저장소 그래프 오류: ' + errors.join(' / '));
-  commonCache = graph;
+  commonCache.set(id, graph);
   return graph;
 }
 

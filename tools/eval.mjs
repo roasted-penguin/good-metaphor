@@ -11,15 +11,17 @@
 //   npm run eval -- --holdout          # 평가셋·검증셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점 (T-150)
 //   [--margin 0.005]                   # 여유(1위 − 경쟁자 점수 차)가 이보다 작은 맞힌 문장을 요약 끝에 목록으로 (T-150). -v면 문장별 여유
 //   [--retrieval '{"nodeTextMode":"desc"}']  # admin.retrieval 위에 덮어쓸 설정(JSON). 측정용, 파일은 바꾸지 않는다 (T-154)
+//   npm run eval -- --interest restaurant  # 다른 공통 관심사 그래프로 그 관심사 평가셋(tools/eval-set-<id>.json)만 채점 (T-302, 가드 없음. --guard·--holdout·--margin-guard·--server와 같이 쓰면 오류)
 //   [--margin-guard]                   # 가드 문장 중 여유가 --margin 미만이면 종료 코드 1 (선택, 여유 경고는 기본으로 실패가 아님)
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
-import { loadCommonGraphFromDisk } from './load-graph.mjs';
+import { loadInterestGraph, interestFromArgv } from './load-graph.mjs';
+import { commonInterest } from '../extension/lib/graph.js';
 import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { embedEach } from '../extension/lib/embed-each.js';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
-import { scoreCases, mixedSetting, regressions, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets } from './eval-lib.mjs';
+import { scoreCases, mixedSetting, regressions, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
 import { rankAllViaServer, gateLine, ServerUnavailable } from './eval-server.mjs';
@@ -33,14 +35,21 @@ if (retrievalAt > 0) {
   admin.retrieval = { ...admin.retrieval, ...over };
   console.log(`retrieval 덮어쓰기: ${JSON.stringify(over)}`);
 }
-const common = loadCommonGraphFromDisk(); // 그래프 + tags.json (T-304)
+// --interest <id>: 공통 관심사(T-302). 기본은 메이플
+const interest = commonInterest(interestFromArgv(process.argv));
+const isDefaultInterest = interest.id === 'maplestory';
+// 메이플 전용 옵션(--guard·--holdout·--margin-guard·--server)을 다른 관심사와 같이 주면 바로 멈춘다
+{ const err = interestArgError(process.argv, interest); if (err) throw new Error(err); }
+const common = loadInterestGraph(interest.id); // 그래프 + tags.json (T-304)
+console.log(`관심사: ${interest.label} (${common.id} ${common.version})`);
 const readSet = f => JSON.parse(fs.readFileSync(new URL(f, here)));
-// 평가셋·검증셋(eval-holdout.json), --holdout이면 홀드아웃(eval-unseen.json)만 (T-150)
+// 평가셋·검증셋(eval-holdout.json), --holdout이면 홀드아웃(eval-unseen.json)만 (T-150). 다른 관심사면 그 관심사 평가셋만
 const sets = pickSets(process.argv, {
-  evalSet: readSet('./eval-set.json'),
-  validation: readSet('./eval-holdout.json'),
-  holdout: process.argv.includes('--holdout') ? readSet('./eval-unseen.json') : []
-});
+  evalSet: isDefaultInterest ? readSet('./eval-set.json') : [],
+  validation: isDefaultInterest ? readSet('./eval-holdout.json') : [],
+  holdout: isDefaultInterest && process.argv.includes('--holdout') ? readSet('./eval-unseen.json') : [],
+  interestSet: isDefaultInterest ? [] : readSet(`./eval-set-${interest.id}.json`)
+}, interest);
 const useFallback = process.argv.includes('--fallback');
 const verbose = process.argv.includes('-v');
 // 회귀 가드: 지금 맞히는 문장은 계속 맞혀야 한다(사용자 원칙, T-113). --guard면 하나라도 틀릴 때 종료 코드 1.

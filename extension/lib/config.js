@@ -40,6 +40,8 @@ export const DEFAULT_SETTINGS = {
   models: {},                  // 제공자별 사용자가 고른 모델
   apiKeys: {},                 // 제공자별 사용자 키 (이 브라우저에만 저장)
   customBaseUrl: '',
+  // 공통 관심사(T-302). 'maplestory' | 'restaurant'. 로그인 없이 팝업·설정에서 고른다. 모르는 값이면 로더가 메이플로 바꾼다
+  interest: 'maplestory',
   // 이 호스트(와 하위 도메인)에서는 문장을 보내지 않는다(T-107). 팝업 "이 사이트에서 끄기"로 더하고 뺀다
   excludedHosts: [...globalThis.AnalogySiteFilter.DEFAULT_EXCLUDED_HOSTS]
 };

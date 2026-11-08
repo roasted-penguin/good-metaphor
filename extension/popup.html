@@ -14,6 +14,10 @@
   .site { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
   .site label { font-weight: 600; }
   .site small { color: var(--muted); margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+  .interest { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .interest > span { font-weight: 600; }
+  .interest .seg label { padding: 4px 12px; }
+  .note { font-size: 11.5px; color: var(--muted); margin-top: -4px; }
   .howto { font-size: 12.5px; background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; }
 </style>
 </head>
@@ -21,8 +25,16 @@
 <div class="wrap">
   <div class="top"><img src="icons/48.png" alt=""><b>좋은비유네용</b><span style="flex:1"></span><input type="checkbox" id="enabled" title="켜기/끄기"></div>
   <div class="site"><input type="checkbox" id="siteOff" disabled><label for="siteOff">이 사이트에서 끄기</label><small id="siteHost"></small></div>
+  <!-- 공통 관심사(T-302). 로그인 없이 고른다. 설정 화면 "사용 방식"과 같은 값(storage) -->
+  <div class="interest" role="radiogroup" aria-label="관심사"><span>관심사</span>
+    <div class="seg" id="interest">
+      <label><input type="radio" name="interest" value="maplestory"><span>메이플</span></label>
+      <label><input type="radio" name="interest" value="restaurant"><span>식당</span></label>
+    </div>
+  </div>
+  <div class="note" id="interestNote" hidden>지금은 내 관심사만 써서 이 선택은 쓰이지 않아요.</div>
   <div class="howto" id="howto"></div>
-  <div class="line"><span>관심사</span><span id="domain">…</span></div>
+  <div class="line"><span>그래프</span><span id="domain">…</span></div>
   <div class="line"><span>AI</span><span id="provider">…</span></div>
   <div class="line"><span>계정</span><span id="account">…</span></div>
   <button id="open">설정 열기</button>

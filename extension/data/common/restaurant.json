@@ -1,0 +1,295 @@
+{
+  "schema": 1,
+  "id": "restaurant",
+  "version": "2026.11.09-2",
+  "domain": "식당",
+  "analogyPrefix": "식당으로 비유하자면",
+  "theme": "neutral",
+  "noMatchText": "이건 식당으로도 비유가 안 되네요.",
+  "note": "두 번째 공통 관심사(T-302, D-4). 사실(facts)은 식당 운영의 구조만 적고 수치·가격·날짜·특정 가게·브랜드·인물은 넣지 않는다(규칙 2·11). 출처는 실제로 열어 확인한 공공·공식 자료만(D-5, T-118). 추상 태그는 같은 폴더 tags.json을 공유하고 노드 tags에는 그 id만 적는다(T-304).",
+  "nodes": [
+    {
+      "id": "ingredient_cost",
+      "label": "식재료 원가 상승",
+      "facts": [
+        "원가는 음식을 만들고 파는 데 든 재료와 품을 단위마다 계산한 값이다.",
+        "식재료 값과 인건비가 오르면 같은 매출로 남는 돈이 줄어 식당의 경영 부담이 커진다.",
+        "가격 인상을 미루던 식당도 비용이 계속 오르면 결국 메뉴 가격을 올리게 된다."
+      ],
+      "tags": [
+        "inflation",
+        "market_price"
+      ],
+      "sources": [
+        "https://www.mafra.go.kr/bbs/home/792/573384/artclView.do",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=원가"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "lunch_peak",
+      "label": "점심 피크와 테이블 회전",
+      "facts": [
+        "점심과 저녁 같은 정해진 시간대에 주문이 한꺼번에 몰려 손님이 기다리게 된다.",
+        "바쁜 시간에 주문이 밀리거나 빠지면 테이블이 늦게 비어 회전율이 떨어진다.",
+        "그래서 주문 방식을 바꿔 몰리는 시간의 주문을 덜고 직원이 조리와 응대에 집중하게 한다."
+      ],
+      "tags": [
+        "periodic_cap",
+        "efficiency_metric"
+      ],
+      "sources": [
+        "https://www.sbiz.or.kr/smst/notice/view.do?key=2111306004395&notcSn=55",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=회전율"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "kitchen_division",
+      "label": "주방 분업",
+      "facts": [
+        "주방 일은 재료를 씻고 다듬는 일, 조리하는 일, 맛을 점검하고 뒷정리하는 일로 나뉜다.",
+        "주방장은 조리사들의 조리와 재료 손질을 지시하고 감독하며 교육을 맡는다.",
+        "한 사람이 모든 일을 하지 않고 여럿이 일을 나누어 맡아 함께 음식을 완성한다."
+      ],
+      "tags": [
+        "role_division"
+      ],
+      "sources": [
+        "https://www.career.go.kr/cnet/app/base/job/jobView.m?SEQ=173",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=분업"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "happy_hour",
+      "label": "해피아워",
+      "facts": [
+        "손님이 드문 시간대를 정해 그 시간에만 값을 낮추거나 음료와 간단한 음식을 덤으로 준다.",
+        "정해 둔 시간이 지나면 혜택이 끝나고 원래 값으로 돌아간다."
+      ],
+      "tags": [
+        "temporary_multiplier"
+      ],
+      "sources": [
+        "https://opendict.korean.go.kr/search/searchResult?query=해피아워"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "limited_menu",
+      "label": "한정 메뉴",
+      "facts": [
+        "미리 정해 둔 수량만 만들어 파는 메뉴다.",
+        "정한 수량이 다 팔리면 그 메뉴는 더 주문할 수 없다."
+      ],
+      "tags": [
+        "scarcity_value",
+        "periodic_cap"
+      ],
+      "sources": [
+        "https://opendict.korean.go.kr/search/searchResult?query=한정판매",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=한정"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "loyalty_points",
+      "label": "단골 포인트 적립",
+      "facts": [
+        "식당을 이용할 때마다 포인트가 쌓이고, 모은 포인트는 소비자의 재산으로 본다.",
+        "한 회사의 포인트를 여러 외식 매장에서 함께 쌓고 쓰기도 한다.",
+        "유효기간 안에 쓰지 못하면 애써 모은 포인트가 사라진다."
+      ],
+      "tags": [
+        "daily_accumulation",
+        "shared_bonus",
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.korea.kr/news/policyNewsView.do?newsId=156667089",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=단골"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "hygiene_inspection",
+      "label": "위생 점검과 행정처분",
+      "facts": [
+        "식약처와 지자체가 음식점을 찾아가 건강진단과 위생적 취급 기준을 지키는지 점검한다.",
+        "적발된 가게는 관할 관청의 행정처분을 받고, 나중에 다시 점검받아 고쳤는지 확인받는다.",
+        "같은 위반을 되풀이할수록 영업정지 기간이 길어진다."
+      ],
+      "tags": [
+        "escalating_cost",
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148901589",
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148890175"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "delivery_fee",
+      "label": "배달 앱 중개수수료",
+      "facts": [
+        "배달 앱은 주문을 중개해 준 대가로 거래 금액에 비례한 중개수수료를 입점 식당에서 받는다.",
+        "할인 쿠폰을 써도 할인 전 가격에 수수료를 매기면 식당이 실제로 떼이는 비율이 커진다.",
+        "수수료 부담이 커지면 식당은 메뉴 가격을 올리기도 한다."
+      ],
+      "tags": [
+        "expected_value"
+      ],
+      "sources": [
+        "https://www.korea.kr/news/policyNewsView.do?newsId=156722071",
+        "https://www.mafra.go.kr/bbs/home/792/573384/artclView.do"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "fifo_storage",
+      "label": "재료 선입선출",
+      "facts": [
+        "새로 들어온 재료는 뒤에 두고 먼저 들어온 재료를 앞으로 옮겨 먼저 쓴다.",
+        "먼저 들어온 것을 먼저 처리하는 방식으로, 대기 줄을 처리하는 순서와 같다.",
+        "보관 상태를 수시로 점검해 기한이 지난 재료는 버리고 조리에 쓰지 않는다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.foodsafetykorea.go.kr/portalmobile/content/detail.do?bbs_no=bbs427&ntctxt_no=1069310",
+        "https://www.easylaw.go.kr/CSP/CnpClsMain.laf?csmSeq=840&ccfNo=1&cciNo=1&cnpClsNo=1",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=선입선출"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "no_show",
+      "label": "예약 노쇼",
+      "facts": [
+        "예약에 맞춰 재료와 음식을 미리 준비하는 식당은 손님이 오지 않으면 그날 재료를 버려야 한다.",
+        "비어 버린 자리를 짧은 시간 안에 다른 손님으로 채우기 어려워 손해가 커진다.",
+        "그래서 예약보증금과 위약금 기준을 손님에게 미리 알리고, 알린 경우에만 그 기준을 적용한다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148952791",
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148957487"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "price_board",
+      "label": "가격표 게시",
+      "facts": [
+        "음식 가격은 부가세와 봉사료를 포함해 손님이 실제로 내는 최종 가격으로 적어야 한다.",
+        "영업장이 일정 넓이 이상인 음식점은 가게 밖과 안에 모두 가격표를 붙여야 한다.",
+        "고기 메뉴는 정해진 무게당 가격으로 적어야 한다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://easylaw.go.kr/CSP/OnhunqueansInfoRetrieve.laf?onhunqnaAstSeq=91&onhunqueSeq=4361",
+        "https://www.korea.kr/briefing/policyBriefingView.do?newsId=148736000"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "key_money",
+      "label": "권리금",
+      "facts": [
+        "권리금은 가게의 시설, 거래처, 신용, 영업 노하우, 위치의 이점 같은 가치를 넘겨받는 대가로 보증금과 월세와 따로 주는 돈이다.",
+        "권리금은 새로 들어올 세입자가 지금 세입자에게 주는 돈이고, 건물주에게 돌려받는 돈이 아니다.",
+        "임대 기간이 끝나갈 때 건물주는 세입자가 새 세입자에게서 권리금을 받는 것을 방해하면 안 된다."
+      ],
+      "tags": [
+        "shared_bonus"
+      ],
+      "sources": [
+        "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=627&ccfNo=4&cciNo=3&cnpClsNo=3",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=권리금"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "hygiene_grade",
+      "label": "위생등급 지정",
+      "facts": [
+        "필수인 기본 항목을 모두 갖춰야 위생등급을 신청할 수 있다.",
+        "일반 항목과 가점 항목 점수를 합쳐 기준을 넘어야 지정된다.",
+        "지정된 뒤에도 해마다 사후 관리를 받는다."
+      ],
+      "tags": [
+        "threshold_req",
+        "progression_gate"
+      ],
+      "sources": [
+        "https://www.foodsafetykorea.go.kr/portal/board/boardDetail.do?menu_no=3397&menu_grp=MENU_NEW03&bbs_no=newbbs12"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "open_prep",
+      "label": "영업 신고와 위생교육",
+      "facts": [
+        "식당을 열려는 사람은 미리 식품위생교육을 받아야 한다.",
+        "필요한 시설을 먼저 갖춘 뒤 서류를 내고 영업신고증을 받아야 한다.",
+        "영업을 시작한 뒤에도 영업자는 해마다 위생교육을 받아야 한다."
+      ],
+      "tags": [
+        "progression_gate",
+        "threshold_req"
+      ],
+      "sources": [
+        "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=839&ccfNo=5&cciNo=1&cnpClsNo=1",
+        "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=839&ccfNo=4&cciNo=1&cnpClsNo=2"
+      ],
+      "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "model_restaurant",
+      "label": "모범업소 지정",
+      "facts": [
+        "영업신고를 마친 식당 가운데 위생 관리가 기준에 맞는 곳을 지자체가 모범업소로 지정한다.",
+        "지정되면 표지판을 붙이고, 일정 기간 출입 검사를 받지 않거나 시설 개선 융자를 먼저 지원받는다.",
+        "해마다 다시 심사하고, 영업정지 이상의 처분을 받으면 지정이 취소된다."
+      ],
+      "tags": [
+        "threshold_req",
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.easylaw.go.kr/CSP/CnpClsMain.laf?csmSeq=840&ccfNo=1&cciNo=3&cnpClsNo=1",
+        "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=840&ccfNo=1&cciNo=3&cnpClsNo=2"
+      ],
+      "verifiedAt": "2026-11-09"
+    }
+  ],
+  "edges": [
+    {
+      "from": "open_prep",
+      "to": "model_restaurant",
+      "rel": "신고를 마쳐야 지정 대상이 됨"
+    },
+    {
+      "from": "hygiene_inspection",
+      "to": "model_restaurant",
+      "rel": "영업정지 처분이면 지정이 취소됨"
+    },
+    {
+      "from": "ingredient_cost",
+      "to": "price_board",
+      "rel": "메뉴 가격을 올리게 함"
+    },
+    {
+      "from": "delivery_fee",
+      "to": "price_board",
+      "rel": "메뉴 가격을 올리게 함"
+    }
+  ]
+}

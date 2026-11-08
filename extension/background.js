@@ -2,10 +2,10 @@
 import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './lib/config.js';
 import { complete, PROVIDERS } from './lib/providers.js';
 import { buildChain, completeWithFallback } from './lib/fallback.js';
-import { mergeGraphs, embedItems, sha1 } from './lib/graph.js';
+import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
-import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes } from './lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked } from './lib/blocklist.js';
@@ -58,10 +58,16 @@ async function getSessionAndOverlay() {
   return { store, session, overlay };
 }
 
+// 사용자가 고른 공통 관심사 그래프(T-302, 설정 interest). 로그아웃이어도 고를 수 있다. 모르는 값이면 로더가 메이플로
+async function loadChosenCommon() {
+  const { interest } = await getSettings();
+  return loadCommonGraph(interest);
+}
+
 async function getMergedGraph() {
-  const common = await loadCommonGraph();
+  const common = await loadChosenCommon();
   const { session, overlay } = await getSessionAndOverlay();
-  // 로그아웃 상태 = 공통 저장소만. 로그인 상태 = 공통 + 내 오버레이
+  // 로그아웃 상태 = 고른 공통 관심사만. 로그인 상태 = 고른 공통 관심사 + 내 오버레이(useCommon false면 공통 노드 없음)
   return { graph: mergeGraphs(common, session ? overlay : null), session };
 }
 
@@ -169,8 +175,10 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // 내 태그 예문(교정 예문 포함, T-131)과 가중치(nodeBoosts + feedbackBoosts)가 바뀌어도 다른 문장의 캐시가 갈리게 짧은 지문을 넣는다
   const userTagKey = (await sha1(JSON.stringify([graph.tags.filter(t => t.source === 'user').map(t => [t.id, t.examples || []]), graph.boosts || {}]))).slice(0, 12);
   const graphKey = JSON.stringify([graph.sources, session?.userId || null, graph.nodes.length, userTagKey]);
+  // graph.sources에 공통 그래프 id·판본이 있어 관심사를 바꾸면 결과 캐시 키가 갈린다(T-302). 벡터 캐시는 텍스트 해시라 섞이지 않는다
   const sentenceHash = await sentenceHashOf(sentence);
-  const feedbackRecords = await feedbackStore.get();
+  // 지금 그래프 노드를 가리키는 기록만 쓴다(T-302). 다른 관심사에서 남긴 👎·고정은 후보·캐시 키·서버 판정 어디에도 끼지 않는다
+  const feedbackRecords = feedbackForGraph(await feedbackStore.get(), graph);
   // 피드백 지문을 캐시 키에 넣어, 그 문장의 피드백이 바뀌면 캐시가 저절로 무효가 된다
   // 비슷한 문장 메모리(T-130)는 다른 문장의 기록이라, 그 기록 id 목록도 키에 넣어 새 👎·고정이 생기면 무효가 되게 한다
   const memoryKey = feedbackRecords.filter(r => r.vec && r.vote !== 'up' && r.sentenceHash !== sentenceHash).map(r => r.id).join(',');
@@ -187,6 +195,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // 주소가 비었으면(서버 모드 꺼짐) source·debug.server 를 붙이지 않는다(지금 결과 그대로)
   const skip = serverSkipReason({
     admin, session, providerKind: provider.def.kind,
+    commonId: graph.sources.common?.id ?? null, // 서버는 메이플만 안다(T-302)
     sentenceRecords: feedbackRecords.filter(r => r.sentenceHash === sentenceHash)
   });
   let serverInfo = skip === 'off' ? null : { used: false, reason: skip };
@@ -288,6 +297,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     evidence,
     domain: graph.domain,
     theme: graph.theme,
+    // 비유 없음 문구(T-302). 공통 관심사별, 내 관심사면 빈 문자열(말풍선이 기본 문구)
+    noMatchText: graph.noMatchText || '',
     feedbackApplied: fb.applied || similarChanged,
     debug: {
       feedback: { excluded: fb.excluded, pinned: fb.pinned, similar, queryVec, extraEmbedMs, reported: [...reported] },
@@ -398,7 +409,8 @@ async function syncCorrections(records) {
     const session = await store.getSession();
     if (!session) return;
     const ov = normalizeOverlay(await store.loadOverlay(session));
-    const common = await loadCommonGraph();
+    // 고른 공통 관심사(T-302). 여기서는 내 노드·내 태그 대상만 다루고 태그 사전(tags.json)은 공유라, 어느 관심사여도 결과가 같다
+    const common = await loadChosenCommon();
     const { overlay, changed } = syncCorrectionExamples(ov, records, mergeGraphs(common, ov), {
       blockTerms: await loadBlocklist(),
       commonTagIds: new Set(common.tags.map(t => t.id))
@@ -454,7 +466,8 @@ const handlers = {
   async 'graph:draft'({ name, mode }) {
     const { session, overlay } = await getSessionAndOverlay();
     if (!session) throw new Error('로그인이 필요해요.');
-    const [common, blockTerms, admin, settings, provider] = await Promise.all([loadCommonGraph(), loadBlocklist(), getAdminConfig(), getSettings(), resolveProvider()]);
+    // 태그 사전은 공유(tags.json)라 관심사와 무관. 피할 id는 고른 공통 관심사 노드 + 내 노드(T-302)
+    const [common, blockTerms, admin, settings, provider] = await Promise.all([loadChosenCommon(), loadBlocklist(), getAdminConfig(), getSettings(), resolveProvider()]);
     // 이름은 domain·analogyPrefix로 말풍선에 보이므로 금칙어도 막는다(규칙 11)
     const nameErr = draftNameError(name, blockTerms);
     if (nameErr) throw new Error(nameErr);
@@ -481,7 +494,8 @@ const handlers = {
     return { ...parsed, name: n, mode: mode === 'new' ? 'new' : 'add', provider: answered };
   },
   async 'graph:info'() {
-    const common = await loadCommonGraph();
+    // 설정 화면 "공통 저장소"·팝업·말풍선 테마 미리 받기가 쓴다. 고른 공통 관심사(T-302)
+    const common = await loadChosenCommon();
     const { graph, session } = await getMergedGraph();
     return {
       common: { id: common.id, domain: common.domain, version: common.version, nodes: common.nodes.length, tags: common.tags.length, nodeList: common.nodes.map(n => ({ id: n.id, label: n.label })), tagList: common.tags.map(t => ({ id: t.id, label: t.label })) },
@@ -545,8 +559,10 @@ const handlers = {
   },
   // "내 피드백" 설정 화면(T-132). 최신순, 라벨은 지금 병합 그래프에서 찾고 없으면 id 그대로
   async 'feedback:list'() {
-    const [records, { graph }, settings] = await Promise.all([feedbackStore.get(), getMergedGraph(), getSettings()]);
-    const labelOf = id => (id ? graph.nodes.find(n => n.id === id)?.label || id : null);
+    const [records, { graph }, settings, ...commons] = await Promise.all([feedbackStore.get(), getMergedGraph(), getSettings(), ...COMMON_INTERESTS.map(i => loadCommonGraph(i.id))]);
+    // 다른 공통 관심사에서 남긴 기록도 라벨로 보이게 모든 공통 그래프에서 찾는다(T-302). 지금 병합 그래프가 먼저
+    const labels = new Map([...commons.flatMap(c => c.nodes), ...graph.nodes].map(n => [n.id, n.label]));
+    const labelOf = id => (id ? labels.get(id) || id : null);
     // 기록은 뒤에 붙으므로 먼저 뒤집어, ts가 같아도 나중 기록이 앞에 오게 한다(안정 정렬)
     const items = [...records].reverse().sort((a, b) => b.ts - a.ts).map(r => ({
       id: r.id, ts: r.ts, sentence: r.sentence, masked: maskSentence(r.sentence ?? ''), vote: r.vote, reason: r.reason || null,
@@ -560,8 +576,10 @@ const handlers = {
   },
   // 운영자용 교정 내보내기(T-131). 공통 노드·공통 태그 대상만, 가린 문장만. 서버로 보내지 않는다(설정 화면이 로컬 파일로 받는다)
   async 'corrections:export'() {
-    // 공통 그래프로 노드·기존 예문을 찾는다(내 관심사만 쓰는 useCommon false여도 공통 노드 교정을 내보낸다)
-    const [records, common, blockTerms] = await Promise.all([feedbackStore.get(), loadCommonGraph(), loadBlocklist()]);
+    // 공통 그래프로 노드·기존 예문을 찾는다(내 관심사만 쓰는 useCommon false여도 공통 노드 교정을 내보낸다).
+    // 고른 관심사와 무관하게 메이플만(T-302): 승인 절차(/approve-corrections)의 평가셋·회귀 가드가 메이플 것이라
+    // 식당 노드 교정이 섞이면 안 된다. 식당 교정 내보내기는 따로 정한다
+    const [records, common, blockTerms] = await Promise.all([feedbackStore.get(), loadCommonGraph(DEFAULT_INTEREST), loadBlocklist()]);
     return buildCorrectionsExport(records, common, {
       blockTerms,
       commonTagIds: new Set(common.tags.map(t => t.id)),

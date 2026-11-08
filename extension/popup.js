@@ -23,8 +23,23 @@ async function initSiteToggle(settings) {
   $('#siteHost').title = siteHost;
 }
 
+// 공통 관심사(T-302): 저장된 값을 라디오에 그린다. 모르는 값이면 메이플(로더와 같게)
+function renderInterest(id) {
+  const r = document.querySelector(`input[name=interest][value="${id}"]`) || document.querySelector('input[name=interest][value=maplestory]');
+  r.checked = true;
+}
+// 지금 쓰는 그래프(병합 결과) 줄과 계정 줄. 관심사를 바꾸면 다시 그린다
+async function renderGraph() {
+  const info = await send('graph:info');
+  $('#domain').textContent = `${info.merged.domain} · 노드 ${info.merged.nodes}개`;
+  $('#account').textContent = info.session ? `${info.session.name} (내 노드 ${info.merged.userNodes})` : '로그인 안 함 · 공통 저장소';
+  // 로그인해 내 관심사만 쓰면(useCommon false) 공통 관심사 선택은 검색에 쓰이지 않는다
+  $('#interestNote').hidden = info.merged.usesCommon;
+}
+
 (async () => {
   const st = await send('settings:get');
+  renderInterest(st.settings.interest);
   await initSiteToggle(st.settings);
   const s = st.settings;
   $('#enabled').checked = s.enabled;
@@ -32,9 +47,7 @@ async function initSiteToggle(settings) {
     ? `<kbd>${KEY[s.modifierKey]}</kbd> 누른 채 모르는 문장에 커서를 올리세요.`
     : `모르는 문장 위에 커서를 ${(s.dwellMs / 1000).toFixed(1)}초 올려 두세요.`;
   $('#provider').textContent = `${st.providers[st.active.id].label.split(' (')[0]} · ${st.active.model}${st.active.hasKey || st.providers[st.active.id].keyOptional ? '' : ' (키 없음)'}`;
-  const info = await send('graph:info');
-  $('#domain').textContent = `${info.merged.domain} · 노드 ${info.merged.nodes}개`;
-  $('#account').textContent = info.session ? `${info.session.name} (내 노드 ${info.merged.userNodes})` : '로그인 안 함 · 공통 저장소';
+  await renderGraph();
 })().catch(e => { $('#howto').textContent = e.message; });
 
 $('#enabled').addEventListener('change', e => send('settings:save', { patch: { enabled: e.target.checked } }));
@@ -52,5 +65,21 @@ $('#siteOff').addEventListener('change', async e => {
     e.target.checked = !want;
     $('#howto').textContent = `사이트 설정을 저장하지 못했어요. ${err?.message || ''}`.trim();
   }
+});
+document.querySelectorAll('input[name=interest]').forEach(r => r.addEventListener('change', async e => {
+  try {
+    await send('settings:save', { patch: { interest: e.target.value } });
+    await renderGraph();
+  } catch (err) {
+    $('#howto').textContent = `관심사를 바꾸지 못했어요. ${err?.message || ''}`.trim();
+  }
+}));
+// 설정 화면에서 바꿔도 열린 팝업에 반영한다(읽기만)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  const next = changes.settings.newValue?.interest || 'maplestory';
+  if (document.querySelector('input[name=interest]:checked')?.value === next) return;
+  renderInterest(next);
+  renderGraph().catch(() => {});
 });
 $('#open').addEventListener('click', () => chrome.runtime.openOptionsPage());

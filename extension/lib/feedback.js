@@ -50,6 +50,14 @@ export function applyFeedback(candidates, records, sentenceHash, topK = 3) {
   return { candidates: kept.slice(0, topK), applied, excluded, pinned: null };
 }
 
+// 지금 그래프에 있는 노드를 가리키는 기록만 남긴다(T-302). 공통 관심사(메이플·식당)는 노드 id가 겹치지 않아,
+// 관심사를 바꾸면 다른 관심사에서 남긴 👎·고정은 조용히 빠진다(지우지는 않으므로 되돌아가면 다시 적용).
+// 기록이 가리키는 노드(nodeId, pickedNodeId 중 값이 있는 것)가 모두 그래프에 있어야 남는다. 내 노드(u:)는 어느 관심사에나 있다
+export function feedbackForGraph(records, graph) {
+  const ids = new Set((graph?.nodes || []).map(n => n.id));
+  return (records || []).filter(r => [r?.nodeId, r?.pickedNodeId].filter(Boolean).every(id => ids.has(id)));
+}
+
 export const BOOST_STEP = 0.05;
 export const BOOST_MIN = -0.2;
 export const BOOST_MIN_SENTENCES = 3;

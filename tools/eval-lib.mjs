@@ -109,7 +109,18 @@ export function marginThreshold(argv) {
 }
 
 // 채점할 문장 묶음. --holdout이면 홀드아웃만(예문 고를 때 보지 않는 문장, 회귀 가드 대상 아님)
-export function pickSets(argv, { evalSet, validation, holdout }) {
+// interest = 고른 공통 관심사(graph.js commonInterest). 메이플이 아니면 그 관심사 평가셋 하나만, 가드 없음(T-302, 처음 기준선)
+// 메이플 전용 옵션(T-302): 가드·홀드아웃·여유 가드는 메이플 평가셋 기준이고, 서버(analogy-api)는 메이플 그래프만 안다.
+// 다른 관심사와 같이 주면 조용히 무시하지 않고 오류 문구를 돌려준다. 괜찮으면 null
+const MAPLE_ONLY_FLAGS = ['--guard', '--holdout', '--margin-guard', '--server'];
+export function interestArgError(argv, interest) {
+  if (!interest || interest.id === 'maplestory') return null;
+  const bad = MAPLE_ONLY_FLAGS.filter(f => argv.includes(f));
+  return bad.length ? `${bad.join(', ')}는 메이플 관심사에서만 써요(지금 --interest ${interest.id}).` : null;
+}
+
+export function pickSets(argv, { evalSet, validation, holdout, interestSet }, interest = null) {
+  if (interest && interest.id !== 'maplestory') return [{ name: `${interest.label} 평가셋`, cases: interestSet || [], guarded: false }];
   if (argv.includes('--holdout')) return [{ name: '홀드아웃', cases: holdout, guarded: false }];
   return [
     { name: '평가셋', cases: evalSet, guarded: true },

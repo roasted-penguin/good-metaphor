@@ -47,6 +47,27 @@ function renderTrigger(s) {
   syncTriggerUI();
 }
 
+/* ───────── 공통 관심사 (T-302) ───────── */
+// 팝업과 같은 값(settings.interest). 바꾸면 "공통 저장소" 칸도 그 관심사로 다시 그린다
+function renderInterest(id) {
+  const r = document.querySelector(`input[name=interest][value="${id}"]`) || document.querySelector('input[name=interest][value=maplestory]');
+  r.checked = true;
+}
+document.querySelectorAll('input[name=interest]').forEach(r => r.addEventListener('change', async e => {
+  try { state.settings = await send('settings:save', { patch: { interest: e.target.value } }); }
+  catch (err) { console.warn('관심사를 저장하지 못했어요:', err); renderInterest(state?.settings?.interest); return; }
+  await refreshCommon().catch(err => { $('#commonTitle').textContent = '불러오기 실패: ' + err.message; });
+}));
+// 팝업에서 바꿔도 열린 설정 화면에 반영한다(읽기만, 저장하지 않아 루프가 없다)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  const next = changes.settings.newValue?.interest || 'maplestory';
+  if (document.querySelector('input[name=interest]:checked')?.value === next) return;
+  renderInterest(next);
+  if (state) state.settings = { ...state.settings, interest: next };
+  refreshCommon().catch(err => { $('#commonTitle').textContent = '불러오기 실패: ' + err.message; });
+});
+
 /* ───────── 제외 사이트 (T-107, T-144) ───────── */
 // 저장된 순서 그대로 그린다. 읽기·그리기만 하고 저장하지 않는다(onChanged 갱신이 루프를 만들지 않게)
 let siteHosts = [];
@@ -184,12 +205,28 @@ $('#testProvider').addEventListener('click', async () => {
 });
 
 /* ───────── 저장소 ───────── */
-async function loadStore() {
-  const info = await send('graph:info');
+// "공통 저장소" 칸. 고른 공통 관심사(T-302)의 그래프를 보인다
+function renderCommon(info) {
   const c = info.common;
   $('#commonTitle').textContent = `${c.domain} · ${c.version}`;
   $('#commonStats').innerHTML = `<div><b>${c.nodes}</b>개념 노드</div><div><b>${c.tags}</b>추상 태그</div><div><b>${info.merged.usesCommon ? '사용 중' : '꺼짐'}</b>현재 검색 대상</div>`;
   $('#commonList').innerHTML = `<p><b>노드</b> ${c.nodeList.map(n => esc(n.label)).join(' · ')}</p><p><b>태그</b> ${c.tagList.map(t => `${esc(t.label)} <code>${esc(t.id)}</code>`).join(' · ')}</p>`;
+}
+
+// 관심사를 바꾼 뒤(T-302): 공통 칸과 오버레이 편집기의 공통 노드 목록만 다시 그린다.
+// 오버레이를 다시 읽지 않아 편집 중인 노드 폼·안 저장한 변경이 지워지지 않는다
+async function refreshCommon() {
+  const info = await send('graph:info');
+  renderCommon(info);
+  commonNodes = info.common.nodeList;
+  commonTags = info.common.tagList;
+  if (ov && !$('#loggedIn').hidden) renderCommonNodes();
+}
+
+async function loadStore() {
+  const info = await send('graph:info');
+  const c = info.common;
+  renderCommon(info);
 
   const auth = await send('auth:status');
   $('#adapterHint').textContent = auth.adapter === 'none'
@@ -709,6 +746,7 @@ $('#fbShare').addEventListener('change', async () => {
 (async function init() {
   state = await send('settings:get');
   renderTrigger(state.settings);
+  renderInterest(state.settings.interest);
   renderSites(state.settings.excludedHosts);
   initOnboarding();
 
