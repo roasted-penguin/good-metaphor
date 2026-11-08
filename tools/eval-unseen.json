@@ -18,5 +18,17 @@
   { "sentence": "The airline ran a 48-hour fare sale, so travelers booked the whole year's trips during that window.", "expectNodes": ["starforce_event", "exp_coupon"], "expectTag": "temporary_multiplier", "group": "finance", "since": "T-150" },
   { "sentence": "On a film set, the director guides the actors, the camera operator frames each shot, and the editor cuts the footage.", "expectNodes": ["party"], "expectTag": "role_division", "since": "T-150" },
   { "sentence": "큐브 열 개 돌렸는데 잡옵만 떴다.", "expectNodes": ["cube"], "expectTag": "random_reroll", "group": "slang", "since": "T-150" },
-  { "sentence": "극딜 타이밍 맞추려고 쿨 돌 때까지 기다렸다.", "expectNodes": ["skill_cooldown"], "expectTag": "cooldown", "group": "slang", "since": "T-150" }
+  { "sentence": "극딜 타이밍 맞추려고 쿨 돌 때까지 기다렸다.", "expectNodes": ["skill_cooldown"], "expectTag": "cooldown", "group": "slang", "since": "T-150" },
+  { "sentence": "시중에 풀린 현금이 몇 년 새 두 배로 늘자 커피 한 잔 값이 눈에 띄게 올랐다.", "expectNodes": ["meso_inflation", "meso"], "expectTag": "inflation", "group": "finance", "since": "T-155", "batch": "T-155" },
+  { "sentence": "공연이 끝나자 굿즈를 되파는 매물이 쏟아져 시세가 정가 아래로 떨어졌다.", "expectNodes": ["auction"], "expectTag": "market_price", "group": "finance", "since": "T-155", "batch": "T-155" },
+  { "sentence": "더 높은 이자를 준다는 말에 예금을 빼서 맡겼다가 그 회사가 망해 한 푼도 돌려받지 못했다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "finance", "since": "T-155", "batch": "T-155" },
+  { "sentence": "중고폰 매입 업체는 불량품이 섞여 있을 확률까지 셈해서 매입가를 정한다.", "expectNodes": ["cube", "starforce", "starforce_event"], "expectTag": "expected_value", "group": "finance", "since": "T-155", "batch": "T-155" },
+  { "sentence": "A pharmacist won't refill the same prescription until thirty days have passed since the last pickup.", "expectNodes": ["skill_cooldown", "weekly_boss"], "expectTag": "cooldown", "since": "T-155", "batch": "T-155" },
+  { "sentence": "At a busy pizza shop, one worker takes orders, another stretches the dough, and a third drives the deliveries.", "expectNodes": ["party"], "expectTag": "role_division", "since": "T-155", "batch": "T-155" },
+  { "sentence": "Applicants need a credit score above 700 to even be considered for this mortgage.", "expectNodes": ["boss_entry", "arcane_force", "sixth_job"], "expectTag": "threshold_req", "since": "T-155", "batch": "T-155" },
+  { "sentence": "직원을 계속 늘려도 공장 생산량은 처음만큼 늘지 않는다.", "expectNodes": ["level_exp"], "expectTag": "diminishing_returns", "since": "T-155", "batch": "T-155" },
+  { "sentence": "주유소가 오늘 하루만 리터당 할인을 크게 해 줘서 차들이 길게 줄을 섰다.", "expectNodes": ["exp_coupon", "hunting", "starforce_event"], "expectTag": "temporary_multiplier", "since": "T-155", "batch": "T-155" },
+  { "sentence": "항공사 마일리지는 가족끼리 합산해서 한 사람의 항공권을 끊는 데 쓸 수 있다.", "expectNodes": ["union_link"], "expectTag": "shared_bonus", "since": "T-155", "batch": "T-155" },
+  { "sentence": "택배 무료 반품은 한 달에 두 번까지만 신청할 수 있다.", "expectNodes": ["weekly_boss", "arcane_symbol"], "expectTag": "periodic_cap", "since": "T-155", "batch": "T-155" },
+  { "sentence": "은퇴한 선수가 마지막 경기에서 친 공은 세상에 하나뿐이라 수집가들이 수억 원을 부른다.", "expectNodes": ["auction"], "expectTag": "scarcity_value", "since": "T-155", "batch": "T-155" }
 ]
