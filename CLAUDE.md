@@ -63,12 +63,12 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/config.js              설정 우선순위: admin.json < chrome.storage.managed < 사용자 설정(잠금 아닐 때)
   lib/providers.js           LLM 제공자 레지스트리 + 호출 (gemini, openai-compat, anthropic, demo)
   lib/fallback.js            순위 fallback 체인(길이 제한 없음, 순위는 더 붙을 수 있음) + 429 쿨다운 (ADR 0008)
-  lib/stores.js              공통 저장소 로더 + 사용자 저장소 어댑터(none / local-dev / remote)
+  lib/stores.js              공통 저장소 로더 `loadCommonGraph(interestId)`(관심사별 캐시, 기본·모르는 id는 메이플, 원격 주소는 메이플만, T-302) + 사용자 저장소 어댑터(none / local-dev / remote)
   lib/graph.js               그래프 병합(공통 + 오버레이), 검증, 임베딩 텍스트
   lib/retrieval.js           점수 = 직접 유사도 × w1 + 최고 태그 유사도 × w2 + boost
   lib/pipeline.js            비유 생성 핵심(추상화·프롬프트·호출·규칙 1·근거 검사), 확장과 eval:gen이 같이 씀 (T-104)
   lib/grounding.js           근거 검사: usedFact가 고른 노드 facts와 맞는지 + 비유 숫자가 facts·라벨·원문에 있는지 (T-123)
-  lib/feedback.js            말풍선 피드백 층: 문장별 👎 제외·고른 개념 고정, 500건, 캐시 지문 (ADR 0010)
+  lib/feedback.js            말풍선 피드백 층: 문장별 👎 제외·고른 개념 고정, 500건, 캐시 지문 (ADR 0010). `feedbackForGraph`로 지금 그래프에 없는 노드(다른 관심사) 기록은 빼고 쓴다 (T-302)
   lib/corrections.js         교정 → 예문 후보(가림·금칙어·중복·길이), 내 태그 examples 반영(로그인만, 태그당 5개), 운영자 내보내기 JSON (T-131)
   lib/embed-each.js          임베딩은 항상 한 문장씩 (q8 묶음 차이, ADR 0011)
   lib/site-filter.js         제외 사이트 판정·`frameHosts`(최상위 호스트)·background 이중 방어. 클래식 스크립트(`globalThis.AnalogySiteFilter`) — 콘텐츠·background·팝업·설정이 같이 씀 (T-107·T-111)
