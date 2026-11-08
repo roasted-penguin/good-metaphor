@@ -67,10 +67,34 @@ export function validateGraph(g, { partial = false } = {}) {
     if (n.verifiedAt !== undefined || !partial) {
       if (!validDate(n.verifiedAt)) errors.push(`노드 ${n.id || i}의 verifiedAt(검수 날짜)은 YYYY-MM-DD 형식의 날짜여야 해요.`);
     }
+    // 공통 그래프는 태그 파일(tags.json)에 없는 태그 id를 참조하면 오류(T-304). 오버레이는 mergeGraphs가 조용히 거른다
+    if (!partial && Array.isArray(n.tags)) {
+      for (const id of n.tags) if (!tagIds.has(id)) errors.push(`노드 ${n.id || i}가 없는 태그를 참조해요: ${id}`);
+    }
     if (nodeIds.has(n.id)) errors.push(`노드 id 중복: ${n.id}`);
     nodeIds.add(n.id);
   }
   return errors;
+}
+
+/* ───────────── 공통 태그 파일 (T-304, 규칙 9) ───────────── */
+// 추상 태그(통제 어휘)의 원본은 data/common/tags.json({ version, tags }). 관심사 그래프는 태그 id만 참조한다.
+// 합치는 곳은 런타임마다 로더 한 곳(확장 stores.js, Node tools/load-graph.mjs, 서버 load_common_graph)뿐이다
+
+// 태그 파일 자체 검증: version + 태그 목록(id·label·중복·examples는 validateGraph와 같은 규칙)
+export function validateTagsFile(tf) {
+  if (!tf || typeof tf !== 'object') return ['태그 파일이 객체가 아니에요.'];
+  const errors = [];
+  if (typeof tf.version !== 'string' || !tf.version) errors.push('태그 파일에 version이 없어요.');
+  if (!Array.isArray(tf.tags)) return [...errors, '태그 파일에 tags(배열)가 없어요.'];
+  return [...errors, ...validateGraph({ tags: tf.tags, nodes: [] }, { partial: true })];
+}
+
+// 관심사 그래프 + 태그 파일 → 해석된 그래프({ ...graph, tags }). 태그 순서는 파일 순서 그대로(nodeText·검색 불변).
+// 하위 호환: 그래프에 tags가 이미 있으면(예전 원격 그래프) 그대로 쓴다. 원본 객체는 바꾸지 않는다
+export function resolveCommonGraph(graph, tagsFile) {
+  if (Array.isArray(graph?.tags)) return { ...graph };
+  return { ...graph, tags: Array.isArray(tagsFile?.tags) ? tagsFile.tags : [] };
 }
 
 export const BOOST_LIMIT = 0.2;

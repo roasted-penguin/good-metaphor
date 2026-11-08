@@ -5,10 +5,8 @@ deps 키: settings, graph, llm(키워드·비유 공용) 또는 keyword_llm·ana
 """
 from __future__ import annotations
 
-import json
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -17,7 +15,7 @@ from fastapi.responses import JSONResponse
 from . import __version__
 from .blocklist import active_terms, load_blocklist
 from .cache import ResultCache, cache_key
-from .config import Settings
+from .config import Settings, load_common_graph
 from .pipeline import AnalogyPipeline, AnalogyRequest, PipelineError
 from .ratelimit import RateLimiter
 
@@ -79,7 +77,7 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
         graph = deps.get("graph")
         if graph is None:
             try:
-                graph = json.loads(Path(s.common_graph_path).read_text(encoding="utf-8"))
+                graph = load_common_graph(s.common_graph_path, s.tags_path)  # 태그 파일까지 합친다(T-304)
             except (OSError, ValueError) as e:
                 log.error("공통 그래프를 읽지 못함: %s", e)
                 raise PipelineError(503, "공통 그래프를 읽지 못했어요.") from e

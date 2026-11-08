@@ -1,4 +1,4 @@
-"""공통 그래프(maplestory.json)를 LightRAG 사용자 정의 KG(insert_custom_kg 입력)로 바꾸는 순수 함수.
+"""공통 그래프(maplestory.json + tags.json, config.load_common_graph로 합친 것)를 LightRAG 사용자 정의 KG(insert_custom_kg 입력)로 바꾸는 순수 함수.
 
 모양은 lightrag-hku 1.5.7 ainsert_custom_kg 기준이다.
 - chunks: {content, source_id, file_path}. 엔티티·관계의 source_id는 청크의 source_id를 가리켜야 한다
@@ -9,7 +9,7 @@
 
 이름 규칙(T-402): 노드 엔티티 이름 = 노드 label. retriever.context_to_candidates가 label(또는 id)로 노드를 찾는다.
 label은 사람이 읽는 이름이라 엔티티 벡터(이름 + 설명)에도 id보다 낫다. 태그 엔티티 이름 = 태그 label.
-설명에는 facts·desc를 그대로 쓰고 새 사실을 만들지 않는다(규칙 1·2). 노드 별칭(aliases)은 라벨 뒤 괄호로만 붙인다(T-114). 태그는 graph["tags"]만 쓴다(규칙 9).
+설명에는 facts·desc를 그대로 쓰고 새 사실을 만들지 않는다(규칙 1·2). 노드 별칭(aliases)은 라벨 뒤 괄호로만 붙인다(T-114). 태그는 graph["tags"](원본 tags.json)만 쓴다(규칙 9).
 """
 from __future__ import annotations
 
@@ -120,12 +120,11 @@ async def seed(settings: Any) -> dict[str, Any]:
     멱등: ainsert_custom_kg(1.5.7)는 엔티티·관계·청크를 이름/쌍/내용 해시로 덮어쓴다(설명을 이어 붙이지 않는다).
     그래서 같은 그래프를 다시 넣어도 수와 설명이 그대로다(test_seed_inject가 확인).
     """
-    import json
-    from pathlib import Path
-
+    from app.config import load_common_graph
     from app.rag import open_rag  # LightRAG는 무거워서 실제로 넣을 때만 불러온다
 
-    graph = json.loads(Path(settings.common_graph_path).read_text(encoding="utf-8"))
+    # 태그는 tags.json에서 온다(T-304, 규칙 9). 합치는 곳은 load_common_graph 하나
+    graph = load_common_graph(settings.common_graph_path, getattr(settings, "tags_path", None))
     custom_kg = graph_to_custom_kg(graph)
     rag = await open_rag(settings)
     try:

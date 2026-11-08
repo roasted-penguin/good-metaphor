@@ -5,11 +5,12 @@
 import { readFileSync } from 'node:fs';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
+import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve } from '../extension/lib/retrieval.js';
 
 const admin = JSON.parse(readFileSync('extension/config/admin.json', 'utf8'));
 const cases = [...JSON.parse(readFileSync('tools/eval-set.json', 'utf8')), ...JSON.parse(readFileSync('tools/eval-holdout.json', 'utf8'))];
-const graph = mergeGraphs(JSON.parse(readFileSync('extension/data/common/maplestory.json', 'utf8')), null);
+const graph = mergeGraphs(loadCommonGraphFromDisk(), null); // 그래프 + tags.json (T-304)
 const tm = new Map(graph.tags.map(t => [t.id, t]));
 const items = [...graph.tags.map(t => ['tag:' + t.id, tagText(t)]), ...graph.nodes.map(n => ['node:' + n.id, nodeText(n, tm)])];
 

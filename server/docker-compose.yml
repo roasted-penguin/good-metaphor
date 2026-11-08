@@ -15,5 +15,7 @@ services:
       COMMON_GRAPH_PATH: /data/common/maplestory.json
       # 금칙어 목록(T-114). 같은 볼륨에 있다. 못 읽으면 /v1/analogy가 503
       BLOCKLIST_PATH: /data/common/blocklist.json
+      # 추상 태그(통제 어휘, T-304). 같은 볼륨에 있다. 그래프에 tags가 없으면 여기서 읽는다
+      TAGS_PATH: /data/common/tags.json
     volumes:
       - ../extension/data/common:/data/common:ro

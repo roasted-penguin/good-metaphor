@@ -10,13 +10,14 @@ import fs from 'node:fs';
 import { PROVIDERS, complete, parseJSONLoose } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, extractMeaning } from '../extension/lib/prompt.js';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
+import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { checkGrounding } from '../extension/lib/grounding.js';
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
-const common = JSON.parse(fs.readFileSync(new URL('../extension/data/common/maplestory.json', here)));
+const common = loadCommonGraphFromDisk(); // 그래프 + tags.json (T-304)
 const allModels = process.argv.includes('--all-models');
 
 const SENTENCES = [

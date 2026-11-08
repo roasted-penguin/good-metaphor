@@ -1,5 +1,4 @@
 """프롬프트 이식 테스트. 확장 prompt.js와 규칙 문장이 같은지, 후보 서식, 키워드 파싱을 확인한다."""
-import json
 from pathlib import Path
 
 import pytest
