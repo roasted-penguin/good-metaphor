@@ -226,3 +226,79 @@ test('retrieve: 별칭이 낱말로 있으면 그 노드 점수에 aliasBoost를
   // 큰 가산이면 순위가 뒤집힌다
   assert.equal(retrieve(q, gAlias, vecs, { aliasBoost: 0.5, aliasText: '또 펑 났다' })[0].id, 'n2');
 });
+
+// --- T-149 약한 별칭(weakAliases): 일상어와 겹치는 은어는 메이플 단서가 함께 있을 때만 가산 ---
+import { mapleCue, labelCueWords, MAPLE_GENERIC_WORDS } from '../../extension/lib/retrieval.js';
+import { mergeGraphs } from '../../extension/lib/graph.js';
+import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
+
+const commonMerged = mergeGraphs(loadCommonGraphFromDisk(), null);
+
+test('labelCueWords: 공통 노드 라벨에서 괄호를 빼고, 끝의 과·와를 떼고, 2글자 이상 낱말 중 일반어가 아닌 것', () => {
+  const g = { nodes: [
+    { id: 'a', label: '잠재능력 재설정(큐브)', source: 'common' },
+    { id: 'b', label: '사냥 효율과 재획', source: 'common' },
+    { id: 'c', label: '주간 보스와 결정석', source: 'common' },
+    { id: 'u:x', label: '내가 만든 노드', source: 'user' }
+  ] };
+  const words = labelCueWords(g);
+  assert.ok(!words.includes('큐브'), '괄호 안은 뺀다');
+  assert.ok(words.includes('재획'));
+  assert.ok(words.includes('결정석'));
+  assert.ok(!words.includes('효율') && !words.includes('효율과'), '일반어');
+  assert.ok(!words.includes('보스') && !words.includes('보스와'), '일반어');
+  assert.ok(!words.includes('내가') && !words.includes('노드'), '사용자 노드 라벨은 단서가 아니다');
+});
+
+test('MAPLE_GENERIC_WORDS: 모든 항목이 지금 공통 라벨 낱말이다(죽은 항목 없음)', () => {
+  const raw = new Set(commonMerged.nodes.flatMap(n => n.label.replace(/\([^)]*\)/g, ' ').split(/\s+/))
+    .map(w => (w.length >= 3 ? w.replace(/[과와]$/, '') : w)).filter(w => w.length >= 2));
+  for (const w of MAPLE_GENERIC_WORDS) assert.ok(raw.has(w), `${w}는 라벨 낱말이 아니에요`);
+  const cues = labelCueWords(commonMerged);
+  for (const w of cues) assert.ok(!MAPLE_GENERIC_WORDS.includes(w));
+  assert.ok(cues.includes('메소') && cues.includes('스타포스') && cues.includes('아케인'));
+});
+
+test('mapleCue: 강한 별칭이나 라벨 핵심 낱말이 낱말로 있으면 참', () => {
+  assert.equal(mapleCue('이번 주 세금 내고 나니 메소가 바닥났다.', commonMerged), true, '메소');
+  assert.equal(mapleCue('오늘도 재획 돌리고 세금 냈다', commonMerged), true, '강한 별칭 재획');
+  assert.equal(mapleCue('아케인 지역 세금 냈다', commonMerged), true, '아케인');
+  assert.equal(mapleCue('스타포스 하다가 펑', commonMerged), true);
+});
+
+test('mapleCue: 일반어만 있거나 아무것도 없으면 거짓', () => {
+  assert.equal(mapleCue('연말정산 때 세금 신고를 미리 준비해야 한다.', commonMerged), false);
+  assert.equal(mapleCue('22성 도전하다가 또 펑 났다.', commonMerged), false);
+  assert.equal(mapleCue('보스가 파티 조건을 강화하고 난이도를 올렸다.', commonMerged), false, '일반어만');
+  assert.equal(mapleCue('메소포타미아 문명', commonMerged), true, '앞 경계만 보는 aliasMatch 규칙 그대로(메소…)');
+  assert.equal(mapleCue('', commonMerged), false);
+});
+
+const gWeak = {
+  ...graph,
+  nodes: [
+    { ...graph.nodes[0], label: '메소' },
+    { ...graph.nodes[1], weakAliases: ['펑'] }
+  ]
+};
+
+test('retrieve: 약한 별칭은 단서가 없으면 가산하지 않는다(결과가 완전히 같다)', () => {
+  const base = retrieve(q, gWeak, vecs, { topK: 2 });
+  assert.deepEqual(retrieve(q, gWeak, vecs, { topK: 2, aliasBoost: 0.08, aliasText: '타이어가 펑 터졌다' }), base);
+});
+
+test('retrieve: 약한 별칭은 단서(라벨 낱말)가 있으면 aliasBoost를 정확히 더한다', () => {
+  const all = o => Object.fromEntries(retrieve(q, gWeak, vecs, { topK: 2, ...o }).map(r => [r.id, r.score]));
+  const base = all({});
+  const hit = all({ aliasBoost: 0.08, aliasText: '메소 날리고 또 펑 났다' });
+  assert.equal(hit.n1, base.n1);
+  assert.ok(Math.abs(hit.n2 - base.n2 - 0.08) < 1e-4, `${hit.n2} - ${base.n2}`);
+});
+
+test('retrieve: 강한 별칭과 약한 별칭이 함께 맞아도 가산은 한 번', () => {
+  const g = { ...gWeak, nodes: [gWeak.nodes[0], { ...gWeak.nodes[1], aliases: ['프텍'] }] };
+  const all = o => Object.fromEntries(retrieve(q, g, vecs, { topK: 2, ...o }).map(r => [r.id, r.score]));
+  const base = all({});
+  const hit = all({ aliasBoost: 0.08, aliasText: '프텍 걸고 펑 났다' });
+  assert.ok(Math.abs(hit.n2 - base.n2 - 0.08) < 1e-4);
+});

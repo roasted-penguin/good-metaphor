@@ -93,6 +93,25 @@ def test_node_aliases_go_after_label_in_description_and_chunk():
     assert kg["chunks"][0]["content"] == "스타포스 강화(펑, 프텍)\n가."
 
 
+def test_weak_aliases_are_left_out_of_seed():
+    """T-149: 약한 별칭(weakAliases)은 설명·청크에 넣지 않는다. 약한 별칭만 있는 노드는 별칭 없는 노드와 같다."""
+    g = {"tags": [], "nodes": [{"id": "x", "label": "아케인 심볼", "facts": ["가."], "tags": []}], "edges": []}
+    plain = graph_to_custom_kg(g)
+    g["nodes"][0]["weakAliases"] = ["세금"]
+    assert graph_to_custom_kg(g) == plain
+    g2 = {"tags": [], "nodes": [{"id": "y", "label": "스타포스 강화", "facts": ["가."], "tags": [], "aliases": ["프텍"], "weakAliases": ["펑"]}], "edges": []}
+    kg = graph_to_custom_kg(g2)
+    assert kg["entities"][0]["description"] == "스타포스 강화(프텍)\n가."
+    assert "펑" not in kg["chunks"][0]["content"]
+
+
+def test_common_graph_seed_has_no_weak_alias(kg):
+    """공통 그래프 시드 어디에도 약한 별칭 '세금'이 없다(펑은 '펑'만 따로 보지 않고 머리줄로 확인)."""
+    text = json.dumps(kg, ensure_ascii=False)
+    assert "세금" not in text
+    assert "스타포스 강화(프텍)" in text and "스타포스 강화(펑" not in text
+
+
 def test_node_entity_names_are_found_by_retriever(graph, kg):
     """노드 엔티티 이름을 LightRAG 맥락에 넣으면 retriever가 같은 노드로 되찾는다."""
     from lightrag.utils import normalize_entity_name
