@@ -220,7 +220,7 @@ const KINDS = {
     chunk: d => d.choices?.[0]?.delta?.content || ''
   },
   anthropic: {
-    build({ baseUrl, model, apiKey }, system, user, _opts, stream) {
+    build({ baseUrl, model, apiKey }, system, user, opts, stream) {
       return {
         url: `${baseUrl}/messages`,
         headers: {
@@ -228,7 +228,7 @@ const KINDS = {
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true'
         },
-        body: { model, max_tokens: 700, system, messages: [{ role: 'user', content: user }], ...(stream ? { stream: true } : {}) }
+        body: { model, max_tokens: opts.maxTokens || 700, system, messages: [{ role: 'user', content: user }], ...(stream ? { stream: true } : {}) }
       };
     },
     text: d => (d.content || []).filter(b => b.type === 'text').map(b => b.text).join(''),
@@ -237,11 +237,13 @@ const KINDS = {
 };
 
 async function send(kind, req, opts, stream) {
-  if (!stream) return kind.text(await postJSON(req.url, req.headers, req.body, { stats: opts.stats, noRetry429: opts.noRetry429 }));
+  // opts.timeoutMs: 긴 답(AI 초안, T-301)만 늘린다. 없으면 postJSON 기본값
+  if (!stream) return kind.text(await postJSON(req.url, req.headers, req.body, { stats: opts.stats, noRetry429: opts.noRetry429, timeoutMs: opts.timeoutMs }));
   let acc = '';
   await postJSON(req.url, req.headers, req.body, {
     stats: opts.stats,
     noRetry429: opts.noRetry429,
+    timeoutMs: opts.timeoutMs,
     onData: d => { const piece = kind.chunk(d); if (piece) { acc += piece; opts.onText(acc); } }
   });
   return acc;

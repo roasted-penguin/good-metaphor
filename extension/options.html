@@ -138,6 +138,32 @@
               <label><input type="radio" name="useCommon" value="false"><span>내 관심사만</span></label>
             </div>
           </div>
+          <!-- AI 초안 (T-301): 로그인했을 때만 보인다(#loggedIn 안). 초안은 검수 대기로 들어가고, 사실을 모두 확인해야 검색에 쓴다 -->
+          <details class="ov-block draft-panel" id="draftPanel">
+            <summary>AI로 초안 만들기</summary>
+            <p class="hint">관심사 이름을 넣으면 AI가 개념 노드 10~20개를 제안해요. 사실을 하나씩 확인해야 비유 근거로 써요.</p>
+            <div class="grid">
+              <label for="draftName">관심사 이름</label>
+              <input type="text" id="draftName" maxlength="30" placeholder="예: 축구" autocomplete="off">
+
+              <label id="draftModeLabel">시작 방식</label>
+              <div class="seg" id="draftMode" role="radiogroup" aria-labelledby="draftModeLabel">
+                <label><input type="radio" name="draftMode" value="add" checked><span>공통(메이플) 위에 더하기</span></label>
+                <label><input type="radio" name="draftMode" value="new"><span>새 관심사로 시작</span></label>
+              </div>
+
+              <span></span>
+              <div class="row"><button class="primary" id="draftRun">초안 만들기</button><span class="status" id="draftStatus" role="status"></span></div>
+            </div>
+            <ul class="draft-dropped" id="draftDropped" hidden></ul>
+          </details>
+
+          <div class="ov-block" id="reviewBox" hidden>
+            <h4>검수 대기 <span class="hint" id="reviewCount"></span></h4>
+            <p class="hint">확인한 사실만 남겨요. 노드의 사실을 모두 확인하면 내 노드로 옮겨져 검색에 쓰여요. 저장해야 반영돼요.</p>
+            <ul class="review-list" id="reviewList"></ul>
+          </div>
+
           <!-- 그래프 편집 (T-202): 내 노드 폼, 공통 노드 숨김·가중치, 고급 JSON -->
           <div class="ov-block">
             <h4>내 노드</h4>

@@ -76,6 +76,37 @@ export function withJosa(word, batchim, noBatchim) {
   return word + (has ? batchim : noBatchim);
 }
 
+// "(으)로": 받침이 있으면 "으로", ㄹ 받침·받침 없음(영문 포함)이면 "로". withRo('원신') → '원신으로'
+export function withRo(word) {
+  const w = String(word).trim();
+  const code = w.replace(/[)"'\]]+$/, '').slice(-1).charCodeAt(0) - 0xac00;
+  const jong = code >= 0 && code <= 11171 ? code % 28 : 0;
+  return w + (jong === 0 || jong === 8 ? '로' : '으로');
+}
+
+// AI 관심사 그래프 초안(T-301). tags는 공통 태그 사전(data/common/tags.json)에서 그대로 온다(규칙 9: 같은 원본).
+// 예문(examples)은 다른 분야 문장이라 싣지 않는다. 결과는 lib/draft.js parseDraft가 다시 검사한다
+export function buildDraftPrompt({ name, tags }) {
+  const system = [
+    '너는 사용자가 잘 아는 관심사를 개념 노드 목록으로 정리하는 도우미다. 이 노드는 나중에 낯선 문장을 그 관심사에 빗대 설명할 때 근거로 쓰인다.',
+    '규칙:',
+    `1. "${name}"에서 사람들이 잘 아는 개념을 10~20개 고른다. 개념마다 label(40자 이내), facts(사실 1~3개, 각 200자 이내), tags(추상 태그 id 1~3개)를 적는다.`,
+    '2. tags에는 아래 [추상 태그] 목록의 id만 쓴다. 이 목록 밖 태그는 쓰지 않는다. 맞는 태그가 없는 개념은 넣지 않는다.',
+    '3. 사실을 지어내지 않는다. 널리 알려진 확실한 것만 쓰고, 모르면 그 개념을 뺀다.',
+    '4. 자주 바뀌는 수치(가격·확률·날짜·최대 단계)는 쓰지 않는다. 숫자 대신 구조와 규칙을 쓴다.',
+    '5. 실존 인물의 이름·별명과 커뮤니티 멸칭은 쓰지 않는다.',
+    '6. facts는 한국어 평서문("~다") 한 문장씩, 그 개념이 어떻게 움직이는지(무엇이 무엇에 따라 어떻게 변하는가)가 드러나게 쓴다.',
+    '7. JSON 객체만 출력한다. 형식: {"nodes": [{"label": string, "facts": [string], "tags": [string]}]}'
+  ].join('\n');
+  const user = [
+    `관심사: ${name}`,
+    '',
+    '[추상 태그]',
+    ...(tags || []).map(t => `- ${t.id} | ${t.label} — ${t.desc || ''}`)
+  ].join('\n');
+  return { system, user };
+}
+
 // LLM 없이 검색 결과만으로 만드는 데모 응답
 export function demoAnswer({ candidates, analogyPrefix }) {
   const top = candidates[0];

@@ -11,6 +11,8 @@ import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
 import { syncCorrectionExamples, buildCorrectionsExport } from './lib/corrections.js';
+import { buildDraftPrompt } from './lib/prompt.js';
+import { parseDraft, validDraftName, demoDraftText } from './lib/draft.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -447,12 +449,34 @@ const handlers = {
     await store.saveOverlay(session, normalizeOverlay(overlay));
     return { ok: true };
   },
+  // AI 관심사 그래프 초안(T-301). 로그인 사용자만(규칙 3·D-4). 기존 제공자 체인으로 한 번 부르고(규칙 7),
+  // 태그 목록은 공통 태그 사전(tags.json, 규칙 9)에서. 저장하지 않고 검수 대기 노드만 돌려준다(설정 화면이 overlay:save로 저장)
+  async 'graph:draft'({ name, mode }) {
+    const { session, overlay } = await getSessionAndOverlay();
+    if (!session) throw new Error('로그인이 필요해요.');
+    const n = validDraftName(name);
+    if (!n) throw new Error('관심사 이름을 1~30자로 적어 주세요.');
+    const [common, blockTerms, admin, settings, provider] = await Promise.all([loadCommonGraph(), loadBlocklist(), getAdminConfig(), getSettings(), resolveProvider()]);
+    const ov = normalizeOverlay(overlay);
+    let text, answered = `${provider.id}/${provider.model}`;
+    if (provider.def.kind === 'demo') text = demoDraftText(n);
+    else {
+      const { system, user } = buildDraftPrompt({ name: n, tags: common.tags });
+      const r = await completeWithFallback(buildChain(provider, admin, settings), system, user,
+        { json: true, maxTokens: 4000, timeoutMs: 90_000 }, { cooldowns, cooldown: admin.cooldown });
+      text = r.text;
+      answered = `${r.provider.id}/${r.provider.model}`;
+    }
+    const existingIds = [...(ov.nodes || []).map(x => x.id), ...common.nodes.map(x => x.id)];
+    const parsed = parseDraft(text, { tags: common.tags, existingIds, blockTerms });
+    return { ...parsed, name: n, mode: mode === 'new' ? 'new' : 'add', provider: answered };
+  },
   async 'graph:info'() {
     const common = await loadCommonGraph();
     const { graph, session } = await getMergedGraph();
     return {
       common: { id: common.id, domain: common.domain, version: common.version, nodes: common.nodes.length, tags: common.tags.length, nodeList: common.nodes.map(n => ({ id: n.id, label: n.label })), tagList: common.tags.map(t => ({ id: t.id, label: t.label })) },
-      merged: { domain: graph.domain, theme: graph.theme, nodes: graph.nodes.length, tags: graph.tags.length, userNodes: graph.sources.userNodes, usesCommon: !!graph.sources.common },
+      merged: { domain: graph.domain, theme: graph.theme, nodes: graph.nodes.length, tags: graph.tags.length, userNodes: graph.sources.userNodes, draftNodes: graph.sources.draftNodes, usesCommon: !!graph.sources.common },
       session
     };
   },
