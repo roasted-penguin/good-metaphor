@@ -10,6 +10,7 @@ import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/anal
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
+import { syncCorrectionExamples, buildCorrectionsExport } from './lib/corrections.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -166,7 +167,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
 
   onStage('graph');
   const { graph, session } = merged || await getMergedGraph();
-  const graphKey = JSON.stringify([graph.sources, session?.userId || null, graph.nodes.length]);
+  // 내 태그 예문(교정 예문 포함, T-131)과 가중치(nodeBoosts + feedbackBoosts)가 바뀌어도 다른 문장의 캐시가 갈리게 짧은 지문을 넣는다
+  const userTagKey = (await sha1(JSON.stringify([graph.tags.filter(t => t.source === 'user').map(t => [t.id, t.examples || []]), graph.boosts || {}]))).slice(0, 12);
+  const graphKey = JSON.stringify([graph.sources, session?.userId || null, graph.nodes.length, userTagKey]);
   const sentenceHash = await sentenceHashOf(sentence);
   const feedbackRecords = await feedbackStore.get();
   // 피드백 지문을 캐시 키에 넣어, 그 문장의 피드백이 바뀌면 캐시가 저절로 무효가 된다
@@ -289,7 +292,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     feedbackApplied: fb.applied || similarChanged,
     debug: {
       feedback: { excluded: fb.excluded, pinned: fb.pinned, similar, queryVec, extraEmbedMs, reported: [...reported] },
-      candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagSim: c.tag?.sim, source: c.source })),
+      // tagId: 그 후보의 최고 태그. 말풍선 "더 맞는 개념"이 교정 기록(pickedTagId)에 싣는다(T-131)
+      candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagId: c.tag?.id, tagSim: c.tag?.sim, source: c.source })),
       topTags: tags,
       abstractText,
       embedderId,
@@ -386,6 +390,26 @@ async function syncBoosts(records, touchedNodeIds = []) {
   }
 }
 
+// 로그인 사용자만: "더 맞는 개념" 교정 중 내 노드 + 내 태그 대상을 그 태그 examples에 넣는다(T-131, ADR 0010 3단계).
+// 지금 기록만으로 정해져(syncCorrectionExamples) 되돌리기·전부 지우기·500건 상한에도 맞춰진다. 바뀔 때만 저장.
+// 공통 태그 대상은 오버레이를 건드리지 않고 운영자 내보내기로만 간다(규칙 3·9). 실패해도 피드백 기록은 이미 저장돼 있다.
+async function syncCorrections(records) {
+  try {
+    const store = await getUserStore();
+    const session = await store.getSession();
+    if (!session) return;
+    const ov = normalizeOverlay(await store.loadOverlay(session));
+    const common = await loadCommonGraph();
+    const { overlay, changed } = syncCorrectionExamples(ov, records, mergeGraphs(common, ov), {
+      blockTerms: await loadBlocklist(),
+      commonTagIds: new Set(common.tags.map(t => t.id))
+    });
+    if (changed) await store.saveOverlay(session, overlay);
+  } catch (e) {
+    console.warn('[feedback] 교정 예문을 내 그래프에 넣지 못했어요', e);
+  }
+}
+
 const handlers = {
   async 'settings:get'() {
     const admin = await getAdminConfig();
@@ -472,6 +496,7 @@ const handlers = {
     await feedbackStore.set(records);
     // 👍·고정이어도 500건 상한으로 오래된 👎가 밀려났을 수 있어 항상 맞춘다
     await syncBoosts(records, r.vote === 'down' ? [r.nodeId] : []);
+    await syncCorrections(records);
     return { id: r.id, result: rerun ? await explain(rerun) : null };
   },
   async 'feedback-reason'({ id, reason }) {
@@ -485,6 +510,7 @@ const handlers = {
     const records = removeRecord(before, id);
     await feedbackStore.set(records);
     if (undone?.vote === 'down') await syncBoosts(records, [undone.nodeId]);
+    if (undone?.vote === 'pick') await syncCorrections(records);
     return { id, result: rerun ? await explain(rerun) : null };
   },
   // "내 피드백" 설정 화면(T-132). 최신순, 라벨은 지금 병합 그래프에서 찾고 없으면 id 그대로
@@ -502,10 +528,22 @@ const handlers = {
     const { hoverCounts } = await chrome.storage.local.get('hoverCounts');
     return summarizeFeedback(await feedbackStore.get(), hoverCounts || {}, localDay(Date.now()));
   },
+  // 운영자용 교정 내보내기(T-131). 공통 노드·공통 태그 대상만, 가린 문장만. 서버로 보내지 않는다(설정 화면이 로컬 파일로 받는다)
+  async 'corrections:export'() {
+    // 공통 그래프로 노드·기존 예문을 찾는다(내 관심사만 쓰는 useCommon false여도 공통 노드 교정을 내보낸다)
+    const [records, common, blockTerms] = await Promise.all([feedbackStore.get(), loadCommonGraph(), loadBlocklist()]);
+    return buildCorrectionsExport(records, common, {
+      blockTerms,
+      commonTagIds: new Set(common.tags.map(t => t.id)),
+      commonGraphVersion: common.version ?? null,
+      tagsVersion: common.tagsVersion ?? null
+    });
+  },
   // 결과 캐시 키에 피드백 지문이 있어서 캐시는 따로 안 지워도 된다
   async 'feedback:clear'() {
     await feedbackStore.set([]);
     await syncBoosts([]);
+    await syncCorrections([]);
     return true;
   },
   async 'open-options'() { await chrome.runtime.openOptionsPage(); return true; }

@@ -487,7 +487,8 @@
       const picked = (fb.alts || r.debug?.candidates || []).find(c => c.id === data.id);
       const nextFb = { pick: true, label: picked?.label || data.id, undo: true };
       render({ result: r, fb: nextFb, busy: true });
-      const res = await ask('feedback', { record: { ...sent, nodeId: r.evidence?.nodeId || null, tagId: null, vote: 'pick', pickedNodeId: data.id }, rerun: current.payload });
+      // pickedTagId: 고른 개념의 최고 태그. 교정 예문 후보가 어느 태그로 갈지 정한다(T-131)
+      const res = await ask('feedback', { record: { ...sent, nodeId: r.evidence?.nodeId || null, tagId: null, vote: 'pick', pickedNodeId: data.id, pickedTagId: picked?.tagId || null }, rerun: current.payload });
       nextFb.id = res?.data?.id;
       done(res, nextFb);
       later(5000, () => { nextFb.undo = false; if (stillHere() && view?.fb === nextFb) render({ ...view }); });

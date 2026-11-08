@@ -898,8 +898,112 @@ test('로그아웃 상태의 같은 노드 👎 3건은 오버레이를 바꾸�
   expect(ov.feedbackBoosts).toEqual({});
 });
 
+/* ───────── 교정 → 예문 후보 (T-131) ───────── */
+const FOCUS_OVERLAY = {
+  tags: [{ id: 'u_focus', label: '몰입 시간', examples: ['손으로 적은 예문은 그대로 남아야 한다.'] }],
+  nodes: [{ id: 'u:focus', label: '내 몰입 루틴', facts: ['나는 매일 같은 시간에 30분 집중한다.'], tags: ['u_focus', 'daily_accumulation'] }]
+};
+const FOCUS_SENTENCE = '2026년 목표를 세우고 매일 같은 시간에 공부하면 몰입하는 시간이 길어진다.';
+const FOCUS_MASKED = '[숫자]년 목표를 세우고 매일 같은 시간에 공부하면 몰입하는 시간이 길어진다.';
+
+test('교정(T-131): 로그인 + 내 노드·내 태그 pick → 내 태그 examples에 가린 문장, 되돌리면 빠지고 로그아웃이면 안 바뀐다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const fb = await send({ type: 'feedback', record: { sentence: FOCUS_SENTENCE, nodeId: 'meso', tagId: null, vote: 'pick', pickedNodeId: 'u:focus' } });
+  expect(fb.ok).toBe(true);
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.tags[0].examples).toEqual(['손으로 적은 예문은 그대로 남아야 한다.', FOCUS_MASKED]);
+  expect(JSON.stringify(ov)).not.toContain('2026');
+  // 되돌리기 → 교정 예문도 빠진다
+  await send({ type: 'feedback-undo', id: fb.data.id });
+  expect((await send({ type: 'overlay:get' })).data.tags[0].examples).toEqual(['손으로 적은 예문은 그대로 남아야 한다.']);
+
+  // 로그아웃 상태의 pick은 오버레이를 바꾸지 않는다(규칙 3)
+  await send({ type: 'auth:logout' });
+  await send({ type: 'feedback', record: { sentence: FOCUS_SENTENCE, nodeId: 'meso', tagId: null, vote: 'pick', pickedNodeId: 'u:focus' } });
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:get' })).data.tags[0].examples).toEqual(['손으로 적은 예문은 그대로 남아야 한다.']);
+});
+
+test('교정(T-131): 공통 노드 pick은 오버레이를 안 건드리고, 설정 "운영자용 교정 내보내기" JSON에 가린 후보로', async ({ ext }) => {
+  const { send, page: op } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const S = '중앙은행이 2026년에 돈을 많이 찍어내면 물가가 오르고 저축한 돈의 구매력이 줄어든다.';
+  await send({ type: 'feedback', record: { sentence: S, nodeId: 'cube', tagId: null, vote: 'pick', pickedNodeId: 'meso' } });
+  await send({ type: 'feedback', record: { sentence: FOCUS_SENTENCE, nodeId: 'meso', tagId: null, vote: 'pick', pickedNodeId: 'u:focus' } });
+  await send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678 로 물으면 금리가 오른 이유를 알려 준다.', nodeId: 'meso', tagId: null, vote: 'up' } });
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.tags.map(t => t.id)).toEqual(['u_focus']); // 공통 태그를 오버레이에 만들지 않는다
+
+  await op.reload();
+  await expect(op.locator('#fbCorrections')).toBeEnabled();
+  const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbCorrections')]);
+  expect(download.suggestedFilename()).toMatch(/^good-metaphor-corrections-\d{4}-\d{2}-\d{2}\.json$/);
+  const data = JSON.parse(readFileSync(await download.path(), 'utf8'));
+  expect(data.kind).toBe('good-metaphor-corrections');
+  expect(data.version).toBe(1);
+  const common = loadCommonGraphFromDisk();
+  expect(data.commonGraphVersion).toBe(common.version);
+  expect(data.tagsVersion).toBe(common.tagsVersion);
+  const mesoTag = common.nodes.find(n => n.id === 'meso').tags[0];
+  expect(data.exampleCandidates).toEqual([{ tagId: mesoTag, text: S.replace('2026', '[숫자]'), nodeId: 'meso', count: 1 }]);
+  // 같은 문장이 예문 후보이기도 해서 표시가 붙는다(한 곳에만 넣는다)
+  expect(data.evalCandidates).toEqual([{ sentence: S.replace('2026', '[숫자]'), expectNodes: ['meso'], expectTag: mesoTag, source: 'pick', alsoExampleCandidate: true }]);
+  expect(data.guardCandidates).toEqual([{ sentence: '연락처 [숫자] 로 물으면 금리가 오른 이유를 알려 준다.', expectNodes: ['meso'], source: 'up' }]);
+  // 판본·시각 필드에는 연도가 있으니 후보 칸만 본다
+  const raw = JSON.stringify([data.exampleCandidates, data.rejected, data.evalCandidates, data.guardCandidates]);
+  for (const bad of ['u:focus', 'u_focus', '2026', '010-1234']) expect(raw).not.toContain(bad);
+});
+
+test('교정(T-131): 내 태그 예문이 바뀌면 다른 문장의 결과 캐시도 새로 만든다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  await send({ type: 'explain', ...q });
+  expect((await send({ type: 'explain', ...q })).data.cached).toBe(true);
+  // 교정 기록은 비슷한 문장 메모리 키로도 캐시를 가르므로, 기록 없이 예문만 바꿔 graphKey가 가르는지 본다
+  const ov = (await send({ type: 'overlay:get' })).data;
+  ov.tags[0].examples = [...ov.tags[0].examples, FOCUS_MASKED];
+  expect((await send({ type: 'overlay:save', overlay: ov })).data.ok).toBe(true);
+  expect((await send({ type: 'explain', ...q })).data.cached).toBeUndefined();
+  expect((await send({ type: 'explain', ...q })).data.cached).toBe(true);
+  // feedbackBoosts만 바뀌어도 새로
+  ov.feedbackBoosts = { meso: -0.05 };
+  await send({ type: 'overlay:save', overlay: ov });
+  expect((await send({ type: 'explain', ...q })).data.cached).toBeUndefined();
+});
+
+test('교정(T-131): 내 관심사만 쓸 때(useCommon false)도 공통 노드 교정을 내보낸다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: { ...FOCUS_OVERLAY, useCommon: false, domain: '공부' } })).data.ok).toBe(true);
+  const S = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 저축한 돈의 구매력이 줄어든다.';
+  await send({ type: 'feedback', record: { sentence: S, nodeId: null, tagId: null, vote: 'pick', pickedNodeId: 'meso' } });
+  const data = (await send({ type: 'corrections:export' })).data;
+  expect(data.exampleCandidates.map(c => [c.nodeId, c.text])).toEqual([['meso', S]]);
+});
+
+test('교정(T-131): 말풍선 "더 맞는 개념" 기록에 고른 개념의 최고 태그(pickedTagId)가 남는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  const alt = box(page).locator('button.alt').first();
+  await expect(alt).toBeVisible();
+  await alt.click();
+  const last = async () => (await storageGet(ext.page, 'feedback'))?.at(-1);
+  await expect.poll(async () => (await last())?.vote).toBe('pick');
+  const r = await last();
+  const node = loadCommonGraphFromDisk().nodes.find(n => n.id === r.pickedNodeId);
+  expect(node.tags).toContain(r.pickedTagId);
+});
+
 // 그래프 편집 화면 (T-202)
-const myNode = (page, id) => page.locator(`#myNodeList li[data-id="${id}"]`);
+const myNode =(page, id) => page.locator(`#myNodeList li[data-id="${id}"]`);
 const commonNode = (page, id) => page.locator(`#commonNodeList li[data-id="${id}"]`);
 
 test('그래프 편집(T-202): 폼으로 노드 추가(태그 칩)·수정·지우기, 공통 노드 숨김·가중치, 피드백 가중치는 읽기 전용으로 보존', async ({ ext }) => {
