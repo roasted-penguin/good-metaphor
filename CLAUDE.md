@@ -45,6 +45,7 @@ npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장�
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
 npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
+npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내기를 평가셋·검증셋·가드와 대조(베낀 예문 후보를 거름). 반영 절차는 /approve-corrections
 ```
 
 확장 수동 실행: `chrome://extensions` → 개발자 모드 → 압축해제된 확장 로드 → `extension/`. 코드를 고치면 확장 카드의 새로고침 버튼 + 페이지 새로고침.
@@ -66,6 +67,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/pipeline.js            비유 생성 핵심(추상화·프롬프트·호출·규칙 1·근거 검사), 확장과 eval:gen이 같이 씀 (T-104)
   lib/grounding.js           근거 검사: usedFact가 고른 노드 facts와 맞는지 + 비유 숫자가 facts·라벨·원문에 있는지 (T-123)
   lib/feedback.js            말풍선 피드백 층: 문장별 👎 제외·고른 개념 고정, 500건, 캐시 지문 (ADR 0010)
+  lib/corrections.js         교정 → 예문 후보(가림·금칙어·중복·길이), 내 태그 examples 반영(로그인만, 태그당 5개), 운영자 내보내기 JSON (T-131)
   lib/embed-each.js          임베딩은 항상 한 문장씩 (q8 묶음 차이, ADR 0011)
   lib/site-filter.js         제외 사이트 판정·`frameHosts`(최상위 호스트)·background 이중 방어. 클래식 스크립트(`globalThis.AnalogySiteFilter`) — 콘텐츠·background·팝업·설정이 같이 씀 (T-107·T-111)
   lib/place.js               말풍선 배치: 호버한 줄(인덱스) 아래, 넘치면 위 (클래식 스크립트, T-109)
