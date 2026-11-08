@@ -160,12 +160,39 @@ export function mergeGraphs(common, overlay) {
 // 임베딩할 문자열. 태그는 추상 설명 + 다른 분야 예문(examples), 노드는 태그 설명(구조)을 앞에 두고 이름+사실
 // 태그 설명을 앞에 두는 이유: 게임 용어(메소 등)가 주제 유사도를 끌어가는 쏠림을 줄인다 (T-113)
 export function tagText(t) {
-  return [`${t.label}: ${t.desc || ''}`.trim(), ...(t.examples || [])].join(' ');
+  return [tagDescText(t), ...(t.examples || [])].join(' ');
+}
+// 태그의 "라벨: 설명"만(예문 없음). nodeTextMode 'desc'와 tagVectorMode 'max'의 설명 벡터가 쓴다 (T-154)
+export function tagDescText(t) {
+  return `${t.label}: ${t.desc || ''}`.trim();
 }
 // 별칭(aliases)은 넣지 않는다: 넣으면 노드 벡터가 바뀌어 잘 맞던 문장이 틀려졌다(T-114). 별칭은 retrieval.js 어휘 가산으로 쓴다
-export function nodeText(n, tagMap) {
-  const structure = n.tags.map(id => tagMap.get(id)).filter(Boolean).map(tagText).join(' ');
+// mode 'full'(기본) = 태그 설명 + 예문, 'desc' = 태그 설명만(예문 한 줄이 그 태그의 모든 노드를 흔드는 것을 끊는다, T-154)
+export function nodeText(n, tagMap, { mode = 'full' } = {}) {
+  const tt = mode === 'desc' ? tagDescText : tagText;
+  const structure = n.tags.map(id => tagMap.get(id)).filter(Boolean).map(tt).join(' ');
   return `${structure} ${n.label}. ${n.facts.join(' ')}`.trim();
+}
+
+/**
+ * 임베딩할 항목 목록 (T-154, ADR 0013). 확장(ensureGraphVectors)·평가 도구가 모두 이것으로 만든다.
+ * @param {object} graph      mergeGraphs 결과
+ * @param {object} retrieval  admin.retrieval. nodeTextMode 'full'(기본) | 'desc', tagVectorMode 'joined'(기본) | 'max'
+ *   joined: 'tag:<id>' = 태그 설명 + 예문을 한 텍스트로
+ *   max:    'tag:<id>' = 태그 설명만, 예문마다 'tag:<id>#<n>'(n은 1부터). retrieve가 그중 최대 유사도를 쓴다
+ *   기본값이면 예전 구성과 키·텍스트가 바이트 단위로 같다(벡터 캐시·검색 불변). 알 수 없는 값은 기본값으로 친다
+ * @returns {Array<{key: string, text: string}>}
+ */
+export function embedItems(graph, { nodeTextMode = 'full', tagVectorMode = 'joined' } = {}) {
+  const tagMap = new Map(graph.tags.map(t => [t.id, t]));
+  const tags = tagVectorMode === 'max'
+    ? graph.tags.flatMap(t => [
+        { key: 'tag:' + t.id, text: tagDescText(t) },
+        ...(t.examples || []).map((e, i) => ({ key: `tag:${t.id}#${i + 1}`, text: e }))
+      ])
+    : graph.tags.map(t => ({ key: 'tag:' + t.id, text: tagText(t) }));
+  const mode = nodeTextMode === 'desc' ? 'desc' : 'full';
+  return [...tags, ...graph.nodes.map(n => ({ key: 'node:' + n.id, text: nodeText(n, tagMap, { mode }) }))];
 }
 
 export async function sha1(str) {

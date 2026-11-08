@@ -11,7 +11,7 @@
 //                                            # 채점 모델이 생성한 행은 건너뛰고 '채점 안 됨'으로 센다
 // 결과: .tmp/eval-gen-<YYYY-MM-DD>.json (커밋 안 함). 키는 출력·파일에 남기지 않는다.
 import fs from 'node:fs';
-import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
+import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve } from '../extension/lib/retrieval.js';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
@@ -124,10 +124,9 @@ async function generate(cases) {
   console.log(`확장 안에서 임베딩 모델 준비 중: ${admin.embedding.model} (${admin.embedding.dtype})`);
   const be = await openBrowserEmbedder();
   try {
-    const tagMap = new Map(graph.tags.map(t => [t.id, t]));
-    const keys = [...graph.tags.map(t => 'tag:' + t.id), ...graph.nodes.map(n => 'node:' + n.id)];
-    const vs = await be.embed([...graph.tags.map(tagText), ...graph.nodes.map(n => nodeText(n, tagMap))], 'passage');
-    vecs = new Map(keys.map((k, i) => [k, vs[i]]));
+    const items = embedItems(graph, admin.retrieval); // 확장과 같은 구성 (T-154)
+    const vs = await be.embed(items.map(it => it.text), 'passage');
+    vecs = new Map(items.map((it, i) => [it.key, vs[i]]));
     qs = await be.embed(cases.map(c => c.sentence), 'query');
   } finally {
     await be.close();

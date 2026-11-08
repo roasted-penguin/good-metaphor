@@ -4,20 +4,20 @@
 // 평가셋·검증셋 전 문장에서 시험해 보기(explain)의 1위가 평가 도구(npm run eval)가 계산한 1위와 같은지
 import { readFileSync } from 'node:fs';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
-import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
+import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve } from '../extension/lib/retrieval.js';
 
 const admin = JSON.parse(readFileSync('extension/config/admin.json', 'utf8'));
 const cases = [...JSON.parse(readFileSync('tools/eval-set.json', 'utf8')), ...JSON.parse(readFileSync('tools/eval-holdout.json', 'utf8'))];
 const graph = mergeGraphs(loadCommonGraphFromDisk(), null); // 그래프 + tags.json (T-304)
-const tm = new Map(graph.tags.map(t => [t.id, t]));
-const items = [...graph.tags.map(t => ['tag:' + t.id, tagText(t)]), ...graph.nodes.map(n => ['node:' + n.id, nodeText(n, tm)])];
+// 확장과 같은 함수·같은 설정(admin.retrieval의 nodeTextMode·tagVectorMode, T-154)
+const items = embedItems(graph, admin.retrieval).map(it => [it.key, it.text]);
 
 async function check(label, fresh) {
   const be = await openBrowserEmbedder({ profile: '.tmp/ext-check-profile', fresh });
   try {
-    console.log(`[${label}] warmup ${be.warmupMs}ms · ${be.embedderId}`);
+    console.log(`[${label}] warmup ${be.warmupMs}ms · ${be.embedderId} · 그래프 벡터 ${items.length}개`);
     const pv = await be.embed(items.map(([, t]) => t), 'passage');
     const vecs = new Map(items.map(([k], i) => [k, pv[i]]));
     let same = 0; const ms = []; const diff = [];

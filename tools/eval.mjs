@@ -10,9 +10,10 @@
 //        [--server-only]               # 브라우저 평가 생략   [--rpm 20] 분당 요청 수   [--token <값>] 기본은 eval-<무작위>
 //   npm run eval -- --holdout          # 평가셋·검증셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점 (T-150)
 //   [--margin 0.005]                   # 여유(1위 − 경쟁자 점수 차)가 이보다 작은 맞힌 문장을 요약 끝에 목록으로 (T-150). -v면 문장별 여유
+//   [--retrieval '{"nodeTextMode":"desc"}']  # admin.retrieval 위에 덮어쓸 설정(JSON). 측정용, 파일은 바꾸지 않는다 (T-154)
 //   [--margin-guard]                   # 가드 문장 중 여유가 --margin 미만이면 종료 코드 1 (선택, 여유 경고는 기본으로 실패가 아님)
 import fs from 'node:fs';
-import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
+import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
@@ -25,6 +26,13 @@ import { rankAllViaServer, gateLine, ServerUnavailable } from './eval-server.mjs
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
+// --retrieval '<JSON>': admin.retrieval에 덮어써 같은 방식(임베딩 텍스트·점수)으로 채점한다 (T-154)
+const retrievalAt = process.argv.indexOf('--retrieval');
+if (retrievalAt > 0) {
+  const over = JSON.parse(process.argv[retrievalAt + 1]);
+  admin.retrieval = { ...admin.retrieval, ...over };
+  console.log(`retrieval 덮어쓰기: ${JSON.stringify(over)}`);
+}
 const common = loadCommonGraphFromDisk(); // 그래프 + tags.json (T-304)
 const readSet = f => JSON.parse(fs.readFileSync(new URL(f, here)));
 // 평가셋·검증셋(eval-holdout.json), --holdout이면 홀드아웃(eval-unseen.json)만 (T-150)
@@ -109,11 +117,12 @@ if (serverOnly) {
 }
 
 const graph = mergeGraphs(common, null);
-const tagMap = new Map(graph.tags.map(t => [t.id, t]));
-const keys = [...graph.tags.map(t => 'tag:' + t.id), ...graph.nodes.map(n => 'node:' + n.id)];
-const texts = [...graph.tags.map(tagText), ...graph.nodes.map(n => nodeText(n, tagMap))];
-const vs = serverOnly ? [] : await embed(texts, 'passage');
-const vecs = new Map(keys.map((k, i) => [k, vs[i]]));
+// 확장(ensureGraphVectors)과 같은 함수·같은 설정으로 임베딩 항목을 만든다 (T-154)
+const items = embedItems(graph, admin.retrieval);
+const embedStart = Date.now();
+const vs = serverOnly ? [] : await embed(items.map(it => it.text), 'passage');
+if (!serverOnly) console.log(`그래프 벡터 ${items.length}개 임베딩 ${Date.now() - embedStart}ms`);
+const vecs = new Map(items.map((it, i) => [it.key, vs[i]]));
 const settings = [
   { name: '노드 직접 비교만', directWeight: 1, tagWeight: 0 },
   { name: '태그 경유만 (그래프 홉)', directWeight: 0, tagWeight: 1 },
