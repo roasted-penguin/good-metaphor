@@ -47,5 +47,6 @@
   { "sentence": "펑크 록 밴드의 공연이 주말에 열렸다.", "expectNodes": [], "forbidNodes": ["starforce"], "group": "alias-negative", "since": "T-149" },
   { "sentence": "달리던 차의 타이어가 펑 하고 터졌다.", "expectNodes": [], "forbidNodes": ["starforce"], "group": "alias-negative", "since": "T-149" },
   { "sentence": "버스 기사가 손님에게 길을 안내했다.", "expectNodes": [], "forbidNodes": ["party"], "group": "alias-negative", "since": "T-149" },
-  { "sentence": "오늘 신문 기사에서 금리 인상 소식을 읽었다.", "expectNodes": [], "forbidNodes": ["party"], "group": "alias-negative", "since": "T-149" }
+  { "sentence": "오늘 신문 기사에서 금리 인상 소식을 읽었다.", "expectNodes": [], "forbidNodes": ["party"], "group": "alias-negative", "since": "T-149" },
+  { "sentence": "메소포타미아 문명에서는 세금을 보리로 거두었다.", "expectNodes": [], "forbidNodes": ["arcane_symbol"], "group": "alias-negative", "since": "T-152" }
 ]

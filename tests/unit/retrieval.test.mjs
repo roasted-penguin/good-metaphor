@@ -270,8 +270,29 @@ test('mapleCue: 일반어만 있거나 아무것도 없으면 거짓', () => {
   assert.equal(mapleCue('연말정산 때 세금 신고를 미리 준비해야 한다.', commonMerged), false);
   assert.equal(mapleCue('22성 도전하다가 또 펑 났다.', commonMerged), false);
   assert.equal(mapleCue('보스가 파티 조건을 강화하고 난이도를 올렸다.', commonMerged), false, '일반어만');
-  assert.equal(mapleCue('메소포타미아 문명', commonMerged), true, '앞 경계만 보는 aliasMatch 규칙 그대로(메소…)');
   assert.equal(mapleCue('', commonMerged), false);
+});
+
+// T-152: 라벨 단서 낱말 뒤에 한글이 바로 붙으면 조사로 시작할 때만 단서다(메소포타미아·샤이닝스타는 다른 낱말)
+test('mapleCue: 라벨 단서 낱말 뒤 한글은 조사로 시작할 때만 단서로 친다', () => {
+  assert.equal(mapleCue('메소가 바닥났다', commonMerged), true, '메소가');
+  assert.equal(mapleCue('메소포타미아 문명', commonMerged), false, '메소포타미아');
+  assert.equal(mapleCue('샤이닝이 다시 개봉했다', commonMerged), true, '샤이닝이');
+  assert.equal(mapleCue('샤이닝스타 상을 받았다', commonMerged), false, '샤이닝스타');
+  assert.equal(mapleCue('아케인에서 사냥했다', commonMerged), true, '아케인에서');
+  assert.equal(mapleCue('아케인으로 갔다', commonMerged), true, '아케인으로');
+  assert.equal(mapleCue('스타포스까지 했다', commonMerged), true, '스타포스까지');
+  assert.equal(mapleCue('스타포스부터 했다', commonMerged), true, '스타포스부터');
+  assert.equal(mapleCue('메소만 날렸다', commonMerged), true, '메소만');
+  assert.equal(mapleCue('메소, 펑', commonMerged), true, '뒤가 문장부호');
+  assert.equal(mapleCue('메소2억 날렸다', commonMerged), true, '뒤가 숫자(한글 아님)');
+  assert.equal(mapleCue('아케인포스가 모자라다', commonMerged), true, '더 긴 단서 낱말(아케인포스)은 그대로');
+  assert.equal(mapleCue('에르다의 흐름', commonMerged), true, '에르다의');
+  assert.equal(mapleCue('스타포스타워에 올랐다', commonMerged), false, '스타포스타워');
+});
+
+test('mapleCue: 강한 별칭은 aliasMatch 그대로(조사가 아닌 활용도 붙는다)', () => {
+  assert.equal(mapleCue('재획하고 왔다', commonMerged), true, '재획하고');
 });
 
 const gWeak = {

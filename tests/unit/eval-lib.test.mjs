@@ -177,7 +177,7 @@ test('평가셋 alias-negative: 4문장 이상, forbidNodes는 그래프 id, exp
   for (const c of neg) {
     assert.deepEqual(c.expectNodes, [], c.sentence);
     assert.ok(c.forbidNodes?.length && c.forbidNodes.every(id => nodeIds.has(id)), c.sentence);
-    assert.equal(c.since, 'T-149');
+    assert.match(c.since, /^T-\d+$/, c.sentence); // T-149에서 시작, 이후 작업이 더한다(T-152)
     assert.ok(!guard.has(c.sentence));
   }
   // 기존 지표 분모가 그대로: 음성이 아닌 문장 수와 비유 없음 문장 수
