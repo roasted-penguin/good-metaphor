@@ -2354,7 +2354,7 @@ test('관심사(T-302): 로그아웃 상태에서 팝업으로 식당 → "식�
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extId}/popup.html`);
   await expect(popup.locator('input[name=interest][value=maplestory]')).toBeChecked();
-  await popup.locator('input[name=interest][value=restaurant]').check();
+  await popup.locator('label:has(input[name=interest][value=restaurant])').click(); // 세그먼트 라디오는 숨겨 두고 라벨을 누른다
   await expect.poll(() => ext.page.evaluate(async () => (await chrome.storage.local.get('settings')).settings?.interest)).toBe('restaurant');
   await expect(popup.locator('#domain')).toHaveText(/식당/);
   // 설정 화면(열려 있던 ext.page)도 storage 변경으로 같이 바뀐다
@@ -2382,7 +2382,7 @@ test('관심사(T-302): 로그아웃 상태에서 팝업으로 식당 → "식�
   await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain(RESTAURANT_NO_MATCH);
 
   // 설정 화면에서 메이플로 되돌리기 → 팝업도 바뀌고, 말풍선은 메이플 테마·말머리·문구
-  await ext.page.locator('input[name=interest][value=maplestory]').check();
+  await ext.page.locator('label:has(input[name=interest][value=maplestory])').click();
   await expect(popup.locator('input[name=interest][value=maplestory]')).toBeChecked();
   await expect(ext.page.locator('#commonTitle')).toHaveText(/^메이플스토리 · /);
   await waitTheme(page, 'maple');
