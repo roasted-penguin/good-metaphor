@@ -233,3 +233,36 @@ test('interestArgError: 메이플이 아닌 관심사에 --guard·--holdout·--m
   assert.equal(interestArgError(['node', 'eval', '--interest', 'restaurant', '-v'], r), null);
   assert.equal(interestArgError(['node', 'eval'], null), null);
 });
+
+/* ───────────── 식당 홀드아웃 (T-156) ───────────── */
+// 조정(태그·감점·facts)을 고를 때 보지 않는 문장. 조정 전에 커밋하고 마지막에 한 번만 채점한다
+
+const unseenRestaurant = read('tools/eval-unseen-restaurant.json');
+
+test('식당 홀드아웃: 8문장 이상, 영어 1개 이상, 메이플 문장 2개 이상, 문장마다 근거(why), 기대 노드·태그가 식당 그래프에 있다', () => {
+  const ids = new Set(restaurant.nodes.map(n => n.id));
+  const tagIds = new Set(restaurant.tags.map(t => t.id));
+  assert.ok(unseenRestaurant.length >= 8, `${unseenRestaurant.length}문장`);
+  assert.ok(unseenRestaurant.filter(c => isEnglish(c.sentence)).length >= 1, '영어 부족');
+  assert.ok(unseenRestaurant.filter(c => c.group === 'maple').length >= 2, '메이플 문장 부족');
+  assert.equal(new Set(unseenRestaurant.map(c => c.sentence)).size, unseenRestaurant.length, '중복');
+  for (const c of unseenRestaurant) {
+    assert.ok(typeof c.why === 'string' && c.why.trim(), `근거 없음: ${c.sentence}`);
+    assert.ok(Array.isArray(c.expectNodes) && c.expectNodes.length >= 1, c.sentence);
+    for (const id of c.expectNodes) assert.ok(ids.has(id), `${c.sentence} → 없는 노드 ${id}`);
+    if (c.expectTag) assert.ok(tagIds.has(c.expectTag), `${c.sentence} → 없는 태그 ${c.expectTag}`);
+  }
+});
+
+test('식당 홀드아웃: 다른 평가 문장(메이플·식당 평가셋 포함)과 3-gram < 0.5, 태그 설명·예문과 < 0.3, 식당 facts와 < 0.3', () => {
+  const others = [
+    ...read('tools/eval-set.json'), ...read('tools/eval-holdout.json'), ...read('tools/eval-unseen.json'), ...evalSet
+  ].map(c => c.sentence).concat(read('tools/eval-guard.json'));
+  const tagTexts = tagsFile.tags.flatMap(t => [t.desc, ...(t.examples || [])]);
+  const facts = restaurant.nodes.flatMap(n => n.facts);
+  for (const c of unseenRestaurant) {
+    for (const s of others) assert.ok(jaccard(c.sentence, s) < 0.5, `"${c.sentence}" ↔ "${s}"`);
+    for (const t of tagTexts) assert.ok(jaccard(c.sentence, t) < 0.3, `"${c.sentence}" ↔ 예문 "${t}"`);
+    for (const f of facts) assert.ok(jaccard(c.sentence, f) < 0.3, `"${c.sentence}" ↔ 사실 "${f}"`);
+  }
+});

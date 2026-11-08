@@ -1,0 +1,10 @@
+[
+  { "sentence": "썬데이 메이플에는 그날 하루만 경험치와 아이템 드롭 혜택이 커진다.", "expectNodes": ["happy_hour"], "expectTag": "temporary_multiplier", "group": "maple", "since": "T-156", "why": "정해진 하루만 혜택이 커지고 지나면 끝난다 = 해피아워(정한 시간에만 값을 낮춤, 지나면 원래대로)" },
+  { "sentence": "파티 퀘스트에서 한 명은 몬스터를 모으고 다른 사람들은 모인 몬스터를 한꺼번에 처치한다.", "expectNodes": ["kitchen_division"], "expectTag": "role_division", "group": "maple", "since": "T-156", "why": "여럿이 일을 나눠 맡아 함께 끝낸다 = 주방 분업" },
+  { "sentence": "The museum shop printed only a small batch of posters, and once they are gone there will be no reprint.", "expectNodes": ["limited_menu"], "expectTag": "scarcity_value", "group": "en", "since": "T-156", "why": "정해 둔 수량만 만들고 다 팔리면 더 살 수 없다 = 한정 메뉴" },
+  { "sentence": "도서관 책을 거듭 늦게 반납할수록 대출 정지 기간이 길어진다.", "expectNodes": ["hygiene_inspection"], "expectTag": "escalating_cost", "since": "T-156", "why": "같은 위반을 되풀이할수록 정지 기간이 길어진다 = 위생 점검과 행정처분" },
+  { "sentence": "물류 창고는 오래 쌓인 상자부터 내보내고 날짜가 지난 물건은 골라서 버린다.", "expectNodes": ["fifo_storage"], "expectTag": "loss_risk", "since": "T-156", "why": "먼저 들어온 것을 먼저 내보내고 기한 지난 것은 버린다 = 재료 선입선출" },
+  { "sentence": "미용실은 커트와 염색 요금을 손님이 볼 수 있게 가게 안에 붙여 둔다.", "expectNodes": ["price_board"], "expectTag": "threshold_req", "since": "T-156", "why": "손님이 보도록 요금을 가게에 게시한다 = 가격표 게시" },
+  { "sentence": "임대료가 오르자 동네 학원들이 줄줄이 수강료를 인상했다.", "expectNodes": ["ingredient_cost"], "expectTag": "inflation", "since": "T-156", "why": "들어가는 비용이 오르자 결국 파는 값을 올린다 = 식재료 원가 상승" },
+  { "sentence": "숙소 예약 사이트는 방이 팔릴 때마다 숙박비의 일정 비율을 호텔에서 수수료로 가져간다.", "expectNodes": ["delivery_fee"], "expectTag": "expected_value", "since": "T-156", "why": "거래를 중개한 대가로 금액에 비례한 수수료를 판매자에게서 받는다 = 배달 앱 중개수수료" }
+]
