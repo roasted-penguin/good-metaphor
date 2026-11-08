@@ -21,3 +21,4 @@
 - 추출 어휘와 키워드 프롬프트 어휘가 같은 `tags.json`에서 나오는지 서버 테스트가 확인한다(규칙 9).
 - 서버 판본(`workspace_version`, 결과 캐시 키)은 `"그래프 판본+태그 판본"`이라 `tags.json`의 `version`만 올려도 캐시가 갈린다(`WORKSPACE_VERSION`이 있으면 그 값, 인라인 tags·태그 파일을 못 읽으면 그래프 판본만). 확장도 `sources.common.tagsVersion`이 결과 캐시 키(`graphKey`)에 들어간다. 태그를 바꾸면 `tags.json` `version`을 올리고, 서버 인덱스는 시드를 다시 넣는다.
 - 공통 그래프를 직접 `JSON.parse`/`json.loads`로 읽으면 태그가 빠진다. 새 도구·테스트는 위 로더를 쓴다.
+- (T-302, 2026-11-09) 공통 관심사가 둘(메이플·식당)이 됐다. 확장 `loadCommonGraph(interestId)`, Node `loadInterestGraph(interestId)`·`commonGraphPath(interestId)`가 같은 폴더의 `<id>.json` + `tags.json`을 읽는다(목록은 `lib/graph.js` `COMMON_INTERESTS`). 관리자 원격 주소(`commonStore.url`)는 기본 관심사(메이플)에만 쓴다. **서버는 메이플만 안다**(식당은 확장 브라우저 파이프라인만).

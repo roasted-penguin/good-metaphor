@@ -109,7 +109,9 @@ export function marginThreshold(argv) {
 }
 
 // 채점할 문장 묶음. --holdout이면 홀드아웃만(예문 고를 때 보지 않는 문장, 회귀 가드 대상 아님)
-export function pickSets(argv, { evalSet, validation, holdout }) {
+// interest = 고른 공통 관심사(graph.js commonInterest). 메이플이 아니면 그 관심사 평가셋 하나만, 가드 없음(T-302, 처음 기준선)
+export function pickSets(argv, { evalSet, validation, holdout, interestSet }, interest = null) {
+  if (interest && interest.id !== 'maplestory') return [{ name: `${interest.label} 평가셋`, cases: interestSet || [], guarded: false }];
   if (argv.includes('--holdout')) return [{ name: '홀드아웃', cases: holdout, guarded: false }];
   return [
     { name: '평가셋', cases: evalSet, guarded: true },

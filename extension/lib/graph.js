@@ -14,6 +14,17 @@ export const EMPTY_OVERLAY = {
   edges: []
 };
 
+// 공통 관심사(T-302). 로그인 없이 고를 수 있는 공통 그래프 목록. file은 data/common/ 아래 파일 이름
+export const COMMON_INTERESTS = [
+  { id: 'maplestory', label: '메이플', file: 'maplestory.json' },
+  { id: 'restaurant', label: '식당', file: 'restaurant.json' }
+];
+export const DEFAULT_INTEREST = 'maplestory';
+// 관심사 id → 목록 항목, 모르는 id면 null
+export function commonInterest(id) {
+  return COMMON_INTERESTS.find(i => i.id === id) || null;
+}
+
 // 별칭(게임 은어, T-114): 문자열 배열, 각 항목은 공백만이 아닌 1~20자
 const ALIAS_MAX = 20;
 function validAliases(a) {
@@ -44,6 +55,10 @@ export function validateGraph(g, { partial = false } = {}) {
   const errors = [];
   if (!g || typeof g !== 'object') return ['그래프가 객체가 아니에요.'];
   if (!partial && !g.domain) errors.push('domain(관심사 이름)이 없어요.');
+  // 비유가 없을 때 말풍선 문구(T-302). 넣었으면 빈 문자열이 아닌 문자열
+  if (g.noMatchText !== undefined && !(typeof g.noMatchText === 'string' && g.noMatchText.trim())) {
+    errors.push('noMatchText(비유 없음 문구)는 빈 문자열이 아닌 문자열이어야 해요.');
+  }
   const tagIds = new Set();
   for (const [i, t] of (g.tags || []).entries()) {
     if (!t.id || !t.label) errors.push(`tags[${i}]에 id 또는 label이 없어요.`);
@@ -148,6 +163,8 @@ export function mergeGraphs(common, overlay) {
     domain: useCommon ? common.domain : (ov.domain || '내 관심사'),
     theme: useCommon ? (common.theme || 'neutral') : (ov.theme || 'neutral'),
     analogyPrefix: useCommon ? common.analogyPrefix : (ov.analogyPrefix || `${ov.domain || '내 관심사'}로 치면`),
+    // 비유 없음 문구(T-302): 공통 관심사별. 내 관심사면 빈 문자열(말풍선이 기본 문구를 쓴다)
+    noMatchText: useCommon ? (common.noMatchText || '') : '',
     sources: {
       common: useCommon ? { id: common.id, version: common.version, tagsVersion: common.tagsVersion ?? null } : null,
       userNodes: reviewedNodes.length,
