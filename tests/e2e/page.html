@@ -42,4 +42,6 @@
 <!-- T-111: 기존 문장 위치에 영향 없게 맨 아래. 같은 출처·다른 출처(localhost ≠ 127.0.0.1) iframe -->
 <iframe id="fr-same" src="/frame.html" style="border:0;width:700px;height:200px;display:block"></iframe>
 <iframe id="fr-cross" src="http://localhost:8766/frame.html" style="border:0;width:700px;height:200px;display:block"></iframe>
+<!-- T-147: 광고 크기(200×120) iframe. 작은 프레임에서는 말풍선도 요청도 없어야 한다 -->
+<iframe id="fr-tiny" src="/frame.html" style="border:0;width:200px;height:120px;display:block"></iframe>
 </body></html>

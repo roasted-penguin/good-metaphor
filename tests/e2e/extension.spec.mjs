@@ -1605,3 +1605,84 @@ test('말풍선 닫은 뒤(T-111 CI): 숨은 말풍선 자리 아래 글자도 �
   await altHoverAt(page, target);
   await expect.poll(() => hlText(page)).toBe('반면 고정금리는 약정 기간 동안 금리가 바뀌지 않는다.');
 });
+
+/* ───────── iframe 사용감 (T-147) ───────── */
+// #sh-open 을 화면 위쪽(top 40px)에 두면 그 아래 fr-same·fr-cross 가 한 화면에 들어온다(스크롤로 닫히는 것과 구분)
+async function topSentencePoint(page) {
+  return page.evaluate(() => {
+    window.scrollTo(0, window.scrollY + document.getElementById('sh-open').getBoundingClientRect().top - 40);
+    const t = document.getElementById('sh-open').shadowRoot.querySelector('#so').firstChild;
+    const r = document.createRange(); r.setStart(t, 5); r.setEnd(t, 6);
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  });
+}
+// 프레임 안 글자의 페이지 좌표(스크롤하지 않음)
+async function framePoint(page, frameSel, sel, idx = 5) {
+  const { el, frame } = await frameOf(page, frameSel);
+  const box = await el.boundingBox();
+  const p = await pointOnChar(frame, sel, idx);
+  return { frame, x: box.x + p.x, y: box.y + p.y };
+}
+
+test('iframe(T-147): 커서가 iframe 문장에 있을 때 Alt → 요청은 iframe 문장뿐, 최상위의 이전 커서 자리 문장은 안 보냄', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await frameOf(page, '#fr-same');
+  const top = await topSentencePoint(page);
+  // 최상위 문장 위를 보조키 없이 지나간다(최상위 content.js 의 마지막 좌표가 이 문장이 됨)
+  await page.mouse.move(top.x, top.y);
+  await page.waitForTimeout(200);
+  expect(await tooltip(page), '보조키 없이는 안 뜸').toBeFalsy();
+  const { frame, x, y } = await framePoint(page, '#fr-same', '#fa');
+  const from = calls.length; // calls 는 파일 전체에서 쌓이므로 이 테스트에서 생긴 것만 본다
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt'); // 포커스는 최상위 문서라 keydown 은 최상위로 간다
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  await page.waitForTimeout(800);
+  const mine = calls.slice(from);
+  expect(mine.filter(c => c.user.includes('같은출처프레임테스트')).length, 'iframe 문장 요청').toBeGreaterThan(0);
+  expect(mine.some(c => c.user.includes('열린섀도테스트')), '최상위 이전 자리 문장 요청 0').toBe(false);
+  expect(await tooltip(page), '최상위 말풍선 없음').toBeFalsy();
+  expect(await hlText(page), '최상위 강조 없음').toBeNull();
+});
+
+test('iframe(T-147): 최상위 말풍선(결과) → iframe 문장 Alt+호버 → 최상위 말풍선은 닫히고 iframe 말풍선이 뜬다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await frameOf(page, '#fr-cross');
+  await altHoverAt(page, await topSentencePoint(page));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  const scrollY = await page.evaluate(() => window.scrollY);
+  const { frame, x, y } = await framePoint(page, '#fr-cross', '#fb');
+  // 전제: iframe 글자가 최상위 말풍선에 가려지지 않는다(가려지면 호버가 말풍선으로 감)
+  const boxRect = await page.evaluate(() => document.getElementById('good-metaphor-host').shadowRoot.querySelector('.box').getBoundingClientRect().toJSON());
+  expect(y > boxRect.bottom || x > boxRect.right || x < boxRect.left, 'iframe 글자는 최상위 말풍선 밖').toBe(true);
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  await expect.poll(() => tooltip(page), { message: '최상위 말풍선은 닫힘' }).toBe('');
+  expect(await hlText(page), '최상위 강조도 지움').toBeNull();
+  expect(await page.evaluate(() => window.scrollY), '스크롤로 닫힌 게 아님').toBe(scrollY);
+  // 보낸 프레임 자신의 말풍선은 닫히지 않는다(결과가 뜬 뒤에도 그대로)
+  await page.waitForTimeout(500);
+  expect(await tooltip(frame)).toContain('같은 구조예요');
+});
+
+test('iframe(T-147): 작은(200×120) iframe 문장은 Alt+호버해도 요청 0·말풍선 없음', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { frame } = await frameOf(page, '#fr-tiny');
+  expect(await frame.evaluate(() => [innerWidth, innerHeight]), '전제: 프레임 크기').toEqual([200, 120]);
+  const before = sentCount();
+  await altHoverFrame(page, '#fr-tiny', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(await tooltip(page), '최상위에도 없음').toBeFalsy();
+});
