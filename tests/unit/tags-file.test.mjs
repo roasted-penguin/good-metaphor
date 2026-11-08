@@ -136,3 +136,16 @@ test('확장 로더: 원격 그래프에 tags가 있으면 그대로, 없으면 
     admin.commonStore = saved;
   }
 });
+
+test('태그 판본이 해석된 그래프와 병합 결과 sources.common에 실린다(결과 캐시 graphKey, T-304 수정 1)', () => {
+  const tf = { version: 'tags-7', tags: [{ id: 'a', label: 'A' }] };
+  const g = resolveCommonGraph({ id: 'x', version: 'g-1', domain: 'd', nodes: [] }, tf);
+  assert.equal(g.tagsVersion, 'tags-7');
+  assert.deepEqual(mergeGraphs(g, null).sources.common, { id: 'x', version: 'g-1', tagsVersion: 'tags-7' });
+  // 태그가 그래프에 들어 있으면(하위 호환) 태그 판본 없음
+  const inline = resolveCommonGraph({ id: 'x', version: 'g-1', domain: 'd', tags: tf.tags, nodes: [] }, tf);
+  assert.equal(inline.tagsVersion, null);
+  assert.equal(mergeGraphs(inline, null).sources.common.tagsVersion, null);
+  // 실제 공통 그래프
+  assert.equal(mergeGraphs(loadCommonGraphFromDisk(), null).sources.common.tagsVersion, tagsFile.version);
+});

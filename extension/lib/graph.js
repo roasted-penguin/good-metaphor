@@ -91,10 +91,11 @@ export function validateTagsFile(tf) {
 }
 
 // 관심사 그래프 + 태그 파일 → 해석된 그래프({ ...graph, tags }). 태그 순서는 파일 순서 그대로(nodeText·검색 불변).
-// 하위 호환: 그래프에 tags가 이미 있으면(예전 원격 그래프) 그대로 쓴다. 원본 객체는 바꾸지 않는다
+// 하위 호환: 그래프에 tags가 이미 있으면(예전 원격 그래프) 그대로 쓴다. 원본 객체는 바꾸지 않는다.
+// tagsVersion = 태그 파일 판본(인라인이면 null). mergeGraphs가 sources.common에 실어 결과 캐시 키(graphKey)를 가른다
 export function resolveCommonGraph(graph, tagsFile) {
-  if (Array.isArray(graph?.tags)) return { ...graph };
-  return { ...graph, tags: Array.isArray(tagsFile?.tags) ? tagsFile.tags : [] };
+  if (Array.isArray(graph?.tags)) return { ...graph, tagsVersion: null };
+  return { ...graph, tags: Array.isArray(tagsFile?.tags) ? tagsFile.tags : [], tagsVersion: tagsFile?.version ?? null };
 }
 
 export const BOOST_LIMIT = 0.2;
@@ -142,7 +143,7 @@ export function mergeGraphs(common, overlay) {
     theme: useCommon ? (common.theme || 'neutral') : (ov.theme || 'neutral'),
     analogyPrefix: useCommon ? common.analogyPrefix : (ov.analogyPrefix || `${ov.domain || '내 관심사'}로 치면`),
     sources: {
-      common: useCommon ? { id: common.id, version: common.version } : null,
+      common: useCommon ? { id: common.id, version: common.version, tagsVersion: common.tagsVersion ?? null } : null,
       userNodes: (ov.nodes || []).length
     },
     tags: [...tags.values()].filter(t => usedTagIds.has(t.id)),
