@@ -1692,6 +1692,7 @@ test('iframe(T-148): 부모 문서의 비밀번호 폼 안 같은 출처 iframe 
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/pwframe.html');
   const before = sentCount();
+  const from = calls.length; // calls 는 파일 전체에서 쌓인다(앞 테스트도 #fa 문장을 보냄). 이 테스트에서 생긴 것만 본다
   const frame = await altHoverFrame(page, '#fr-pw', '#fa');
   await page.waitForTimeout(1500);
   expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
@@ -1705,7 +1706,7 @@ test('iframe(T-148): 부모 문서의 비밀번호 폼 안 같은 출처 iframe 
   await page.waitForTimeout(1500);
   expect(await tooltip(late), '나중에 생긴 칸도 막음').toBeFalsy();
   expect(sentCount() - before, '요청 0').toBe(0);
-  expect(calls.some(c => c.user.includes('같은출처프레임테스트')), '그 문장 요청 없음').toBe(false);
+  expect(calls.slice(from).some(c => c.user.includes('같은출처프레임테스트')), '그 문장 요청 없음').toBe(false);
 
   // 같은 페이지의 폼 밖 iframe 은 정상(모든 프레임을 막는 게 아님)
   const ok = await altHoverFrame(page, '#fr-ok', '#fb');
