@@ -45,8 +45,10 @@ def test_settings_defaults(monkeypatch):
     assert s.workspace == "common_maplestory"
     assert s.rate_limit_per_min == 30
     assert Path(s.common_graph_path).resolve() == COMMON_GRAPH.resolve()
-    expected_version = json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))["version"]
-    assert s.workspace_version == expected_version
+    graph_v = json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))["version"]
+    tags_v = json.loads((COMMON_GRAPH.parent / "tags.json").read_text(encoding="utf-8"))["version"]
+    # 판본 = 그래프 판본 + 태그 판본(T-304). 태그만 바뀌어도 결과 캐시 키가 바뀐다
+    assert s.workspace_version == f"{graph_v}+{tags_v}"
 
 
 def test_settings_from_env(monkeypatch, tmp_path):

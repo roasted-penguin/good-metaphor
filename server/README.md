@@ -62,7 +62,7 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 | --- | --- | --- |
 | `GEMINI_API_KEY` | 없음 | 없어도 서버는 떠요. 로컬은 셸 환경, 도커는 `server/.env`(커밋 안 함)에서 읽어요. |
 | `WORKSPACE` | `common_maplestory` | LightRAG 워크스페이스 이름 |
-| `WORKSPACE_VERSION` | 공통 그래프의 `version` | 캐시 키에 붙는 판본 |
+| `WORKSPACE_VERSION` | `그래프 version+태그 version`(태그가 그래프 안에 있거나 태그 파일을 못 읽으면 그래프 version만) | 캐시 키에 붙는 판본. 태그만 바뀌어도 캐시가 갈려요(T-304) |
 | `RATE_LIMIT_PER_MIN` | `30` | 설치 토큰별 분당 요청 한도 |
 | `COMMON_GRAPH_PATH` | 저장소의 `extension/data/common/maplestory.json` | 실행 위치(cwd)와 무관하게 저장소 루트 기준으로 찾아요. 도커에서는 compose가 `/data/common/maplestory.json`으로 지정해요. |
 | `TAGS_PATH` | 공통 그래프 파일 옆 `tags.json` | 추상 태그(통제 어휘)의 원본(T-304, ADR 0012). 그래프에 `tags`가 이미 있으면 읽지 않아요. 도커에서는 `/data/common/tags.json`. |

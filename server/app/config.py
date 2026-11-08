@@ -29,7 +29,7 @@ DEFAULT_EMBEDDING_DIM = 1024
 
 
 def read_graph_version(path: str | os.PathLike) -> str | None:
-    """공통 그래프 JSON의 version 값. 파일이 없거나 깨졌으면 None."""
+    """공통 그래프(또는 태그 파일) JSON의 version 값. 파일이 없거나 깨졌으면 None."""
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -83,6 +83,24 @@ def load_common_graph(path: str | os.PathLike, tags_path: str | os.PathLike | No
     return {**graph, "tags": tags}
 
 
+def workspace_version_for(graph_path: str | os.PathLike, tags_path: str | os.PathLike | None = None) -> str | None:
+    """결과 캐시 키·/health 판본 = "그래프 판본+태그 판본"(T-304). 태그만 바뀌어도 캐시가 갈린다.
+
+    그래프에 tags가 들어 있거나(하위 호환) 태그 파일을 못 읽으면 그래프 판본만 쓴다.
+    """
+    graph_v = read_graph_version(graph_path)
+    try:
+        graph = json.loads(Path(graph_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return graph_v
+    if not isinstance(graph, dict) or isinstance(graph.get("tags"), list):
+        return graph_v
+    tags_v = read_graph_version(tags_path or Path(graph_path).parent / TAGS_FILENAME)
+    if graph_v is None or tags_v is None:
+        return graph_v
+    return f"{graph_v}+{tags_v}"
+
+
 @dataclass(frozen=True)
 class Settings:
     gemini_api_key: str | None
@@ -118,7 +136,8 @@ class Settings:
         graph_path = env.get("COMMON_GRAPH_PATH") or str(DEFAULT_COMMON_GRAPH_PATH)
         # 키가 없어도 서버는 뜬다(비유 요청만 나중에 명확한 오류로 막는다).
         key = env.get("GEMINI_API_KEY") or None
-        version = env.get("WORKSPACE_VERSION") or read_graph_version(graph_path)
+        tags_path = env.get("TAGS_PATH") or None
+        version = env.get("WORKSPACE_VERSION") or workspace_version_for(graph_path, tags_path)
         return cls(
             gemini_api_key=key,
             workspace=env.get("WORKSPACE") or DEFAULT_WORKSPACE,
@@ -133,5 +152,5 @@ class Settings:
             embedding_model=env.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL,
             embedding_dim=int(env.get("EMBEDDING_DIM") or DEFAULT_EMBEDDING_DIM),
             blocklist_path=env.get("BLOCKLIST_PATH") or None,
-            tags_path=env.get("TAGS_PATH") or None,
+            tags_path=tags_path,
         )

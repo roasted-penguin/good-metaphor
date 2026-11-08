@@ -145,3 +145,54 @@ def test_docker_compose_sets_tags_path_in_mounted_dir():
     assert "TAGS_PATH: /data/common/tags.json" in compose
     assert "../extension/data/common:/data/common:ro" in compose
     assert TAGS_FILE.is_file()
+
+
+# --- 판본(캐시 키·/health)에 태그 판본도 넣는다(T-304 수정 1) ---
+
+def _versions():
+    graph_v = json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))["version"]
+    tags_v = json.loads(TAGS_FILE.read_text(encoding="utf-8"))["version"]
+    return graph_v, tags_v
+
+
+def test_workspace_version_combines_graph_and_tags_versions():
+    from app.config import Settings
+
+    graph_v, tags_v = _versions()
+    assert Settings.from_env({}).workspace_version == f"{graph_v}+{tags_v}"
+    # WORKSPACE_VERSION이 있으면 그대로
+    assert Settings.from_env({"WORKSPACE_VERSION": "w-1"}).workspace_version == "w-1"
+
+
+def test_workspace_version_follows_tags_path_env(tmp_path):
+    from app.config import Settings
+
+    graph_v, _ = _versions()
+    other = _write(tmp_path / "t.json", {"version": "tags-9", "tags": []})
+    assert Settings.from_env({"TAGS_PATH": str(other)}).workspace_version == f"{graph_v}+tags-9"
+
+
+def test_workspace_version_graph_only_when_inline_tags_or_tags_unreadable(tmp_path):
+    from app.config import Settings
+
+    inline = _write(tmp_path / "inline.json", {"version": "g-1", "tags": [{"id": "x", "label": "X"}], "nodes": []})
+    _write(tmp_path / "tags.json", {"version": "tags-1", "tags": []})
+    assert Settings.from_env({"COMMON_GRAPH_PATH": str(inline)}).workspace_version == "g-1"
+    lone_dir = tmp_path / "lone"
+    lone_dir.mkdir()
+    lone = _write(lone_dir / "g.json", {"version": "g-2", "nodes": []})
+    assert Settings.from_env({"COMMON_GRAPH_PATH": str(lone)}).workspace_version == "g-2"
+    (lone_dir / "tags.json").write_text("{깨짐", encoding="utf-8")
+    assert Settings.from_env({"COMMON_GRAPH_PATH": str(lone)}).workspace_version == "g-2"
+
+
+def test_cache_key_changes_when_tags_version_changes(tmp_path):
+    from app.cache import cache_key
+    from app.config import Settings
+
+    g = _write(tmp_path / "g.json", {"version": "g-1", "nodes": []})
+    _write(tmp_path / "tags.json", {"version": "tags-1", "tags": []})
+    k1 = cache_key("문장", None, Settings.from_env({"COMMON_GRAPH_PATH": str(g)}).workspace_version)
+    _write(tmp_path / "tags.json", {"version": "tags-2", "tags": []})
+    k2 = cache_key("문장", None, Settings.from_env({"COMMON_GRAPH_PATH": str(g)}).workspace_version)
+    assert k1 != k2
