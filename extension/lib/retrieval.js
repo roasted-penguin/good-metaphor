@@ -99,14 +99,31 @@ export function labelCueWords(graph) {
   return [...out];
 }
 
+// 라벨 단서 낱말 바로 뒤에 올 수 있는 조사 (T-152). 긴 것을 앞에 둔다
+const CUE_PARTICLES = ['까지', '부터', '에서', '으로', '은', '는', '이', '가', '을', '를', '의', '에', '로', '와', '과', '도', '만'];
+
+/**
+ * 라벨 단서 낱말이 문장에 낱말로 있는지 (T-152). 앞 경계는 aliasMatch와 같고, 뒤에 한글이 바로 이어지면
+ * 조사로 시작할 때만 맞다(메소가 → 맞음, 메소포타미아·샤이닝스타 → 다른 낱말이라 아님).
+ */
+export function cueWordMatch(text, words) {
+  if (!text || !words?.length) return false;
+  const t = text.normalize('NFKC');
+  const particle = CUE_PARTICLES.join('|');
+  return words.some(w => {
+    const cw = String(w || '').normalize('NFKC').trim();
+    return cw && new RegExp(`(?:^|[\\s\\p{P}\\p{S}])${escapeRe(cw)}(?:(?=${particle})|(?!\\p{Script=Hangul}))`, 'u').test(t);
+  });
+}
+
 /**
  * 문장에 메이플 단서가 있는지 (T-149): 어떤 노드의 강한 별칭(aliases)이나 공통 라벨 핵심 낱말이 낱말로 있으면 참.
- * 경계 규칙은 aliasMatch 그대로(앞만 경계).
+ * 강한 별칭은 aliasMatch 그대로(앞만 경계, 활용도 붙음: 재획하고), 라벨 낱말은 cueWordMatch(뒤에 조사만, T-152).
  */
 export function mapleCue(text, graph) {
   if (!text) return false;
   if ((graph?.nodes || []).some(n => aliasMatch(text, n.aliases))) return true;
-  return aliasMatch(text, labelCueWords(graph));
+  return cueWordMatch(text, labelCueWords(graph));
 }
 
 /**
