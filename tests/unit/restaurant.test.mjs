@@ -7,7 +7,7 @@ import {
   validateGraph, mergeGraphs, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest
 } from '../../extension/lib/graph.js';
 import { loadCommonGraphFromDisk, commonGraphPath, loadInterestGraph, interestFromArgv } from '../../tools/load-graph.mjs';
-import { pickSets, interestArgError } from '../../tools/eval-lib.mjs';
+import { pickSets, interestArgError, interestEvalFiles, mixedSetting } from '../../tools/eval-lib.mjs';
 
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
 const rawRestaurant = read('extension/data/common/restaurant.json');
@@ -138,10 +138,12 @@ test('interestFromArgv: --interest <id>, 없으면 기본, 모르는 id·값 없
   assert.throws(() => interestFromArgv(['--interest']), /interest/);
 });
 
-test('pickSets: --interest restaurant면 식당 평가셋 하나(가드 대상 아님), 메이플이면 기존 그대로', () => {
+test('pickSets: --interest restaurant면 식당 평가셋 하나(식당 가드 대상), --holdout이면 식당 홀드아웃만, 메이플이면 기존 그대로', () => {
   const e = [{ sentence: 'e' }], v = [{ sentence: 'v' }], h = [{ sentence: 'h' }], r = [{ sentence: 'r' }];
   const rest = pickSets(['--interest', 'restaurant'], { evalSet: e, validation: v, holdout: h, interestSet: r }, commonInterest('restaurant'));
-  assert.deepEqual(rest.map(s => [s.name, s.cases, s.guarded]), [['식당 평가셋', r, false]]);
+  assert.deepEqual(rest.map(s => [s.name, s.cases, s.guarded]), [['식당 평가셋', r, true]]);
+  const restH = pickSets(['--interest', 'restaurant', '--holdout'], { evalSet: e, validation: v, holdout: h, interestSet: r }, commonInterest('restaurant'));
+  assert.deepEqual(restH.map(s => [s.name, s.cases, s.guarded]), [['식당 홀드아웃', h, false]]);
   const maple = pickSets([], { evalSet: e, validation: v, holdout: h }, commonInterest('maplestory'));
   assert.deepEqual(maple.map(s => s.name), ['평가셋', '검증셋']);
 });
@@ -222,16 +224,30 @@ test('설정 기본값: interest는 기본 관심사(메이플), 목록에 있�
   assert.ok(commonInterest(DEFAULT_SETTINGS.interest));
 });
 
-test('interestArgError: 메이플이 아닌 관심사에 --guard·--holdout·--margin-guard·--server를 주면 오류 문구, 아니면 null', () => {
+test('interestArgError: 메이플이 아닌 관심사에 --margin-guard·--server를 주면 오류 문구, --guard·--holdout은 그 관심사 파일로(T-156)', () => {
   const r = commonInterest('restaurant'), m = commonInterest('maplestory');
-  for (const flag of ['--guard', '--holdout', '--margin-guard', '--server']) {
+  for (const flag of ['--margin-guard', '--server']) {
     const msg = interestArgError(['node', 'eval', '--interest', 'restaurant', flag], r);
     assert.match(msg, new RegExp(flag));
     assert.match(msg, /메이플 관심사에서만/);
     assert.equal(interestArgError(['node', 'eval', flag], m), null, '메이플이면 그대로');
   }
+  for (const flag of ['--guard', '--holdout']) assert.equal(interestArgError(['node', 'eval', '--interest', 'restaurant', flag], r), null, flag);
   assert.equal(interestArgError(['node', 'eval', '--interest', 'restaurant', '-v'], r), null);
   assert.equal(interestArgError(['node', 'eval'], null), null);
+});
+
+test('interestEvalFiles: 관심사별 평가셋·홀드아웃·가드 파일 이름, 메이플은 예전 이름 그대로', () => {
+  assert.deepEqual(interestEvalFiles(commonInterest('maplestory')), { evalSet: 'eval-set.json', holdout: 'eval-unseen.json', guard: 'eval-guard.json' });
+  assert.deepEqual(interestEvalFiles(null), { evalSet: 'eval-set.json', holdout: 'eval-unseen.json', guard: 'eval-guard.json' });
+  assert.deepEqual(interestEvalFiles(commonInterest('restaurant')), { evalSet: 'eval-set-restaurant.json', holdout: 'eval-unseen-restaurant.json', guard: 'eval-guard-restaurant.json' });
+});
+
+test('mixedSetting(admin, graph): 관심사 그래프 감점을 admin.retrieval 위에 덮어쓴다, 그래프가 없으면 예전 그대로', () => {
+  const admin = { retrieval: { topK: 3, tagPenalty: { inflation: 0.03 } } };
+  assert.deepEqual(mixedSetting(admin).tagPenalty, { inflation: 0.03 });
+  assert.deepEqual(mixedSetting(admin, { tagPenalty: { inflation: 0, scarcity_value: 0.02 } }).tagPenalty, { inflation: 0, scarcity_value: 0.02 });
+  assert.equal(mixedSetting(admin, { tagPenalty: {} }).name, '혼합 (현재 기본값)');
 });
 
 /* ───────────── 식당 홀드아웃 (T-156) ───────────── */
@@ -265,4 +281,28 @@ test('식당 홀드아웃: 다른 평가 문장(메이플·식당 평가셋 포�
     for (const t of tagTexts) assert.ok(jaccard(c.sentence, t) < 0.3, `"${c.sentence}" ↔ 예문 "${t}"`);
     for (const f of facts) assert.ok(jaccard(c.sentence, f) < 0.3, `"${c.sentence}" ↔ 사실 "${f}"`);
   }
+});
+
+/* ───────────── 관심사별 감점 (T-156) ───────────── */
+
+test('maplestory.json에는 tagPenalty가 없다(메이플은 admin.retrieval.tagPenalty만, 결과 불변)', () => {
+  assert.equal('tagPenalty' in rawMaple, false);
+  assert.deepEqual(mergeGraphs(loadCommonGraphFromDisk(), null).tagPenalty, {});
+});
+
+test('mergeGraphs: 공통 그래프의 tagPenalty를 싣는다, 내 관심사(useCommon=false)·없으면 빈 객체', () => {
+  const g = { ...restaurant, tagPenalty: { scarcity_value: 0.02 } };
+  assert.deepEqual(mergeGraphs(g, null).tagPenalty, { scarcity_value: 0.02 });
+  assert.deepEqual(mergeGraphs(g, { useCommon: false, domain: '원신' }).tagPenalty, {});
+  const { tagPenalty, ...noPen } = g;
+  assert.deepEqual(mergeGraphs(noPen, null).tagPenalty, {});
+});
+
+test('validateGraph: tagPenalty는 그래프 태그 id → 0~0.1 숫자인 객체', () => {
+  assert.deepEqual(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: 0.02, inflation: 0 } }), []);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: { nope: 0.02 } }).join(), /tagPenalty.*nope/);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: 0.5 } }).join(), /tagPenalty/);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: -0.01 } }).join(), /tagPenalty/);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: '0.02' } }).join(), /tagPenalty/);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: [0.02] }).join(), /tagPenalty/);
 });

@@ -68,6 +68,17 @@ export function validateGraph(g, { partial = false } = {}) {
     }
     tagIds.add(t.id);
   }
+  // 관심사별 감점(T-156, 선택): 태그 id → 0~0.1 숫자. 공통 그래프는 그 그래프의 태그 id만
+  if (g.tagPenalty !== undefined) {
+    if (!g.tagPenalty || typeof g.tagPenalty !== 'object' || Array.isArray(g.tagPenalty)) {
+      errors.push('tagPenalty(관심사별 감점)는 태그 id → 숫자인 객체여야 해요.');
+    } else {
+      for (const [id, v] of Object.entries(g.tagPenalty)) {
+        if (!partial && !tagIds.has(id)) errors.push(`tagPenalty가 없는 태그를 가리켜요: ${id}`);
+        if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 0.1) errors.push(`tagPenalty ${id} 값은 0~0.1 숫자여야 해요: ${v}`);
+      }
+    }
+  }
   const nodeIds = new Set();
   for (const [i, n] of (g.nodes || []).entries()) {
     if (!n.id || !n.label) errors.push(`nodes[${i}]에 id 또는 label이 없어요.`);
@@ -165,6 +176,8 @@ export function mergeGraphs(common, overlay) {
     analogyPrefix: useCommon ? common.analogyPrefix : (ov.analogyPrefix || `${ov.domain || '내 관심사'}로 치면`),
     // 비유 없음 문구(T-302): 공통 관심사별. 내 관심사면 빈 문자열(말풍선이 기본 문구를 쓴다)
     noMatchText: useCommon ? (common.noMatchText || '') : '',
+    // 관심사별 감점(T-156): 공통 관심사 그래프에 있을 때만. retrievalFor가 admin.retrieval.tagPenalty 위에 덮어쓴다
+    tagPenalty: useCommon ? { ...(common.tagPenalty || {}) } : {},
     sources: {
       common: useCommon ? { id: common.id, version: common.version, tagsVersion: common.tagsVersion ?? null } : null,
       userNodes: reviewedNodes.length,

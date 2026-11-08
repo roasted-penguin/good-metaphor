@@ -44,7 +44,7 @@ npm run eval:fallback            # 모델 없이 같은 평가
 npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장이 하나라도 틀리면 실패. 검색을 바꾸는 PR은 항상 돌린다
 npm run eval -- --holdout         # 평가셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점. 출력 끝에 여유(1·2위 점수 차) < --margin(기본 0.005) 문장 목록, -v면 문장별 여유. --margin-guard면 가드 문장의 작은 여유도 실패(T-150)
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
-npm run eval -- --interest restaurant  # 식당 관심사 평가셋(tools/eval-set-restaurant.json)을 식당 그래프로 채점(가드 없음, --server와 같이 못 씀) (T-302)
+npm run eval -- --interest restaurant  # 식당 관심사 평가셋(tools/eval-set-restaurant.json)을 식당 그래프로 채점(T-302). --guard는 tools/eval-guard-restaurant.json, --holdout은 tools/eval-unseen-restaurant.json(T-156). --server·--margin-guard는 메이플만
 npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
 npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내기를 평가셋·검증셋·가드와 대조(베낀 예문 후보를 거름). 반영 절차는 /approve-corrections
@@ -65,7 +65,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/fallback.js            순위 fallback 체인(길이 제한 없음, 순위는 더 붙을 수 있음) + 429 쿨다운 (ADR 0008)
   lib/stores.js              공통 저장소 로더 `loadCommonGraph(interestId)`(관심사별 캐시, 기본·모르는 id는 메이플, 원격 주소는 메이플만, T-302) + 사용자 저장소 어댑터(none / local-dev / remote)
   lib/graph.js               그래프 병합(공통 + 오버레이), 검증, 임베딩 텍스트
-  lib/retrieval.js           점수 = 직접 유사도 × w1 + 최고 태그 유사도 × w2 + boost
+  lib/retrieval.js           점수 = 직접 유사도 × w1 + 최고 태그 유사도 × w2 + boost. 감점은 `retrievalFor(admin.retrieval, graph)`: 관심사 그래프 `tagPenalty`(선택)가 admin 값을 태그별로 덮어씀(T-156, 메이플 그래프엔 없음)
   lib/pipeline.js            비유 생성 핵심(추상화·프롬프트·호출·규칙 1·근거 검사), 확장과 eval:gen이 같이 씀 (T-104)
   lib/grounding.js           근거 검사: usedFact가 고른 노드 facts와 맞는지 + 비유 숫자가 facts·라벨·원문에 있는지 (T-123)
   lib/feedback.js            말풍선 피드백 층: 문장별 👎 제외·고른 개념 고정, 500건, 캐시 지문 (ADR 0010). `feedbackForGraph`로 지금 그래프에 없는 노드(다른 관심사) 기록은 빼고 쓴다 (T-302)
