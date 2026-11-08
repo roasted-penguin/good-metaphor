@@ -11,7 +11,7 @@ e5-small에서 텍스트·가중치만 고친 첫 판(PR #11 첫 판, 0.3/0.7)�
 - **임베딩 모델** `Xenova/multilingual-e5-base` q8(이전 e5-small). 접두어(`query: `·`passage: `)는 같다.
 - **태그 텍스트** = `라벨: 설명` + `examples`(게임 밖 여러 분야의 짧은 예문 2~3개). 예문은 통제 어휘(규칙 9)를 늘리지 않는다. 평가셋·검증셋 문장을 베끼지 않는다(단위 테스트의 3-gram 자카드 < 0.3).
 - **노드 텍스트** = 노드 태그들의 태그 텍스트(예문 포함)를 앞에, `이름. 사실`을 뒤에.
-- **점수** 가중치는 그대로(`directWeight 0.45`, `tagWeight 0.55`), 경제 태그 감점 `tagPenalty: { inflation: 0.02, market_price: 0.02 }`. `retrieve()`에 `tagAgg`(`max`|`top2mean`)·`tagPenalty` 옵션이 있고 기본값은 이전과 같다.
+- **점수** 가중치는 그대로(`directWeight 0.45`, `tagWeight 0.55`), 경제 태그 감점 `tagPenalty: { inflation: 0.02, market_price: 0.02 }`(2026-11-08 T-135에서 `inflation` 0.03으로, 희소성·단계적 해금 태그 예문 보강과 함께). `retrieve()`에 `tagAgg`(`max`|`top2mean`)·`tagPenalty` 옵션이 있고 기본값은 이전과 같다.
 - **판단 기준(사용자, 2026-11-01)**: 전에 맞던 문장이 틀려지는 것("회귀")은 문장 단위로 보이고, 전체로 많이 맞히면 바꾼다. 틀려진 문장은 따로 작업으로 고친다(T-135).
 
 ## 결과
