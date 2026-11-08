@@ -85,7 +85,8 @@ const isEnglish = s => !/[\uac00-\ud7a3]/.test(s);
 
 test('평가셋: 40문장 이상, 영어 25% 이상, 맞는 비유 없는 문장 5개 이상 (T-103)', () => {
   // 별칭 음성 문장(forbidNodes, T-149)은 한국어 일상어 검사라 따로 센다. 비율은 기존 평가 문장으로만 본다
-  const base = evalSet.filter(c => !c.forbidNodes);
+  // 은어 문장(group slang, T-114·T-152)도 한국어 게임 은어 검사라 비율에서 뺀다(T-152에서 5문장 추가)
+  const base = evalSet.filter(c => !c.forbidNodes && c.group !== 'slang');
   assert.ok(base.length >= 40, `평가셋 ${base.length}문장`);
   const en = base.filter(c => isEnglish(c.sentence)).length;
   assert.ok(en / base.length >= 0.25, `영어 ${en}/${base.length}`);
@@ -182,6 +183,8 @@ test('평가셋 alias-negative: 4문장 이상, forbidNodes는 그래프 id, exp
   }
   // 기존 지표 분모가 그대로: 음성이 아닌 문장 수와 비유 없음 문장 수
   const plain = evalSet.filter(c => !c.forbidNodes);
-  assert.equal(plain.filter(c => c.expectNodes.length).length, 39);
+  // T-152에서 은어 홀드아웃 5문장(starforce)을 더해 39 → 44
+  assert.equal(plain.filter(c => c.expectNodes.length).length, 44);
+  assert.equal(evalSet.filter(c => c.group === 'slang' && c.since === 'T-152').length, 5);
   assert.equal(plain.filter(c => !c.expectNodes.length).length, 5);
 });
