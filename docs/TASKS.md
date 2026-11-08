@@ -58,7 +58,7 @@
 | T-134 | **[사용자 결정]** 평가 도구: 금융 그룹·검증셋·회귀 가드(`--guard`)·결과 고정·질의 재작성 시험 (T-113에서 분리, T-103 선행) | 1 품질 | P0 | 완료 | |
 | D-2 | 로그인 방식과 백엔드 | 결정 | P0 | 보류 | **L3 시작 전에 결정** (추천 d) |
 | T-201 | 사용자 저장소 서버 + remote 어댑터 연결 | 2 계정 | P0 | 대기 | D-2 |
-| T-202 | 그래프 편집 화면 (JSON 대신 폼) | 2 계정 | P1 | 진행 | |
+| T-202 | 그래프 편집 화면 (JSON 대신 폼) | 2 계정 | P1 | 리뷰 | |
 | T-203 | 공통 저장소 원격 배포와 버전 확인 | 2 계정 | P1 | 대기 | T-201 |
 | T-204 | 외부 배포용 API 키 프록시 | 2 계정 | P1 | 보류 | T-402가 서버에서 키를 보관하며 흡수 |
 | D-3 | 공통 저장소 검수 주체와 갱신 주기 | 결정 | P1 | 완료 | 본인 승인, 큰 업데이트마다 |
@@ -552,6 +552,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-08 | T-202 | task/T-202-graph-editor | | 그래프 편집 화면: 설정 "내 저장소"에 내 노드 폼(이름·사실 1~5줄·태그 칩 1~3개·별칭, id는 `u:` 슬러그 자동), 공통 노드 숨기기·가중치 슬라이더(-0.2~0.2), 피드백 가중치는 읽기 전용, 폼은 새 태그를 만들지 않음(규칙 9). JSON은 "고급"으로 접고 저장 때 고친 JSON도 자동 적용(실패면 저장 안 함), 저장 전 `validateOverlay`, 폼이 모르는 필드 보존, 사용자 입력은 textContent로만. 순수 함수 `lib/overlay-form.js`. Opus·medium 서브에이전트(수정 1회: 적용 안 한 JSON이 저장 때 사라짐). 단위 454·e2e 86. |
 | 2026-11-08 | T-135 | task/T-135-e5base-fix | [#45](https://github.com/roasted-penguin/good-metaphor/pull/45) | e5-base 전환으로 틀려진 2문장 다시 맞힘: `scarcity_value` 예문 2개(한정 판매 기념품 되팔기, 소량 인쇄물 웃돈)·`progression_gate` 예문 1개(회원 등급과 자료실), `tagPenalty.inflation` 0.03. 실제 확장 혼합 31→**35/39**, 검증 12→**13/14**, 회귀 없음(메인 세션에서 재현). 평가 문장은 예문에 베끼지 않음. 여유가 작은 문장은 T-150. Opus·medium 서브에이전트. 단위 437·e2e 82. |
 | 2026-11-08 | T-148 | task/T-148-frame-shadow-gaps | [#44](https://github.com/roasted-penguin/good-metaphor/pull/44) | 프레임·shadow 보호 빈틈: 같은 출처 iframe이 부모 문서의 비밀번호 폼 안이면 프레임 전체 꺼짐(`frameElement` 사슬, 다른 출처는 볼 수 없음), 폼 안 하위 요소의 열린 shadow에 숨은 비밀번호 칸도 찾음(`hasPasswordDeep`, 깊이 10·노드 2,000 상한 — 넘으면 없음으로 봄: 큰 폼 전체가 꺼지는 손해가 더 커서), 서브프레임 첫 호버는 테마를 알 때까지 말풍선 지연, 닫을 때 페이지 shadow의 우리 하이라이트 시트 떼기. Opus·medium 서브에이전트. 단위 437·e2e 82. |
 | 2026-11-08 | T-147 | task/T-147-iframe-ux | [#43](https://github.com/roasted-penguin/good-metaphor/pull/43) | iframe 사용감: 프레임마다 `mouse.inside`(문서 밖·iframe 위로 나가면 false, 첫 mousemove 전에도 false)로 다른 프레임 위에서 누른 Alt가 옛 좌표 문장을 트리거하지 않음. 새 explain이 시작되면 background가 같은 탭 모든 프레임에 close-bubble(보낸 프레임 토큰은 무시)로 이전 말풍선 닫기. 가로 260·세로 160 미만 서브프레임은 말풍선·요청 없음(`place.js` `tinyFrame`). Opus·medium 서브에이전트. 단위 432·e2e 78. |
