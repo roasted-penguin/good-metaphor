@@ -951,7 +951,8 @@ test('교정(T-131): 공통 노드 pick은 오버레이를 안 건드리고, 설
   expect(data.exampleCandidates).toEqual([{ tagId: mesoTag, text: S.replace('2026', '[숫자]'), nodeId: 'meso', count: 1 }]);
   expect(data.evalCandidates).toEqual([{ sentence: S.replace('2026', '[숫자]'), expectNodes: ['meso'], expectTag: mesoTag, source: 'pick' }]);
   expect(data.guardCandidates).toEqual([{ sentence: '연락처 [숫자] 로 물으면 금리가 오른 이유를 알려 준다.', expectNodes: ['meso'], source: 'up' }]);
-  const raw = JSON.stringify(data);
+  // 판본·시각 필드에는 연도가 있으니 후보 칸만 본다
+  const raw = JSON.stringify([data.exampleCandidates, data.rejected, data.evalCandidates, data.guardCandidates]);
   for (const bad of ['u:focus', 'u_focus', '2026', '010-1234']) expect(raw).not.toContain(bad);
 });
 

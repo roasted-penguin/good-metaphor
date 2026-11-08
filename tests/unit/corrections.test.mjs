@@ -262,3 +262,32 @@ test('filterEvalCopies(운영자 도구): 평가 문장을 베낀 예문 후보�
   // 원본은 바꾸지 않는다
   assert.equal(ex.exampleCandidates.length, 2);
 });
+
+test('filterEvalCopies: 내보낸 뒤 늘어난 금칙어도 운영자 쪽에서 다시 거른다', () => {
+  const ex = buildCorrectionsExport([pick(S3, 'cube')], graph, { ...meta, blockTerms: [] });
+  const out = filterEvalCopies(ex, [], { blockTerms: [{ term: '세공', status: '승인' }] });
+  assert.deepEqual(out.exampleCandidates, []);
+  assert.deepEqual(out.rejected, [{ tagId: 'prob_upgrade', reason: 'blocked', count: 1 }]);
+  assert.deepEqual(out.evalCandidates, []);
+});
+
+test('buildCorrectionsExport: 공통 태그의 지금 예문(tags.json)과 거의 같은 후보는 duplicate', () => {
+  const g = { ...graph, tags: graph.tags.map(t => (t.id === 'prob_upgrade' ? { ...t, examples: [S3] } : t)) };
+  const ex = buildCorrectionsExport([pick(S3 + ' ', 'cube')], g, meta);
+  assert.deepEqual(ex.exampleCandidates, []);
+  assert.deepEqual(ex.rejected, [{ tagId: 'prob_upgrade', reason: 'duplicate', count: 1 }]);
+});
+
+test('운영자 도구(tools/check-corrections.mjs): 평가셋·검증셋·가드 문장을 모두 읽고, 베낀 예문 후보를 거른다', async () => {
+  const { evalSentencesFromDisk, blockTermsFromDisk } = await import('../../tools/check-corrections.mjs');
+  const { readFileSync } = await import('node:fs');
+  const read = f => JSON.parse(readFileSync(new URL(`../../tools/${f}`, import.meta.url), 'utf8'));
+  const all = evalSentencesFromDisk();
+  for (const s of [read('eval-set.json')[0].sentence, read('eval-holdout.json')[0].sentence, read('eval-guard.json').at(-1)]) assert.ok(all.includes(s), s);
+  assert.ok(blockTermsFromDisk().length > 0);
+  const holdout = read('eval-holdout.json')[0].sentence;
+  const ex = buildCorrectionsExport([pick(holdout, 'cube'), pick(S3, 'cube', { ts: 1e9 })], graph, meta);
+  const out = filterEvalCopies(ex, all);
+  assert.deepEqual(out.exampleCandidates.map(c => c.text), [S3]);
+  assert.deepEqual(out.rejected, [{ tagId: 'prob_upgrade', reason: 'copies-eval', count: 1 }]);
+});
