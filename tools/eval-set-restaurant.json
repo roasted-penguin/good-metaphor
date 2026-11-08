@@ -1,0 +1,23 @@
+[
+  { "sentence": "통신망은 퇴근길 저녁 시간대에 접속이 몰려 속도가 느려진다.", "expectNodes": ["lunch_peak"], "expectTag": "periodic_cap" },
+  { "sentence": "기름값이 뛰자 택배 회사들이 결국 배송비를 올렸다.", "expectNodes": ["ingredient_cost"], "expectTag": "inflation" },
+  { "sentence": "영화관은 관객이 적은 평일 아침 상영을 조조할인으로 싸게 판다.", "expectNodes": ["happy_hour"], "expectTag": "temporary_multiplier" },
+  { "sentence": "콘서트 굿즈는 준비한 물량이 바닥나면 그날 판매가 끝난다.", "expectNodes": ["limited_menu"], "expectTag": "scarcity_value" },
+  { "sentence": "항공 마일리지는 탈 때마다 쌓이고 제휴사에서도 쓸 수 있지만 기한을 넘기면 없어진다.", "expectNodes": ["loyalty_points"], "expectTag": "daily_accumulation" },
+  { "sentence": "오픈마켓은 판매자가 물건을 팔 때마다 판매 금액의 일부를 떼어 간다.", "expectNodes": ["delivery_fee"], "expectTag": "expected_value" },
+  { "sentence": "진료 예약을 하고 나타나지 않으면 병원은 그 시간을 다른 환자에게 줄 수 없어 손해를 본다.", "expectNodes": ["no_show"], "expectTag": "loss_risk" },
+  { "sentence": "편의점 직원은 유통기한이 가까운 우유를 진열대 앞줄로 꺼내 놓는다.", "expectNodes": ["fifo_storage"], "expectTag": "loss_risk" },
+  { "sentence": "어린이집은 평가에서 기준 점수를 넘겨야 인증을 받고, 인증 뒤에도 관리 점검을 받는다.", "expectNodes": ["hygiene_grade", "model_restaurant"], "expectTag": "threshold_req" },
+  { "sentence": "운전면허 시험은 안전 교육을 먼저 이수해야 응시할 수 있다.", "expectNodes": ["open_prep"], "expectTag": "progression_gate" },
+  { "sentence": "같은 곳에 불법 주차를 거듭할수록 처분이 점점 무거워진다.", "expectNodes": ["hygiene_inspection"], "expectTag": "escalating_cost" },
+  { "sentence": "영화 촬영장에서는 촬영, 조명, 편집 팀이 일을 나눠 맡고 감독이 전체를 지휘한다.", "expectNodes": ["kitchen_division"], "expectTag": "role_division" },
+  { "sentence": "유튜브 채널을 넘길 때는 그동안 쌓은 구독자의 가치까지 값으로 쳐서 받는다.", "expectNodes": ["key_money"], "expectTag": "shared_bonus" },
+  { "sentence": "주유소는 도로에서 잘 보이도록 기름값을 큰 판에 걸어 둔다.", "expectNodes": ["price_board"], "expectTag": "threshold_req" },
+  { "sentence": "스타포스 이벤트 기간에는 강화 비용이 할인돼 유저들이 그때 몰아서 강화한다.", "expectNodes": ["happy_hour"], "expectTag": "temporary_multiplier", "group": "maple" },
+  { "sentence": "메소 시세가 떨어져서 같은 아이템을 사려면 메소가 훨씬 더 든다.", "expectNodes": ["ingredient_cost"], "expectTag": "inflation", "group": "maple" },
+  { "sentence": "보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.", "expectNodes": ["kitchen_division"], "expectTag": "role_division", "group": "maple" },
+  { "sentence": "경매장에서 아이템이 팔리면 판매 대금에서 수수료가 빠진다.", "expectNodes": ["delivery_fee"], "expectTag": "expected_value", "group": "maple" },
+  { "sentence": "주간 보스 결정석은 한 주에 팔 수 있는 개수가 정해져 있다.", "expectNodes": ["limited_menu", "lunch_peak"], "expectTag": "periodic_cap", "group": "maple" },
+  { "sentence": "Airlines overbook flights because some passengers never show up and their seats would fly empty.", "expectNodes": ["no_show"], "expectTag": "loss_risk", "group": "en" },
+  { "sentence": "Gyms get packed right after office hours, so members queue for every machine.", "expectNodes": ["lunch_peak"], "expectTag": "periodic_cap", "group": "en" }
+]

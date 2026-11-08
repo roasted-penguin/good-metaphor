@@ -1,10 +1,11 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.09-3",
+  "version": "2026.11.09-4",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
+  "noMatchText": "메이플스토리에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.",
   "note": "공통 저장소 샘플. 사실(facts)은 시스템의 일반적인 구조만 적고, 수치·확률표처럼 자주 바뀌는 값은 넣지 않는다. 추상 태그 정의는 같은 폴더 tags.json에 있고, 노드 tags에는 그 id만 적는다(T-304).",
   "nodes": [
     {
