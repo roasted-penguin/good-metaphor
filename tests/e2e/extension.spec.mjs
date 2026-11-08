@@ -992,6 +992,11 @@ test('그래프 편집(T-202): 태그 없는 노드는 저장되지 않고 필�
   await expect(myNode(page, 'u:json_node')).toHaveCount(1);
   await expect(page.locator('#myNodeList li')).toHaveCount(1);
 
+  // 고급 칸에 틀린 JSON이 남아 있으면 저장하지 않는다(고친 JSON은 저장 때도 적용되므로) → 맞는 JSON으로 되돌리고 저장
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toHaveClass(/err/);
+  expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
+  await page.fill('#overlay', JSON.stringify(json));
   await page.click('#saveOverlay');
   await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
   const ov = (await send({ type: 'overlay:get' })).data;
@@ -1009,6 +1014,64 @@ test('그래프 편집(T-202): 태그 없는 노드는 저장되지 않고 필�
   await page.click('#useCommonSeg input[value="false"] + span');
   await expect(page.locator('#commonNodesBox')).toBeHidden();
   await expect(page.locator('#overlayStatus')).toHaveText('바뀐 내용을 저장하세요.');
+});
+
+test('그래프 편집(T-202): 고급 JSON을 고치고 "JSON 적용" 없이 저장해도 반영(내 태그 추가), 깨진 JSON이면 저장 안 함', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '편집자' });
+  await page.reload();
+  await expect(page.locator('#loggedIn')).toBeVisible();
+  await page.click('#advanced summary');
+  await expect(page.locator('#advanced')).toContainText('feedbackBoosts는 저장 때 기록 값으로 덮여요.');
+
+  // JSON에서 내 태그를 더하고 바로 저장
+  const json = JSON.parse(await page.inputValue('#overlay'));
+  json.tags = [{ id: 'u_focus', label: '몰입 시간' }];
+  await page.fill('#overlay', JSON.stringify(json, null, 2));
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  expect((await send({ type: 'overlay:get' })).data.tags).toEqual([{ id: 'u_focus', label: '몰입 시간' }]);
+  await expect(page.locator('#nfTags [data-tag="u_focus"]')).toHaveText('몰입 시간'); // 폼에도 반영
+
+  // 깨진 JSON + 저장 → 아무것도 저장하지 않고 오류
+  await page.fill('#overlay', '{ "tags": [');
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toHaveClass(/err/);
+  await expect(page.locator('#jsonStatus')).toContainText('JSON 오류');
+  expect((await send({ type: 'overlay:get' })).data.tags).toEqual([{ id: 'u_focus', label: '몰입 시간' }]);
+  // 검증 실패 JSON + 저장도 마찬가지
+  await page.fill('#overlay', JSON.stringify({ tags: [], nodes: [{ id: 'bad', label: 'a', facts: ['f'], tags: ['cooldown'] }] }));
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toHaveClass(/err/);
+  await expect(page.locator('#jsonStatus')).toContainText('u:');
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes).toEqual([]);
+  expect(ov.tags).toEqual([{ id: 'u_focus', label: '몰입 시간' }]);
+});
+
+test('그래프 편집(T-202): 사전에 없는 태그는 지울 수 있는 칩으로 보이고, 범위 밖 가중치는 잘라서 보인다', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '편집자' });
+  const overlay = { nodeBoosts: { auction: 0.5 }, nodes: [{ id: 'u:ghost', label: '유령 태그 노드', facts: ['사실.'], tags: ['ghost_tag', 'cooldown'] }] };
+  expect((await send({ type: 'overlay:save', overlay })).data.ok).toBe(true);
+  await page.reload();
+  await expect(page.locator('#loggedIn')).toBeVisible();
+  await expect(commonNode(page, 'auction').locator('.ov-boost-val')).toHaveText('+0.20');
+
+  await myNode(page, 'u:ghost').locator('.ov-edit').click();
+  const ghost = page.locator('#nfTags [data-tag="ghost_tag"]');
+  await expect(ghost).toHaveAttribute('aria-pressed', 'true');
+  await expect(ghost).toHaveClass(/unknown/);
+  await ghost.click();
+  await expect(ghost).toHaveCount(0); // 빼면 사라진다
+  await page.click('#nfApply');
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  expect((await send({ type: 'overlay:get' })).data.nodes[0].tags).toEqual(['cooldown']);
+
+  // 예시 문구
+  await page.click('#insertSample');
+  await expect(page.locator('#overlayStatus')).toHaveText('예시를 폼에 채웠어요. 저장하면 반영돼요.');
 });
 
 test('정밀 모드, 데모 제공자, 키 없음 오류', async ({ ext }) => {

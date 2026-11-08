@@ -97,8 +97,13 @@ export function setHidden(ov, id, hidden) {
 }
 
 // 가중치: -0.2~0.2, 소수 둘째 자리. 0이면 키를 지워 JSON을 깔끔하게 둔다
+// 가중치 값 하나를 -0.2~0.2, 소수 둘째 자리로. 숫자가 아니면 0 (저장과 화면 표시가 같이 씀)
+export function clampBoost(value) {
+  return Math.round(Math.min(BOOST_MAX, Math.max(BOOST_MIN, Number(value) || 0)) * 100) / 100;
+}
+
 export function setBoost(ov, id, value) {
-  const v = Math.round(Math.min(BOOST_MAX, Math.max(BOOST_MIN, Number(value) || 0)) * 100) / 100;
+  const v = clampBoost(value);
   const nodeBoosts = { ...(ov.nodeBoosts || {}) };
   if (v === 0) delete nodeBoosts[id]; else nodeBoosts[id] = v;
   return { ...ov, nodeBoosts };

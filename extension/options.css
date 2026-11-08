@@ -137,3 +137,4 @@ textarea.nf-facts { font: inherit; min-height: 90px; }
 .ov-advanced { margin-top: 14px; }
 .ov-advanced > .hint { margin: 8px 0; }
 @media (max-width: 640px) { .ov-form .grid > label { padding-top: 0; } .ov-boost { width: 96px; } .ov-boost-wrap { min-width: 0; } }
+.chip-btn.unknown { border-style: dashed; border-color: var(--err); color: var(--err); background: none; }

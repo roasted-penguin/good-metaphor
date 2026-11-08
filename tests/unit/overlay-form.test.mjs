@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  makeNodeId, formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost,
+  makeNodeId, formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost,
   tagChoices, SAMPLE_FORM, FORM_LIMITS
 } from '../../extension/lib/overlay-form.js';
 import { validateOverlay } from '../../extension/lib/stores.js';
@@ -157,4 +157,12 @@ test('tagChoices: 공통 태그 사전 + 내 태그, id 중복은 한 번만', (
     { id: 'u_c', label: '다', source: 'user' }
   ]);
   assert.deepEqual(tagChoices(undefined, undefined), []);
+});
+
+test('clampBoost: 화면에 보일 가중치도 -0.2~0.2, 소수 둘째 자리, 숫자가 아니면 0', () => {
+  assert.equal(clampBoost(0.5), 0.2);
+  assert.equal(clampBoost(-9), -0.2);
+  assert.equal(clampBoost('0.034'), 0.03);
+  assert.equal(clampBoost('abc'), 0);
+  assert.equal(clampBoost(undefined), 0);
 });
