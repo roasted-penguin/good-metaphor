@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cosine, retrieve, topTags, feedbackAdjust } from '../../extension/lib/retrieval.js';
+import { cosine, retrieve, topTags, feedbackAdjust, tagSimilarity } from '../../extension/lib/retrieval.js';
 
 // 3차원 장난감 그래프: 태그 경유 점수가 순위를 뒤집는지 본다
 const graph = {
@@ -339,4 +339,34 @@ test('retrieve: 강한 별칭과 약한 별칭이 함께 맞아도 가산은 한
   const base = all({});
   const hit = all({ aliasBoost: 0.08, aliasText: '프텍 걸고 펑 났다' });
   assert.ok(Math.abs(hit.n2 - base.n2 - 0.08) < 1e-4);
+});
+
+/* ───────────── 태그 벡터 여러 개 (T-154 tagVectorMode 'max') ───────────── */
+
+test('tagSimilarity: tag:<id> 하나면 그 코사인, #1·#2…가 있으면 최대값, 빈 번호에서 멈춘다', () => {
+  const v = new Map([['tag:A', [0, 1, 0]], ['tag:A#1', [1, 0, 0]], ['tag:A#3', [1, 0, 0]]]);
+  assert.equal(tagSimilarity([0, 1, 0], 'A', v), 1);
+  assert.equal(tagSimilarity([1, 0, 0], 'A', v), 1);  // #1
+  assert.equal(tagSimilarity([0, 0, 1], 'A', v), 0);
+  const v2 = new Map([['tag:A', [0, 1, 0]], ['tag:A#2', [1, 0, 0]]]);
+  assert.equal(tagSimilarity([1, 0, 0], 'A', v2), 0);  // #1이 없으면 #2는 보지 않는다
+  assert.equal(tagSimilarity([1, 0, 0], 'Z', v2), undefined); // 벡터가 없으면 undefined
+});
+
+test('retrieve: 예문 벡터(tag:<id>#n)가 없으면 결과가 이전과 완전히 같다', () => {
+  for (const opts of [{}, { topK: 2 }, tagOnly]) {
+    assert.deepEqual(retrieve(q, graph, vecs, opts), retrieve(q, graph, new Map(vecs), opts));
+  }
+  // 이전 구현과 같은 값: n1의 태그 유사도 = cosine(q, tag:A)
+  const [top] = retrieve(q, graph, vecs, { topK: 1 });
+  assert.equal(top.tag.sim, +cosine(q, [1, 0, 0]).toFixed(4));
+});
+
+test('retrieve·topTags: 예문 벡터가 있으면 태그 유사도는 설명·예문 중 최대값', () => {
+  // 태그 B의 예문 하나가 q와 같은 방향 → B 유사도 1, 태그 경유만이면 n2가 1위
+  const vm = new Map([...vecs, ['tag:B#1', q]]);
+  const r = retrieve(q, graph, vm, tagOnly);
+  assert.equal(r[0].id, 'n2');
+  assert.equal(r[0].tag.sim, 1);
+  assert.deepEqual(topTags(q, graph, vm, 2).map(t => [t.id, t.sim]), [['B', 1], ['A', +cosine(q, [1, 0, 0]).toFixed(4)]]);
 });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mergeGraphs, validateGraph, nodeText, tagText } from '../../extension/lib/graph.js';
+import { mergeGraphs, validateGraph, nodeText, tagText, tagDescText, embedItems } from '../../extension/lib/graph.js';
 import { validateOverlay } from '../../extension/lib/stores.js';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
 
@@ -244,4 +244,49 @@ test('mergeGraphs: 공통 노드의 sources·verifiedAt이 병합 결과에 남�
   const g = mergeGraphs({ ...provGraph({}), id: 'c', version: '1', analogyPrefix: 'p' }, null);
   assert.equal(g.nodes[0].verifiedAt, '2026-10-11');
   assert.deepEqual(g.nodes[0].sources, PROV.sources);
+});
+
+/* ───────────── 노드 텍스트·태그 벡터 방식 (T-154, ADR 0013) ───────────── */
+
+test('embedItems 기본값: 키·텍스트가 예전 구성(tag:<id> = tagText, node:<id> = nodeText)과 바이트 단위로 같다', () => {
+  const g = mergeGraphs(common, null);
+  const tagMap = new Map(g.tags.map(t => [t.id, t]));
+  const before = [
+    ...g.tags.map(t => ({ key: 'tag:' + t.id, text: tagText(t) })),
+    ...g.nodes.map(n => ({ key: 'node:' + n.id, text: nodeText(n, tagMap) }))
+  ];
+  assert.deepEqual(embedItems(g), before);
+  assert.deepEqual(embedItems(g, {}), before);
+  assert.deepEqual(embedItems(g, { nodeTextMode: 'full', tagVectorMode: 'joined' }), before);
+  // 알 수 없는 값은 기본값으로 친다
+  assert.deepEqual(embedItems(g, { nodeTextMode: '?', tagVectorMode: '?' }), before);
+});
+
+test('nodeText desc 모드: 태그 라벨·설명 + 이름 + 사실, 예문은 빠진다', () => {
+  const tagMap = new Map([['t', { id: 't', label: '라벨', desc: '설명', examples: ['예문 하나', '예문 둘'] }]]);
+  const n = { id: 'x', label: '노드', facts: ['사실1.', '사실2.'], tags: ['t'] };
+  assert.equal(nodeText(n, tagMap, { mode: 'desc' }), '라벨: 설명 노드. 사실1. 사실2.');
+  assert.equal(nodeText(n, tagMap, { mode: 'full' }), nodeText(n, tagMap));
+  assert.equal(nodeText(n, tagMap), '라벨: 설명 예문 하나 예문 둘 노드. 사실1. 사실2.');
+});
+
+test('tagDescText: 라벨: 설명 (예문 없음)', () => {
+  assert.equal(tagDescText({ id: 'x', label: '라벨', desc: '설명', examples: ['예'] }), '라벨: 설명');
+  assert.equal(tagDescText({ id: 'x', label: '라벨' }), '라벨:');
+});
+
+test('embedItems max 모드: tag:<id>는 설명만, 예문마다 tag:<id>#<n>(1부터), 노드는 nodeTextMode대로', () => {
+  const g = {
+    tags: [{ id: 'a', label: 'A', desc: '설명A', examples: ['예1', '예2'] }, { id: 'b', label: 'B', desc: '설명B' }],
+    nodes: [{ id: 'n', label: '노드', facts: ['사실.'], tags: ['a', 'b'] }]
+  };
+  assert.deepEqual(embedItems(g, { tagVectorMode: 'max' }), [
+    { key: 'tag:a', text: 'A: 설명A' }, { key: 'tag:a#1', text: '예1' }, { key: 'tag:a#2', text: '예2' },
+    { key: 'tag:b', text: 'B: 설명B' },
+    { key: 'node:n', text: 'A: 설명A 예1 예2 B: 설명B 노드. 사실.' }
+  ]);
+  assert.deepEqual(embedItems(g, { tagVectorMode: 'max', nodeTextMode: 'desc' }).at(-1), { key: 'node:n', text: 'A: 설명A B: 설명B 노드. 사실.' });
+  assert.deepEqual(embedItems(g, { nodeTextMode: 'desc' }).slice(0, 2), [
+    { key: 'tag:a', text: 'A: 설명A 예1 예2' }, { key: 'tag:b', text: 'B: 설명B' }
+  ]);
 });

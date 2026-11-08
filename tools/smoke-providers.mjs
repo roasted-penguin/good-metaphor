@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import { PROVIDERS, complete, parseJSONLoose } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, buildAnalogyPrompt, extractMeaning } from '../extension/lib/prompt.js';
-import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
+import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
@@ -26,11 +26,7 @@ const SENTENCES = [
 ];
 
 const graph = mergeGraphs(common, null);
-const tagMap = new Map(graph.tags.map(t => [t.id, t]));
-const vecs = new Map([
-  ...graph.tags.map(t => ['tag:' + t.id, hashEmbed(tagText(t))]),
-  ...graph.nodes.map(n => ['node:' + n.id, hashEmbed(nodeText(n, tagMap))])
-]);
+const vecs = new Map(embedItems(graph, admin.retrieval).map(it => [it.key, hashEmbed(it.text)])); // 확장과 같은 구성 (T-154)
 
 // 로컬 제공자(Ollama)는 키 대신 서버가 떠 있는지로 판단한다
 async function reachable(baseUrl) {

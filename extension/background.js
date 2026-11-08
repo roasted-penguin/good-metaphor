@@ -2,7 +2,7 @@
 import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './lib/config.js';
 import { complete, PROVIDERS } from './lib/providers.js';
 import { buildChain, completeWithFallback } from './lib/fallback.js';
-import { mergeGraphs, tagText, nodeText, sha1 } from './lib/graph.js';
+import { mergeGraphs, embedItems, sha1 } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes } from './lib/feedback.js';
@@ -78,11 +78,9 @@ async function ensureGraphVectors(graph) {
   const init = await keepAlive(offscreen('init'));
   const embedderId = init.embedderId;
   const cache = await loadVecCache();
-  const tagMap = new Map(graph.tags.map(t => [t.id, t]));
-  const items = [
-    ...graph.tags.map(t => ({ key: 'tag:' + t.id, text: tagText(t) })),
-    ...graph.nodes.map(n => ({ key: 'node:' + n.id, text: nodeText(n, tagMap) }))
-  ];
+  const admin = await getAdminConfig();
+  // 노드 텍스트·태그 벡터 방식은 admin.retrieval(nodeTextMode·tagVectorMode)을 따른다. 평가 도구와 같은 함수 (T-154)
+  const items = embedItems(graph, admin.retrieval);
   for (const it of items) it.cacheKey = `${embedderId}|${await sha1(it.text)}`;
   const missing = items.filter(it => !cache.has(it.cacheKey));
   if (missing.length) {
@@ -92,7 +90,6 @@ async function ensureGraphVectors(graph) {
   // 정리(T-110): 이번 키를 최근 사용으로 옮기고, 다른 임베더 항목과 상한 초과분을 지운다(이번 키는 지키고)
   const used = items.map(it => it.cacheKey);
   touch(cache, used);
-  const admin = await getAdminConfig();
   const { cache: pruned, removed } = pruneVecCache(cache, { embedderId, max: admin.vecCacheMax ?? VEC_CACHE_MAX, keep: new Set(used) });
   // 임베딩을 기다리는 사이 "캐시 지우기"나 다른 호출이 vecMem을 바꿨으면 덮어쓰지 않는다(이번 결과 vecs는 그대로 쓴다)
   if (vecMem === cache) {

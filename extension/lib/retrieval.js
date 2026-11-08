@@ -133,9 +133,26 @@ export function mapleCue(text, graph) {
 }
 
 /**
+ * 질의와 태그 하나의 유사도 (T-154). 'tag:<id>' 벡터에 더해 'tag:<id>#1', '#2'…(tagVectorMode 'max'의 예문 벡터)가
+ * 있으면 그중 최대값. 번호는 1부터 빈 곳에서 멈춘다. 예문 벡터가 없으면 cosine(q, tag:<id>) 그대로(이전과 같다).
+ * 벡터가 하나도 없으면 undefined
+ */
+export function tagSimilarity(q, id, vecs) {
+  const v = vecs.get('tag:' + id);
+  let best = v ? cosine(q, v) : undefined;
+  for (let i = 1; ; i++) {
+    const e = vecs.get(`tag:${id}#${i}`);
+    if (!e) break;
+    const s = cosine(q, e);
+    if (best === undefined || s > best) best = s;
+  }
+  return best;
+}
+
+/**
  * @param {number[]} q        질의 벡터
  * @param {object} graph      mergeGraphs 결과
- * @param {Map} vecs          'tag:<id>' | 'node:<id>' -> 벡터
+ * @param {Map} vecs          'tag:<id>' | 'tag:<id>#<n>'(예문 벡터, T-154) | 'node:<id>' -> 벡터
  * @param {object} opts       { topK, directWeight, tagWeight, tagAgg, tagPenalty, feedbackMemory, feedbackQuery, feedbackSim, feedbackMax }
  *   tagAgg      'max'(가장 높은 태그) | 'top2mean'(상위 2개 평균, 태그 1개면 그 값)
  *   tagPenalty  태그 id -> 태그 유사도에서 뺄 값. 주제가 넓은 태그(예: 경제)로 쏠리는 것을 줄인다 (T-113)
@@ -157,8 +174,8 @@ export function retrieve(q, graph, vecs, {
   const fb = feedbackMemory?.length ? feedbackAdjust(feedbackQuery || q, feedbackMemory, { sim: feedbackSim, max: feedbackMax }) : null;
   const tagSim = new Map();
   for (const t of graph.tags) {
-    const v = vecs.get('tag:' + t.id);
-    if (v) tagSim.set(t.id, cosine(q, v));
+    const s = tagSimilarity(q, t.id, vecs);
+    if (s !== undefined) tagSim.set(t.id, s);
   }
 
   const scored = graph.nodes.map(n => {
@@ -214,7 +231,7 @@ function feedbackField(delta) {
 
 export function topTags(q, graph, vecs, k = 5) {
   return graph.tags
-    .map(t => ({ id: t.id, label: t.label, sim: vecs.get('tag:' + t.id) ? cosine(q, vecs.get('tag:' + t.id)) : 0 }))
+    .map(t => ({ id: t.id, label: t.label, sim: tagSimilarity(q, t.id, vecs) ?? 0 }))
     .sort((a, b) => b.sim - a.sim)
     .slice(0, k)
     .map(t => ({ ...t, sim: +t.sim.toFixed(4) }));
