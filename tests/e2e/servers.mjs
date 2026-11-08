@@ -72,8 +72,8 @@ function streamOut(res, cors, content) {
   }, cut > 1 ? STREAM_GAP_MS : 0);
 }
 
-// /frame.html·/masked.html 은 iframe 픽스처(T-111), 그 밖의 주소는 모두 테스트 페이지
-const FIXTURES = { '/frame.html': './frame.html', '/masked.html': './masked.html' };
+// /frame.html·/masked.html·/pwframe.html 은 iframe 픽스처(T-111, T-148), 그 밖의 주소는 모두 테스트 페이지
+const FIXTURES = { '/frame.html': './frame.html', '/masked.html': './masked.html', '/pwframe.html': './pwframe.html' }; // pwframe: T-148
 function staticPage(req, res) {
   const file = FIXTURES[new URL(req.url, 'http://x').pathname] ?? './page.html';
   // masked.html: 최상위를 불투명 출처(CSP sandbox, allow-same-origin 없음)·no-referrer 로 →

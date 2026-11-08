@@ -1686,3 +1686,82 @@ test('iframe(T-147): 작은(200×120) iframe 문장은 Alt+호버해도 요청 0
   expect(sentCount() - before, '요청 0').toBe(0);
   expect(await tooltip(page), '최상위에도 없음').toBeFalsy();
 });
+
+/* ───────── 프레임·shadow 보호 빈틈 (T-148) ───────── */
+test('iframe(T-148): 부모 문서의 비밀번호 폼 안 같은 출처 iframe 문장은 요청 0, 부모 폼에 나중에 칸이 생겨도 막고, 폼 밖 iframe 은 정상', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/pwframe.html');
+  const before = sentCount();
+  const frame = await altHoverFrame(page, '#fr-pw', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '부모 비밀번호 폼 안 iframe 문장은 보내지 않음').toBe(0);
+
+  // 시작 때는 칸이 없던 부모 폼에 비밀번호 칸이 생기면 다음 트리거에서 다시 검사해 막는다
+  await frameOf(page, '#fr-late');
+  await page.evaluate(() => { const i = document.createElement('input'); i.type = 'password'; document.getElementById('late-form').appendChild(i); });
+  const late = await altHoverFrame(page, '#fr-late', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(late), '나중에 생긴 칸도 막음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('같은출처프레임테스트')), '그 문장 요청 없음').toBe(false);
+
+  // 같은 페이지의 폼 밖 iframe 은 정상(모든 프레임을 막는 게 아님)
+  const ok = await altHoverFrame(page, '#fr-ok', '#fb');
+  await expect.poll(() => tooltip(ok)).toContain('같은 구조예요');
+});
+
+test('비밀번호 폼(T-148): 폼 안 호스트의 열린 shadow(2겹) 안에만 비밀번호 칸이 있어도 폼의 light DOM 문장은 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // content.js 가 준비된 뒤 호버
+  await page.locator('#pdeep').scrollIntoViewIfNeeded();
+  const before = sentCount();
+  await altHover(page, '#pdeep');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '말풍선 없음').toBeFalsy();
+  expect(await hlText(page), '강조 없음').toBeNull();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('깊은비밀번호테스트'))).toBe(false);
+});
+
+test('테마(T-148): 중립 관심사면 서브프레임 첫 호버 로딩 말풍선부터 t-neutral, t-maple은 한 번도 없음', async ({ context, ext }) => {
+  await ext.send({ type: 'auth:login', nickname: '테스터' });
+  expect((await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY })).data.ok).toBe(true);
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  // #fc(셋째 문단)가 잘리지 않게 프레임을 키운다(크기만 바뀌고 다시 로드되지 않음)
+  await page.evaluate(() => { document.getElementById('fr-same').style.height = '320px'; });
+  const { frame } = await frameOf(page, '#fr-same');
+  expect(await contentTheme(frame), '전제: 서브프레임은 아직 테마를 모름').toBeNull();
+  await recordBoxClasses(frame);
+  await altHoverFrame(page, '#fr-same', '#fc');
+  await expect.poll(async () => (await boxLog(frame)).some(e => e.loading && e.cls.includes('show')), { message: '로딩 말풍선이 보임' }).toBe(true);
+  await expect.poll(() => tooltip(frame), { timeout: 15_000 }).toContain('축구로 보면');
+  const log = await boxLog(frame);
+  expect(log.filter(e => e.cls.includes('t-maple')), JSON.stringify(log)).toEqual([]);
+  expect(log.filter(e => e.cls.includes('box ')).every(e => e.cls.includes('t-neutral')), JSON.stringify(log)).toBe(true);
+});
+
+test('Shadow DOM(T-148): 말풍선을 닫으면 그 root 에서 우리 강조 시트만 빠지고(페이지 시트 보존), 다시 호버하면 하나만 다시 붙는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const sheets = () => page.evaluate(() => document.getElementById('sh-open').shadowRoot.adoptedStyleSheets.map(s => [...s.cssRules].map(r => r.cssText).join(' ')));
+  const ours = list => list.filter(t => t.includes('::highlight(good-metaphor-hl)')).length;
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(ours(await sheets())).toBe(1);
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => ours(await sheets()), { message: '닫으면 우리 시트 없음' }).toBe(0);
+  const left = await sheets();
+  expect(left).toHaveLength(1);
+  expect(left[0], '페이지 시트는 그대로').toContain('rgb(0, 0, 200)');
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('sh-open').shadowRoot.getElementById('so')).color)).toBe('rgb(0, 0, 200)');
+
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => hlText(page)).toContain('열린섀도테스트');
+  const again = await sheets();
+  expect(ours(again), '다시 호버하면 하나').toBe(1);
+  expect(again).toHaveLength(2);
+});

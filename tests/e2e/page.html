@@ -44,4 +44,13 @@
 <iframe id="fr-cross" src="http://localhost:8766/frame.html" style="border:0;width:700px;height:200px;display:block"></iframe>
 <!-- T-147: 광고 크기(200×120) iframe. 작은 프레임에서는 말풍선도 요청도 없어야 한다 -->
 <iframe id="fr-tiny" src="/frame.html" style="border:0;width:200px;height:120px;display:block"></iframe>
+<!-- T-148: 폼의 light DOM 문장, 비밀번호 칸은 폼 안 호스트의 열린 shadow 안 shadow(2겹)에만 있음(form.elements 에 안 잡힘) -->
+<form id="pw-deep-form" onsubmit="return false"><p id="pdeep">깊은비밀번호테스트 이 폼의 비밀번호 칸은 컴포넌트 안에 숨어 있다.</p><div id="sh-pwdeep"></div></form>
+<script>
+  (() => {
+    const outer = document.getElementById('sh-pwdeep').attachShadow({ mode: 'open' });
+    outer.innerHTML = '<div id="pw-inner"></div>';
+    outer.getElementById('pw-inner').attachShadow({ mode: 'open' }).innerHTML = '<input type="password">';
+  })();
+</script>
 </body></html>

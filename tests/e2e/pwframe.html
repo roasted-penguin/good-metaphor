@@ -1,0 +1,6 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>부모 비밀번호 폼 프레임 테스트</title></head><body>
+<!-- T-148: 비밀번호 칸이 있는 부모 폼 안의 같은 출처 iframe(막아야 함), 처음엔 비밀번호 칸이 없는 폼 안 iframe(테스트가 나중에 칸을 넣음), 폼 밖 iframe(정상) -->
+<form id="pw-parent" onsubmit="return false"><input type="password"><iframe id="fr-pw" src="/frame.html" style="border:0;width:700px;height:200px;display:block"></iframe></form>
+<form id="late-form" onsubmit="return false"><iframe id="fr-late" src="/frame.html" style="border:0;width:700px;height:200px;display:block"></iframe></form>
+<iframe id="fr-ok" src="/frame.html" style="border:0;width:700px;height:200px;display:block"></iframe>
+</body></html>
