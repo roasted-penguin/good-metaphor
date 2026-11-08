@@ -168,6 +168,14 @@ export function validateOverlay(ov) {
   if (ov.useCommon === false && !ov.domain) errors.push('공통 그래프를 끄려면 domain(내 관심사 이름)이 필요해요.');
   for (const n of ov.nodes || []) {
     if (n.id && !String(n.id).startsWith('u:')) errors.push(`내 노드 id는 "u:"로 시작해야 해요: ${n.id}`);
+    // 검수 대기 표시(T-301): draft는 boolean, 초안이면 factsReviewed가 facts와 같은 길이의 boolean 배열
+    if (n.draft !== undefined && typeof n.draft !== 'boolean') errors.push(`노드 ${n.id}의 draft는 true 또는 false여야 해요.`);
+    else if (n.factsReviewed !== undefined || n.draft === true) {
+      const rv = n.factsReviewed;
+      if (!Array.isArray(rv) || !rv.every(v => typeof v === 'boolean') || rv.length !== (Array.isArray(n.facts) ? n.facts.length : -1)) {
+        errors.push(`노드 ${n.id}의 factsReviewed는 사실 수만큼의 true/false 배열이어야 해요.`);
+      }
+    }
   }
   return errors;
 }

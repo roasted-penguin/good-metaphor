@@ -4,7 +4,7 @@ import { test as base, expect, chromium } from '@playwright/test';
 import { mkdtempSync, readFileSync, cpSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startServers, calls, analogyCalls, SERVER_ANALOGY, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING } from './servers.mjs';
+import { startServers, calls, analogyCalls, SERVER_ANALOGY, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES } from './servers.mjs';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
 import { openBrowserEmbedder } from '../../tools/browser-embedder.mjs';
 
@@ -2153,4 +2153,189 @@ test('제보 제외(T-118): 서버 결과 근거가 제보 제외 노드면 로�
   expect(r2.data.source).toBe('local');
   expect(r2.data.debug.server).toEqual({ used: false, reason: 'reported' });
   expect(r2.data.debug.candidates.map(c => c.id)).not.toContain('starforce');
+});
+
+/* ───────── AI 초안 + 검수 (T-301) ───────── */
+const reviewNode = (page, label) => page.locator('#reviewList > li', { has: page.locator('.rv-label', { hasText: label }) });
+const draftCalls = since => calls.slice(since).filter(c => c.system.includes('개념 노드 목록으로 정리'));
+const TRANSFER_SENTENCE = '인기 선수는 원하는 구단이 많아 이적료가 오른다.';
+const openDraftPanel = async page => {
+  await expect(page.locator('#draftPanel')).toBeVisible();
+  if (!(await page.locator('#draftPanel').evaluate(d => d.open))) await page.locator('#draftPanel > summary').click();
+};
+
+test('AI 초안(T-301): 로그아웃이면 패널·메시지 모두 막힘 → 로그인 → 공통 위에 초안 → 검수 대기 노드는 후보에 없음 → 확인·저장하면 후보', async ({ ext }) => {
+  const { page, send } = ext;
+  await expect(page.locator('#loggedOut')).toBeVisible();
+  await expect(page.locator('#draftPanel')).toBeHidden();
+  const denied = await send({ type: 'graph:draft', name: '축구', mode: 'add' });
+  expect(denied.ok).toBe(false);
+  expect(denied.error).toBe('로그인이 필요해요.');
+
+  await send({ type: 'auth:login', nickname: '초안' });
+  await page.reload();
+  await openDraftPanel(page);
+  await expect(page.locator('#draftMode input[value="add"]')).toBeChecked();
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('관심사 이름을 1~30자로 적어 주세요.');
+
+  const since = calls.length;
+  await page.fill('#draftName', '축구');
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toContainText('초안 4개를 검수 대기에 넣고 저장했어요.');
+  await expect(page.locator('#draftStatus')).toContainText('10개보다 적어요');
+  // 프롬프트: 기존 체인(가짜 LLM) 한 번, 태그 목록과 규칙
+  const [call] = draftCalls(since);
+  expect(draftCalls(since)).toHaveLength(1);
+  expect(call.user).toContain('관심사: 축구');
+  expect(call.user).toContain('threshold_req');
+  expect(call.system).toContain('목록 밖 태그는 쓰지 않는다');
+
+  // 검수 대기: 4개, 내 노드 목록에는 없음. 뺀 항목 안내(금칙어 자체는 안 보임), 숫자 경고
+  await expect(page.locator('#reviewBox')).toBeVisible();
+  await expect(page.locator('#reviewList > li')).toHaveCount(4);
+  await expect(page.locator('#myNodeList > li')).toHaveCount(0);
+  await expect(page.locator('#draftDropped')).toContainText('없는 태그 개념: 목록에 있는 태그가 없어요.');
+  await expect(page.locator('#draftDropped')).toContainText('금칙 사실 개념: 쓸 수 없는 표현이 든 사실을 뺐어요.');
+  await expect(page.locator('#draftDropped')).not.toContainText(BLOCKED_IN_ANALOGY);
+  await expect(reviewNode(page, '경기 시간').locator('.rv-warn')).toHaveCount(1);
+  await expect(reviewNode(page, '이적 시장').locator('.rv-warn')).toHaveCount(0);
+
+  // 저장됨: draft·factsReviewed, 금칙어 사실은 빠짐, 목록 밖 태그는 빠짐
+  let ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.useCommon).toBe(true);
+  expect(ov.nodes.map(n => n.label)).toEqual(['오프사이드 규칙', '이적 시장', '경기 시간', '금칙 사실 개념']);
+  const transfer = ov.nodes.find(n => n.label === '이적 시장');
+  expect(transfer).toMatchObject({ draft: true, factsReviewed: [false], tags: ['market_price', 'scarcity_value'] });
+  expect(transfer.id).toMatch(/^u:/);
+  expect(ov.nodes.find(n => n.label === '금칙 사실 개념')).toMatchObject({ facts: ['이 사실은 남는다.'], tags: ['role_division'] });
+
+  // 검수 전: 검색 후보·근거·내 노드 수 어디에도 없다(규칙 1)
+  let r = await send({ type: 'explain', sentence: TRANSFER_SENTENCE, noCache: true });
+  expect(r.data.debug.candidates.map(c => c.id)).not.toContain(transfer.id);
+  expect(r.data.evidence?.nodeId ?? null).not.toBe(transfer.id);
+  expect((await send({ type: 'graph:info' })).data.merged.userNodes).toBe(0);
+
+  // 사실 하나씩: 확인 → "확인됨", 남은 사실 지우기 → 모두 확인된 셈이라 내 노드로
+  const off = reviewNode(page, '오프사이드 규칙');
+  await off.locator('.rv-fact').nth(0).locator('.rv-ok').click();
+  await expect(off.locator('.rv-fact').nth(0)).toContainText('확인됨');
+  await expect(page.locator('#overlayStatus')).toHaveText('바뀐 내용을 저장하세요.');
+  await off.locator('.rv-fact').nth(1).locator('.rv-del').click();
+  await expect(page.locator('#reviewList > li')).toHaveCount(3);
+  await expect(page.locator('#myNodeList > li')).toHaveCount(1);
+
+  // 노드 모두 확인
+  await reviewNode(page, '이적 시장').locator('.rv-all').click();
+  await expect(myNode(page, transfer.id)).toBeVisible();
+  // 수정 폼(T-202)으로 사실을 고치면 확인된 것으로
+  await reviewNode(page, '경기 시간').locator('.rv-edit').click();
+  await expect(page.locator('#nfApply')).toHaveText('수정 반영');
+  await page.fill('#nfFacts', '한 경기는 전반과 후반으로 나뉜다.');
+  await page.click('#nfApply');
+  await expect(page.locator('#reviewList > li')).toHaveCount(1);
+  // 노드 지우기
+  page.once('dialog', d => { expect(d.message()).toBe('이 노드를 지울까요?'); d.accept(); });
+  await reviewNode(page, '금칙 사실 개념').locator('.rv-del-node').click();
+  await expect(page.locator('#reviewBox')).toBeHidden();
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+
+  ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes.map(n => n.label)).toEqual(['오프사이드 규칙', '이적 시장', '경기 시간']);
+  for (const n of ov.nodes) {
+    expect(n.draft, n.label).toBeUndefined();
+    expect(n.factsReviewed, n.label).toBeUndefined();
+  }
+  expect(ov.nodes[0].facts).toEqual([DRAFT_NODES[0].facts[0]]);
+  expect(ov.nodes[2].facts).toEqual(['한 경기는 전반과 후반으로 나뉜다.']);
+
+  // 검수 뒤: 다음 검색 후보에 나온다
+  r = await send({ type: 'explain', sentence: TRANSFER_SENTENCE, noCache: true });
+  expect(r.data.debug.candidates.map(c => c.id)).toContain(transfer.id);
+  expect((await send({ type: 'graph:info' })).data.merged.userNodes).toBe(3);
+});
+
+test('AI 초안(T-301): 새 관심사로 시작 → 기존 노드가 있으면 더할지 묻고, useCommon false·domain·"(으)로 치면"·중립 테마', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '새관심사' });
+  const old = { id: 'u:old', label: '기존 노드', facts: ['기존 사실이다.'], tags: ['cooldown'] };
+  expect((await send({ type: 'overlay:save', overlay: { nodes: [old] } })).data.ok).toBe(true);
+  await page.reload();
+  await openDraftPanel(page);
+  await page.fill('#draftName', '원신');
+  await page.locator('#draftMode label', { hasText: '새 관심사로 시작' }).click();
+
+  // 취소하면 호출도 변경도 없다
+  let since = calls.length;
+  page.once('dialog', d => { expect(d.message()).toBe('기존 내 노드 1개가 있어요. 초안을 더할까요?'); d.dismiss(); });
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('초안 만들기를 그만뒀어요.');
+  expect(draftCalls(since)).toHaveLength(0);
+  expect((await send({ type: 'overlay:get' })).data.useCommon).toBe(true);
+
+  since = calls.length;
+  page.once('dialog', d => d.accept());
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toContainText('초안 4개를 검수 대기에 넣고 저장했어요.');
+  expect(draftCalls(since)).toHaveLength(1);
+  let ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov).toMatchObject({ useCommon: false, domain: '원신', analogyPrefix: '원신으로 치면', theme: 'neutral' });
+  expect(ov.nodes[0]).toEqual(old); // 덮어쓰지 않고 더한다
+  expect(ov.nodes.filter(n => n.draft)).toHaveLength(4);
+  await expect(page.locator('input[name=useCommon][value="false"]')).toBeChecked();
+  await expect(page.locator('#commonNodesBox')).toBeHidden();
+  expect((await send({ type: 'graph:info' })).data.merged).toMatchObject({ domain: '원신', theme: 'neutral', usesCommon: false, nodes: 1 });
+
+  await reviewNode(page, '이적 시장').locator('.rv-all').click();
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  const transfer = (await send({ type: 'overlay:get' })).data.nodes.find(n => n.label === '이적 시장');
+  const r = await send({ type: 'explain', sentence: TRANSFER_SENTENCE, noCache: true });
+  expect(r.data.theme).toBe('neutral');
+  expect(r.data.domain).toBe('원신');
+  expect(r.data.debug.candidates.map(c => c.id)).toContain(transfer.id);
+  expect(r.data.debug.candidates.every(c => c.source === 'user')).toBe(true);
+});
+
+test('AI 초안(T-301): 데모 제공자면 LLM 없이 고정 초안, 이름이 30자를 넘으면 거절', async ({ ext }) => {
+  const { send, setSettings } = ext;
+  await send({ type: 'auth:login', nickname: '데모' });
+  await setSettings({ provider: 'demo' });
+  const since = calls.length;
+  const r = await send({ type: 'graph:draft', name: '축구', mode: 'add' });
+  expect(r.ok).toBe(true);
+  expect(r.data.nodes.length).toBeGreaterThanOrEqual(10);
+  expect(r.data.nodes.every(n => n.draft === true && n.id.startsWith('u:'))).toBe(true);
+  expect(calls.length).toBe(since);
+  const long = await send({ type: 'graph:draft', name: '가'.repeat(31), mode: 'add' });
+  expect(long.ok).toBe(false);
+  expect(long.error).toBe('관심사 이름을 1~30자로 적어 주세요.');
+});
+
+test('AI 초안 수정 1회차(T-301): 저장 안내 한 줄, 금칙어 이름은 화면·메시지 모두 거절, 전체 마감을 넘기면 정중한 오류', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '마감' });
+  await page.reload();
+  await openDraftPanel(page);
+  await expect(page.locator('#draftPanel')).toContainText('초안 만들기를 누르면 검수 대기에 넣고 바로 저장해요.');
+
+  let since = calls.length;
+  await page.fill('#draftName', `${BLOCKED_IN_ANALOGY} 게임`);
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('이 이름은 쓸 수 없어요.');
+  const bad = await send({ type: 'graph:draft', name: `${BLOCKED_IN_ANALOGY} 게임`, mode: 'new' });
+  expect(bad.ok).toBe(false);
+  expect(bad.error).toBe('이 이름은 쓸 수 없어요.');
+  expect(draftCalls(since)).toHaveLength(0);
+
+  since = calls.length;
+  await page.fill('#draftName', '초안지연테스트');
+  const t0 = Date.now();
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('초안을 만드는 데 시간이 너무 오래 걸렸어요. 다시 시도해 주세요.', { timeout: 10_000 });
+  expect(Date.now() - t0).toBeLessThan(5500); // 가짜 LLM(6초)을 기다리지 않고 마감(2.5초)에 끝난다
+  expect(draftCalls(since)).toHaveLength(1);
+  expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
+  await expect(page.locator('#draftRun')).toBeEnabled();
 });

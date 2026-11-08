@@ -312,3 +312,42 @@ test('통합: 하루 한도 429 모델은 리셋 시각까지 쿨다운, 다음 
   assert.deepEqual(b.fallbacks, [{ provider: 'groq/openai/gpt-oss-120b', reason: '쿨다운 중' }, { provider: 'gemini/gemini-3.8-flash', reason: '쿨다운 중' }]);
   assert.deepEqual(calls, ['openai/gpt-oss-120b', 'gemini-3.8-flash', 'gpt-6-luna', 'gpt-6-luna']);
 });
+
+/* ───── 전체 마감(deadline, T-301 AI 초안) ───── */
+
+test('deadline: 이미 지났으면 아무것도 부르지 않고 deadline 오류', async t => {
+  const calls = mockFetch(t, ok);
+  const chain = buildChain(providerFor('groq', 'openai/gpt-oss-120b', admin, settings), admin, settings);
+  await assert.rejects(
+    completeWithFallback(chain, 's', 'u', { deadline: 1000 }, { cooldowns: memCooldowns(), cooldown: admin.cooldown, now: () => 1000 }),
+    e => e.deadline === true
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('deadline: 앞 순서가 실패하는 사이 마감이 지나면 다음 순서로 넘기지 않는다', async t => {
+  fastRetry(t);
+  let clock = 0;
+  const calls = mockFetch(t, (model, url) => {
+    if (model === 'openai/gpt-oss-120b') { clock = 200_000; return [503, { error: { message: 'busy' } }]; }
+    return ok(model, url);
+  });
+  const chain = buildChain(providerFor('groq', 'openai/gpt-oss-120b', admin, settings), admin, settings);
+  await assert.rejects(
+    completeWithFallback(chain, 's', 'u', { deadline: 120_000 }, { cooldowns: memCooldowns(), cooldown: admin.cooldown, now: () => clock }),
+    e => e.deadline === true
+  );
+  assert.ok(!calls.includes('gemini-3.8-flash'), JSON.stringify(calls));
+});
+
+test('deadline: 순서마다 시간 제한은 남은 시간으로 줄어든다(긴 timeoutMs보다 마감이 먼저)', async t => {
+  // 응답하지 않다가 abort 신호가 오면 끝나는 fetch
+  t.mock.method(globalThis, 'fetch', (url, init) => new Promise((_, reject) => {
+    init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+  }));
+  const one = { ...admin, fallbackChain: [] };
+  const chain = buildChain(providerFor('groq', 'openai/gpt-oss-120b', one, settings), one, settings);
+  const t0 = Date.now();
+  await assert.rejects(completeWithFallback(chain, 's', 'u', { timeoutMs: 90_000, deadline: Date.now() + 80 }, { cooldowns: memCooldowns(), cooldown: admin.cooldown }));
+  assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0}ms`);
+});

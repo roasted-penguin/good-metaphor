@@ -10,7 +10,7 @@ export const EMPTY_OVERLAY = {
   nodeBoosts: {},           // 노드 id -> 점수 가산 (-0.2 ~ 0.2)
   feedbackBoosts: {},       // 노드 id -> 👎 누적으로 정해진 가산 (T-130, 확장이 기록으로 계산해 씀. 손으로 고치지 않음)
   tags: [],                 // 내가 추가한 추상 개념 태그
-  nodes: [],                // 내가 추가한 노드 (공통 태그 id도 참조 가능)
+  nodes: [],                // 내가 추가한 노드 (공통 태그 id도 참조 가능). draft: true면 검수 대기(T-301, 병합에서 빠짐)
   edges: []
 };
 
@@ -132,7 +132,9 @@ export function mergeGraphs(common, overlay) {
   }
 
   for (const t of ov.tags || []) tags.set(t.id, { ...t, source: 'user' });
-  for (const n of ov.nodes || []) nodes.set(n.id, { ...n, source: 'user' });
+  // 검수 대기(draft) 노드는 그래프에 넣지 않는다: 임베딩·검색 후보·비유 근거 어디에도 쓰지 않는다(T-301, 규칙 1)
+  const reviewedNodes = (ov.nodes || []).filter(n => n.draft !== true);
+  for (const n of reviewedNodes) nodes.set(n.id, { ...n, source: 'user' });
   for (const e of ov.edges || []) edges.push({ ...e, source: 'user' });
 
   // 존재하지 않는 태그·엣지는 조용히 버린다
@@ -148,7 +150,8 @@ export function mergeGraphs(common, overlay) {
     analogyPrefix: useCommon ? common.analogyPrefix : (ov.analogyPrefix || `${ov.domain || '내 관심사'}로 치면`),
     sources: {
       common: useCommon ? { id: common.id, version: common.version, tagsVersion: common.tagsVersion ?? null } : null,
-      userNodes: (ov.nodes || []).length
+      userNodes: reviewedNodes.length,
+      draftNodes: (ov.nodes || []).length - reviewedNodes.length
     },
     tags: [...tags.values()].filter(t => usedTagIds.has(t.id)),
     nodes: [...nodes.values()],

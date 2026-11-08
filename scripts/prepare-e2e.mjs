@@ -17,6 +17,8 @@ admin.defaultModels.custom = 'mock-model';
 admin.fallbackChain = [{ provider: 'custom', model: 'mock-model' }];
 // 서버 모드(T-404): 가짜 analogy-api. 표시어 없는 문장은 500이라 기존 e2e는 로컬 결과 그대로
 admin.analogyServer = { url: 'http://127.0.0.1:8767', timeoutMs: 800 };
+// AI 초안 전체 마감(T-301): 시험이 빨리 끝나게 짧게. 가짜 LLM의 "초안지연테스트"는 이보다 늦게 답한다
+admin.draft = { deadlineMs: 2500 };
 writeFileSync(p, JSON.stringify(admin, null, 2));
 
 // 테스트 전용 콘텐츠 스크립트(T-144): 사본 manifest에만 등록한다. 실제 extension/ 은 그대로

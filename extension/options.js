@@ -1,6 +1,7 @@
 import { localDay, formatFeedbackStats } from './lib/feedback.js';
-import { validateOverlay, normalizeOverlay } from './lib/stores.js';
+import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.js';
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
+import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 const SF = globalThis.AnalogySiteFilter;
@@ -269,7 +270,9 @@ function renderMyNodes() {
   const list = $('#myNodeList');
   list.replaceChildren();
   const tagLabel = new Map(tagChoices(commonTags, ov.tags).map(t => [t.id, t.label]));
-  for (const n of ov.nodes || []) {
+  // 검수 대기(draft) 노드는 아래 "검수 대기" 구역에만 보인다(T-301)
+  const mine = (ov.nodes || []).filter(n => n.draft !== true);
+  for (const n of mine) {
     const chips = el('span', { class: 'chips small' }, (n.tags || []).map(t => el('span', { class: 'chip', text: tagLabel.get(t) || t })));
     list.append(el('li', { dataset: { id: n.id } }, [
       el('span', { class: 'ov-main' }, [el('span', { class: 'ov-label', text: n.label || n.id }), chips]),
@@ -278,9 +281,52 @@ function renderMyNodes() {
       el('button', { class: 'ov-del', text: '지우기', onclick: () => deleteNode(n.id) })
     ]));
   }
-  const empty = !(ov.nodes || []).length;
+  const empty = !mine.length;
   list.hidden = empty;
   $('#myNodesEmpty').hidden = !empty;
+  renderReview();
+}
+
+/* 검수 대기 (T-301): 사실마다 확인·지우기, 노드마다 모두 확인·수정·노드 지우기.
+   모든 사실이 확인되면 draft가 풀려 내 노드 목록으로 옮겨 간다. 바꾸는 것은 메모리의 ov뿐이고 저장 버튼이 반영한다 */
+function updateNode(id, fn) {
+  const n = (ov.nodes || []).find(x => x.id === id);
+  if (!n) return;
+  const next = fn(n);
+  ov = next ? upsertNode(ov, next) : removeNode(ov, id);
+  if (!next && editingId === id) resetNodeForm();
+  renderMyNodes();
+  markDirty();
+}
+
+function renderReview() {
+  const drafts = draftNodes(ov);
+  const list = $('#reviewList');
+  list.replaceChildren();
+  const tagLabel = new Map(tagChoices(commonTags, ov.tags).map(t => [t.id, t.label]));
+  for (const n of drafts) {
+    const chips = el('span', { class: 'chips small' }, (n.tags || []).map(t => el('span', { class: 'chip', text: tagLabel.get(t) || t })));
+    const facts = el('ul', { class: 'rv-facts' }, n.facts.map((f, i) => {
+      const done = n.factsReviewed?.[i] === true;
+      return el('li', { class: 'rv-fact' + (done ? ' done' : ''), dataset: { i: String(i) } }, [
+        el('span', { class: 'rv-text', text: f }),
+        hasNumber(f) ? el('span', { class: 'rv-warn', title: '자주 바뀌는 값(가격·확률·날짜)이면 지우거나 고쳐 주세요.', text: '숫자 확인' }) : null,
+        done ? el('span', { class: 'rv-done', text: '확인됨' }) : el('button', { class: 'rv-ok', text: '확인', onclick: () => updateNode(n.id, x => confirmFact(x, i)) }),
+        el('button', { class: 'rv-del', text: '지우기', 'aria-label': `사실 ${i + 1} 지우기`, onclick: () => updateNode(n.id, x => removeFact(x, i)) })
+      ]);
+    }));
+    list.append(el('li', { dataset: { id: n.id } }, [
+      el('div', { class: 'rv-head' }, [
+        el('span', { class: 'ov-main' }, [el('span', { class: 'ov-label rv-label', text: n.label }), chips]),
+        el('button', { class: 'rv-all', text: '모두 확인', onclick: () => updateNode(n.id, confirmAllFacts) }),
+        el('button', { class: 'rv-edit', text: '수정', onclick: () => startEdit(n.id) }),
+        el('button', { class: 'rv-del-node', text: '노드 지우기', onclick: () => deleteNode(n.id) })
+      ]),
+      facts
+    ]));
+  }
+  $('#reviewCount').textContent = drafts.length ? `${drafts.length}개` : '';
+  $('#reviewBox').hidden = !drafts.length;
 }
 
 function renderCommonNodes() {
@@ -369,9 +415,11 @@ function startEdit(id) {
 function applyNodeForm() {
   const prev = editingId ? (ov.nodes || []).find(x => x.id === editingId) : null;
   const existingIds = [...(ov.nodes || []).map(n => n.id), ...commonNodes.map(n => n.id)];
-  const { node, errors } = formToNode(readForm(), { prev, existingIds });
+  const { node: formed, errors } = formToNode(readForm(), { prev, existingIds });
   showFormErrors(errors);
-  if (!node) return false;
+  if (!formed) return false;
+  // 초안 노드를 고쳤으면 고친 사실은 확인된 것으로(T-301). 모두 확인되면 일반 노드가 된다
+  const node = reviewAfterEdit(prev, formed);
   ov = upsertNode(ov, node);
   resetNodeForm();
   renderMyNodes();
@@ -429,27 +477,71 @@ function showSaveErrors(errors) {
   ul.hidden = !errors.length;
 }
 
-$('#saveOverlay').addEventListener('click', async () => {
-  if (!ov) return;
+$('#saveOverlay').addEventListener('click', () => saveOverlayNow());
+// 저장 버튼과 AI 초안이 같이 쓴다. 저장했으면 true
+async function saveOverlayNow() {
+  if (!ov) return false;
   // 고급 JSON을 고치고 "JSON 적용"을 안 눌렀으면 같은 길로 먼저 적용한다. 실패하면 저장하지 않는다
   if (jsonBoxChanged() && !applyJsonBox({ keepForm: true })) {
     $('#advanced').open = true;
-    return setStatus($('#overlayStatus'), '저장하지 않았어요. 고급 JSON 오류를 고쳐 주세요.', 'err');
+    setStatus($('#overlayStatus'), '저장하지 않았어요. 고급 JSON 오류를 고쳐 주세요.', 'err');
+    return false;
   }
   // 폼에 적다 만 노드가 있으면 먼저 넣는다. 오류면 저장하지 않는다
-  if (formHasInput() && !applyNodeForm()) return setStatus($('#overlayStatus'), '노드 입력을 먼저 고쳐 주세요.', 'err');
+  if (formHasInput() && !applyNodeForm()) { setStatus($('#overlayStatus'), '노드 입력을 먼저 고쳐 주세요.', 'err'); return false; }
   const errors = validateOverlay(ov);
-  if (errors.length) { showSaveErrors(errors); return setStatus($('#overlayStatus'), '저장하지 않았어요. 아래 오류를 고쳐 주세요.', 'err'); }
+  if (errors.length) { showSaveErrors(errors); setStatus($('#overlayStatus'), '저장하지 않았어요. 아래 오류를 고쳐 주세요.', 'err'); return false; }
   try {
     // feedbackBoosts는 폼이 고치지 않는다. 편집하는 동안 👎로 바뀌었을 수 있으니 저장 직전 값을 쓴다
     const fresh = await send('overlay:get');
     const r = await send('overlay:save', { overlay: { ...ov, feedbackBoosts: fresh.feedbackBoosts || {} } });
-    if (!r.ok) { showSaveErrors(r.errors || []); return setStatus($('#overlayStatus'), '저장하지 않았어요. 아래 오류를 고쳐 주세요.', 'err'); }
-  } catch (e) { return setStatus($('#overlayStatus'), e.message, 'err'); }
+    if (!r.ok) { showSaveErrors(r.errors || []); setStatus($('#overlayStatus'), '저장하지 않았어요. 아래 오류를 고쳐 주세요.', 'err'); return false; }
+  } catch (e) { setStatus($('#overlayStatus'), e.message, 'err'); return false; }
   showSaveErrors([]);
   setStatus($('#overlayStatus'), '저장했어요. 새 노드는 다음 검색 때 벡터로 바뀌어요.', 'ok');
   setStatus($('#jsonStatus'), '');
   await loadStore();
+  return true;
+}
+
+/* ───────── AI 초안 (T-301) ─────────
+   background graph:draft(기존 제공자 체인 한 번) → 검수 대기 노드를 ov에 더하고 바로 저장한다(초안을 잃지 않게).
+   새 관심사로 시작이면 useCommon false·domain·analogyPrefix도 함께. 기존 내 노드는 지우지 않는다(더하기만) */
+$('#draftRun').addEventListener('click', async () => {
+  if (!ov) return;
+  const status = $('#draftStatus');
+  const droppedList = $('#draftDropped');
+  // 이름은 domain·analogyPrefix가 되어 말풍선에 보이므로 금칙어도 막는다(규칙 11). background도 다시 검사한다
+  const nameErr = draftNameError($('#draftName').value, await loadBlocklist());
+  if (nameErr) return setStatus(status, nameErr, 'err');
+  const name = validDraftName($('#draftName').value);
+  const mode = document.querySelector('input[name=draftMode]:checked')?.value === 'new' ? 'new' : 'add';
+  const existing = (ov.nodes || []).length;
+  if (mode === 'new' && existing && !confirm(`기존 내 노드 ${existing}개가 있어요. 초안을 더할까요?`)) {
+    return setStatus(status, '초안 만들기를 그만뒀어요.');
+  }
+  $('#draftRun').disabled = true;
+  droppedList.hidden = true;
+  setStatus(status, 'AI가 초안을 만드는 중이에요…');
+  try {
+    const r = await send('graph:draft', { name, mode });
+    droppedList.replaceChildren(...(r.dropped || []).map(d => el('li', { text: d.label ? `${d.label}: ${d.reason}` : d.reason })));
+    droppedList.hidden = !(r.dropped || []).length;
+    if (!r.nodes.length) return setStatus(status, r.error || '쓸 수 있는 초안이 없어요. 이름을 바꿔 다시 해 보세요.', 'err');
+    // 그사이 다른 곳에서 노드가 생겼을 수 있어 id가 겹치면 새 id를 준다(공통 노드 id도 피한다)
+    const fresh = r.nodes;
+    if (mode === 'new') ov = startNewInterest(ov, r.name);
+    ov = addDraftNodes(ov, fresh, { reservedIds: commonNodes.map(n => n.id) });
+    renderOverlayEditor();
+    markDirty();
+    const few = fresh.length < DRAFT_LIMITS.min ? ` AI가 만든 초안이 ${DRAFT_LIMITS.min}개보다 적어요.` : '';
+    if (await saveOverlayNow()) setStatus(status, `초안 ${fresh.length}개를 검수 대기에 넣고 저장했어요. 사실을 하나씩 확인해 주세요.${few}`, 'ok');
+    else setStatus(status, '초안을 저장하지 못했어요. 아래 저장 버튼 옆 문구를 확인해 주세요.', 'err');
+  } catch (e) {
+    setStatus(status, e.message, 'err');
+  } finally {
+    $('#draftRun').disabled = false;
+  }
 });
 
 /* ───────── 임베딩 ───────── */

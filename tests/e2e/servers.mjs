@@ -7,16 +7,27 @@
 //   "입장횟수테스트" → facts·문장에 없는 숫자를 쓴 비유, "사실조작테스트" → facts에 없는 usedFact
 // 금칙어 필터 확인용(T-114, 금칙어는 테스트 코드 안에만): "금칙비유테스트" → 비유에 우회 표기한 금칙어,
 //   "금칙뜻테스트" → 뜻(스트리밍으로 먼저 오는 부분)에 금칙어, "금칙추상테스트" → 정밀 모드 추상화 응답에 금칙어
+// AI 초안(T-301): 시스템 프롬프트가 "개념 노드 목록으로 정리"면 DRAFT_NODES 를 코드블록 JSON으로 답한다.
+//   쓸 수 있는 노드 4개(숫자 경고 1) + 목록 밖 태그만 있는 노드 1(버림) + 금칙어 사실 1개가 섞인 노드(그 사실만 버림)
 export const BLOCKED_IN_ANALOGY = '리.선.족';
 export const BLOCKED_IN_MEANING = '쌀 숭이';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
+
+export const DRAFT_NODES = [
+  { label: '오프사이드 규칙', facts: ['공격수가 마지막 수비수보다 앞에서 공을 받으면 오프사이드 반칙이다.', '오프사이드는 부심이 깃발로 알린다.'], tags: ['threshold_req'] },
+  { label: '이적 시장', facts: ['인기 선수는 원하는 구단이 많아 이적료가 오른다.'], tags: ['market_price', 'scarcity_value'] },
+  { label: '경기 시간', facts: ['한 경기는 전후반 90분이다.'], tags: ['periodic_cap'] },
+  { label: '없는 태그 개념', facts: ['목록 밖 태그만 붙은 개념이다.'], tags: ['made_up_tag'] },
+  { label: '금칙 사실 개념', facts: [`${BLOCKED_IN_ANALOGY}는 쓰면 안 되는 말이다.`, '이 사실은 남는다.'], tags: ['role_division', 'made_up_tag'] }
+];
 
 export const calls = [];
 export const analogyCalls = []; // 가짜 analogy-api 요청 기록 { headers, body }
 export const STREAM_GAP_MS = 1500;
 // 문장에 "로딩지연테스트"가 있으면 응답을 이만큼 늦춘다(로딩 말풍선을 붙잡아 두는 용도, T-108)
 export const SLOW_MS = 2500;
+export const DRAFT_SLOW_MS = 6000; // AI 초안 마감 시험용, prepare-e2e의 admin.draft.deadlineMs(2500)보다 길게
 
 function mockLLM(req, res) {
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS' };
@@ -32,7 +43,8 @@ function mockLLM(req, res) {
       return res.end(JSON.stringify({ error: { message: 'Rate limit reached (mock)' } }));
     }
     let content;
-    if (system.includes('추상 구조로')) content = user.includes('금칙추상테스트') ? `${BLOCKED_IN_ANALOGY} 처럼 비용을 내고 시도하는 구조` : '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
+    if (system.includes('개념 노드 목록으로 정리')) content = '초안이에요.\n```json\n' + JSON.stringify({ nodes: DRAFT_NODES }) + '\n```';
+    else if (system.includes('추상 구조로')) content = user.includes('금칙추상테스트') ? `${BLOCKED_IN_ANALOGY} 처럼 비용을 내고 시도하는 구조` : '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
     else if (user.includes('연결 성공')) content = '연결 성공';
     else {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
@@ -54,6 +66,8 @@ function mockLLM(req, res) {
       res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));
     };
     if (user.includes('로딩지연테스트')) return void setTimeout(out, SLOW_MS);
+    // AI 초안 전체 마감 확인용(T-301): e2e 사본의 마감(admin.draft.deadlineMs)보다 늦게 답한다
+    if (user.includes('관심사: 초안지연테스트')) return void setTimeout(() => { if (!res.destroyed) out(); }, DRAFT_SLOW_MS);
     out();
   });
 }
