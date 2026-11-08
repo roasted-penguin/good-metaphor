@@ -44,6 +44,7 @@ npm run eval:fallback            # 모델 없이 같은 평가
 npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장이 하나라도 틀리면 실패. 검색을 바꾸는 PR은 항상 돌린다
 npm run eval -- --holdout         # 평가셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점. 출력 끝에 여유(1·2위 점수 차) < --margin(기본 0.005) 문장 목록, -v면 문장별 여유. --margin-guard면 가드 문장의 작은 여유도 실패(T-150)
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
+npm run eval -- --interest restaurant  # 식당 관심사 평가셋(tools/eval-set-restaurant.json)을 식당 그래프로 채점(가드 없음, --server와 같이 못 씀) (T-302)
 npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
 npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내기를 평가셋·검증셋·가드와 대조(베낀 예문 후보를 거름). 반영 절차는 /approve-corrections
@@ -80,9 +81,11 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)
   data/common/tags.json     추상 태그 18개(통제 어휘, 규칙 9)의 원본. 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
   data/common/maplestory.json 공통 저장소 그래프 (노드 18, 엣지 12, 태그는 id만). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114)
+  data/common/restaurant.json 두 번째 공통 관심사 "식당" 그래프 (노드 15, 공통 태그 id만, 수치 없음, 중립 테마, `noMatchText`). 팝업·설정 "관심사"(설정 `interest`)로 로그인 없이 고른다. 서버는 메이플만 알아 식당이면 로컬 (T-302)
   data/common/blocklist.json  금칙어 용어 카드(ADR 0007 형식, `승인`만 필터에 씀). 확장·서버가 같이 읽음 (T-114)
 src/offscreen-src.js         오프스크린 원본 (transformers.js 번들 입력)
 tools/eval.mjs, eval-set.json 검색 품질 평가
+tools/eval-set-restaurant.json 식당 관심사 평가셋(`npm run eval -- --interest restaurant`, T-302)
 tools/eval-gen.mjs           생성 품질 평가(`npm run eval:gen -- --judge`, 다른 모델이 근거·구조·자연스러움 채점)
 tests/unit/                  node:test 단위 테스트 (lib/* 순수 함수)
 tests/e2e/                   Playwright: 가짜 LLM(:8765) + 테스트 페이지(:8766) + 확장 사본(.tmp/ext-e2e)
