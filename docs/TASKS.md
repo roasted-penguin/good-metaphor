@@ -49,7 +49,8 @@
 | T-148 | 프레임·shadow 보호 빈틈: 같은 출처 iframe이 부모의 비밀번호 폼 안이면 막기(`frameElement`), 하위 요소 shadow 안에 숨은 비밀번호 입력, 서브프레임 첫 호버 테마(첫 stage까지 숨김), 페이지 shadow에 남는 하이라이트 시트 정리 | 1 품질 | P2 | 대기 | T-111 |
 | T-112 | 윈도우에서 Alt 메뉴 포커스 충돌 확인 | 1 품질 | P2 | 대기 | |
 | T-115 | 앱 이름을 "좋은비유네용"으로 바꾸기 | 1 품질 | P1 | 완료 | |
-| T-114 | 메이플 커뮤니티 용어 사전: 은어 aliases + 멸칭 금칙어 필터 | 1 품질 | P1 | 진행 | |
+| T-114 | 메이플 커뮤니티 용어 사전: 은어 aliases + 멸칭 금칙어 필터 | 1 품질 | P1 | 리뷰 | |
+| T-149 | 일상어 별칭 오부스트: "세금 신고"·"펑크 밴드"처럼 은어와 같은 일상 문장을 평가셋(음성)에 넣고, 애매한 별칭은 메이플 단서가 함께 있을 때만 부스트. 서버(`--server`) 별칭 효과도 측정 | 1 품질 | P2 | 대기 | T-114 |
 | T-113 | 금융·경제 문장이 `meso`·`auction`으로 끌려가는 주제 편향 줄이기 | 1 품질 | P0 | 완료 | |
 | T-135 | e5-base 전환으로 틀려진 문장 고치기(실제 확장 기준 2문장: 한정판 운동화, 팀장 결재) | 1 품질 | P1 | 대기 | T-113 |
 | T-128 | 임베딩 배치 구성에 따라 벡터가 달라지는 문제(q8): 한 문장씩 임베딩 + 평가를 실제 확장 안에서 (ADR 0011) | 1 품질 | P0 | 완료 | T-113 |
@@ -550,6 +551,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-08 | T-114 | task/T-114-glossary | | 메이플 커뮤니티 용어 사전: (1) 노드 `aliases`(은어 11개 노드, 검증), 임베딩 텍스트는 그대로 두고 문장에 별칭이 낱말로 있으면 `aliasBoost` 0.08 — 첫 시도(nodeText에 별칭)는 회귀 4건이라 버림, 최종 혼합 31/39·은어 4/4·회귀 없음. "기사·버스"는 일상어라 뺌(T-149). 서버 시드·추출 용어 사전에도 별칭. (2) `blocklist.json` 금칙어 용어 카드(승인 8·제안 2, 매미·먹자는 일상어라 제안), 확장·서버 출력 직전 필터(스트리밍 뜻·서버 결과 재검사·정밀 모드 추상화 포함), 프롬프트 규칙 한 줄, 서버는 금칙어를 못 읽으면 503(`/health`에 표시). Opus·medium 서브에이전트(Task 2개, 재설계 1회, 최종 검토 수정 1회). 단위 430·e2e 75·서버 318. |
 | 2026-11-08 | T-115 | task/T-115-rename | [#41](https://github.com/roasted-penguin/good-metaphor/pull/41) | 앱 이름을 "좋은비유네용"으로: manifest(`좋은비유네용 (PoC)`·short_name·default_title), 팝업·설정 제목, `package.json` `good-metaphor`, README·CLAUDE.md·intro·아키텍처 페이지 제목, 내부 식별자 `analogy-helper-*` → `good-metaphor-*`(camelCase 전역은 그대로). 이름 일치 단위 테스트 추가. 기획서 아티팩트는 이 세션에서 열 수 없어 사람이 제목을 고쳐야 함. Opus·medium 서브에이전트. 단위 401·e2e 73. |
 | 2026-11-08 | T-111 | task/T-111-iframe-shadow | [#40](https://github.com/roasted-penguin/good-metaphor/pull/40) | iframe·Shadow DOM: 콘텐츠 스크립트를 모든 프레임에(`all_frames`·`match_about_blank`), 서브프레임은 자기 호스트와 최상위 호스트(`window.top` → `ancestorOrigins` → 부모가 최상위일 때만 referrer) 중 하나라도 제외면 꺼짐, **최상위를 모르면 꺼짐**(fail closed). background는 `payload.topHost`·`sender.url`·`tab.url`을 따로 보고 서브프레임에 topHost가 없으면 막음. 서브프레임 테마는 첫 호버 때. 열린 Shadow DOM: `caretPositionFromPoint` `shadowRoots`, shadow 경계 블록, 하이라이트 시트 한 줄 덧붙이기, 비밀번호 폼 검사가 shadow 경계를 넘음. 닫힌 shadow·크롬 128 미만은 미지원. `lib/shadow.js` 추가, CLAUDE.md 구조·함정. Opus·medium 서브에이전트(Task 2개, 각 수정 1회 + 최종 검토 수정 1회). 단위 397·e2e 73. CI에서 드러난 기존 버그도 고침: Esc로 닫은 투명 말풍선이 그 자리 아래 글자 호버를 가로챔(보일 때만 pointer-events). 후속 T-147·T-148. |
 | 2026-11-08 | T-110 | task/T-110-vector-cache | [#39](https://github.com/roasted-penguin/good-metaphor/pull/39) | 벡터 캐시 정리: `lib/vec-cache.js`(`touch`·`pruneVecCache` 순수 함수) — 지금 embedderId가 아닌 항목 삭제, `admin.vecCacheMax` 2,000개 상한(LRU, 이번 그래프 키는 절대 안 지움), 추가·삭제가 있을 때만 저장(호버마다 쓰지 않음). 임베딩 중 "캐시 지우기"가 있으면 되살리지 않는 가드. Opus·medium 서브에이전트. 단위 384·e2e 61. |
