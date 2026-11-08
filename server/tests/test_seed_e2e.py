@@ -2,20 +2,19 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app import rag as rag_mod
-from app.config import Settings
+from app.config import Settings, load_common_graph
 from app.seed import graph_to_custom_kg, seed
 from fakes import FakeLLM
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMMON_GRAPH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
-GRAPH = json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))
+GRAPH = load_common_graph(COMMON_GRAPH)
 NODE_IDS = {n["id"] for n in GRAPH["nodes"]}
 TOKEN = {"X-Install-Token": "install-e2e"}
 SENTENCE = "강화할 때마다 확률이 낮아지는 구조예요."

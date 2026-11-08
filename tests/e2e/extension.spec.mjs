@@ -1,10 +1,12 @@
 // 확장 전체 흐름 e2e. 네트워크 없이: 대체 임베더 + 가짜 LLM(servers.mjs)
 // 실행: npm run test:e2e   (브라우저 경로 지정: CHROMIUM_PATH=/path/to/chrome)
 import { test as base, expect, chromium } from '@playwright/test';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, cpSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServers, calls, analogyCalls, SERVER_ANALOGY, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING } from './servers.mjs';
+import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
+import { openBrowserEmbedder } from '../../tools/browser-embedder.mjs';
 
 const EXT = path.resolve('.tmp/ext-e2e');
 
@@ -82,6 +84,33 @@ test('평가 도구 계약: 옵션 페이지에서 오프스크린 embed를 직�
   expect(both.vectors).toHaveLength(2);
   expect(both.embedderId).toBe(r.data.embedderId);
   expect(alone.vectors[0]).toEqual(both.vectors[1]); // 묶어 보내도 한 문장씩과 같은 벡터
+});
+
+// npm run eval·check:embed가 쓰는 경로 그대로(T-304 수정 1). 같은 프로필을 다시 쓰면 크롬이 예전 서비스 워커 스크립트를
+// 프로필 캐시에서 계속 돌려, 고친 background(태그 파일 합치기)가 반영되지 않고 "common.tags is not iterable"로 멈췄다
+test('평가 도구(browser-embedder): 같은 프로필을 다시 써도 바뀐 서비스 워커 코드로 돌고, 태그 분리 그래프로 준비된다 (T-304)', async () => {
+  test.setTimeout(120_000);
+  const root = mkdtempSync(path.join(tmpdir(), 'ah-be-'));
+  const launchOptions = process.env.CHROMIUM_PATH
+    ? { executablePath: process.env.CHROMIUM_PATH, headless: false, args: ['--headless=new'] }
+    : { channel: 'chromium', headless: !process.env.HEADED };
+  for (const marker of ['A', 'B']) {
+    // 대체 임베더 사본(.tmp/ext-e2e)에 실행마다 다른 표시를 background.js에 붙인다
+    const src = path.join(root, `src-${marker}`);
+    cpSync(EXT, src, { recursive: true });
+    appendFileSync(path.join(src, 'background.js'), `\nself.__evalMarker = '${marker}';\n`);
+    const be = await openBrowserEmbedder({ src, out: path.join(root, 'out'), profile: path.join(root, 'profile'), requireReady: false, launchOptions });
+    try {
+      expect(await be.sw.evaluate(() => self.__evalMarker), '이번 실행의 background.js가 돌아야 해요').toBe(marker);
+      expect(be.status).toBe('fallback');
+      expect(await be.embed(['첫 문장', '두 번째 문장'], 'query')).toHaveLength(2);
+      const info = await be.send('graph:info');
+      expect(info.ok).toBe(true);
+      expect(info.data.common.tags).toBe(18);
+    } finally {
+      await be.close();
+    }
+  }
 });
 
 test('벡터 캐시 정리(T-110): 다른 임베더 키는 지워지고, 바뀐 것이 없으면 다시 저장하지 않는다', async ({ ext }) => {
@@ -1973,7 +2002,7 @@ test('Shadow DOM(T-148): 말풍선을 닫으면 그 root 에서 우리 강조 �
 });
 
 /* ───────────── 출처·검수 날짜와 제보 제외 (T-118, D-3) ───────────── */
-const COMMON = JSON.parse(readFileSync('extension/data/common/maplestory.json', 'utf8'));
+const COMMON = loadCommonGraphFromDisk();
 const verifiedYM = label => COMMON.nodes.find(n => n.label === label)?.verifiedAt?.slice(0, 7);
 // "사실이 틀렸어요" 제보(👎 + reason fact). 문장마다 하나씩
 const reportFact = (ext, nodeId, sentence) => ext.send({ type: 'feedback', record: { sentence, nodeId, tagId: null, vote: 'down', reason: 'fact' } });

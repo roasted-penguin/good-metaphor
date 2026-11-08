@@ -1,9 +1,9 @@
 """프롬프트 이식 테스트. 확장 prompt.js와 규칙 문장이 같은지, 후보 서식, 키워드 파싱을 확인한다."""
-import json
 from pathlib import Path
 
 import pytest
 
+from app.config import load_common_graph
 from app.prompts import (
     analogy_system_section,
     analogy_system_static_fragments,
@@ -23,7 +23,7 @@ def _js_text() -> str:
 
 
 def _graph_tags() -> list[dict]:
-    return json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))["tags"]
+    return load_common_graph(COMMON_GRAPH)["tags"]  # 원본은 tags.json(T-304)
 
 
 CANDIDATES = [

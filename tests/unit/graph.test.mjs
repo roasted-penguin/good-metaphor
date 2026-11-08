@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { mergeGraphs, validateGraph, nodeText, tagText } from '../../extension/lib/graph.js';
 import { validateOverlay } from '../../extension/lib/stores.js';
+import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
 
-const common = JSON.parse(readFileSync('extension/data/common/maplestory.json', 'utf8'));
+// 해석된 공통 그래프 = maplestory.json + tags.json (T-304)
+const common = loadCommonGraphFromDisk();
 // 공통 그래프 노드에 필요한 출처·검수 날짜(T-118). 검증 규칙만 보는 테스트 그래프에 붙인다
 const PROV = { sources: ['https://maplestory.nexon.com/News/Update/799'], verifiedAt: '2026-10-11' };
 
@@ -170,7 +172,7 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
     party: []
   };
   for (const [id, aliases] of Object.entries(expected)) assert.deepEqual(byId[id], aliases, id);
-  assert.equal(common.version, '2026.11.08-4');
+  assert.equal(common.version, '2026.11.08-5');
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {

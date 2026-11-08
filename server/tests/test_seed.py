@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from app.config import load_common_graph
 from app.retriever import context_to_candidates
 from app.seed import graph_to_custom_kg, seed_counts
 
@@ -14,7 +15,7 @@ COMMON_GRAPH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
 
 @pytest.fixture(scope="module")
 def graph() -> dict:
-    return json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))
+    return load_common_graph(COMMON_GRAPH)
 
 
 @pytest.fixture(scope="module")

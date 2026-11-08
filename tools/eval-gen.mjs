@@ -12,6 +12,7 @@
 // 결과: .tmp/eval-gen-<YYYY-MM-DD>.json (커밋 안 함). 키는 출력·파일에 남기지 않는다.
 import fs from 'node:fs';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
+import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve } from '../extension/lib/retrieval.js';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildChain, completeWithFallback } from '../extension/lib/fallback.js';
@@ -22,7 +23,7 @@ import { buildJudgePrompt, parseJudge, summarize, assertDifferentModels, modelKe
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
-const common = JSON.parse(fs.readFileSync(new URL('../extension/data/common/maplestory.json', here)));
+const common = loadCommonGraphFromDisk(); // 그래프 + tags.json (T-304)
 const evalSet = JSON.parse(fs.readFileSync(new URL('./eval-set.json', here)));
 // 금칙어 목록(T-114). 확장 background.js와 같은 번들 파일을 runAnalogy에 준다
 const blocklist = JSON.parse(fs.readFileSync(new URL('../extension/data/common/blocklist.json', here))).terms;

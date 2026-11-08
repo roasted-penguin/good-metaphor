@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { scoreCases, mixedSetting, regressions } from '../../tools/eval-lib.mjs';
+import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
 
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
-const common = read('extension/data/common/maplestory.json');
+const common = loadCommonGraphFromDisk();
 const admin = read('extension/config/admin.json');
 const evalSet = read('tools/eval-set.json');
 const holdout = read('tools/eval-holdout.json');

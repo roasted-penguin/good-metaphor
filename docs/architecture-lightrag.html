@@ -257,8 +257,8 @@
     <div class="table-wrap"><table>
       <thead><tr><th>항목</th><th>지금 PoC</th><th>LightRAG 설계</th></tr></thead>
       <tbody>
-        <tr><td>관심사 그래프</td><td>손으로 쓴 노드 18 · 태그 18</td><td>가이드 문서에서 LLM이 추출 + 기존 JSON을 시드로 주입</td></tr>
-        <tr><td>추상 태그</td><td>노드의 <code>tags</code> 필드</td><td>"추상구조" 엔티티 + 관계의 high-level 키워드</td></tr>
+        <tr><td>관심사 그래프</td><td>손으로 쓴 노드 18 · 태그 18(<code>tags.json</code>)</td><td>가이드 문서에서 LLM이 추출 + 기존 JSON을 시드로 주입</td></tr>
+        <tr><td>추상 태그</td><td><code>tags.json</code>(통제 어휘 원본), 노드 <code>tags</code>에는 id만</td><td>"추상구조" 엔티티 + 관계의 high-level 키워드</td></tr>
         <tr><td>검색</td><td>브라우저 e5-base</td><td>EC2 LightRAG hybrid (엔티티 + 관계 + 1-hop), bge-m3</td></tr>
         <tr><td>LLM 키</td><td>사용자 브라우저에 보관</td><td>서버에 보관 (키 프록시를 겸함)</td></tr>
         <tr><td>호버당 LLM 호출</td><td>1회 (정밀 모드 2회)</td><td>2회: 키워드 + 비유</td></tr>
@@ -471,7 +471,7 @@
       <li><b>비유 (Gemini Flash)</b><span>기존 <code>buildAnalogyPrompt</code>와 같은 규칙으로 한 번 호출해요.</span></li>
       <li><b>근거 검증 → 응답</b><span><code>nodeId</code>가 후보에 없으면 비유를 숨겨요. 응답은 기존 확장의 결과 형식 그대로라 말풍선 코드는 바뀌지 않아요.</span></li>
     </ol>
-    <p class="note">통제 어휘가 핵심이에요. 금융 문장의 키워드 LLM과 메이플 문서의 추출 LLM이 같은 목록에서 고르므로 "기간당 한도" 같은 키워드가 양쪽에서 글자 그대로 만나요. 자유 키워드에 맡기면 한쪽은 "API 요청 제한", 다른 쪽은 "결정석 판매 상한"이라 서로 못 만나요.</p>
+    <p class="note">통제 어휘가 핵심이에요. 금융 문장의 키워드 LLM과 메이플 문서의 추출 LLM이 같은 목록에서 고르므로 "기간당 한도" 같은 키워드가 양쪽에서 글자 그대로 만나요. 자유 키워드에 맡기면 한쪽은 "API 요청 제한", 다른 쪽은 "결정석 판매 상한"이라 서로 못 만나요. 어휘의 원본은 <code>extension/data/common/tags.json</code>이에요(ADR 0012).</p>
   </section>
 
   <section id="indexing">
@@ -531,7 +531,7 @@
       <figcaption>주황 = 맥에서 도는 LLM 단계. 시드는 맥 없이 바로 돌아가는 첫 그래프예요.</figcaption>
     </figure>
     <ul class="rules">
-      <li><b>시드 먼저</b><span><code>maplestory.json</code>의 노드 18·태그 18·연결 12를 <code>insert_custom_kg</code>로 넣어요. 태그는 "추상구조" 엔티티, 노드–태그 연결은 관계 키워드에 태그 이름이 들어간 관계가 돼요.</span></li>
+      <li><b>시드 먼저</b><span><code>maplestory.json</code>의 노드 18·연결 12와 <code>tags.json</code>의 태그 18을 <code>insert_custom_kg</code>로 넣어요. 태그는 "추상구조" 엔티티, 노드–태그 연결은 관계 키워드에 태그 이름이 들어간 관계가 돼요.</span></li>
       <li><b>추출 프롬프트</b><span>엔티티 유형은 게임시스템·재화·아이템·보스·지역·추상구조. "목록에 있는 추상구조만 연결하라"고 지시하고 통제 어휘와 메이플 용어 사전을 붙여요.</span></li>
       <li><b>청크 800토큰</b><span>소형 모델이라 기본 1,200 대신 줄여서, 한 번에 뽑을 개체 수와 누락을 줄여요.</span></li>
       <li><b>검수 루프</b><span>문서를 넣을 때마다 "추상구조 연결이 없는 게임 개념" 목록을 만들고, 사람이 확인해 연결을 보강해요.</span></li>

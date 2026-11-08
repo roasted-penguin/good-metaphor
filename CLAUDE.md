@@ -75,7 +75,8 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/prompt.js              프롬프트, 데모 응답, 조사 처리
   lib/fallback-embed.js      모델 없을 때 쓰는 글자 n-gram 임베더
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)
-  data/common/maplestory.json 공통 저장소 그래프 (노드 18, 태그 18, 엣지 12). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114)
+  data/common/tags.json     추상 태그 18개(통제 어휘, 규칙 9)의 원본. 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
+  data/common/maplestory.json 공통 저장소 그래프 (노드 18, 엣지 12, 태그는 id만). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114)
   data/common/blocklist.json  금칙어 용어 카드(ADR 0007 형식, `승인`만 필터에 씀). 확장·서버가 같이 읽음 (T-114)
 src/offscreen-src.js         오프스크린 원본 (transformers.js 번들 입력)
 tools/eval.mjs, eval-set.json 검색 품질 평가
@@ -98,7 +99,7 @@ scripts/                     build, prepare-e2e
 7. 새 제공자는 `PROVIDERS`에 항목 추가로 끝나야 한다. 호출 로직을 제공자별로 흩뜨리지 않는다.
    LLM 호출 순서는 `config/admin.json`의 `fallbackChain`(ADR 0008)이고 **순위는 앞으로 계속 더 붙는다**(사용자 안내, 2026-10-18). 코드·테스트·문서·UI 문구에 체인 길이나 "1·2순위"를 가정하지 않는다. 순위 추가는 배열에 항목만 넣고 코드는 고치지 않는다(절차는 ADR 0008 "순위를 더할 때").
 8. **호버는 맥에 기대지 않는다.** 맥(로컬 Ollama)의 주 용도는 인덱싱 추출이고 꺼져 있을 수 있다. 호버 LLM은 클라우드 무료 모델 체인이 먼저이고, 로컬 Ollama는 **체인 맨 뒤 최종 방어선**으로만 쓴다(`def.local`, 어떤 설정이든 다른 무료 모델이 무조건 앞, 사용자 결정 2026-10-18, T-127). 꺼져 있으면 건너뛰는 것과 같다.
-9. **추상 태그는 통제 어휘다.** 원본은 `maplestory.json`의 `tags`. 추출 프롬프트와 질의 키워드 프롬프트가 같은 목록에서 생성돼야 하고, 목록 밖 추상구조는 버린다.
+9. **추상 태그는 통제 어휘다.** 원본은 `data/common/tags.json`(ADR 0012). 공통 그래프와 태그 파일을 합치는 곳은 런타임마다 로더 한 곳(확장 `stores.js` `loadCommonGraph`, Node `tools/load-graph.mjs`, 서버 `config.load_common_graph`)이고, `maplestory.json`을 직접 읽지 않는다. 추출 프롬프트와 질의 키워드 프롬프트가 같은 목록에서 생성돼야 하고, 목록 밖 추상구조는 버린다.
 10. **맥은 인터넷에 포트를 열지 않는다.** Ollama는 127.0.0.1에만, 노출은 `tailscale serve`로 테일넷에만.
 11. **커뮤니티 멸칭·실존 인물을 출력하지 않는다.** 쌀숭이·리선족 같은 멸칭과 신창섭(김창섭 디렉터) 같은 실존 인물은 그래프·프롬프트·UI 어디에도 넣지 않는다. 밈은 앱 말투에만 아껴 쓴다(`docs/naming-meme.md`). 금칙어 목록은 `data/common/blocklist.json` 한 곳에만 두고(테스트 제외), 확장·서버가 출력 직전에 이 파일로 거른다(T-114). 프롬프트에는 금칙어를 넣지 않고 "멸칭·실존 인물 금지" 규칙 한 줄만.
 

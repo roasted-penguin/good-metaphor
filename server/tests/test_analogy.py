@@ -9,11 +9,12 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import load_common_graph
 from fakes import FakeLLM, FakeRetriever
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMMON_GRAPH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
-GRAPH = json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))
+GRAPH = load_common_graph(COMMON_GRAPH)  # 태그 파일까지 합친 공통 그래프(T-304)
 
 REJECTED = "모델이 근거 목록에 없는 개념을 골라서 비유를 숨겼어요."
 GROUNDING_REJECTED = "근거에 없는 내용이 섞여 있어서 비유를 숨겼어요."

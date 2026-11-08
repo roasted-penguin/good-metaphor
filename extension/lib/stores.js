@@ -2,11 +2,29 @@
 //  - 공통 저장소: 로그인 없이 누구나 읽는 그래프 (PoC: 메이플스토리). 번들 파일 또는 관리자가 지정한 URL.
 //  - 사용자 저장소: 로그인한 사용자만. 공통 그래프 위에 얹는 오버레이(추가 노드, 숨김, 관심사 변경).
 import { getAdminConfig } from './config.js';
-import { EMPTY_OVERLAY, validateGraph } from './graph.js';
+import { EMPTY_OVERLAY, validateGraph, validateTagsFile, resolveCommonGraph } from './graph.js';
 
 /* ───────────── 공통 저장소 ───────────── */
 
 let commonCache = null;
+
+// 공통 그래프와 같은 폴더의 태그 파일(T-304). base는 그래프 파일 주소
+const TAGS_FILENAME = 'tags.json';
+async function fetchJson(url, init) {
+  const res = await fetch(url, init);
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+  return res.json();
+}
+
+// 관심사 그래프 + 같은 폴더의 tags.json → 해석된 그래프. 그래프에 tags가 이미 있으면(하위 호환) 태그 파일을 받지 않는다
+async function fetchResolved(graphUrl, init) {
+  const graph = await fetchJson(graphUrl, init);
+  if (Array.isArray(graph?.tags)) return resolveCommonGraph(graph, null);
+  const tagsFile = await fetchJson(new URL(TAGS_FILENAME, graphUrl).href, init);
+  const errors = validateTagsFile(tagsFile);
+  if (errors.length) throw new Error('태그 파일 오류: ' + errors.join(' / '));
+  return resolveCommonGraph(graph, tagsFile);
+}
 
 export async function loadCommonGraph({ fresh = false } = {}) {
   if (commonCache && !fresh) return commonCache;
@@ -15,16 +33,12 @@ export async function loadCommonGraph({ fresh = false } = {}) {
   let graph = null;
   if (url) {
     try {
-      const res = await fetch(url, { cache: 'no-cache' });
-      if (res.ok) graph = await res.json();
+      graph = await fetchResolved(url, { cache: 'no-cache' });
     } catch (e) {
       console.warn('[common-store] 원격 공통 저장소를 못 읽어서 번들 파일을 씁니다.', e);
     }
   }
-  if (!graph) {
-    const res = await fetch(chrome.runtime.getURL(bundled || 'data/common/maplestory.json'));
-    graph = await res.json();
-  }
+  if (!graph) graph = await fetchResolved(chrome.runtime.getURL(bundled || 'data/common/maplestory.json'));
   const errors = validateGraph(graph);
   if (errors.length) throw new Error('공통 저장소 그래프 오류: ' + errors.join(' / '));
   commonCache = graph;

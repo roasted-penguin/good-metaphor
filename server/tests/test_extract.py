@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from lightrag.prompt import PROMPTS
 
+from app.config import load_common_graph
 from app.extract import (
     ENTITY_TYPES,
     build_extraction_config,
@@ -27,7 +28,7 @@ BANNED_WORDS = ["쌀숭이", "리선족", "신창섭"]
 
 @pytest.fixture(scope="module")
 def graph() -> dict:
-    return json.loads(COMMON_GRAPH.read_text(encoding="utf-8"))
+    return load_common_graph(COMMON_GRAPH)
 
 
 @pytest.fixture(scope="module")

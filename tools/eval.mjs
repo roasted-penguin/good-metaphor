@@ -10,6 +10,7 @@
 //        [--server-only]               # 브라우저 평가 생략   [--rpm 20] 분당 요청 수   [--token <값>] 기본은 eval-<무작위>
 import fs from 'node:fs';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
+import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { embedEach } from '../extension/lib/embed-each.js';
@@ -21,7 +22,7 @@ import { rankAllViaServer, gateLine, ServerUnavailable } from './eval-server.mjs
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
-const common = JSON.parse(fs.readFileSync(new URL('../extension/data/common/maplestory.json', here)));
+const common = loadCommonGraphFromDisk(); // 그래프 + tags.json (T-304)
 const sets = [
   { name: '평가셋', cases: JSON.parse(fs.readFileSync(new URL('./eval-set.json', here))) },
   // 검증셋: 가중치·텍스트 조정에 쓰지 않는 문장 (T-113). 과적합 확인용
