@@ -84,10 +84,12 @@ test('scoreCases: 맞는 비유가 없어야 하는 문장(expectNodes: [])은 h
 const isEnglish = s => !/[\uac00-\ud7a3]/.test(s);
 
 test('평가셋: 40문장 이상, 영어 25% 이상, 맞는 비유 없는 문장 5개 이상 (T-103)', () => {
-  assert.ok(evalSet.length >= 40, `평가셋 ${evalSet.length}문장`);
-  const en = evalSet.filter(c => isEnglish(c.sentence)).length;
-  assert.ok(en / evalSet.length >= 0.25, `영어 ${en}/${evalSet.length}`);
-  assert.ok(evalSet.filter(c => c.expectNodes.length === 0).length >= 5);
+  // 별칭 음성 문장(forbidNodes, T-149)은 한국어 일상어 검사라 따로 센다. 비율은 기존 평가 문장으로만 본다
+  const base = evalSet.filter(c => !c.forbidNodes);
+  assert.ok(base.length >= 40, `평가셋 ${base.length}문장`);
+  const en = base.filter(c => isEnglish(c.sentence)).length;
+  assert.ok(en / base.length >= 0.25, `영어 ${en}/${base.length}`);
+  assert.ok(base.filter(c => c.expectNodes.length === 0).length >= 5);
 });
 
 test('평가셋: id는 모두 공통 그래프에 있고, 문장 중복이 없다', () => {

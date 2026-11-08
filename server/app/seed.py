@@ -33,6 +33,8 @@ def label_with_aliases(node: dict[str, Any]) -> str:
 
     서버는 별칭을 엔티티 설명·청크 글에 넣어 LightRAG가 검색하게 한다. 확장은 nodeText에 넣지 않고
     검색 어휘 가산(retrieval.js aliasBoost)으로 쓴다(임베딩 벡터·기존 검색 결과를 바꾸지 않으려고).
+    약한 별칭(weakAliases: 펑·세금처럼 일상어와 겹치는 은어)은 넣지 않는다. 텍스트에 넣으면 일상어 문장이 서버 검색에서
+    그 노드로 끌린다(T-149). 확장은 메이플 단서가 있을 때만 가산한다.
     """
     aliases = node.get("aliases") or []
     return f"{node['label']}({', '.join(aliases)})" if aliases else node["label"]

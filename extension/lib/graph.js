@@ -61,6 +61,10 @@ export function validateGraph(g, { partial = false } = {}) {
     if (n.aliases !== undefined && !validAliases(n.aliases)) {
       errors.push(`노드 ${n.id || i}의 aliases는 1~20자 문자열 배열이어야 해요.`);
     }
+    // 약한 별칭(일상어와 겹치는 은어, T-149): aliases와 같은 규칙
+    if (n.weakAliases !== undefined && !validAliases(n.weakAliases)) {
+      errors.push(`노드 ${n.id || i}의 weakAliases는 1~20자 문자열 배열이어야 해요.`);
+    }
     if (n.sources !== undefined || !partial) {
       if (!validSources(n.sources)) errors.push(`노드 ${n.id || i}의 sources(출처)는 http(s) 주소 1개 이상인 배열이어야 해요.`);
     }
