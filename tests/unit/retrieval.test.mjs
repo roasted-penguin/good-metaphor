@@ -291,6 +291,23 @@ test('mapleCue: 라벨 단서 낱말 뒤 한글은 조사로 시작할 때만 �
   assert.equal(mapleCue('스타포스타워에 올랐다', commonMerged), false, '스타포스타워');
 });
 
+// T-152 리뷰: 랑·이랑·하고·처럼·보다, 하/해/했/한/할(동사 붙음) 추가, 조사 뒤에 다른 낱말이 이어지면 단서 아님
+test('mapleCue: 랑·처럼·보다·하고와 동사 붙음(하다/했다)도 단서, 조사 뒤에 낱말이 이어지면 아님', () => {
+  assert.equal(mapleCue('스타포스하다가 또', commonMerged), true, '스타포스하다가');
+  assert.equal(mapleCue('스타포스했다', commonMerged), true, '스타포스했다');
+  assert.equal(mapleCue('스타포스해서 날렸다', commonMerged), true, '스타포스해서');
+  assert.equal(mapleCue('메소랑 바꿨다', commonMerged), true, '메소랑');
+  assert.equal(mapleCue('메소이랑 바꿨다', commonMerged), true, '메소이랑');
+  assert.equal(mapleCue('메소하고 바꿨다', commonMerged), true, '메소하고');
+  assert.equal(mapleCue('메소처럼 쓴다', commonMerged), true, '메소처럼');
+  assert.equal(mapleCue('메소보다 비싸다', commonMerged), true, '메소보다');
+  assert.equal(mapleCue('메소에서는 달랐다', commonMerged), true, '조사 두 개(에서+는)');
+  assert.equal(mapleCue('메소보다도 비싸다', commonMerged), true, '조사 두 개(보다+도)');
+  assert.equal(mapleCue('메소포타미아', commonMerged), false, '메소포타미아');
+  assert.equal(mapleCue('아케인과학 연구소', commonMerged), false, '아케인과학(과 뒤에 낱말)');
+  assert.equal(mapleCue('메소도시 문명', commonMerged), false, '메소도시(도 뒤에 낱말)');
+});
+
 test('mapleCue: 강한 별칭은 aliasMatch 그대로(조사가 아닌 활용도 붙는다)', () => {
   assert.equal(mapleCue('재획하고 왔다', commonMerged), true, '재획하고');
 });
