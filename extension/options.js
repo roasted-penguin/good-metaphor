@@ -1,4 +1,6 @@
 import { localDay, formatFeedbackStats } from './lib/feedback.js';
+import { validateOverlay, normalizeOverlay } from './lib/stores.js';
+import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 const SF = globalThis.AnalogySiteFilter;
@@ -202,9 +204,11 @@ async function loadStore() {
     $('#loggedIn').hidden = false;
     $('#userTitle').textContent = `${auth.session.name} 님의 오버레이 · 내 노드 ${info.merged.userNodes}개`;
     $('#whoami').textContent = `${auth.adapterLabel}로 로그인됨`;
-    const ov = await send('overlay:get');
-    $('#overlay').value = JSON.stringify(ov, null, 2);
-    document.querySelector(`input[name=useCommon][value="${ov.useCommon !== false}"]`).checked = true;
+    commonNodes = c.nodeList;
+    commonTags = c.tagList;
+    ov = normalizeOverlay(await send('overlay:get'));
+    resetNodeForm();
+    renderOverlayEditor();
   } else {
     $('#loggedOut').hidden = false;
     $('#loggedIn').hidden = true;
@@ -219,39 +223,232 @@ $('#login').addEventListener('click', async () => {
 });
 $('#logout').addEventListener('click', async () => { await send('auth:logout'); await loadStore(); });
 
-document.querySelectorAll('input[name=useCommon]').forEach(r => r.addEventListener('change', () => {
-  try {
-    const ov = JSON.parse($('#overlay').value);
-    ov.useCommon = r.value === 'true';
-    if (!ov.useCommon && !ov.domain) { ov.domain = '내 관심사'; ov.analogyPrefix = '내 관심사로 치면'; }
-    $('#overlay').value = JSON.stringify(ov, null, 2);
-    setStatus($('#overlayStatus'), '바뀐 내용을 저장하세요.', 'warn');
-  } catch { setStatus($('#overlayStatus'), 'JSON 형식을 먼저 고쳐 주세요.', 'err'); }
-}));
+/* ───────── 그래프 편집 (T-202) ─────────
+   폼이 바꾸는 것은 메모리의 ov뿐이고, 저장 버튼이 overlay:save로 보낸다.
+   폼은 아는 필드(nodes, hiddenNodeIds, nodeBoosts, useCommon)만 고치고 나머지(feedbackBoosts, tags 등)는 그대로 둔다.
+   사용자 입력은 모두 textContent로 넣는다(innerHTML 금지). */
+let ov = null;            // 편집 중인 오버레이
+let commonNodes = [];     // graph:info의 공통 노드 목록 [{id,label}]
+let commonTags = [];      // 공통 태그 사전 [{id,label}]
+let editingId = null;     // 수정 중인 내 노드 id (새 노드면 null)
+let formTags = [];        // 폼에서 고른 태그 id (고른 순서)
 
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'text') e.textContent = v;
+    else if (k === 'dataset') Object.assign(e.dataset, v);
+    else if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) if (c) e.append(c);
+  return e;
+}
+const fmtBoost = v => (v > 0 ? '+' : '') + Number(v).toFixed(2);
+
+function markDirty() {
+  $('#overlay').value = JSON.stringify(ov, null, 2);
+  $('#overlayErrors').hidden = true;
+  setStatus($('#overlayStatus'), '바뀐 내용을 저장하세요.', 'warn');
+}
+
+// 가중치 슬라이더 + 값 + (있으면) 피드백 가중치 읽기 전용
+function boostControls(id, label) {
+  const val = clampBoost(ov.nodeBoosts?.[id]);
+  const out = el('output', { class: 'ov-boost-val', text: fmtBoost(val) });
+  const range = el('input', { type: 'range', class: 'ov-boost', min: BOOST_MIN, max: BOOST_MAX, step: '0.01', 'aria-label': `${label} 가중치` });
+  range.value = String(val);
+  range.addEventListener('input', () => { out.textContent = fmtBoost(+range.value); });
+  range.addEventListener('change', () => { ov = setBoost(ov, id, range.value); markDirty(); });
+  const fb = clampBoost(ov.feedbackBoosts?.[id]);
+  return el('span', { class: 'ov-boost-wrap' }, [range, out, fb ? el('span', { class: 'ov-fb', title: '👎 기록으로 정해진 값이라 여기서 고치지 않아요.', text: `피드백 ${fmtBoost(fb)}` }) : null]);
+}
+
+function renderMyNodes() {
+  const list = $('#myNodeList');
+  list.replaceChildren();
+  const tagLabel = new Map(tagChoices(commonTags, ov.tags).map(t => [t.id, t.label]));
+  for (const n of ov.nodes || []) {
+    const chips = el('span', { class: 'chips small' }, (n.tags || []).map(t => el('span', { class: 'chip', text: tagLabel.get(t) || t })));
+    list.append(el('li', { dataset: { id: n.id } }, [
+      el('span', { class: 'ov-main' }, [el('span', { class: 'ov-label', text: n.label || n.id }), chips]),
+      boostControls(n.id, n.label || n.id),
+      el('button', { class: 'ov-edit', text: '수정', onclick: () => startEdit(n.id) }),
+      el('button', { class: 'ov-del', text: '지우기', onclick: () => deleteNode(n.id) })
+    ]));
+  }
+  const empty = !(ov.nodes || []).length;
+  list.hidden = empty;
+  $('#myNodesEmpty').hidden = !empty;
+}
+
+function renderCommonNodes() {
+  $('#commonNodesBox').hidden = ov.useCommon === false;
+  const hidden = new Set(ov.hiddenNodeIds || []);
+  const list = $('#commonNodeList');
+  list.replaceChildren();
+  for (const n of commonNodes) {
+    const box = el('input', { type: 'checkbox', class: 'ov-hide' });
+    box.checked = hidden.has(n.id);
+    box.addEventListener('change', () => { ov = setHidden(ov, n.id, box.checked); markDirty(); });
+    list.append(el('li', { dataset: { id: n.id } }, [
+      el('span', { class: 'ov-main' }, [el('span', { class: 'ov-label', text: n.label })]),
+      el('label', { class: 'ov-hide-label' }, [box, document.createTextNode(' 숨기기')]),
+      boostControls(n.id, n.label)
+    ]));
+  }
+}
+
+function renderTagChips() {
+  const wrap = $('#nfTags');
+  wrap.replaceChildren();
+  for (const t of tagChoices(commonTags, ov.tags)) {
+    const b = el('button', { type: 'button', class: 'chip-btn' + (t.source === 'user' ? ' user' : ''), dataset: { tag: t.id }, title: t.id, text: t.label });
+    b.setAttribute('aria-pressed', String(formTags.includes(t.id)));
+    b.addEventListener('click', () => {
+      formTags = formTags.includes(t.id) ? formTags.filter(x => x !== t.id) : [...formTags, t.id];
+      b.setAttribute('aria-pressed', String(formTags.includes(t.id)));
+    });
+    wrap.append(b);
+  }
+  // 사전에 없는 태그(고급 JSON으로 넣었거나 사전에서 빠진 것)는 눌러서 뺄 수만 있는 칩으로 보인다
+  const known = new Set(tagChoices(commonTags, ov.tags).map(t => t.id));
+  for (const id of formTags.filter(t => !known.has(t))) {
+    const b = el('button', { type: 'button', class: 'chip-btn unknown', dataset: { tag: id }, title: '사전에 없는 태그예요. 눌러서 빼세요.', 'aria-pressed': 'true', text: id + ' ×' });
+    b.addEventListener('click', () => { formTags = formTags.filter(x => x !== id); renderTagChips(); });
+    wrap.append(b);
+  }
+}
+
+function renderOverlayEditor() {
+  const r = document.querySelector(`input[name=useCommon][value="${ov.useCommon !== false}"]`);
+  if (r) r.checked = true;
+  renderMyNodes();
+  renderCommonNodes();
+  renderTagChips();
+  $('#overlay').value = JSON.stringify(ov, null, 2);
+}
+
+/* 노드 폼 */
+const FORM_FIELDS = { label: '#nfLabel', facts: '#nfFacts', aliases: '#nfAliases' };
+const ERR_FIELDS = { label: '#nfLabelErr', facts: '#nfFactsErr', tags: '#nfTagsErr', aliases: '#nfAliasesErr' };
+function showFormErrors(errors = {}) {
+  for (const [k, sel] of Object.entries(ERR_FIELDS)) $(sel).textContent = errors[k] || '';
+}
+function fillForm(form) {
+  for (const [k, sel] of Object.entries(FORM_FIELDS)) $(sel).value = form[k] || '';
+  formTags = [...(form.tags || [])];
+  renderTagChips();
+}
+function readForm() {
+  return { label: $('#nfLabel').value, facts: $('#nfFacts').value, aliases: $('#nfAliases').value, tags: [...formTags] };
+}
+function formHasInput() {
+  const f = readForm();
+  return !!(f.label.trim() || f.facts.trim() || f.aliases.trim() || f.tags.length);
+}
+function resetNodeForm() {
+  editingId = null;
+  fillForm({ label: '', facts: '', tags: [], aliases: '' });
+  showFormErrors();
+  $('#nodeFormTitle').textContent = '새 노드';
+  $('#nfApply').textContent = '노드 추가';
+}
+function startEdit(id) {
+  const n = (ov.nodes || []).find(x => x.id === id);
+  if (!n) return;
+  editingId = id;
+  fillForm(nodeToForm(n));
+  showFormErrors();
+  $('#nodeFormTitle').textContent = '노드 수정';
+  $('#nfApply').textContent = '수정 반영';
+  $('#nfLabel').focus();
+}
+// 폼 → ov. 성공하면 true
+function applyNodeForm() {
+  const prev = editingId ? (ov.nodes || []).find(x => x.id === editingId) : null;
+  const existingIds = [...(ov.nodes || []).map(n => n.id), ...commonNodes.map(n => n.id)];
+  const { node, errors } = formToNode(readForm(), { prev, existingIds });
+  showFormErrors(errors);
+  if (!node) return false;
+  ov = upsertNode(ov, node);
+  resetNodeForm();
+  renderMyNodes();
+  markDirty();
+  return true;
+}
+function deleteNode(id) {
+  if (!confirm('이 노드를 지울까요?')) return;
+  ov = removeNode(ov, id);
+  if (editingId === id) resetNodeForm();
+  renderMyNodes();
+  markDirty();
+}
+
+$('#nfApply').addEventListener('click', applyNodeForm);
+$('#nfCancel').addEventListener('click', resetNodeForm);
 $('#insertSample').addEventListener('click', () => {
-  try {
-    const ov = JSON.parse($('#overlay').value);
-    ov.nodes = ov.nodes || [];
-    if (!ov.nodes.some(n => n.id === 'u:my_routine')) {
-      ov.nodes.push({
-        id: 'u:my_routine',
-        label: '내 아침 재획 루틴',
-        facts: ['나는 출근 전 30분 동안 매일 같은 사냥터에서 재획을 한다.', '빠진 날이 생기면 주말에 몰아서 채우기 어렵다.'],
-        tags: ['daily_accumulation', 'efficiency_metric']
-      });
-    }
-    $('#overlay').value = JSON.stringify(ov, null, 2);
-    setStatus($('#overlayStatus'), '예시를 넣었어요. 저장을 눌러야 반영돼요.', 'warn');
-  } catch { setStatus($('#overlayStatus'), 'JSON 형식을 먼저 고쳐 주세요.', 'err'); }
+  editingId = null;
+  $('#nodeFormTitle').textContent = '새 노드';
+  $('#nfApply').textContent = '노드 추가';
+  fillForm(SAMPLE_FORM);
+  showFormErrors();
+  setStatus($('#overlayStatus'), '예시를 폼에 채웠어요. 저장하면 반영돼요.', 'warn');
 });
 
+document.querySelectorAll('input[name=useCommon]').forEach(r => r.addEventListener('change', () => {
+  if (!ov) return;
+  ov = { ...ov, useCommon: r.value === 'true' };
+  if (!ov.useCommon && !ov.domain) ov = { ...ov, domain: '내 관심사', analogyPrefix: '내 관심사로 치면' };
+  renderCommonNodes();
+  markDirty();
+}));
+
+// 고급: JSON을 고쳐 적용하면 검사 후 폼을 다시 그린다. 실패하면 오류만 보이고 폼은 그대로
+// keepForm: 저장 버튼이 자동 적용할 때는 폼에 적던 값을 지운다(그 뒤 폼 적용이 이어진다)
+function applyJsonBox({ keepForm = false } = {}) {
+  let parsed;
+  try { parsed = JSON.parse($('#overlay').value); } catch (e) { setStatus($('#jsonStatus'), 'JSON 오류: ' + e.message, 'err'); return false; }
+  const errors = validateOverlay(parsed);
+  if (errors.length) { setStatus($('#jsonStatus'), errors.join(' / '), 'err'); return false; }
+  ov = normalizeOverlay(parsed);
+  if (!keepForm) resetNodeForm();
+  else if (editingId && !(ov.nodes || []).some(n => n.id === editingId)) editingId = null;
+  renderOverlayEditor();
+  markDirty();
+  setStatus($('#jsonStatus'), '폼에 반영했어요.', 'ok');
+  return true;
+}
+$('#applyJson').addEventListener('click', () => applyJsonBox());
+const jsonBoxChanged = () => $('#overlay').value !== JSON.stringify(ov, null, 2);
+
+function showSaveErrors(errors) {
+  const ul = $('#overlayErrors');
+  ul.replaceChildren(...errors.map(e => el('li', { text: e })));
+  ul.hidden = !errors.length;
+}
+
 $('#saveOverlay').addEventListener('click', async () => {
-  let ov;
-  try { ov = JSON.parse($('#overlay').value); } catch (e) { return setStatus($('#overlayStatus'), 'JSON 오류: ' + e.message, 'err'); }
-  const r = await send('overlay:save', { overlay: ov }).catch(e => ({ ok: false, errors: [e.message] }));
-  if (!r.ok) return setStatus($('#overlayStatus'), r.errors.join(' / '), 'err');
+  if (!ov) return;
+  // 고급 JSON을 고치고 "JSON 적용"을 안 눌렀으면 같은 길로 먼저 적용한다. 실패하면 저장하지 않는다
+  if (jsonBoxChanged() && !applyJsonBox({ keepForm: true })) {
+    $('#advanced').open = true;
+    return setStatus($('#overlayStatus'), '저장하지 않았어요. 고급 JSON 오류를 고쳐 주세요.', 'err');
+  }
+  // 폼에 적다 만 노드가 있으면 먼저 넣는다. 오류면 저장하지 않는다
+  if (formHasInput() && !applyNodeForm()) return setStatus($('#overlayStatus'), '노드 입력을 먼저 고쳐 주세요.', 'err');
+  const errors = validateOverlay(ov);
+  if (errors.length) { showSaveErrors(errors); return setStatus($('#overlayStatus'), '저장하지 않았어요. 아래 오류를 고쳐 주세요.', 'err'); }
+  try {
+    // feedbackBoosts는 폼이 고치지 않는다. 편집하는 동안 👎로 바뀌었을 수 있으니 저장 직전 값을 쓴다
+    const fresh = await send('overlay:get');
+    const r = await send('overlay:save', { overlay: { ...ov, feedbackBoosts: fresh.feedbackBoosts || {} } });
+    if (!r.ok) { showSaveErrors(r.errors || []); return setStatus($('#overlayStatus'), '저장하지 않았어요. 아래 오류를 고쳐 주세요.', 'err'); }
+  } catch (e) { return setStatus($('#overlayStatus'), e.message, 'err'); }
+  showSaveErrors([]);
   setStatus($('#overlayStatus'), '저장했어요. 새 노드는 다음 검색 때 벡터로 바뀌어요.', 'ok');
+  setStatus($('#jsonStatus'), '');
   await loadStore();
 });
 

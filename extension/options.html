@@ -138,9 +138,48 @@
               <label><input type="radio" name="useCommon" value="false"><span>내 관심사만</span></label>
             </div>
           </div>
-          <p class="hint">오버레이 JSON을 고쳐 저장하세요. 내 노드 id는 <code>u:</code>로 시작하고, 공통 태그 id(예: <code>prob_upgrade</code>)를 그대로 쓸 수 있어요.</p>
-          <textarea id="overlay" spellcheck="false"></textarea>
-          <div class="row" style="margin-top:8px"><button class="primary" id="saveOverlay">저장</button><button id="insertSample">예시 노드 넣기</button><span class="status" id="overlayStatus"></span></div>
+          <!-- 그래프 편집 (T-202): 내 노드 폼, 공통 노드 숨김·가중치, 고급 JSON -->
+          <div class="ov-block">
+            <h4>내 노드</h4>
+            <ul class="ov-list" id="myNodeList"></ul>
+            <p class="ov-empty hint" id="myNodesEmpty" hidden>아직 내 노드가 없어요. 아래에서 추가하세요.</p>
+          </div>
+
+          <div class="ov-block ov-form" id="nodeForm">
+            <h4 id="nodeFormTitle">새 노드</h4>
+            <div class="grid">
+              <label for="nfLabel">이름</label>
+              <div><input type="text" id="nfLabel" maxlength="60" placeholder="예: 내 아침 재획 루틴"><div class="field-err" id="nfLabelErr"></div></div>
+
+              <label for="nfFacts">사실</label>
+              <div><textarea id="nfFacts" class="nf-facts" spellcheck="false" placeholder="한 줄에 한 문장, 다섯 줄까지 적어요."></textarea><div class="field-err" id="nfFactsErr"></div></div>
+
+              <label id="nfTagsLabel">태그</label>
+              <div><div class="chips" id="nfTags" role="group" aria-labelledby="nfTagsLabel"></div><div class="hint">공통 태그 사전에서 1~3개 골라요.</div><div class="field-err" id="nfTagsErr"></div></div>
+
+              <label for="nfAliases">별칭</label>
+              <div><input type="text" id="nfAliases" placeholder="선택, 쉼표로 구분 (예: 아침 재획, 출근 사냥)"><div class="field-err" id="nfAliasesErr"></div></div>
+
+              <span></span>
+              <div class="row"><button id="nfApply">노드 추가</button><button id="nfCancel" class="link">취소</button><button id="insertSample" class="link">예시 노드 넣기</button></div>
+            </div>
+          </div>
+
+          <div class="ov-block" id="commonNodesBox">
+            <h4>공통 노드</h4>
+            <p class="hint">숨기면 검색에서 빠져요. 가중치는 -0.2~0.2, 오른쪽으로 갈수록 더 자주 골라요.</p>
+            <ul class="ov-list" id="commonNodeList"></ul>
+          </div>
+
+          <div class="row" style="margin-top:12px"><button class="primary" id="saveOverlay">저장</button><span class="status" id="overlayStatus"></span></div>
+          <ul class="ov-errors" id="overlayErrors" hidden></ul>
+
+          <details id="advanced" class="ov-advanced">
+            <summary>고급: JSON으로 직접 고치기</summary>
+            <p class="hint">내 노드 id는 <code>u:</code>로 시작하고, 공통 태그 id(예: <code>prob_upgrade</code>)를 그대로 쓸 수 있어요. 내 태그(<code>tags</code>)는 여기서만 더해요. 고친 JSON은 저장할 때도 적용돼요.<br><code>feedbackBoosts</code>는 저장 때 기록 값으로 덮여요.</p>
+            <textarea id="overlay" spellcheck="false"></textarea>
+            <div class="row" style="margin-top:8px"><button id="applyJson">JSON 적용</button><span class="status" id="jsonStatus"></span></div>
+          </details>
         </div>
       </div>
     </section>
