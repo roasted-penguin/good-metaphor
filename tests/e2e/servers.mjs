@@ -7,6 +7,7 @@
 //   "입장횟수테스트" → facts·문장에 없는 숫자를 쓴 비유, "사실조작테스트" → facts에 없는 usedFact
 // 금칙어 필터 확인용(T-114, 금칙어는 테스트 코드 안에만): "금칙비유테스트" → 비유에 우회 표기한 금칙어,
 //   "금칙뜻테스트" → 뜻(스트리밍으로 먼저 오는 부분)에 금칙어, "금칙추상테스트" → 정밀 모드 추상화 응답에 금칙어
+// 비유 문구는 시스템 프롬프트의 analogyPrefix("4. analogy는 "…" 문구로 시작")를 따른다(T-302, 관심사별 말머리 확인용)
 // AI 초안(T-301): 시스템 프롬프트가 "개념 노드 목록으로 정리"면 DRAFT_NODES 를 코드블록 JSON으로 답한다.
 //   쓸 수 있는 노드 4개(숫자 경고 1) + 목록 밖 태그만 있는 노드 1(버림) + 금칙어 사실 1개가 섞인 노드(그 사실만 버림)
 export const BLOCKED_IN_ANALOGY = '리.선.족';
@@ -50,6 +51,7 @@ function mockLLM(req, res) {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
       const tag = user.match(/맞은 추상 태그: .+? \(id=(\S+)\)/);
       const nodeId = user.includes('Leverage') ? 'not-a-candidate' : id;
+      const prefix = system.match(/analogy는 "([^"]+)" 문구로 시작/)?.[1] ?? '메이플로 치면';
       const usedFact = user.match(/\[1\] id=[\s\S]*?facts:\n\s+- (.+)/)?.[1] ?? '';
       const meaning = user.includes('금칙뜻테스트') ? `${BLOCKED_IN_MEANING} 같은 뜻풀이예요.` : '테스트 뜻 풀이예요.';
       const answer = (analogy, fact = usedFact) => '```json\n' + JSON.stringify({ meaning, analogy, nodeId, tagId: tag?.[1] ?? null, usedFact: fact, mapping: `원문 ↔ ${label}` }) + '\n```';
@@ -58,7 +60,7 @@ function mockLLM(req, res) {
       else if (user.includes('입장횟수테스트')) content = answer('메이플로 치면 일주일에 7번만 입장할 수 있는 것과 같아요.');
       else if (user.includes('금칙비유테스트')) content = answer(`메이플로 치면 ${label}과 같은 구조예요. ${BLOCKED_IN_ANALOGY}`);
       else if (user.includes('사실조작테스트')) content = answer('메이플로 치면 보스에 하루 세 번 들어가는 것과 같아요.', '보스는 하루에 세 번까지 입장할 수 있다.');
-      else content = answer(`메이플로 치면 ${label}과 같은 구조예요.`);
+      else content = answer(`${prefix} ${label}과 같은 구조예요.`);
     }
     const out = () => {
       if (stream) return streamOut(res, cors, content);

@@ -200,3 +200,15 @@ test('serverSkipReason: 서버를 건너뛰는 이유(off·session·feedback·de
   assert.equal(serverSkipReason({ ...base, sentenceRecords: [{ vote: 'pick' }] }), 'feedback');
   assert.equal(serverSkipReason({ ...base, providerKind: 'demo' }), 'demo');
 });
+
+// T-302: 서버는 메이플 그래프만 안다. 공통 관심사가 메이플이 아니면 로컬
+test('serverSkipReason: 공통 관심사가 메이플이 아니면 interest, 메이플·생략이면 그대로 서버 (T-302)', () => {
+  const base = { admin, session: null, sentenceRecords: [], providerKind: 'gemini' };
+  assert.equal(serverSkipReason({ ...base, commonId: 'restaurant' }), 'interest');
+  assert.equal(shouldUseServer({ ...base, commonId: 'restaurant' }), false);
+  assert.equal(serverSkipReason({ ...base, commonId: 'maplestory' }), null);
+  assert.equal(serverSkipReason(base), null, '생략하면 메이플(예전 호출 모양)');
+  // 주소가 없으면 off가 먼저, 로그인이면 session이 먼저
+  assert.equal(serverSkipReason({ ...base, admin: {}, commonId: 'restaurant' }), 'off');
+  assert.equal(serverSkipReason({ ...base, session: { name: 'u' }, commonId: 'restaurant' }), 'session');
+});

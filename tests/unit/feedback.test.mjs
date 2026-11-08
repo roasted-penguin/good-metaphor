@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, feedbackPercent, formatFeedbackStats, similarMemory, boostForNode, reportedNodes } from '../../extension/lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, feedbackPercent, formatFeedbackStats, similarMemory, boostForNode, reportedNodes, feedbackForGraph } from '../../extension/lib/feedback.js';
 
 // 검색 후보(retrieve 결과 모양만 흉내)
 const cands = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, label: id.toUpperCase(), score: 1 - i * 0.1 }));
@@ -334,4 +334,31 @@ test('제보: 노드마다 따로 세고 threshold를 바꿀 수 있다 (T-118)'
   assert.deepEqual([...reportedNodes(recs, RG, { threshold: 2 })].sort(), ['meso', 'starforce']);
   assert.equal(reportedNodes([], RG).size, 0);
   assert.equal(reportedNodes(undefined, RG).size, 0);
+});
+
+// T-302: 관심사를 바꾸면 다른 관심사 노드에 남긴 기록은 조용히 빠진다(그래프에 있는 노드 기록만)
+test('feedbackForGraph: 그래프에 없는 노드를 가리키는 기록은 빼고, 내 노드(u:)·지금 그래프 노드 기록은 남긴다 (T-302)', () => {
+  const graph = { nodes: [{ id: 'lunch_peak' }, { id: 'no_show' }, { id: 'u:mine', source: 'user' }] };
+  const records = [
+    rec({ id: 'r1', nodeId: 'starforce', vote: 'down' }),                               // 메이플 노드 👎 → 뺀다
+    rec({ id: 'r2', nodeId: 'cube', vote: 'pick', pickedNodeId: 'meso' }),              // 메이플 고정 → 뺀다
+    rec({ id: 'r3', nodeId: 'lunch_peak', vote: 'down' }),                              // 식당 노드 → 남긴다
+    rec({ id: 'r4', nodeId: null, vote: 'pick', pickedNodeId: 'no_show' }),             // 비유 없음에서 고른 식당 노드
+    rec({ id: 'r5', nodeId: 'u:mine', vote: 'down' }),                                  // 내 노드는 관심사와 무관
+    rec({ id: 'r6', nodeId: 'lunch_peak', vote: 'pick', pickedNodeId: 'starforce' })    // 고른 쪽이 다른 관심사 → 뺀다
+  ];
+  assert.deepEqual(feedbackForGraph(records, graph).map(r => r.id), ['r3', 'r4', 'r5']);
+  assert.deepEqual(feedbackForGraph(null, graph), []);
+  assert.deepEqual(feedbackForGraph(records, null), [], '그래프가 없으면 아무 기록도 쓰지 않는다');
+});
+
+test('feedbackForGraph 뒤 applyFeedback: 다른 관심사의 고정·👎는 후보를 바꾸지 않고 오류도 없다 (T-302)', () => {
+  const graph = { nodes: cands.map(c => ({ id: c.id })) };
+  const foreign = [rec({ nodeId: 'starforce', vote: 'down' }), rec({ nodeId: 'starforce', vote: 'pick', pickedNodeId: 'cube', ts: 2 })];
+  const r = applyFeedback(cands, feedbackForGraph(foreign, graph), 'h1', 3);
+  assert.deepEqual(r.candidates.map(c => c.id), ['a', 'b', 'c']);
+  assert.equal(r.applied, false);
+  assert.deepEqual(r.excluded, []);
+  assert.equal(r.pinned, null);
+  assert.equal(feedbackKey(feedbackForGraph(foreign, graph), 'h1'), '', '캐시 지문도 비어 있다');
 });

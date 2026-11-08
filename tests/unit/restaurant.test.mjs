@@ -212,3 +212,12 @@ test('식당 평가셋: 기존 평가 문장과 3-gram < 0.5, 태그 설명·예
     for (const f of facts) assert.ok(jaccard(c.sentence, f) < 0.3, `"${c.sentence}" ↔ 사실 "${f}"`);
   }
 });
+
+/* ───────────── 관심사 선택 설정 (Task 2) ───────────── */
+
+test('설정 기본값: interest는 기본 관심사(메이플), 목록에 있는 id다', async () => {
+  await import('../../extension/lib/site-filter.js');
+  const { DEFAULT_SETTINGS } = await import('../../extension/lib/config.js');
+  assert.equal(DEFAULT_SETTINGS.interest, DEFAULT_INTEREST);
+  assert.ok(commonInterest(DEFAULT_SETTINGS.interest));
+});
