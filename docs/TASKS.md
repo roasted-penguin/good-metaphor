@@ -69,7 +69,7 @@
 | D-5 | 메이플 가이드 문서 출처 (공식만 / 위키 포함) | 결정 | P1 | 완료 | 공식 원문 + 위키·인벤 참고 |
 | D-4 | 두 번째 공통 관심사 | 결정 | P1 | 완료 | 식당 |
 | T-301 | AI로 관심사 그래프 초안 만들기 + 사용자 검수 | 3 확장 | P0 | 대기 | T-202, T-304 |
-| T-304 | 추상 태그를 공통 파일로 분리 (`tags.json`) | 3 확장 | P1 | 진행 | |
+| T-304 | 추상 태그를 공통 파일로 분리 (`tags.json`) | 3 확장 | P1 | 리뷰 | |
 | T-302 | 두 번째 공통 관심사: 식당 그래프 + 로그인 없이 관심사 선택 | 3 확장 | P1 | 대기 | T-304 |
 | T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 대기 | T-107, T-402 |
 | T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
@@ -553,6 +553,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-09 | T-304 | task/T-304-tags-json | | 추상 태그 18개를 `data/common/tags.json`으로 분리(순서 그대로), 관심사 그래프는 태그 id만. 런타임마다 로더 한 곳에서 합침(확장 `loadCommonGraph`, 도구 `tools/load-graph.mjs`, 서버 `load_common_graph`·`TAGS_PATH`). 공통 그래프에서 없는 태그 id는 검증 오류. 서버 버전·확장 결과 캐시 키에 태그 버전 포함. 규칙 9 원본을 tags.json으로, ADR 0012. 평가 도구 크롬 프로필의 오래된 서비스 워커 캐시 정리(실제 eval이 깨진 원인). 실제 eval 35/39·검증 13/14 그대로. Opus·medium 서브에이전트(수정 1회). 단위 474·e2e 90·서버 336. |
 | 2026-11-08 | T-118 | task/T-118-sources-reports | [#47](https://github.com/roasted-penguin/good-metaphor/pull/47) | 공통 노드 18개에 `sources`(실제로 연 maplestory.nexon.com 패치 노트·가이드·공지 URL)·`verifiedAt`, 공통 그래프 검증이 둘 다 요구(오버레이는 선택). 같은 공통 노드에 서로 다른 문장으로 "사실이 틀렸어요" 제보 3건(검수 날짜 이후)이면 후보에서 빼고 캐시 키에 반영, 서버 결과가 그 노드면 로컬로. 말풍선 근거에 "검수 YYYY-MM". 서버 evidence에도 `verifiedAt`. 사실은 바꾸지 않음 — 출처 확인 중 찾은 오류는 T-151(사용자 승인 필요). `/add-common-node`에 출처 단계. 서버 집계는 L0 이후. Opus·medium 서브에이전트. 단위 465·e2e 89·서버 321. |
 | 2026-11-08 | T-202 | task/T-202-graph-editor | [#46](https://github.com/roasted-penguin/good-metaphor/pull/46) | 그래프 편집 화면: 설정 "내 저장소"에 내 노드 폼(이름·사실 1~5줄·태그 칩 1~3개·별칭, id는 `u:` 슬러그 자동), 공통 노드 숨기기·가중치 슬라이더(-0.2~0.2), 피드백 가중치는 읽기 전용, 폼은 새 태그를 만들지 않음(규칙 9). JSON은 "고급"으로 접고 저장 때 고친 JSON도 자동 적용(실패면 저장 안 함), 저장 전 `validateOverlay`, 폼이 모르는 필드 보존, 사용자 입력은 textContent로만. 순수 함수 `lib/overlay-form.js`. Opus·medium 서브에이전트(수정 1회: 적용 안 한 JSON이 저장 때 사라짐). 단위 454·e2e 86. |
 | 2026-11-08 | T-135 | task/T-135-e5base-fix | [#45](https://github.com/roasted-penguin/good-metaphor/pull/45) | e5-base 전환으로 틀려진 2문장 다시 맞힘: `scarcity_value` 예문 2개(한정 판매 기념품 되팔기, 소량 인쇄물 웃돈)·`progression_gate` 예문 1개(회원 등급과 자료실), `tagPenalty.inflation` 0.03. 실제 확장 혼합 31→**35/39**, 검증 12→**13/14**, 회귀 없음(메인 세션에서 재현). 평가 문장은 예문에 베끼지 않음. 여유가 작은 문장은 T-150. Opus·medium 서브에이전트. 단위 437·e2e 82. |
