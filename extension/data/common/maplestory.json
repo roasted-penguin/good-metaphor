@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.08-5",
+  "version": "2026.11.09-1",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
   "note": "공통 저장소 샘플. 사실(facts)은 시스템의 일반적인 구조만 적고, 수치·확률표처럼 자주 바뀌는 값은 넣지 않는다. 추상 태그 정의는 같은 폴더 tags.json에 있고, 노드 tags에는 그 id만 적는다(T-304).",
   "nodes": [
     {
-      "id": "starforce", "label": "스타포스 강화", "aliases": ["펑", "프텍"],
+      "id": "starforce", "label": "스타포스 강화", "aliases": ["프텍"], "weakAliases": ["펑"],
       "facts": [
         "메소를 내고 장비에 별(스타)을 붙여 능력치를 올리는 강화 시스템이다.",
         "별이 높아질수록 성공 확률은 낮아지고 한 번 시도하는 메소 비용은 커진다.",
@@ -40,7 +40,7 @@
       "verifiedAt": "2026-10-11"
     },
     {
-      "id": "arcane_symbol", "label": "아케인 심볼", "aliases": ["세금"],
+      "id": "arcane_symbol", "label": "아케인 심볼", "weakAliases": ["세금"],
       "facts": [
         "아케인리버 지역의 일일 퀘스트 등으로 모아 성장시키는 장비이다.",
         "심볼을 키우면 아케인포스(ARC) 수치가 오른다.",

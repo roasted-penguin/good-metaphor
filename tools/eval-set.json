@@ -42,5 +42,10 @@
   { "sentence": "재획 비약 먹고 두 시간 사냥했다.", "expectNodes": ["hunting"], "expectTag": "temporary_multiplier", "group": "slang", "since": "T-114" },
   { "sentence": "22성 도전하다가 또 펑 났다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "slang", "since": "T-114" },
   { "sentence": "이번 주 세금 내고 나니 메소가 바닥났다.", "expectNodes": ["arcane_symbol"], "expectTag": "daily_accumulation", "group": "slang", "since": "T-114" },
-  { "sentence": "메요일이라 보스 초기화됐다.", "expectNodes": ["weekly_boss"], "expectTag": "periodic_cap", "group": "slang", "since": "T-114" }
+  { "sentence": "메요일이라 보스 초기화됐다.", "expectNodes": ["weekly_boss"], "expectTag": "periodic_cap", "group": "slang", "since": "T-114" },
+  { "sentence": "연말정산 때 세금 신고를 미리 준비해야 한다.", "expectNodes": [], "forbidNodes": ["arcane_symbol"], "group": "alias-negative", "since": "T-149" },
+  { "sentence": "펑크 록 밴드의 공연이 주말에 열렸다.", "expectNodes": [], "forbidNodes": ["starforce"], "group": "alias-negative", "since": "T-149" },
+  { "sentence": "달리던 차의 타이어가 펑 하고 터졌다.", "expectNodes": [], "forbidNodes": ["starforce"], "group": "alias-negative", "since": "T-149" },
+  { "sentence": "버스 기사가 손님에게 길을 안내했다.", "expectNodes": [], "forbidNodes": ["party"], "group": "alias-negative", "since": "T-149" },
+  { "sentence": "오늘 신문 기사에서 금리 인상 소식을 읽었다.", "expectNodes": [], "forbidNodes": ["party"], "group": "alias-negative", "since": "T-149" }
 ]
