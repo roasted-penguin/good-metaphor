@@ -1,4 +1,4 @@
-// 운영자용 교정 검사(T-131). 설정 "운영자용 교정 내보내기"로 받은 JSON을 평가셋·검증셋·가드 문장과 대조한다.
+// 운영자용 교정 검사(T-131). 설정 "운영자용 교정 내보내기"로 받은 JSON을 평가셋·검증셋·홀드아웃·가드 문장과 대조한다.
 //   node tools/check-corrections.mjs <내보낸.json> [--out <결과.json>]
 // - 예문 후보 중 평가 문장을 베낀 것(글자 3-gram 자카드 ≥ 0.5)은 rejected(copies-eval)로 옮긴다. 평가 문장을 예문으로 넣으면 평가가 무의미해진다.
 // - 지금 금칙어 목록(blocklist.json)으로 한 번 더 거른다(내보낸 뒤 목록이 늘었을 수 있다).
@@ -13,9 +13,10 @@ import { activeTerms } from '../extension/lib/blocklist.js';
 const here = new URL('.', import.meta.url);
 const readJson = u => JSON.parse(readFileSync(u, 'utf8'));
 
-// 평가셋 + 검증셋 + 회귀 가드 문장(중복 없이)
+// 평가셋 + 검증셋 + 홀드아웃 + 회귀 가드 문장(중복 없이)
 export function evalSentencesFromDisk() {
-  const cases = [...readJson(new URL('./eval-set.json', here)), ...readJson(new URL('./eval-holdout.json', here))].map(c => c.sentence);
+  const cases = ['./eval-set.json', './eval-holdout.json', './eval-unseen.json'] // 평가셋·검증셋·홀드아웃(T-150)
+    .flatMap(f => readJson(new URL(f, here))).map(c => c.sentence);
   return [...new Set([...cases, ...readJson(new URL('./eval-guard.json', here))])];
 }
 

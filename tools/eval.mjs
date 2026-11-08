@@ -8,6 +8,9 @@
 //                                      # 결과는 .tmp/rewrite-<제공자>-<모델>.json 에 캐시(다시 돌려도 호출 안 함)
 //   npm run eval -- --server <url>     # 같은 문장을 analogy-api(POST /v1/analogy)의 debug.candidates 순위로도 채점하고 관문 한 줄 (T-405)
 //        [--server-only]               # 브라우저 평가 생략   [--rpm 20] 분당 요청 수   [--token <값>] 기본은 eval-<무작위>
+//   npm run eval -- --holdout          # 평가셋·검증셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점 (T-150)
+//   [--margin 0.005]                   # 여유(1위 − 경쟁자 점수 차)가 이보다 작은 맞힌 문장을 요약 끝에 목록으로 (T-150). -v면 문장별 여유
+//   [--margin-guard]                   # 가드 문장 중 여유가 --margin 미만이면 종료 코드 1 (선택, 여유 경고는 기본으로 실패가 아님)
 import fs from 'node:fs';
 import { mergeGraphs, tagText, nodeText } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
@@ -15,7 +18,7 @@ import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { embedEach } from '../extension/lib/embed-each.js';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
-import { scoreCases, mixedSetting, regressions } from './eval-lib.mjs';
+import { scoreCases, mixedSetting, regressions, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
 import { rankAllViaServer, gateLine, ServerUnavailable } from './eval-server.mjs';
@@ -23,11 +26,13 @@ import { rankAllViaServer, gateLine, ServerUnavailable } from './eval-server.mjs
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
 const common = loadCommonGraphFromDisk(); // 그래프 + tags.json (T-304)
-const sets = [
-  { name: '평가셋', cases: JSON.parse(fs.readFileSync(new URL('./eval-set.json', here))) },
-  // 검증셋: 가중치·텍스트 조정에 쓰지 않는 문장 (T-113). 과적합 확인용
-  { name: '검증셋', cases: JSON.parse(fs.readFileSync(new URL('./eval-holdout.json', here))) }
-];
+const readSet = f => JSON.parse(fs.readFileSync(new URL(f, here)));
+// 평가셋·검증셋(eval-holdout.json), --holdout이면 홀드아웃(eval-unseen.json)만 (T-150)
+const sets = pickSets(process.argv, {
+  evalSet: readSet('./eval-set.json'),
+  validation: readSet('./eval-holdout.json'),
+  holdout: process.argv.includes('--holdout') ? readSet('./eval-unseen.json') : []
+});
 const useFallback = process.argv.includes('--fallback');
 const verbose = process.argv.includes('-v');
 // 회귀 가드: 지금 맞히는 문장은 계속 맞혀야 한다(사용자 원칙, T-113). --guard면 하나라도 틀릴 때 종료 코드 1.
@@ -36,6 +41,10 @@ const verbose = process.argv.includes('-v');
 const guard = JSON.parse(fs.readFileSync(new URL('./eval-guard.json', here)));
 const failGuard = process.argv.includes('--guard');
 let regressed = 0;
+// 여유(T-150): 정보용 경고. --margin-guard일 때만 가드 문장의 작은 여유를 실패로 친다
+const marginMin = marginThreshold(process.argv);
+const failMarginGuard = process.argv.includes('--margin-guard');
+let marginGuardFailed = [];
 
 // 서버 모드 (T-405). 토큰은 평가용 무작위 문자열이고 출력하지 않는다
 const argAfter = flag => { const i = process.argv.indexOf(flag); return i > 0 ? process.argv[i + 1] : null; };
@@ -117,7 +126,8 @@ const pctLine = (label, r) => {
   return `${label.padEnd(18)}  hit@1 ${pct(r.hit1, r.n)}  hit@3 ${pct(r.hit3, r.n)}${groups}`;
 };
 // 회귀(가드 기준)와 T-103 새 문장 줄. 브라우저 혼합 줄과 서버 줄이 함께 쓴다
-function printGuardAndNew(cases, r, rank) {
+function printGuardAndNew(cases, r, rank, guarded = true) {
+  if (!guarded) { console.log('  (회귀 가드 대상 아님)'); return; }
   const reg = regressions(guard, r);
   regressed += reg.length;
   console.log(reg.length ? reg.map(x => `  ⚠ 회귀(잘 맞던 문장이 틀림): ${x}`).join('\n') : '  회귀 없음');
@@ -129,23 +139,27 @@ function printGuardAndNew(cases, r, rank) {
   }
 }
 
-if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, cases } of sets) {
+if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, cases, guarded } of sets) {
   const qs = await embed(cases.map(c => mode ? rewriteQueryText(rewrites[c.sentence], c.sentence, mode) : c.sentence), 'query');
   console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${embedderLabel}\n`);
+  let margins = [];
   for (const s of settings) {
     const { topK, ...opts } = s;
-    const rank = (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: 3, aliasText: c.sentence }).map(x => ({ id: x.id, score: x.score }));
+    // 전체 순위를 받는다: scoreCases는 앞 3개만 보고, 여유는 기대 노드가 아닌 첫 노드까지 봐야 한다(T-150)
+    const rank = (c, i) => retrieve(qs[i], graph, vecs, { ...opts, topK: graph.nodes.length, aliasText: c.sentence }).map(x => ({ id: x.id, score: x.score }));
     const r = scoreCases(cases, rank);
     console.log(pctLine(s.name, r));
-    if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);
+    if (verbose) for (const m of r.misses) console.log(missLine(m));
     if (s.name === mixedSetting(admin).name) {
+      margins = marginsOf(cases, rank);
+      if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…`);
       // 음성 문장(T-149): 1위가 금지 노드가 아니면 통과. hit@1 분모와 따로
       if (r.negative.n) {
         console.log(`  alias-negative ${r.negative.pass}/${r.negative.n}`);
         if (verbose) for (const f of r.negative.fails) console.log(`  ✗ ${f.sentence.slice(0, 32)}… → 1위 ${f.top} (금지: ${f.forbid.join('/')})`);
       }
       if (name === '평가셋' && !mode) browserHit1 = r.hit1;
-      printGuardAndNew(cases, r, rank);
+      printGuardAndNew(cases, r, rank, guarded);
       // 비유가 없어야 하는 문장의 1위 점수 vs 맞힌 문장의 1위 점수 (임계값 근거)
       if (r.noMatch.length) {
         const hs = [...r.hitScores].sort((a, b) => a - b);
@@ -158,13 +172,16 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
   const tagged = cases.filter(c => c.expectTag);
   cases.forEach((c, i) => { if (c.expectTag && topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
   console.log(`\n추상 태그 top-1 정확도: ${pct(t1, tagged.length)}`);
+  // 여유 작은 맞힌 문장 (혼합 설정, -v와 상관없이). 기존 줄 뒤에 덧붙이기만 한다
+  console.log(lowMarginLines(lowMargins(margins, marginMin), marginMin).join('\n'));
+  if (guarded && !mode) marginGuardFailed.push(...marginGuardFails(guard, margins, marginMin));
 }
 await closeEmbedder();
 
 if (serverUrl) {
   let serverHit1 = null, serverN = 0;
   try {
-    for (const { name, cases } of sets) {
+    for (const { name, cases, guarded } of sets) {
       const onProgress = process.stdout.isTTY ? (i, n) => process.stdout.write(`\r  서버 요청 ${i}/${n}`) : undefined;
       const ranked = await rankAllViaServer({ url: serverUrl, token: serverToken, cases, rpm: serverRpm, onProgress });
       if (onProgress) process.stdout.write('\r\x1b[K');
@@ -172,8 +189,8 @@ if (serverUrl) {
       const r = scoreCases(cases, rank);
       console.log(`\n[${name} · 서버] 문장 ${cases.length}개 · 서버: ${serverUrl} (분당 ${serverRpm}회)\n`);
       console.log(pctLine('서버', r));
-      if (verbose) for (const m of r.misses) console.log(`  ✗ ${m.sentence.slice(0, 32)}… → ${m.got.join(', ')} (기대: ${m.expect.join('/')})`);
-      printGuardAndNew(cases, r, rank);
+      if (verbose) for (const m of r.misses) console.log(missLine(m));
+      printGuardAndNew(cases, r, rank, guarded);
       if (r.noMatch.length) console.log(`  비유 없음 ${r.noMatch.length}문장 1위 후보 ${r.noMatch.map(m => m.top ?? '-').join(' ')}`);
       if (name === '평가셋') { serverHit1 = r.hit1; serverN = r.n; }
     }
@@ -184,4 +201,9 @@ if (serverUrl) {
   }
   console.log(`\n${gateLine(serverHit1, serverOnly ? null : browserHit1, serverN)}`);
 }
+if (failMarginGuard && marginGuardFailed.length) {
+  console.log(`\n여유 가드: 가드 문장 ${marginGuardFailed.length}개가 여유 < ${marginMin}`);
+  for (const s of marginGuardFailed) console.log(`  ${s}`);
+}
 if (failGuard && regressed) { console.log(`\n회귀 ${regressed}건`); process.exit(1); }
+if (failMarginGuard && marginGuardFailed.length) process.exit(1);
