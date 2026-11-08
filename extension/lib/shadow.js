@@ -42,5 +42,28 @@
     return stopAt;
   }
 
-  globalThis.AnalogyShadow = Object.freeze({ collectShadowRoots, composedParent, blockFor, isShadowRoot });
+  // 비밀번호 칸 깊은 검사(T-148): root(폼 요소나 shadow root) 아래를 깊이 우선으로 돌며, 자손 요소의 열린 shadow 안까지 들어가
+  // <input type=password> 를 찾는다(form.elements 는 shadow 안 칸을 못 잡음). 닫힌 shadow 는 shadowRoot 가 null 이라 못 들어간다.
+  // 상한: shadow 깊이 maxDepth(기본 10, collectShadowRoots 와 같음), 방문 요소 수 maxNodes(기본 2,000).
+  // 방문 수 상한을 넘으면 거기서 멈추고 '없음'으로 본다 — 호버마다 도는 검사라 거대한 폼에서 느려지지 않게 하는 쪽을 골랐다.
+  // 보통 폼의 light DOM 칸은 이 검사 전에 form.elements·querySelector 로 이미 잡히므로, 여기서 놓치는 건 거대한 폼 깊숙한 shadow 뿐이다
+  function hasPasswordDeep(root, { maxDepth = 10, maxNodes = 2000 } = {}) {
+    if (!root) return false;
+    let visited = 0;
+    const stack = [{ parent: root, depth: 0 }];
+    while (stack.length) {
+      const { parent, depth } = stack.pop();
+      const kids = parent.children || [];
+      for (let i = 0; i < kids.length; i++) {
+        if (++visited > maxNodes) return false;
+        const el = kids[i];
+        if (el.localName === 'input' && String(el.type).toLowerCase() === 'password') return true;
+        if (el.children?.length) stack.push({ parent: el, depth });
+        if (el.shadowRoot && depth < maxDepth) stack.push({ parent: el.shadowRoot, depth: depth + 1 });
+      }
+    }
+    return false;
+  }
+
+  globalThis.AnalogyShadow = Object.freeze({ collectShadowRoots, composedParent, blockFor, isShadowRoot, hasPasswordDeep });
 })();
