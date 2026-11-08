@@ -291,3 +291,45 @@ test('운영자 도구(tools/check-corrections.mjs): 평가셋·검증셋·가�
   assert.deepEqual(out.exampleCandidates.map(c => c.text), [S3]);
   assert.deepEqual(out.rejected, [{ tagId: 'prob_upgrade', reason: 'copies-eval', count: 1 }]);
 });
+
+/* ───── 수정 1회: 한 문장을 예문과 평가 문장 두 곳에 쓰지 않게 ───── */
+
+test('filterEvalCopies: 공통 태그 지금 예문(tags.json)과 자카드 ≥ 0.5인 평가·가드 후보는 뺀다', () => {
+  const ex = buildCorrectionsExport([pick(S3, 'cube'), pick(S1, 'meso')], graph, meta);
+  ex.guardCandidates.push({ sentence: S1.replace('많이', '아주 많이'), expectNodes: ['meso'], source: 'up' });
+  const out = filterEvalCopies(ex, [], { commonExamples: [S1] });
+  assert.deepEqual(out.evalCandidates.map(c => c.sentence), [S3]);
+  assert.deepEqual(out.guardCandidates, []);
+});
+
+test('buildCorrectionsExport: 예문 후보이기도 한 평가·가드 후보에는 alsoExampleCandidate: true', () => {
+  const recs = [pick(S3, 'cube'), pick('짧은 문장이지만 금칙어는 없는 나쁜말 문장입니다.', 'meso'), rec({ sentence: S3 + ' 정말', vote: 'up', nodeId: 'cube' })];
+  const ex = buildCorrectionsExport(recs, graph, { ...meta, blockTerms: [] });
+  const e = ex.evalCandidates.find(c => c.sentence === S3);
+  assert.equal(e.alsoExampleCandidate, true);
+  assert.equal(ex.guardCandidates[0].alsoExampleCandidate, true);
+  // 예문 후보가 아닌 평가 후보에는 붙지 않는다(중복으로 예문에서 빠진 경우 등)
+  const g = { ...graph, tags: graph.tags.map(t => (t.id === 'prob_upgrade' ? { ...t, examples: [S3] } : t)) };
+  const ex2 = buildCorrectionsExport([pick(S3, 'cube')], g, meta);
+  assert.equal(ex2.exampleCandidates.length, 0);
+  assert.equal(ex2.evalCandidates[0].alsoExampleCandidate, undefined);
+});
+
+test('filterEvalCopies: 예문 후보가 걸러지면 alsoExampleCandidate 표시를 다시 계산한다', () => {
+  const ex = buildCorrectionsExport([pick(S3, 'cube')], graph, meta);
+  assert.equal(ex.evalCandidates[0].alsoExampleCandidate, true);
+  // 예문 후보가 그대로 남으면 표시도 남고, 예문 후보가 없어지면 표시도 빠진다
+  const out = filterEvalCopies(ex, [], {});
+  assert.equal(out.evalCandidates[0].alsoExampleCandidate, true);
+  const out2 = filterEvalCopies({ ...ex, exampleCandidates: [] }, [], {});
+  assert.equal(out2.evalCandidates[0].alsoExampleCandidate, undefined);
+});
+
+test('운영자 도구: 지금 tags.json의 공통 예문을 읽는다', async () => {
+  const { commonExamplesFromDisk } = await import('../../tools/check-corrections.mjs');
+  const { readFileSync } = await import('node:fs');
+  const tf = JSON.parse(readFileSync(new URL('../../extension/data/common/tags.json', import.meta.url), 'utf8'));
+  const all = commonExamplesFromDisk();
+  assert.equal(all.length, tf.tags.flatMap(t => t.examples || []).length);
+  assert.ok(all.includes(tf.tags[0].examples[0]));
+});

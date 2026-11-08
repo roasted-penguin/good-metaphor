@@ -949,11 +949,41 @@ test('교정(T-131): 공통 노드 pick은 오버레이를 안 건드리고, 설
   expect(data.tagsVersion).toBe(common.tagsVersion);
   const mesoTag = common.nodes.find(n => n.id === 'meso').tags[0];
   expect(data.exampleCandidates).toEqual([{ tagId: mesoTag, text: S.replace('2026', '[숫자]'), nodeId: 'meso', count: 1 }]);
-  expect(data.evalCandidates).toEqual([{ sentence: S.replace('2026', '[숫자]'), expectNodes: ['meso'], expectTag: mesoTag, source: 'pick' }]);
+  // 같은 문장이 예문 후보이기도 해서 표시가 붙는다(한 곳에만 넣는다)
+  expect(data.evalCandidates).toEqual([{ sentence: S.replace('2026', '[숫자]'), expectNodes: ['meso'], expectTag: mesoTag, source: 'pick', alsoExampleCandidate: true }]);
   expect(data.guardCandidates).toEqual([{ sentence: '연락처 [숫자] 로 물으면 금리가 오른 이유를 알려 준다.', expectNodes: ['meso'], source: 'up' }]);
   // 판본·시각 필드에는 연도가 있으니 후보 칸만 본다
   const raw = JSON.stringify([data.exampleCandidates, data.rejected, data.evalCandidates, data.guardCandidates]);
   for (const bad of ['u:focus', 'u_focus', '2026', '010-1234']) expect(raw).not.toContain(bad);
+});
+
+test('교정(T-131): 내 태그 예문이 바뀌면 다른 문장의 결과 캐시도 새로 만든다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  await send({ type: 'explain', ...q });
+  expect((await send({ type: 'explain', ...q })).data.cached).toBe(true);
+  // 교정 기록은 비슷한 문장 메모리 키로도 캐시를 가르므로, 기록 없이 예문만 바꿔 graphKey가 가르는지 본다
+  const ov = (await send({ type: 'overlay:get' })).data;
+  ov.tags[0].examples = [...ov.tags[0].examples, FOCUS_MASKED];
+  expect((await send({ type: 'overlay:save', overlay: ov })).data.ok).toBe(true);
+  expect((await send({ type: 'explain', ...q })).data.cached).toBeUndefined();
+  expect((await send({ type: 'explain', ...q })).data.cached).toBe(true);
+  // feedbackBoosts만 바뀌어도 새로
+  ov.feedbackBoosts = { meso: -0.05 };
+  await send({ type: 'overlay:save', overlay: ov });
+  expect((await send({ type: 'explain', ...q })).data.cached).toBeUndefined();
+});
+
+test('교정(T-131): 내 관심사만 쓸 때(useCommon false)도 공통 노드 교정을 내보낸다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: { ...FOCUS_OVERLAY, useCommon: false, domain: '공부' } })).data.ok).toBe(true);
+  const S = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 저축한 돈의 구매력이 줄어든다.';
+  await send({ type: 'feedback', record: { sentence: S, nodeId: null, tagId: null, vote: 'pick', pickedNodeId: 'meso' } });
+  const data = (await send({ type: 'corrections:export' })).data;
+  expect(data.exampleCandidates.map(c => [c.nodeId, c.text])).toEqual([['meso', S]]);
 });
 
 test('교정(T-131): 말풍선 "더 맞는 개념" 기록에 고른 개념의 최고 태그(pickedTagId)가 남는다', async ({ context, ext }) => {

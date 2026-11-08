@@ -200,24 +200,37 @@ export function buildCorrectionsExport(records, graph, { blockTerms = [], common
     seenGuard.add(sentence);
     guardCandidates.push({ sentence, expectNodes: [p.nodeId], source: 'up' });
   }
+  const exampleCandidates = accepted.map(({ tagId, text, nodeId, count }) => ({ tagId, text, nodeId, count }));
   return {
     kind: EXPORT_KIND,
     version: 1,
     generatedAt: generatedAt || new Date().toISOString(),
     commonGraphVersion,
     tagsVersion,
-    exampleCandidates: accepted.map(({ tagId, text, nodeId, count }) => ({ tagId, text, nodeId, count })),
+    exampleCandidates,
     rejected: countRejected(rejected),
-    evalCandidates,
-    guardCandidates
+    evalCandidates: markAlsoExample(evalCandidates, exampleCandidates),
+    guardCandidates: markAlsoExample(guardCandidates, exampleCandidates)
   };
+}
+
+// 한 문장은 예문이나 평가 문장 중 한 곳에만 쓴다(같은 문장이 두 곳에 있으면 평가가 무의미해진다).
+// 예문 후보와 자카드 ≥ 0.5인 평가·가드 후보에 alsoExampleCandidate: true를 붙이고, 아니면 표시를 뗀다
+function markAlsoExample(list, exampleCandidates) {
+  const texts = (exampleCandidates || []).map(c => c.text);
+  return (list || []).map(c => {
+    const { alsoExampleCandidate, ...rest } = c;
+    return copiesEval(c.sentence, texts) ? { ...rest, alsoExampleCandidate: true } : rest;
+  });
 }
 
 /**
  * 운영자 도구용: 내보낸 JSON에서 평가셋·검증셋·가드 문장을 베낀 예문 후보를 rejected(copies-eval)로 옮기고,
- * 이미 평가 문장과 거의 같은(자카드 ≥ 0.8) 평가·가드 후보는 뺀다. blockTerms를 주면 금칙어도 다시 거른다. 받은 객체는 바꾸지 않는다.
+ * 이미 평가 문장과 거의 같은(자카드 ≥ 0.8) 평가·가드 후보는 뺀다. blockTerms를 주면 금칙어도 다시 거른다.
+ * commonExamples(지금 tags.json 공통 예문)와 자카드 ≥ 0.5인 평가·가드 후보도 뺀다(이미 예문인 문장을 평가에 쓰지 않게).
+ * 남은 예문 후보 기준으로 alsoExampleCandidate 표시를 다시 계산한다. 받은 객체는 바꾸지 않는다.
  */
-export function filterEvalCopies(exported, evalSentences = [], { blockTerms = [] } = {}) {
+export function filterEvalCopies(exported, evalSentences = [], { blockTerms = [], commonExamples = [] } = {}) {
   const keep = [], dropped = [];
   for (const c of exported.exampleCandidates || []) {
     // 내보낸 뒤 금칙어 목록이 늘었을 수 있어 운영자 쪽에서 한 번 더 본다
@@ -225,7 +238,8 @@ export function filterEvalCopies(exported, evalSentences = [], { blockTerms = []
     else if (copiesEval(c.text, evalSentences)) dropped.push({ ...c, reason: 'copies-eval' });
     else keep.push(c);
   }
-  const fresh = list => (list || []).filter(c => !findBlocked(c.sentence, blockTerms) && !copiesEval(c.sentence, evalSentences, DUPLICATE_MIN));
+  const fresh = list => markAlsoExample((list || []).filter(c => !findBlocked(c.sentence, blockTerms)
+    && !copiesEval(c.sentence, evalSentences, DUPLICATE_MIN) && !copiesEval(c.sentence, commonExamples)), keep);
   return {
     ...exported,
     exampleCandidates: keep,

@@ -167,7 +167,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
 
   onStage('graph');
   const { graph, session } = merged || await getMergedGraph();
-  const graphKey = JSON.stringify([graph.sources, session?.userId || null, graph.nodes.length]);
+  // 내 태그 예문(교정 예문 포함, T-131)과 가중치(nodeBoosts + feedbackBoosts)가 바뀌어도 다른 문장의 캐시가 갈리게 짧은 지문을 넣는다
+  const userTagKey = (await sha1(JSON.stringify([graph.tags.filter(t => t.source === 'user').map(t => [t.id, t.examples || []]), graph.boosts || {}]))).slice(0, 12);
+  const graphKey = JSON.stringify([graph.sources, session?.userId || null, graph.nodes.length, userTagKey]);
   const sentenceHash = await sentenceHashOf(sentence);
   const feedbackRecords = await feedbackStore.get();
   // 피드백 지문을 캐시 키에 넣어, 그 문장의 피드백이 바뀌면 캐시가 저절로 무효가 된다
@@ -528,8 +530,9 @@ const handlers = {
   },
   // 운영자용 교정 내보내기(T-131). 공통 노드·공통 태그 대상만, 가린 문장만. 서버로 보내지 않는다(설정 화면이 로컬 파일로 받는다)
   async 'corrections:export'() {
-    const [records, common, { graph }, blockTerms] = await Promise.all([feedbackStore.get(), loadCommonGraph(), getMergedGraph(), loadBlocklist()]);
-    return buildCorrectionsExport(records, graph, {
+    // 공통 그래프로 노드·기존 예문을 찾는다(내 관심사만 쓰는 useCommon false여도 공통 노드 교정을 내보낸다)
+    const [records, common, blockTerms] = await Promise.all([feedbackStore.get(), loadCommonGraph(), loadBlocklist()]);
+    return buildCorrectionsExport(records, common, {
       blockTerms,
       commonTagIds: new Set(common.tags.map(t => t.id)),
       commonGraphVersion: common.version ?? null,
