@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from app import rag as rag_mod
-from app.config import Settings
+from app.config import Settings, load_common_graph
 from app.seed import graph_to_custom_kg, seed, seed_counts
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
@@ -23,7 +23,7 @@ COMMON_GRAPH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
 
 @pytest.fixture(scope="module")
 def kg() -> dict:
-    return graph_to_custom_kg(json.loads(COMMON_GRAPH.read_text(encoding="utf-8")))
+    return graph_to_custom_kg(load_common_graph(COMMON_GRAPH))
 
 
 def make_settings(tmp_path: Path, **env: str) -> Settings:

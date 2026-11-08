@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServers, calls, analogyCalls, SERVER_ANALOGY, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING } from './servers.mjs';
+import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
 
 const EXT = path.resolve('.tmp/ext-e2e');
 
@@ -1973,7 +1974,7 @@ test('Shadow DOM(T-148): 말풍선을 닫으면 그 root 에서 우리 강조 �
 });
 
 /* ───────────── 출처·검수 날짜와 제보 제외 (T-118, D-3) ───────────── */
-const COMMON = JSON.parse(readFileSync('extension/data/common/maplestory.json', 'utf8'));
+const COMMON = loadCommonGraphFromDisk();
 const verifiedYM = label => COMMON.nodes.find(n => n.label === label)?.verifiedAt?.slice(0, 7);
 // "사실이 틀렸어요" 제보(👎 + reason fact). 문장마다 하나씩
 const reportFact = (ext, nodeId, sentence) => ext.send({ type: 'feedback', record: { sentence, nodeId, tagId: null, vote: 'down', reason: 'fact' } });
