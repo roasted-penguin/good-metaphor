@@ -85,3 +85,17 @@ test('lineRects: 0크기 rect를 뺀 배열(배치 때 index로 다시 꺼내는
   assert.deepEqual(lineRects([zero, LINES[0], LINES[1]]), [LINES[0], LINES[1]]);
   assert.deepEqual(lineRects(null), []);
 });
+
+test('tinyFrame(T-147): 서브프레임이 너비 260 미만 또는 높이 160 미만이면 작은 프레임', () => {
+  const { tinyFrame } = globalThis.AnalogyPlace;
+  assert.equal(tinyFrame({ isTop: false, vw: 200, vh: 120 }), true, '광고 크기');
+  assert.equal(tinyFrame({ isTop: false, vw: 259, vh: 600 }), true, '너비만 작음');
+  assert.equal(tinyFrame({ isTop: false, vw: 700, vh: 159 }), true, '높이만 작음');
+  assert.equal(tinyFrame({ isTop: false, vw: 260, vh: 160 }), false, '경계는 작지 않음');
+  assert.equal(tinyFrame({ isTop: false, vw: 700, vh: 200 }), false);
+});
+
+test('tinyFrame(T-147): 최상위 프레임은 창이 작아도 해당 없음', () => {
+  const { tinyFrame } = globalThis.AnalogyPlace;
+  assert.equal(tinyFrame({ isTop: true, vw: 200, vh: 120 }), false);
+});

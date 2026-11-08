@@ -319,6 +319,15 @@ async function assertSiteAllowed(sender, topHost) {
   if (await siteBlocked(sender, topHost)) throw new Error(SITE_OFF);
 }
 
+// 한 탭에는 말풍선 하나(T-147): 어떤 프레임에서 explain이 시작되면 같은 탭의 다른 프레임 말풍선을 닫는다.
+// frameId 없이 보내 모든 프레임이 받고, 보낸 프레임은 자기 표지(exceptToken)라 무시한다. tabs 권한은 필요 없다.
+// 콘텐츠 스크립트가 없는 프레임만 있으면 거절되는데, 닫을 말풍선도 없다는 뜻이라 무시한다
+function closeOtherBubbles(sender, exceptToken) {
+  const tabId = sender?.tab?.id;
+  if (tabId == null || tabId < 0 || !exceptToken) return;
+  try { chrome.tabs.sendMessage(tabId, { type: 'close-bubble', exceptToken }).catch(() => {}); } catch {}
+}
+
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'explain') return;
   port.onMessage.addListener(async msg => {
@@ -326,6 +335,7 @@ chrome.runtime.onConnect.addListener(port => {
     try {
       const post = m => { try { port.postMessage({ id: msg.id, ...m }); } catch {} };
       if (await siteBlocked(port.sender, msg.payload?.topHost)) { post({ type: 'error', error: SITE_OFF }); return; }
+      closeOtherBubbles(port.sender, msg.frameToken);
       countHover();
       // 병합 그래프를 먼저 읽어 모든 stage 메시지에 테마를 싣는다(T-108). 첫 결과 전 말풍선이 다른 테마로 뜨지 않게.
       // 읽은 그래프는 explain에 넘겨 다시 읽지 않는다
