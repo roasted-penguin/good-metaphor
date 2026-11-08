@@ -12,7 +12,7 @@ import { applyBlocklist, findBlocked } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
 import { syncCorrectionExamples, buildCorrectionsExport } from './lib/corrections.js';
 import { buildDraftPrompt } from './lib/prompt.js';
-import { parseDraft, validDraftName, demoDraftText } from './lib/draft.js';
+import { parseDraft, validDraftName, draftNameError, demoDraftText, withDeadline, draftError, DRAFT_DEADLINE_MS } from './lib/draft.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
@@ -454,18 +454,27 @@ const handlers = {
   async 'graph:draft'({ name, mode }) {
     const { session, overlay } = await getSessionAndOverlay();
     if (!session) throw new Error('로그인이 필요해요.');
-    const n = validDraftName(name);
-    if (!n) throw new Error('관심사 이름을 1~30자로 적어 주세요.');
     const [common, blockTerms, admin, settings, provider] = await Promise.all([loadCommonGraph(), loadBlocklist(), getAdminConfig(), getSettings(), resolveProvider()]);
+    // 이름은 domain·analogyPrefix로 말풍선에 보이므로 금칙어도 막는다(규칙 11)
+    const nameErr = draftNameError(name, blockTerms);
+    if (nameErr) throw new Error(nameErr);
+    const n = validDraftName(name);
     const ov = normalizeOverlay(overlay);
     let text, answered = `${provider.id}/${provider.model}`;
     if (provider.def.kind === 'demo') text = demoDraftText(n);
     else {
       const { system, user } = buildDraftPrompt({ name: n, tags: common.tags });
-      const r = await completeWithFallback(buildChain(provider, admin, settings), system, user,
-        { json: true, maxTokens: 4000, timeoutMs: 90_000 }, { cooldowns, cooldown: admin.cooldown });
-      text = r.text;
-      answered = `${r.provider.id}/${r.provider.model}`;
+      // 체인 전체에 마감 하나(순서마다 남은 시간만 준다). 크롬 이벤트 5분 제한 전에 끝나고, 그동안 서비스 워커를 깨워 둔다
+      const ms = admin.draft?.deadlineMs ?? DRAFT_DEADLINE_MS;
+      const deadlineAt = Date.now() + ms;
+      try {
+        const r = await keepAlive(withDeadline(completeWithFallback(buildChain(provider, admin, settings), system, user,
+          { json: true, maxTokens: 4000, timeoutMs: ms, deadline: deadlineAt }, { cooldowns, cooldown: admin.cooldown }), ms));
+        text = r.text;
+        answered = `${r.provider.id}/${r.provider.model}`;
+      } catch (e) {
+        throw draftError(e, { deadlineAt });
+      }
     }
     const existingIds = [...(ov.nodes || []).map(x => x.id), ...common.nodes.map(x => x.id)];
     const parsed = parseDraft(text, { tags: common.tags, existingIds, blockTerms });

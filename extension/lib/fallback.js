@@ -81,7 +81,11 @@ export function cooldownMsFor(e, cooldown = {}, now = Date.now()) {
 }
 
 // cooldowns: { get(): Promise<{[key]: 풀리는 시각}>, set(obj) }. cooldown: { defaultMs, maxMs, dailyDefaultMs, dailyMaxMs }
+// opts.deadline(선택, epoch ms): 체인 전체 마감(AI 초안, T-301). 순서마다 시간 제한을 남은 시간으로 줄이고,
+// 다음 순서로 넘기기 전에 마감이 지났으면 e.deadline = true 오류를 던진다. 없으면 예전 그대로
+const deadlineError = () => Object.assign(new Error('정해진 시간 안에 답을 받지 못했어요.'), { deadline: true });
 export async function completeWithFallback(chain, system, user, opts, { cooldowns, cooldown = {}, now = Date.now }) {
+  const { deadline, ...callOpts } = opts || {};
   const until = await cooldowns.get();
   const t = now();
   let order = chain.filter(p => !(until[keyOf(p)] > t));
@@ -91,8 +95,14 @@ export async function completeWithFallback(chain, system, user, opts, { cooldown
   for (let i = 0; i < order.length; i++) {
     const p = order[i];
     const last = i === order.length - 1;
+    let linkOpts = callOpts;
+    if (deadline != null) {
+      const left = deadline - now();
+      if (left <= 0) throw deadlineError();
+      linkOpts = { ...callOpts, timeoutMs: Math.min(callOpts.timeoutMs ?? Infinity, left) };
+    }
     try {
-      const text = await complete(p, system, user, { ...opts, noRetry429: !last });
+      const text = await complete(p, system, user, { ...linkOpts, noRetry429: !last });
       return { text, provider: p, fallbacks };
     } catch (e) {
       if (last || !passes(e)) throw e;

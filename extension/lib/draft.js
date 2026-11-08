@@ -25,6 +25,33 @@ const REASON = {
 export const NUMBER_WARNING = '숫자가 있어요. 자주 바뀌는 값이면 지워 주세요.';
 export const PARSE_ERROR = 'AI 답을 초안으로 읽지 못했어요. 다시 해 보세요.';
 
+// 관심사 이름 오류 문구. 이름은 domain·analogyPrefix가 되어 말풍선에 보이므로 금칙어도 막는다(규칙 11). 괜찮으면 null
+export const NAME_LENGTH_ERROR = `관심사 이름을 1~${DRAFT_LIMITS.name}자로 적어 주세요.`;
+export const NAME_BLOCKED_ERROR = '이 이름은 쓸 수 없어요.';
+export function draftNameError(name, blockTerms = []) {
+  const n = validDraftName(name);
+  if (!n) return NAME_LENGTH_ERROR;
+  return findBlocked(n, blockTerms) ? NAME_BLOCKED_ERROR : null;
+}
+
+/* ───── 전체 마감 ───── */
+// 초안 호출 전체(체인 모든 순서)에 마감 하나. 크롬 확장 이벤트 5분 제한보다 한참 짧게
+export const DRAFT_DEADLINE_MS = 120_000;
+export const DRAFT_TIMEOUT_TEXT = '초안을 만드는 데 시간이 너무 오래 걸렸어요. 다시 시도해 주세요.';
+const timeoutError = () => Object.assign(new Error(DRAFT_TIMEOUT_TEXT), { deadline: true });
+
+// promise가 ms 안에 끝나지 않으면 시간 초과 문구로 거절한다(안쪽 호출은 각자 시간 제한으로 끊긴다)
+export function withDeadline(promise, ms) {
+  let timer;
+  const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(timeoutError()), ms); });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
+// 초안 호출 오류 → 사용자 문구. 마감 오류이거나 마감 시각을 넘겨 끝난 오류(마지막 순서의 시간 초과)는 시간 초과 문구
+export function draftError(e, { deadlineAt, now = Date.now() }) {
+  return e?.deadline || now >= deadlineAt ? timeoutError() : e;
+}
+
 // 관심사 이름: 공백을 뺀 1~30자. 아니면 null
 export function validDraftName(name) {
   const s = String(name ?? '').trim();
@@ -148,8 +175,15 @@ export function reviewAfterEdit(prev, node) {
 
 export const draftNodes = ov => (ov?.nodes || []).filter(n => n.draft === true);
 
-export function addDraftNodes(ov, nodes) {
-  return { ...ov, nodes: [...(ov.nodes || []), ...nodes] };
+// 초안을 오버레이 뒤에 붙인다. 그사이 생긴 노드·reservedIds(공통 노드 id 등)와 id가 겹치면 버리지 않고 makeNodeId로 새 id
+export function addDraftNodes(ov, nodes, { reservedIds = [], rand = Math.random } = {}) {
+  const taken = [...(ov.nodes || []).map(n => n.id), ...reservedIds];
+  const added = nodes.map(n => {
+    const id = taken.includes(n.id) ? makeNodeId(n.label, taken, rand) : n.id;
+    taken.push(id);
+    return id === n.id ? n : { ...n, id };
+  });
+  return { ...ov, nodes: [...(ov.nodes || []), ...added] };
 }
 
 // 새 관심사로 시작(D-4 b): 공통 그래프를 끄고 이름을 관심사로. 기존 내 노드는 지우지 않는다(더하기만)

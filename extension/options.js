@@ -1,7 +1,7 @@
 import { localDay, formatFeedbackStats } from './lib/feedback.js';
-import { validateOverlay, normalizeOverlay } from './lib/stores.js';
+import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.js';
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
-import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, DRAFT_LIMITS } from './lib/draft.js';
+import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 const SF = globalThis.AnalogySiteFilter;
@@ -511,8 +511,10 @@ $('#draftRun').addEventListener('click', async () => {
   if (!ov) return;
   const status = $('#draftStatus');
   const droppedList = $('#draftDropped');
+  // 이름은 domain·analogyPrefix가 되어 말풍선에 보이므로 금칙어도 막는다(규칙 11). background도 다시 검사한다
+  const nameErr = draftNameError($('#draftName').value, await loadBlocklist());
+  if (nameErr) return setStatus(status, nameErr, 'err');
   const name = validDraftName($('#draftName').value);
-  if (!name) return setStatus(status, `관심사 이름을 1~${DRAFT_LIMITS.name}자로 적어 주세요.`, 'err');
   const mode = document.querySelector('input[name=draftMode]:checked')?.value === 'new' ? 'new' : 'add';
   const existing = (ov.nodes || []).length;
   if (mode === 'new' && existing && !confirm(`기존 내 노드 ${existing}개가 있어요. 초안을 더할까요?`)) {
@@ -526,11 +528,10 @@ $('#draftRun').addEventListener('click', async () => {
     droppedList.replaceChildren(...(r.dropped || []).map(d => el('li', { text: d.label ? `${d.label}: ${d.reason}` : d.reason })));
     droppedList.hidden = !(r.dropped || []).length;
     if (!r.nodes.length) return setStatus(status, r.error || '쓸 수 있는 초안이 없어요. 이름을 바꿔 다시 해 보세요.', 'err');
-    // 그사이 다른 곳에서 노드가 생겼을 수 있어 id가 겹치면 그 노드만 뺀다
-    const taken = new Set((ov.nodes || []).map(n => n.id));
-    const fresh = r.nodes.filter(n => !taken.has(n.id));
+    // 그사이 다른 곳에서 노드가 생겼을 수 있어 id가 겹치면 새 id를 준다(공통 노드 id도 피한다)
+    const fresh = r.nodes;
     if (mode === 'new') ov = startNewInterest(ov, r.name);
-    ov = addDraftNodes(ov, fresh);
+    ov = addDraftNodes(ov, fresh, { reservedIds: commonNodes.map(n => n.id) });
     renderOverlayEditor();
     markDirty();
     const few = fresh.length < DRAFT_LIMITS.min ? ` AI가 만든 초안이 ${DRAFT_LIMITS.min}개보다 적어요.` : '';
