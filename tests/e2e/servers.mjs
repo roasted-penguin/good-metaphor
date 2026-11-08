@@ -27,6 +27,7 @@ export const analogyCalls = []; // 가짜 analogy-api 요청 기록 { headers, b
 export const STREAM_GAP_MS = 1500;
 // 문장에 "로딩지연테스트"가 있으면 응답을 이만큼 늦춘다(로딩 말풍선을 붙잡아 두는 용도, T-108)
 export const SLOW_MS = 2500;
+export const DRAFT_SLOW_MS = 6000; // AI 초안 마감 시험용, prepare-e2e의 admin.draft.deadlineMs(2500)보다 길게
 
 function mockLLM(req, res) {
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS' };
@@ -65,6 +66,8 @@ function mockLLM(req, res) {
       res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));
     };
     if (user.includes('로딩지연테스트')) return void setTimeout(out, SLOW_MS);
+    // AI 초안 전체 마감 확인용(T-301): e2e 사본의 마감(admin.draft.deadlineMs)보다 늦게 답한다
+    if (user.includes('관심사: 초안지연테스트')) return void setTimeout(() => { if (!res.destroyed) out(); }, DRAFT_SLOW_MS);
     out();
   });
 }

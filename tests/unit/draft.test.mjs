@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import { buildDraftPrompt, withRo } from '../../extension/lib/prompt.js';
 import {
   parseDraft, DRAFT_LIMITS, confirmFact, confirmAllFacts, removeFact, settleDraft, reviewAfterEdit,
-  addDraftNodes, startNewInterest, draftNodes, hasNumber, demoDraftText, validDraftName
+  addDraftNodes, startNewInterest, draftNodes, hasNumber, demoDraftText, validDraftName,
+  draftNameError, withDeadline, draftError, DRAFT_TIMEOUT_TEXT, DRAFT_DEADLINE_MS
 } from '../../extension/lib/draft.js';
 import { mergeGraphs } from '../../extension/lib/graph.js';
 import { validateOverlay } from '../../extension/lib/stores.js';
@@ -278,4 +279,43 @@ test('validateOverlay: draft는 boolean, factsReviewed는 facts와 같은 길이
   assert.equal(validateOverlay({ nodes: [{ ...base, draft: true, factsReviewed: [false] }] }).length, 1);
   assert.equal(validateOverlay({ nodes: [{ ...base, draft: true, factsReviewed: [false, 'no'] }] }).length, 1);
   assert.equal(validateOverlay({ nodes: [{ ...base, draft: true }] }).length, 1, '초안이면 factsReviewed가 있어야 한다');
+});
+
+/* ───── 수정 1회차: 이름 금칙어, 전체 마감, id 겹침 ───── */
+
+test('draftNameError: 길이 밖이면 길이 문구, 금칙어면 "이 이름은 쓸 수 없어요."(domain·말풍선에 보이니까), 아니면 null', () => {
+  assert.equal(draftNameError('  ', blockTerms), '관심사 이름을 1~30자로 적어 주세요.');
+  assert.equal(draftNameError('가'.repeat(31), blockTerms), '관심사 이름을 1~30자로 적어 주세요.');
+  assert.equal(draftNameError(`${BLOCKED} 게임`, blockTerms), '이 이름은 쓸 수 없어요.');
+  assert.equal(draftNameError('축구', blockTerms), null);
+  assert.equal(draftNameError('축구', []), null);
+});
+
+test('withDeadline: 시간 안이면 값, 넘으면 정중한 시간 초과 문구로 거절', async () => {
+  assert.equal(await withDeadline(Promise.resolve(7), 50), 7);
+  const slow = new Promise(r => setTimeout(() => r('늦음'), 300));
+  await assert.rejects(withDeadline(slow, 20), e => e.message === DRAFT_TIMEOUT_TEXT && e.deadline === true);
+  assert.equal(DRAFT_TIMEOUT_TEXT, '초안을 만드는 데 시간이 너무 오래 걸렸어요. 다시 시도해 주세요.');
+  assert.equal(DRAFT_DEADLINE_MS, 120_000);
+});
+
+test('draftError: 마감 오류나 마감 시각을 넘긴 오류는 시간 초과 문구, 그 밖은 그대로', () => {
+  assert.equal(draftError(Object.assign(new Error('x'), { deadline: true }), { deadlineAt: 100, now: 0 }).message, DRAFT_TIMEOUT_TEXT);
+  assert.equal(draftError(new Error('응답 시간이 초과됐어요.'), { deadlineAt: 100, now: 100 }).message, DRAFT_TIMEOUT_TEXT);
+  const keyErr = new Error('API 키가 없어요');
+  assert.equal(draftError(keyErr, { deadlineAt: 100, now: 10 }), keyErr);
+});
+
+test('addDraftNodes: 그사이 생긴 노드와 id가 겹치면 버리지 않고 makeNodeId로 새 id(factsReviewed 유지)', () => {
+  const ov = { nodes: [{ id: 'u:routine', label: 'Routine', facts: ['x'], tags: ['t'] }] };
+  const d = { id: 'u:routine', label: 'Routine', facts: ['f1', 'f2'], tags: ['daily_accumulation'], draft: true, factsReviewed: [true, false] };
+  const ko = { id: 'u:nabcdef', label: '오프사이드', facts: ['f'], tags: ['threshold_req'], draft: true, factsReviewed: [false] };
+  const next = addDraftNodes({ nodes: [...ov.nodes, { ...ko, draft: undefined, factsReviewed: undefined }] }, [d, ko], { reservedIds: ['u:routine_2'], rand: () => 0.5 });
+  const added = next.nodes.slice(2);
+  assert.equal(added.length, 2);
+  assert.equal(added[0].id, 'u:routine_3');
+  assert.deepEqual(added[0].factsReviewed, [true, false]);
+  assert.match(added[1].id, /^u:n[0-9a-z]{6}$/);
+  assert.notEqual(added[1].id, 'u:nabcdef');
+  assert.equal(new Set(next.nodes.map(n => n.id)).size, next.nodes.length);
 });

@@ -2312,3 +2312,30 @@ test('AI 초안(T-301): 데모 제공자면 LLM 없이 고정 초안, 이름이 
   expect(long.ok).toBe(false);
   expect(long.error).toBe('관심사 이름을 1~30자로 적어 주세요.');
 });
+
+test('AI 초안 수정 1회차(T-301): 저장 안내 한 줄, 금칙어 이름은 화면·메시지 모두 거절, 전체 마감을 넘기면 정중한 오류', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '마감' });
+  await page.reload();
+  await openDraftPanel(page);
+  await expect(page.locator('#draftPanel')).toContainText('초안 만들기를 누르면 검수 대기에 넣고 바로 저장해요.');
+
+  let since = calls.length;
+  await page.fill('#draftName', `${BLOCKED_IN_ANALOGY} 게임`);
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('이 이름은 쓸 수 없어요.');
+  const bad = await send({ type: 'graph:draft', name: `${BLOCKED_IN_ANALOGY} 게임`, mode: 'new' });
+  expect(bad.ok).toBe(false);
+  expect(bad.error).toBe('이 이름은 쓸 수 없어요.');
+  expect(draftCalls(since)).toHaveLength(0);
+
+  since = calls.length;
+  await page.fill('#draftName', '초안지연테스트');
+  const t0 = Date.now();
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('초안을 만드는 데 시간이 너무 오래 걸렸어요. 다시 시도해 주세요.', { timeout: 10_000 });
+  expect(Date.now() - t0).toBeLessThan(5500); // 가짜 LLM(6초)을 기다리지 않고 마감(2.5초)에 끝난다
+  expect(draftCalls(since)).toHaveLength(1);
+  expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
+  await expect(page.locator('#draftRun')).toBeEnabled();
+});
