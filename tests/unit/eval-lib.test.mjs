@@ -188,3 +188,125 @@ test('평가셋 alias-negative: 4문장 이상, forbidNodes는 그래프 id, exp
   assert.equal(evalSet.filter(c => c.group === 'slang' && c.since === 'T-152').length, 5);
   assert.equal(plain.filter(c => !c.expectNodes.length).length, 5);
 });
+
+// --- T-150 여유(margin)·홀드아웃 ---
+import {
+  marginOf, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets
+} from '../../tools/eval-lib.mjs';
+
+const R = (...pairs) => pairs.map(([id, score]) => ({ id, score }));
+
+test('marginOf: 1위가 기대 노드면 1위 − (기대 노드가 아닌 것 중 최고), 양수', () => {
+  const m = marginOf(R(['a', 0.8], ['x', 0.7], ['y', 0.6]), ['a']);
+  assert.ok(Math.abs(m - 0.1) < 1e-12, m);
+});
+
+test('marginOf: 기대 노드가 여럿이면 2위가 기대 노드여도 건너뛰고 첫 비기대 노드와 비교한다', () => {
+  const m = marginOf(R(['a', 0.8], ['b', 0.79], ['x', 0.7]), ['a', 'b']);
+  assert.ok(Math.abs(m - 0.1) < 1e-12, m);
+});
+
+test('marginOf: 1위가 기대 노드가 아니면 (기대 노드 중 최고) − 1위, 음수', () => {
+  const m = marginOf(R(['x', 0.8], ['y', 0.78], ['b', 0.77], ['a', 0.5]), ['a', 'b']);
+  assert.ok(Math.abs(m - -0.03) < 1e-12, m);
+});
+
+test('marginOf: 비유 없음·점수 없음·비교 대상 없음이면 null', () => {
+  assert.equal(marginOf(R(['x', 0.8]), []), null);
+  assert.equal(marginOf(['a', 'x'], ['a']), null, '점수 없는 순위');
+  assert.equal(marginOf(R(['a', 0.8], ['b', 0.7]), ['a', 'b']), null, '비기대 노드가 순위에 없음');
+  assert.equal(marginOf(R(['x', 0.8], ['y', 0.7]), ['a']), null, '기대 노드가 순위에 없음');
+  assert.equal(marginOf([], ['a']), null);
+});
+
+test('marginsOf: 비유 없음·음성 문장은 빼고 문장별 여유를 순서대로 돌려준다', () => {
+  const cases = [
+    { sentence: '가', expectNodes: ['a'] },
+    { sentence: '없음', expectNodes: [] },
+    { sentence: '음성', expectNodes: [], forbidNodes: ['a'] },
+    { sentence: '나', expectNodes: ['b'] }
+  ];
+  const ranks = { 가: R(['a', 0.8], ['x', 0.799]), 없음: R(['x', 0.5]), 음성: R(['x', 0.5]), 나: R(['x', 0.6], ['b', 0.5]) };
+  const ms = marginsOf(cases, c => ranks[c.sentence]);
+  assert.deepEqual(ms.map(m => m.sentence), ['가', '나']);
+  assert.ok(Math.abs(ms[0].margin - 0.001) < 1e-9);
+  assert.ok(Math.abs(ms[1].margin - -0.1) < 1e-9);
+});
+
+test('lowMargins: 맞힌 문장(여유 ≥ 0) 중 임계값 미만만, 작은 순서로', () => {
+  const ms = [{ sentence: '가', margin: 0.004 }, { sentence: '나', margin: -0.001 }, { sentence: '다', margin: 0.001 }, { sentence: '라', margin: 0.005 }, { sentence: '마', margin: 0.2 }];
+  assert.deepEqual(lowMargins(ms, 0.005).map(m => m.sentence), ['다', '가']);
+});
+
+test('marginGuardFails: 가드 문장 중 여유가 임계값 미만(틀린 것 포함)만', () => {
+  const ms = [{ sentence: '가', margin: 0.001 }, { sentence: '나', margin: -0.01 }, { sentence: '다', margin: 0.001 }, { sentence: '라', margin: 0.3 }];
+  assert.deepEqual(marginGuardFails(['가', '나', '라'], ms, 0.005), ['가', '나']);
+  assert.deepEqual(marginGuardFails([], ms, 0.005), []);
+});
+
+test('fmtMargin: 부호를 붙여 소수 넷째 자리까지', () => {
+  assert.equal(fmtMargin(0.0019), '+0.0019');
+  assert.equal(fmtMargin(-0.03), '-0.0300');
+  assert.equal(fmtMargin(0), '+0.0000');
+});
+
+test('lowMarginLines: 요약 한 줄 + 문장 목록 (모드와 상관없이 출력)', () => {
+  const lines = lowMarginLines([{ sentence: '팀장이 되어야 결재 권한이 생기고, 그다음에야 예산 회의에 들어갈 수 있다.', margin: 0.002 }], 0.005);
+  assert.equal(lines[0], '여유 작은 문장(< 0.005): 1개');
+  assert.match(lines[1], /^ {2}\+0\.0020 {2}팀장이 되어야/);
+  assert.deepEqual(lowMarginLines([], 0.01), ['여유 작은 문장(< 0.01): 0개']);
+});
+
+test('missLine: 기존 -v 틀린 문장 줄 모양 그대로 (T-150에서 바꾸지 않음)', () => {
+  const m = { sentence: '가나다라마바사아자차카타파하가나다라마바사아자차카타파하가나다라마바사', got: ['x', 'y', 'z'], expect: ['a', 'b'] };
+  assert.equal(missLine(m), '  ✗ 가나다라마바사아자차카타파하가나다라마바사아자차카타파하가나다라… → x, y, z (기대: a/b)');
+});
+
+test('marginThreshold: 기본 0.005, --margin 값, 잘못된 값은 오류', () => {
+  assert.equal(marginThreshold(['node', 'eval.mjs']), 0.005);
+  assert.equal(marginThreshold(['--margin', '0.01']), 0.01);
+  assert.throws(() => marginThreshold(['--margin']), /--margin/);
+  assert.throws(() => marginThreshold(['--margin', 'abc']), /--margin/);
+  assert.throws(() => marginThreshold(['--margin', '-1']), /--margin/);
+});
+
+test('pickSets: 기본은 평가셋·검증셋, --holdout이면 홀드아웃만 (가드 대상 아님 표시)', () => {
+  const e = [{ sentence: 'e' }], v = [{ sentence: 'v' }], h = [{ sentence: 'h' }];
+  const def = pickSets([], { evalSet: e, validation: v, holdout: h });
+  assert.deepEqual(def.map(s => s.name), ['평가셋', '검증셋']);
+  assert.ok(def.every(s => s.guarded));
+  const ho = pickSets(['--holdout'], { evalSet: e, validation: v, holdout: h });
+  assert.deepEqual(ho.map(s => [s.name, s.cases, s.guarded]), [['홀드아웃', h, false]]);
+});
+
+// 홀드아웃(tools/eval-unseen.json): 예문을 고를 때 보지 않는 문장. 평가셋·검증셋·가드와 겹치지 않아야 의미가 있다
+const unseen = read('tools/eval-unseen.json');
+
+test('홀드아웃: 12문장 이상, 영어 2개 이상, 은어 1개 이상, id는 공통 그래프에, 비유 없음·음성 문장 없음', () => {
+  const nodeIds = new Set(common.nodes.map(n => n.id));
+  const tagIds = new Set(common.tags.map(t => t.id));
+  assert.ok(unseen.length >= 12, `${unseen.length}문장`);
+  assert.ok(unseen.filter(c => isEnglish(c.sentence)).length >= 2, '영어 부족');
+  assert.ok(unseen.filter(c => c.group === 'slang').length >= 1, '은어 없음');
+  assert.equal(new Set(unseen.map(c => c.sentence)).size, unseen.length, '중복');
+  for (const c of unseen) {
+    assert.ok(c.expectNodes.length && c.expectNodes.every(id => nodeIds.has(id)), c.sentence);
+    assert.ok(tagIds.has(c.expectTag), c.sentence);
+    assert.ok(!c.forbidNodes, c.sentence);
+  }
+});
+
+test('홀드아웃: 평가셋·검증셋·가드 문장과 3-gram 자카드 < 0.5, 태그 설명·예문과 < 0.3', () => {
+  const guard = read('tools/eval-guard.json');
+  const others = [...new Set([...evalSet.map(c => c.sentence), ...holdout.map(c => c.sentence), ...guard])];
+  const tagTexts = common.tags.flatMap(t => [t.desc || '', ...(t.examples || [])]);
+  for (const c of unseen) {
+    for (const s of others) assert.ok(jaccard(c.sentence, s) < 0.5, `"${c.sentence}" ↔ "${s}"`);
+    for (const t of tagTexts) assert.ok(jaccard(c.sentence, t) < 0.3, `"${c.sentence}" ↔ 예문 "${t}"`);
+  }
+});
+
+test('홀드아웃 문장은 회귀 가드에 넣지 않는다', () => {
+  const guard = new Set(read('tools/eval-guard.json'));
+  for (const c of unseen) assert.ok(!guard.has(c.sentence), c.sentence);
+});

@@ -14,5 +14,6 @@ argument-hint: "<개념 이름, 예: 에디셔널 잠재능력>"
 4. **엣지** 기존 노드와의 관계를 짧은 동사구(`rel`)로 1~2개.
 5. `version`의 날짜·번호를 올린다. 태그를 바꿨으면 `tags.json`의 `version`도 올린다(서버·확장 결과 캐시 키에 태그 판본이 들어가 그것만으로 캐시가 갈린다).
 6. `npm run test:unit`(그래프 무결성 검사 포함)과 `npm run eval:fallback`을 돌린다. 실제 모델을 쓸 수 있으면 `npm run eval`.
+   - 노드·태그 예문을 바꾸면 `npm run eval -- --holdout -v`로 홀드아웃(`tools/eval-unseen.json`)도 돌려 순위가 떨어지지 않는지 본다(T-150). 홀드아웃 문장은 예문을 고를 때 보지 않는다.
 7. 커밋 메시지: `data: 공통 그래프에 <개념> 추가`. 사용한 출처 링크를 커밋 본문에 남긴다.
 8. `/ship` 절차로 push 후 dev로 PR. PR 본문에 출처 링크와 추가한 facts 전문을 넣어 검수자가 바로 확인할 수 있게 한다.

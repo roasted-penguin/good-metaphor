@@ -110,10 +110,11 @@ test('태그 examples는 문자열 배열이어야 한다', () => {
 const grams = s => { const t = s.replace(/\s+/g, ' '); const out = new Set(); for (let i = 0; i + 3 <= t.length; i++) out.add(t.slice(i, i + 3)); return out; };
 const jaccard = (a, b) => { const A = grams(a), B = grams(b); let n = 0; for (const g of A) if (B.has(g)) n++; return n / (A.size + B.size - n); };
 
-test('공통 그래프 태그마다 예문 2개 이상, 평가셋·검증셋 문장을 베끼지 않는다 (누설 검사)', () => {
+test('공통 그래프 태그마다 예문 2개 이상, 평가셋·검증셋·홀드아웃 문장을 베끼지 않는다 (누설 검사)', () => {
   const evalSentences = [
     ...JSON.parse(readFileSync('tools/eval-set.json', 'utf8')),
-    ...JSON.parse(readFileSync('tools/eval-holdout.json', 'utf8'))
+    ...JSON.parse(readFileSync('tools/eval-holdout.json', 'utf8')),
+    ...JSON.parse(readFileSync('tools/eval-unseen.json', 'utf8')) // 홀드아웃(T-150)
   ].map(c => c.sentence);
   for (const t of common.tags) {
     assert.ok(Array.isArray(t.examples) && t.examples.length >= 2, `${t.id} 예문 부족`);

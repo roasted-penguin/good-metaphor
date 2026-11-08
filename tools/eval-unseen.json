@@ -1,0 +1,22 @@
+[
+  { "sentence": "스톡옵션 대박을 노리고 전 재산을 한 종목에 몰았다가 폭락으로 노후 자금까지 잃었다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "finance", "since": "T-150" },
+  { "sentence": "헬스장 PT는 고급 과정으로 올라갈수록 회당 가격이 크게 뛴다.", "expectNodes": ["starforce", "level_exp"], "expectTag": "escalating_cost", "group": "finance", "since": "T-150" },
+  { "sentence": "새 카메라 렌즈를 살 때마다 사진이 좋아지는 정도가 점점 미미해진다.", "expectNodes": ["level_exp"], "expectTag": "diminishing_returns", "since": "T-150" },
+  { "sentence": "은행 앱은 하루 이체 한도를 넘기면 다음 날까지 송금이 막힌다.", "expectNodes": ["weekly_boss", "arcane_symbol"], "expectTag": "periodic_cap", "since": "T-150" },
+  { "sentence": "문자 인증번호는 한 번 받으면 3분이 지나야 다시 요청할 수 있다.", "expectNodes": ["skill_cooldown", "weekly_boss"], "expectTag": "cooldown", "since": "T-150" },
+  { "sentence": "포토카드가 무작위로 들어 있어서 팬들은 좋아하는 멤버 카드가 나올 때까지 앨범을 여러 장 산다.", "expectNodes": ["cube"], "expectTag": "random_reroll", "since": "T-150" },
+  { "sentence": "수영 강습은 초급반 수료증이 있어야 중급반에 등록할 수 있다.", "expectNodes": ["sixth_job", "boss_entry", "arcane_force"], "expectTag": "progression_gate", "since": "T-150" },
+  { "sentence": "토익 700점이 안 되면 이 회사 서류 전형에 지원조차 할 수 없다.", "expectNodes": ["boss_entry", "arcane_force", "sixth_job"], "expectTag": "threshold_req", "since": "T-150" },
+  { "sentence": "명절 직전에는 과일을 찾는 사람이 몰려 사과 한 상자 값이 평소의 두 배가 된다.", "expectNodes": ["auction"], "expectTag": "market_price", "group": "finance", "since": "T-150" },
+  { "sentence": "외국어 단어는 하루 스무 개씩 매일 외워야 머리에 남고, 시험 전날 몰아 외우면 금방 잊는다.", "expectNodes": ["arcane_symbol", "sol_erda"], "expectTag": "daily_accumulation", "since": "T-150" },
+  { "sentence": "경품 응모권은 한 장에 오천 원인데 당첨 확률과 상품 값을 곱하면 천 원어치도 안 된다.", "expectNodes": ["cube", "starforce", "starforce_event"], "expectTag": "expected_value", "group": "finance", "since": "T-150" },
+  { "sentence": "논문은 투고할 때마다 실릴 수도 떨어질 수도 있지만, 좋은 저널에 실릴수록 경력이 한 단계씩 올라간다.", "expectNodes": ["starforce", "cube"], "expectTag": "prob_upgrade", "since": "T-150" },
+  { "sentence": "한 게임 회사 계정으로 쌓은 등급이 같은 회사의 다른 게임에서도 혜택으로 이어진다.", "expectNodes": ["union_link"], "expectTag": "shared_bonus", "since": "T-150" },
+  { "sentence": "투자자는 같은 돈을 넣었을 때 한 해 수익이 더 많이 나는 상품을 고른다.", "expectNodes": ["hunting", "weekly_boss"], "expectTag": "efficiency_metric", "group": "finance", "since": "T-150" },
+  { "sentence": "Collectors pay a fortune for stamps printed with an error, since only a handful of them exist.", "expectNodes": ["auction"], "expectTag": "scarcity_value", "group": "finance", "since": "T-150" },
+  { "sentence": "When the government prints money to cover its deficit, rent and groceries eat a bigger share of every paycheck.", "expectNodes": ["meso_inflation", "meso"], "expectTag": "inflation", "group": "finance", "since": "T-150" },
+  { "sentence": "The airline ran a 48-hour fare sale, so travelers booked the whole year's trips during that window.", "expectNodes": ["starforce_event", "exp_coupon"], "expectTag": "temporary_multiplier", "group": "finance", "since": "T-150" },
+  { "sentence": "On a film set, the director guides the actors, the camera operator frames each shot, and the editor cuts the footage.", "expectNodes": ["party"], "expectTag": "role_division", "since": "T-150" },
+  { "sentence": "큐브 열 개 돌렸는데 잡옵만 떴다.", "expectNodes": ["cube"], "expectTag": "random_reroll", "group": "slang", "since": "T-150" },
+  { "sentence": "극딜 타이밍 맞추려고 쿨 돌 때까지 기다렸다.", "expectNodes": ["skill_cooldown"], "expectTag": "cooldown", "group": "slang", "since": "T-150" }
+]
