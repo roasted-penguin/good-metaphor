@@ -8,7 +8,7 @@ argument-hint: "<내보낸 JSON 경로, 예: ~/Downloads/good-metaphor-correctio
 먼저 `git fetch origin && git switch -c task/data-corrections-<날짜> origin/dev`로 브랜치를 만든다.
 
 1. **파일 확인** `kind`가 `good-metaphor-corrections`이고 `version`이 1인지 본다. `commonGraphVersion`·`tagsVersion`이 지금 `extension/data/common/maplestory.json`·`tags.json`의 `version`과 다르면 그 사이 바뀐 태그·노드를 감안해 읽는다(없어진 태그 id 후보는 버린다).
-2. **평가 문장 베끼기 거르기** `npm run check:corrections -- "$ARGUMENTS"`. 평가셋·검증셋·가드 문장과 글자 3-gram 자카드 0.5 이상인 예문 후보는 `copies-eval`로 빠진다(평가 문장을 예문으로 넣으면 평가가 무의미해진다). 지금 금칙어 목록으로 한 번 더 거르고, 이미 평가셋에 있는 평가·가드 후보와 지금 `tags.json` 공통 예문과 자카드 0.5 이상인 평가·가드 후보도 뺀다. 예문 후보이기도 한 평가·가드 후보에는 `alsoExampleCandidate: true`가 붙고 도구가 개수를 "주의"로 알린다. 결과는 `<이름>.checked.json`. 확장 안에서는 이 대조를 하지 않으므로(확장은 `tools/`를 못 읽는다) 이 단계를 건너뛰지 않는다.
+2. **평가 문장 베끼기 거르기** `npm run check:corrections -- "$ARGUMENTS"`. 평가셋·검증셋·홀드아웃·가드 문장과 글자 3-gram 자카드 0.5 이상인 예문 후보는 `copies-eval`로 빠진다(평가 문장을 예문으로 넣으면 평가가 무의미해진다). 지금 금칙어 목록으로 한 번 더 거르고, 이미 평가셋에 있는 평가·가드 후보와 지금 `tags.json` 공통 예문과 자카드 0.5 이상인 평가·가드 후보도 뺀다. 예문 후보이기도 한 평가·가드 후보에는 `alsoExampleCandidate: true`가 붙고 도구가 개수를 "주의"로 알린다. 결과는 `<이름>.checked.json`. 확장 안에서는 이 대조를 하지 않으므로(확장은 `tools/`를 못 읽는다) 이 단계를 건너뛰지 않는다.
 3. **사람이 읽고 고르기** `.checked.json`의 `exampleCandidates`를 하나씩 읽는다. `count`가 클수록 여러 번 들어온 교정이다.
    - 금칙어·멸칭·실존 인물(규칙 11)이 없는지 다시 본다. 자동 필터가 못 잡은 우회 표기도 있다.
    - 개인정보가 없는지 본다. 숫자·메일·주소는 가려져 있지만(`[숫자]`·`[메일]`·`[주소]`) **사람 이름은 가리지 않는다.** 이름·회사명·특정 장소가 있으면 버리거나 일반 표현으로 고친다.
@@ -17,6 +17,7 @@ argument-hint: "<내보낸 JSON 경로, 예: ~/Downloads/good-metaphor-correctio
    - 새 태그 id는 만들지 않는다(규칙 9). 후보의 `tagId`가 맞지 않으면 기존 태그 중 맞는 것으로 옮기거나 버린다.
 4. **예문 추가** 고른 문장을 `extension/data/common/tags.json`의 그 태그 `examples` **맨 뒤에** 넣는다. 태그 순서·다른 태그는 건드리지 않는다(ADR 0012).
 5. **회귀 확인(필수)** `npm run eval -- --guard -v`를 실제 확장으로 돌린다(ADR 0011, Node 수치는 보고하지 않는다. `debug.embedderId`가 실제 모델인지 확인). 가드 문장이 하나라도 새로 틀리면 원인 예문을 빼고 다시 돌린다. 회귀 0이 될 때까지 반복한다. `npm run eval -v`로 평가셋·검증셋 hit@1도 본다. 틀리던 문장이 맞게 되면 좋고, 잘 맞던 문장이 틀려지면 그 예문은 넣지 않는다(CLAUDE.md "함정").
+   - 예문을 바꾸면 `npm run eval -- --holdout -v`로 홀드아웃(`tools/eval-unseen.json`)도 돌려 순위가 떨어지지 않는지 본다(T-150). 홀드아웃 문장은 예문을 고를 때 보지 않고, 여기에 교정 문장을 넣지 않는다. 출력 끝 "여유 작은 문장" 목록도 늘지 않았는지 본다.
 6. **평가셋·가드 후보** 한 문장은 **예문이나 평가셋·가드 중 한 곳에만** 쓴다(같은 문장이 두 곳에 들어가면 평가가 무의미해진다).
    - `alsoExampleCandidate: true`인 후보는 4단계에서 같은 문장을 예문으로 넣었으면 버리고, 예문으로 넣지 않았을 때만 평가·가드 후보로 읽는다. 확인: 이번에 넣은 예문과 평가·가드에 넣을 문장 사이에 비슷한 문장이 없는지 다시 `npm run check:corrections`로 본다(4단계 뒤 `tags.json`이 바뀌었으니 공통 예문 대조가 그 문장을 평가·가드 후보에서 뺀다).
    - `evalCandidates` 중 고른 것을 `tools/eval-set.json`에(학습에 쓰지 않는 검증용이면 `tools/eval-holdout.json`에) `{ sentence, expectNodes, expectTag }` 모양으로. `source`·`alsoExampleCandidate` 필드는 빼고, 3단계와 같은 기준(개인정보·분야 중립·[숫자] 정리)으로 읽는다. `expectNodes`가 정말 맞는 개념인지 사람이 판단한다(한 사용자의 교정이 틀렸을 수 있다).
