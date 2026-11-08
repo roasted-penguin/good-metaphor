@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from . import __version__
+from .blocklist import active_terms, load_blocklist
 from .cache import ResultCache, cache_key
 from .config import Settings
 from .pipeline import AnalogyPipeline, AnalogyRequest, PipelineError
@@ -55,6 +56,11 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
     app.state.rate_limiter = deps.get("rate_limiter") or RateLimiter(settings.rate_limit_per_min)
     app.state.pipeline = None
     app.state.owned_retriever = None
+    # 금칙어(T-114): 시작할 때 한 번 읽는다. 승인 카드가 하나도 없으면 /v1/analogy를 503으로 막는다(실패 시 닫힘)
+    injected = deps.get("blocklist")
+    app.state.blocklist = active_terms(injected) if injected is not None else load_blocklist(settings.blocklist_path)
+    if not app.state.blocklist:
+        log.error("승인된 금칙어가 없어 비유 요청을 막아요: %s", settings.blocklist_path)
 
     def get_pipeline() -> AnalogyPipeline:
         """주입된 부품 + 없는 것은 실제 부품으로 파이프라인을 한 번만 만든다."""
@@ -86,7 +92,8 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
             else:
                 # 시드된 인덱스(LIGHTRAG_WORKING_DIR/WORKSPACE)를 첫 검색 때 연다. 없으면 검색 단계에서 503
                 retriever = app.state.owned_retriever = LazyLightRAGRetriever(s, graph)
-        app.state.pipeline = AnalogyPipeline(graph, keyword_llm, analogy_llm, retriever, s.analogy_model)
+        app.state.pipeline = AnalogyPipeline(graph, keyword_llm, analogy_llm, retriever, s.analogy_model,
+                                             blocklist=app.state.blocklist)
         return app.state.pipeline
 
     @app.exception_handler(Exception)
@@ -97,7 +104,9 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "version": __version__}
+        # 프로세스는 살아 있으면 ok. 금칙어가 없으면 비유 요청만 503(blocklist.loaded로 보인다)
+        n = len(app.state.blocklist)
+        return {"ok": True, "version": __version__, "blocklist": {"loaded": n > 0, "approved": n}}
 
     @app.post("/v1/analogy")
     async def analogy(request: Request) -> JSONResponse:
@@ -115,6 +124,10 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
             return _error(400, "설명할 문장이 비어 있어요.")
         if len(sentence) > MAX_SENTENCE_CHARS:
             return _error(400, "문장이 너무 길어요.")
+
+        # 금칙어 목록 없이는 비유를 내지 않는다(규칙 11, 실패 시 닫힘)
+        if not app.state.blocklist:
+            return _error(503, "금칙어 목록을 읽지 못해 비유를 멈췄어요.")
 
         # 한도 → 캐시 → 파이프라인
         if not app.state.rate_limiter.allow(token):

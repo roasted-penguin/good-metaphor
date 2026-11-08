@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { runAnalogy, runAbstract } from '../../extension/lib/pipeline.js';
 import { REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
 import { GROUNDING_REJECTED_TEXT } from '../../extension/lib/grounding.js';
+import { BLOCKED_REJECTED_TEXT } from '../../extension/lib/blocklist.js';
 import { demoAnswer, buildAnalogyPrompt, buildAbstractPrompt, rewriteQueryText } from '../../extension/lib/prompt.js';
 
 // 공통 그래프(maplestory.json)의 실제 facts
@@ -140,4 +141,78 @@ test('runAbstract: 추상화 프롬프트로 한 번 부르고 질의 문장을 
   assert.equal(calls[0].opts.json, false);
   assert.equal(r.abstractText, '주기마다 한 번만 허용되는 제한');
   assert.equal(r.queryText, rewriteQueryText('주기마다 한 번만 허용되는 제한', SENTENCE));
+});
+
+// 금칙어 필터(T-114): 실제 금칙어 대신 테스트용 가짜 낱말로 확인한다
+const BL = [
+  { term: '금칙테스트말', variants: ['금칙우회말'], meaning: '테스트용', category: 'D', links: [], first_seen: '2026-10-11', sources: [], status: '승인' },
+  { term: '제안테스트말', variants: [], meaning: '테스트용', category: 'D', links: [], first_seen: '2026-10-11', sources: [], status: '제안' }
+];
+
+test('프롬프트에 멸칭·실존 인물 금지 규칙 한 줄(금칙어 자체는 넣지 않음)', () => {
+  const p = buildAnalogyPrompt({ sentence: SENTENCE, context: '', word: '', pageTitle: '', domain: GRAPH.domain, analogyPrefix: GRAPH.analogyPrefix, candidates: CANDIDATES });
+  assert.ok(p.system.includes('커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.'));
+});
+
+for (const field of ['analogy', 'mapping']) {
+  test(`금칙어: ${field}에서 걸리면 비유·대응을 지우고 숨김 문구, 뜻은 남는다`, async () => {
+    const bad = { ...OK_ANSWER, [field]: OK_ANSWER[field] + ' 금.칙 테스트말' };
+    const { ask } = fakeAsk(JSON.stringify(bad));
+    const r = await runAnalogy(base({ ask, blocklist: BL }));
+    assert.equal(r.answer.analogy, '');
+    assert.equal(r.answer.mapping, '');
+    assert.equal(r.answer.meaning, OK_ANSWER.meaning);
+    assert.equal(r.rejected, BLOCKED_REJECTED_TEXT);
+    assert.equal(r.answer.rejected, BLOCKED_REJECTED_TEXT);
+    assert.equal(r.chosen, null);
+    assert.equal(r.evidence, null);
+    assert.deepEqual(r.blocked, { field, term: '(가림)' });
+    assert.ok(!JSON.stringify(r).includes('테스트말'), '금칙어가 결과 어디에도 없어야 함');
+  });
+}
+
+test('금칙어: meaning에서 걸리면 뜻도 지우고, 스트리밍 partial도 보내지 않는다', async () => {
+  const bad = { ...OK_ANSWER, meaning: '금칙우회말 같은 뜻이에요.' };
+  const { ask } = fakeAsk(JSON.stringify(bad));
+  const partials = [];
+  const r = await runAnalogy(base({ ask, blocklist: BL, onPartial: p => partials.push(p) }));
+  assert.deepEqual(partials, []);
+  assert.equal(r.answer.meaning, '');
+  assert.equal(r.answer.analogy, '');
+  assert.equal(r.answer.mapping, '');
+  assert.equal(r.rejected, BLOCKED_REJECTED_TEXT);
+  assert.equal(r.evidence, null);
+  assert.deepEqual(r.blocked, { field: 'meaning', term: '(가림)' });
+});
+
+test('금칙어: 규칙 1에 걸린 답이어도 mapping의 금칙어는 지운다', async () => {
+  const { ask } = fakeAsk(JSON.stringify({ ...OK_ANSWER, nodeId: 'starforce', mapping: '원문 ↔ 금칙테스트말' }));
+  const r = await runAnalogy(base({ ask, blocklist: BL }));
+  assert.equal(r.answer.mapping, '');
+  assert.equal(r.rejected, BLOCKED_REJECTED_TEXT);
+  assert.deepEqual(r.blocked, { field: 'mapping', term: '(가림)' });
+});
+
+test('금칙어: 제안 항목은 무시하고, 목록을 안 주면 빈 목록으로 동작', async () => {
+  const withSuggested = { ...OK_ANSWER, analogy: OK_ANSWER.analogy.replace('주간 보스처럼', '주간 보스(제안테스트말)처럼') };
+  const a = fakeAsk(JSON.stringify(withSuggested));
+  const r1 = await runAnalogy(base({ ask: a.ask, blocklist: BL }));
+  assert.equal(r1.answer.analogy, withSuggested.analogy);
+  assert.equal(r1.blocked, null);
+
+  const b = fakeAsk(JSON.stringify({ ...OK_ANSWER, analogy: OK_ANSWER.analogy + ' 금칙테스트말' }));
+  const partials = [];
+  const r2 = await runAnalogy(base({ ask: b.ask, onPartial: p => partials.push(p) }));
+  assert.equal(r2.blocked, null);
+  assert.deepEqual(partials, [{ meaning: OK_ANSWER.meaning }]);
+});
+
+test('금칙어: 정상 답은 그대로, blocked는 null', async () => {
+  const { ask } = fakeAsk(JSON.stringify(OK_ANSWER));
+  const partials = [];
+  const r = await runAnalogy(base({ ask, blocklist: BL, onPartial: p => partials.push(p) }));
+  assert.equal(r.answer.analogy, OK_ANSWER.analogy);
+  assert.equal(r.blocked, null);
+  assert.equal(r.rejected, null);
+  assert.deepEqual(partials, [{ meaning: OK_ANSWER.meaning }]);
 });

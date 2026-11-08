@@ -28,6 +28,7 @@ export function buildAnalogyPrompt({ sentence, context, word, pageTitle, domain,
     '5. meaning은 원문 문장의 뜻을 중학생도 알 쉬운 말로 1문장. 원문이 영어여도 한국어로 쓴다.',
     '6. 존댓말(~요)을 쓴다. JSON 객체만 출력한다. 필드는 meaning, analogy, nodeId, tagId, usedFact, mapping 순서로 쓴다.',
     `7. analogy에 쓴 ${domain} 쪽 사실은 고른 후보의 facts 문장 하나를 usedFact에 글자 그대로 옮긴다. 비유가 없으면 usedFact는 빈 문자열이다.`,
+    '8. 커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.',
     '출력 형식: {"meaning": string, "analogy": string, "nodeId": string|null, "tagId": string|null, "usedFact": string, "mapping": string}',
     'mapping은 "원문 개념 ↔ 관심사 개념" 형태의 짧은 대응 한 줄이다.'
   ].join('\n');

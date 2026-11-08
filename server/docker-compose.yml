@@ -13,5 +13,7 @@ services:
       RATE_LIMIT_PER_MIN: "30"
       # 아래 볼륨으로 마운트한 공통 그래프 파일
       COMMON_GRAPH_PATH: /data/common/maplestory.json
+      # 금칙어 목록(T-114). 같은 볼륨에 있다. 못 읽으면 /v1/analogy가 503
+      BLOCKLIST_PATH: /data/common/blocklist.json
     volumes:
       - ../extension/data/common:/data/common:ro

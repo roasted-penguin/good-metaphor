@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.10.18-1",
+  "version": "2026.11.08-2",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -46,7 +46,7 @@
   ],
   "nodes": [
     {
-      "id": "starforce", "label": "스타포스 강화",
+      "id": "starforce", "label": "스타포스 강화", "aliases": ["펑", "프텍"],
       "facts": [
         "메소를 내고 장비에 별(스타)을 붙여 능력치를 올리는 강화 시스템이다.",
         "별이 높아질수록 성공 확률은 낮아지고 한 번 시도하는 메소 비용은 커진다.",
@@ -63,7 +63,7 @@
       "tags": ["temporary_multiplier", "expected_value"]
     },
     {
-      "id": "cube", "label": "잠재능력 재설정(큐브)",
+      "id": "cube", "label": "잠재능력 재설정(큐브)", "aliases": ["잡옵"],
       "facts": [
         "큐브나 메소로 잠재능력을 재설정하면 장비의 잠재능력 옵션이 무작위로 다시 정해진다.",
         "원하는 옵션 조합이 나올 때까지 여러 번 돌리는 경우가 많다.",
@@ -72,7 +72,7 @@
       "tags": ["random_reroll", "expected_value", "prob_upgrade"]
     },
     {
-      "id": "arcane_symbol", "label": "아케인 심볼",
+      "id": "arcane_symbol", "label": "아케인 심볼", "aliases": ["세금"],
       "facts": [
         "아케인리버 지역의 일일 퀘스트 등으로 모아 성장시키는 장비이다.",
         "심볼을 키우면 아케인포스(ARC) 수치가 오른다.",
@@ -81,7 +81,7 @@
       "tags": ["daily_accumulation", "periodic_cap"]
     },
     {
-      "id": "arcane_force", "label": "아케인포스 요구치",
+      "id": "arcane_force", "label": "아케인포스 요구치", "aliases": ["최소컷"],
       "facts": [
         "아케인리버 지역의 몬스터에는 요구 아케인포스가 정해져 있다.",
         "내 아케인포스가 요구치보다 낮으면 몬스터에게 주는 피해는 크게 줄고 받는 피해는 늘어난다."
@@ -89,7 +89,7 @@
       "tags": ["threshold_req", "progression_gate"]
     },
     {
-      "id": "boss_entry", "label": "보스 입장 조건과 난이도",
+      "id": "boss_entry", "label": "보스 입장 조건과 난이도", "aliases": ["데카", "풀데카", "최소컷"],
       "facts": [
         "보스마다 입장할 수 있는 최소 레벨이 정해져 있다.",
         "같은 보스라도 난이도에 따라 필요한 스펙과 받는 보상이 다르다."
@@ -97,7 +97,7 @@
       "tags": ["threshold_req", "progression_gate"]
     },
     {
-      "id": "weekly_boss", "label": "주간 보스와 결정석",
+      "id": "weekly_boss", "label": "주간 보스와 결정석", "aliases": ["메요일"],
       "facts": [
         "강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있다.",
         "보스를 잡으면 나오는 결정석(강렬한 힘의 결정)을 상점에 팔아 메소를 번다.",
@@ -106,7 +106,7 @@
       "tags": ["periodic_cap", "cooldown", "efficiency_metric"]
     },
     {
-      "id": "meso", "label": "메소",
+      "id": "meso", "label": "메소", "aliases": ["쌀먹"],
       "facts": [
         "메이플스토리의 게임 내 화폐이다.",
         "사냥과 보스로 벌고, 강화와 거래 등에 쓴다."
@@ -122,7 +122,7 @@
       "tags": ["inflation", "market_price"]
     },
     {
-      "id": "auction", "label": "경매장",
+      "id": "auction", "label": "경매장", "aliases": ["쌀먹"],
       "facts": [
         "플레이어끼리 아이템을 메소로 사고파는 거래소이다.",
         "찾는 사람이 많은 아이템은 가격이 오르고, 흔한 아이템은 가격이 내려간다."
@@ -138,7 +138,7 @@
       "tags": ["diminishing_returns", "escalating_cost"]
     },
     {
-      "id": "hunting", "label": "사냥 효율과 재획",
+      "id": "hunting", "label": "사냥 효율과 재획", "aliases": ["재획"],
       "facts": [
         "사냥터마다 시간당 얻는 경험치와 메소가 다르다.",
         "재물 획득의 비약을 먹고 정해진 시간 동안 사냥하는 것을 흔히 '재획'이라고 부른다."
@@ -154,7 +154,7 @@
       "tags": ["temporary_multiplier"]
     },
     {
-      "id": "skill_cooldown", "label": "스킬 쿨타임과 극딜",
+      "id": "skill_cooldown", "label": "스킬 쿨타임과 극딜", "aliases": ["극딜"],
       "facts": [
         "강한 스킬은 한 번 쓰면 일정 시간이 지나야 다시 쓸 수 있다.",
         "그래서 보스전에서는 강한 스킬을 한 타이밍에 모아 쓰는 '극딜'을 한다."

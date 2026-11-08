@@ -14,6 +14,12 @@ export const EMPTY_OVERLAY = {
   edges: []
 };
 
+// 별칭(게임 은어, T-114): 문자열 배열, 각 항목은 공백만이 아닌 1~20자
+const ALIAS_MAX = 20;
+function validAliases(a) {
+  return Array.isArray(a) && a.every(x => typeof x === 'string' && x.trim().length > 0 && x.length <= ALIAS_MAX);
+}
+
 export function validateGraph(g, { partial = false } = {}) {
   const errors = [];
   if (!g || typeof g !== 'object') return ['그래프가 객체가 아니에요.'];
@@ -32,6 +38,9 @@ export function validateGraph(g, { partial = false } = {}) {
     if (!n.id || !n.label) errors.push(`nodes[${i}]에 id 또는 label이 없어요.`);
     if (!Array.isArray(n.facts) || !n.facts.length) errors.push(`노드 ${n.id || i}에 facts(사실 목록)가 없어요.`);
     if (!Array.isArray(n.tags) || !n.tags.length) errors.push(`노드 ${n.id || i}에 tags가 없어요.`);
+    if (n.aliases !== undefined && !validAliases(n.aliases)) {
+      errors.push(`노드 ${n.id || i}의 aliases는 1~20자 문자열 배열이어야 해요.`);
+    }
     if (nodeIds.has(n.id)) errors.push(`노드 id 중복: ${n.id}`);
     nodeIds.add(n.id);
   }
@@ -98,6 +107,7 @@ export function mergeGraphs(common, overlay) {
 export function tagText(t) {
   return [`${t.label}: ${t.desc || ''}`.trim(), ...(t.examples || [])].join(' ');
 }
+// 별칭(aliases)은 넣지 않는다: 넣으면 노드 벡터가 바뀌어 잘 맞던 문장이 틀려졌다(T-114). 별칭은 retrieval.js 어휘 가산으로 쓴다
 export function nodeText(n, tagMap) {
   const structure = n.tags.map(id => tagMap.get(id)).filter(Boolean).map(tagText).join(' ');
   return `${structure} ${n.label}. ${n.facts.join(' ')}`.trim();

@@ -38,5 +38,9 @@
   { "sentence": "이 셔츠는 면 100%라서 찬물에 손세탁하는 것이 좋다.", "expectNodes": [], "since": "T-103" },
   { "sentence": "서울에서 부산까지 KTX로 약 두 시간 반이 걸린다.", "expectNodes": [], "since": "T-103" },
   { "sentence": "The museum's east wing displays paintings from the eighteenth century.", "expectNodes": [], "since": "T-103" },
-  { "sentence": "Penguins are birds that cannot fly but swim remarkably well.", "expectNodes": [], "since": "T-103" }
+  { "sentence": "Penguins are birds that cannot fly but swim remarkably well.", "expectNodes": [], "since": "T-103" },
+  { "sentence": "재획 비약 먹고 두 시간 사냥했다.", "expectNodes": ["hunting"], "expectTag": "temporary_multiplier", "group": "slang", "since": "T-114" },
+  { "sentence": "22성 도전하다가 또 펑 났다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "slang", "since": "T-114" },
+  { "sentence": "이번 주 세금 내고 나니 메소가 바닥났다.", "expectNodes": ["arcane_symbol"], "expectTag": "daily_accumulation", "group": "slang", "since": "T-114" },
+  { "sentence": "메요일이라 보스 초기화됐다.", "expectNodes": ["weekly_boss"], "expectTag": "periodic_cap", "group": "slang", "since": "T-114" }
 ]

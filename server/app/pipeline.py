@@ -2,6 +2,7 @@
 
 규칙 1: LLM이 고른 nodeId가 후보에 없으면 비유를 숨긴다(문구는 확장 background.js와 같다).
 그 뒤 근거 검사(T-123): usedFact·숫자가 고른 노드 facts 밖이면 비유를 숨긴다(app/grounding.py).
+마지막으로 금칙어 검사(T-114, 규칙 11): meaning·analogy·mapping에 승인된 금칙어가 있으면 숨긴다(app/blocklist.py).
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from .blocklist import BLOCKED_REJECTED_TEXT, active_terms, find_blocked
 from .grounding import GROUNDING_REJECTED_TEXT, check_grounding
 from .llm import LLM, LLMError
 from .prompts import build_analogy_prompt, build_keyword_prompt, parse_json_object, parse_keywords
@@ -40,12 +42,14 @@ class AnalogyRequest:
 
 class AnalogyPipeline:
     def __init__(self, graph: dict[str, Any], keyword_llm: LLM, analogy_llm: LLM, retriever: Retriever,
-                 analogy_model: str) -> None:
+                 analogy_model: str, blocklist: list[dict[str, Any]] | None = None) -> None:
         self.graph = graph
         self.keyword_llm = keyword_llm
         self.analogy_llm = analogy_llm
         self.retriever = retriever
         self.analogy_model = analogy_model
+        # 승인된 금칙어 카드만(없으면 빈 목록)
+        self.blocklist = active_terms(blocklist or [])
         self.tags = [t for t in graph.get("tags", []) if t.get("label")]
         self.tag_labels = [t["label"] for t in self.tags]
 
@@ -104,6 +108,23 @@ class AnalogyPipeline:
                 rejected = GROUNDING_REJECTED_TEXT
                 chosen = None
 
+        # 6) 금칙어 검사(T-114): 출력 직전. 어느 필드든 걸리면 비유·대응을 숨기고, 뜻에서 걸리면 뜻도 지운다.
+        # debug에는 필드 이름만 남긴다(금칙어 자체는 쓰지 않는다)
+        meaning = answer.get("meaning") or ""
+        mapping = answer.get("mapping") or ""
+        blocked = None
+        for field, value in (("meaning", meaning), ("analogy", analogy), ("mapping", mapping)):
+            if not find_blocked(value, self.blocklist):
+                continue
+            blocked = blocked or {"field": field, "term": "(가림)"}
+            if field == "meaning":
+                meaning = ""
+        if blocked:
+            analogy = ""
+            mapping = ""
+            rejected = BLOCKED_REJECTED_TEXT
+            chosen = None
+
         tag_label_by_id = {t["id"]: t.get("label") for t in graph.get("tags", [])}
         evidence = None
         if chosen:
@@ -115,9 +136,9 @@ class AnalogyPipeline:
             }
 
         return {
-            "meaning": answer.get("meaning") or "",
+            "meaning": meaning,
             "analogy": analogy,
-            "mapping": answer.get("mapping") or "",
+            "mapping": mapping,
             "rejected": rejected,
             "evidence": evidence,
             "domain": graph.get("domain"),
@@ -141,6 +162,7 @@ class AnalogyPipeline:
                 "user": None,
                 "keywords": {"hl": hl, "ll": ll},
                 **({"grounding": grounding} if grounding is not None else {}),
+                **({"blocked": blocked} if blocked is not None else {}),
                 "ms": int((time.monotonic() - t0) * 1000),
             },
         }

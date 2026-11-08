@@ -4,7 +4,7 @@ import { test as base, expect, chromium } from '@playwright/test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startServers, calls, analogyCalls, SERVER_ANALOGY } from './servers.mjs';
+import { startServers, calls, analogyCalls, SERVER_ANALOGY, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING } from './servers.mjs';
 
 const EXT = path.resolve('.tmp/ext-e2e');
 
@@ -193,6 +193,58 @@ test('근거 검사(T-123): 프롬프트에 usedFact, 정상은 통과, 숫자·
   expect(fact.data.rejected).toBe(GROUNDING_REJECTED);
   expect(fact.data.evidence).toBeNull();
   expect(fact.data.debug.grounding).toEqual({ ok: false, reason: 'fact-mismatch' });
+});
+
+// 금칙어 필터(T-114): 가짜 LLM은 "금칙비유테스트"면 비유에, "금칙뜻테스트"면 뜻에 금칙어를 섞는다
+const BLOCKED_REJECTED = '부적절한 표현이 섞여 있어서 비유를 숨겼어요.';
+const hasBlocked = t => [BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING].some(w => t.replace(/[\s.]/g, '').includes(w.replace(/[\s.]/g, '')));
+
+test('금칙어(T-114): 비유·뜻에 섞이면 말풍선 어디에도 안 보이고 숨김 문구, 스트리밍 뜻도 막는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await page.evaluate(() => {
+    const p = document.createElement('p');
+    p.id = 'pblock';
+    p.textContent = '금칙뜻테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.';
+    document.body.prepend(p);
+  });
+  await altHover(page, '#pblock');
+  const seen = await recordTooltip(page, t => t.includes(BLOCKED_REJECTED));
+  expect(seen.filter(hasBlocked), '금칙어가 한 번도 보이면 안 됨').toEqual([]);
+  expect(seen.filter(t => t.includes('뜻풀이예요')), '막힌 뜻은 partial로도 안 보임').toEqual([]);
+  const shadowText = await page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.textContent ?? '');
+  expect(hasBlocked(shadowText)).toBe(false);
+
+  const r = await ext.send({ type: 'explain', sentence: '금칙비유테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(r.data.analogy).toBe('');
+  expect(r.data.mapping).toBe('');
+  expect(r.data.meaning).toBe('테스트 뜻 풀이예요.');
+  expect(r.data.rejected).toBe(BLOCKED_REJECTED);
+  expect(r.data.evidence).toBeNull();
+  expect(r.data.debug.blocked).toEqual({ field: 'analogy', term: '(가림)' });
+  expect(hasBlocked(JSON.stringify(r.data))).toBe(false);
+  expect(calls.at(-1).system).toContain('커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.');
+});
+
+test('금칙어(T-114): 서버 결과도 확장이 다시 검사하고, 정밀 모드 추상 구조도 debug에서 지운다', async ({ ext }) => {
+  const s = await ext.send({ type: 'explain', sentence: '서버금칙 확률형 강화는 실패하면 비용만 날아간다.', word: '', context: '', pageTitle: 't', noCache: true });
+  expect(s.data.source).toBe('server');
+  expect(s.data.analogy).toBe('');
+  expect(s.data.mapping).toBe('');
+  expect(s.data.meaning).toBe('서버 뜻 풀이예요.');
+  expect(s.data.rejected).toBe(BLOCKED_REJECTED);
+  expect(s.data.evidence).toBeNull();
+  expect(s.data.debug.blocked).toEqual({ field: 'analogy', term: '(가림)' });
+  expect(hasBlocked(JSON.stringify(s.data))).toBe(false);
+
+  await ext.setSettings({ preciseMode: true });
+  try {
+    const p = await ext.send({ type: 'explain', sentence: '금칙추상테스트 금리가 오르면 이자가 늘어난다.', noCache: true });
+    expect(p.data.debug.abstractText).toBe('');
+    expect(hasBlocked(JSON.stringify(p.data))).toBe(false);
+  } finally {
+    await ext.setSettings({ preciseMode: false });
+  }
 });
 
 test('피드백(T-129): 👎 → 다른 근거로 다시, 다시 물어도 반영, 되돌리기', async ({ ext }) => {

@@ -93,7 +93,7 @@ for (const p of runs) {
   if (!r0.ok) failed++;
   // 비유 생성(json)
   for (const s of SENTENCES) {
-    const candidates = retrieve(hashEmbed(s.sentence), graph, vecs, admin.retrieval);
+    const candidates = retrieve(hashEmbed(s.sentence), graph, vecs, { ...admin.retrieval, aliasText: s.sentence });
     const pr = buildAnalogyPrompt({ ...s, domain: graph.domain, analogyPrefix: graph.analogyPrefix, candidates });
     // 확장과 같이 스트리밍으로 받고, 첫 글자·뜻 완성까지 걸린 시간을 잰다(T-117)
     const t0 = Date.now(), at = {};

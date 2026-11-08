@@ -31,6 +31,21 @@ export function feedbackAdjust(q, memory, { sim = 0.92, max = 0.1 } = {}) {
   return out;
 }
 
+// 별칭 앞 경계: 문장 처음, 공백, 문장부호·기호. 뒤는 무엇이든 된다(한국어 조사가 바로 붙는다: 재획을, 펑났다)
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * 문장에 별칭이 낱말로 들어 있는지 (T-114). 둘 다 NFKC로 맞춘 뒤, 별칭 앞이 경계일 때만 맞다.
+ * 다른 낱말 안에 든 별칭(셔틀버스의 버스)은 맞지 않는다.
+ */
+export function aliasMatch(text, aliases) {
+  if (!text || !aliases?.length) return false;
+  const t = text.normalize('NFKC');
+  return aliases.some(a => {
+    const al = String(a || '').normalize('NFKC').trim();
+    return al && new RegExp(`(?:^|[\\s\\p{P}\\p{S}])${escapeRe(al)}`, 'u').test(t);
+  });
+}
+
 /**
  * @param {number[]} q        질의 벡터
  * @param {object} graph      mergeGraphs 결과
@@ -41,10 +56,13 @@ export function feedbackAdjust(q, memory, { sim = 0.92, max = 0.1 } = {}) {
  *   feedbackMemory  비슷한 문장 피드백 기록. 비어 있으면 결과가 이전과 같다 (T-130, feedbackAdjust)
  *   feedbackQuery   비슷한 문장 판정에만 쓰는 벡터. 없으면 q. 정밀 모드는 q가 추상 구조 + 원문이라
  *                   원문으로 만든 기록 벡터와 맞추려 원문 벡터를 넘긴다 (T-138)
+ *   aliasText   별칭(게임 은어) 판정에 쓰는 원문. 없으면 별칭 가산 없음 (T-114)
+ *   aliasBoost  aliasText에 노드 별칭이 낱말로 있으면 그 노드 점수에 더할 값. 기본 0(영향 없음)
  */
 export function retrieve(q, graph, vecs, {
   topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {},
-  feedbackMemory = [], feedbackQuery = null, feedbackSim = 0.92, feedbackMax = 0.1
+  feedbackMemory = [], feedbackQuery = null, feedbackSim = 0.92, feedbackMax = 0.1,
+  aliasText = '', aliasBoost = 0
 } = {}) {
   const fb = feedbackMemory?.length ? feedbackAdjust(feedbackQuery || q, feedbackMemory, { sim: feedbackSim, max: feedbackMax }) : null;
   const tagSim = new Map();
@@ -65,9 +83,10 @@ export function retrieve(q, graph, vecs, {
     const bestTag = ranked[0]?.sim > 0 ? ranked[0].id : null, bestTagSim = bestTag ? ranked[0].sim : 0;
     const boost = graph.boosts?.[n.id] || 0;
     const feedback = fb?.get(n.id) || 0;
+    const alias = aliasBoost && aliasMatch(aliasText, n.aliases) ? aliasBoost : 0;
     return {
       node: n,
-      score: directWeight * direct + tagWeight * tagScore + boost + feedback,
+      score: directWeight * direct + tagWeight * tagScore + boost + feedback + alias,
       feedback,
       direct,
       tagId: bestTag,

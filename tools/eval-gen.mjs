@@ -24,6 +24,8 @@ const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
 const common = JSON.parse(fs.readFileSync(new URL('../extension/data/common/maplestory.json', here)));
 const evalSet = JSON.parse(fs.readFileSync(new URL('./eval-set.json', here)));
+// 금칙어 목록(T-114). 확장 background.js와 같은 번들 파일을 runAnalogy에 준다
+const blocklist = JSON.parse(fs.readFileSync(new URL('../extension/data/common/blocklist.json', here))).terms;
 
 const argAfter = flag => { const i = process.argv.indexOf(flag); return i > 0 ? process.argv[i + 1] : null; };
 const doJudge = process.argv.includes('--judge');
@@ -131,7 +133,7 @@ async function generate(cases) {
   }
 
   for (const [i, c] of cases.entries()) {
-    const candidates = retrieve(qs[i], graph, vecs, admin.retrieval);
+    const candidates = retrieve(qs[i], graph, vecs, { ...admin.retrieval, aliasText: c.sentence });
     let used = null, fallbacks = [];
     const ask = async (system, user, opts) => {
       const r = await withLimitRetry(() => completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown }));
@@ -141,7 +143,7 @@ async function generate(cases) {
     const t0 = Date.now();
     const base = { sentence: c.sentence, expectNodes: c.expectNodes, candidates: candidates.map(x => ({ id: x.id, label: x.label, score: x.score, facts: x.facts })) };
     try {
-      const r = await runAnalogy({ sentence: c.sentence, word: '', context: '', pageTitle: '', graph, candidates, ask, providerKind: chain[0].def.kind });
+      const r = await runAnalogy({ sentence: c.sentence, word: '', context: '', pageTitle: '', graph, candidates, ask, providerKind: chain[0].def.kind, blocklist });
       const { meaning, analogy, nodeId, usedFact } = r.answer;
       rows.push({ ...base, answer: { meaning, analogy, nodeId, usedFact }, rejected: r.rejected, grounding: r.grounding, provider: used && modelKey(used), fallbacks, ms: Date.now() - t0 });
       console.log(`  ${i + 1}/${cases.length} ${analogy ? `[${nodeId}]` : `(숨김${r.rejected ? ': ' + r.rejected : ''})`} ${c.sentence.slice(0, 28)}… ${Date.now() - t0}ms`);

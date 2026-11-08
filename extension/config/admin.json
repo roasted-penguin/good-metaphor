@@ -53,6 +53,8 @@
     "_tagPenaltyComment": "경제 태그로 주제가 쏠리는 것을 줄이는 감점(T-113, ADR 0009). 공통 그래프 태그 id만",
     "tagPenalty": { "inflation": 0.02, "market_price": 0.02 },
     "_feedbackSimComment": "비슷한 문장 피드백을 적용할 코사인 하한(T-130). npm run sim:feedback으로 잰 값(e5-base q8, 실제 확장, 2026-11-01)",
-    "feedbackSim": 0.9
+    "feedbackSim": 0.9,
+    "_aliasBoostComment": "원문에 노드 별칭(게임 은어)이 낱말로 있으면 그 노드 점수에 더할 값(T-114). 별칭 없는 문장은 영향 없음",
+    "aliasBoost": 0.08
   }
 }

@@ -5,6 +5,10 @@
 // 문장에 "Leverage"가 있으면 후보에 없는 nodeId 로 답한다(근거 검증 확인용)
 // 정상 답에는 usedFact = 후보 [1]의 첫 fact 를 넣는다(T-123). 근거 검사 확인용 표시어:
 //   "입장횟수테스트" → facts·문장에 없는 숫자를 쓴 비유, "사실조작테스트" → facts에 없는 usedFact
+// 금칙어 필터 확인용(T-114, 금칙어는 테스트 코드 안에만): "금칙비유테스트" → 비유에 우회 표기한 금칙어,
+//   "금칙뜻테스트" → 뜻(스트리밍으로 먼저 오는 부분)에 금칙어, "금칙추상테스트" → 정밀 모드 추상화 응답에 금칙어
+export const BLOCKED_IN_ANALOGY = '리.선.족';
+export const BLOCKED_IN_MEANING = '쌀 숭이';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 
@@ -28,17 +32,19 @@ function mockLLM(req, res) {
       return res.end(JSON.stringify({ error: { message: 'Rate limit reached (mock)' } }));
     }
     let content;
-    if (system.includes('추상 구조로')) content = '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
+    if (system.includes('추상 구조로')) content = user.includes('금칙추상테스트') ? `${BLOCKED_IN_ANALOGY} 처럼 비용을 내고 시도하는 구조` : '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
     else if (user.includes('연결 성공')) content = '연결 성공';
     else {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
       const tag = user.match(/맞은 추상 태그: .+? \(id=(\S+)\)/);
       const nodeId = user.includes('Leverage') ? 'not-a-candidate' : id;
       const usedFact = user.match(/\[1\] id=[\s\S]*?facts:\n\s+- (.+)/)?.[1] ?? '';
-      const answer = (analogy, fact = usedFact) => '```json\n' + JSON.stringify({ meaning: '테스트 뜻 풀이예요.', analogy, nodeId, tagId: tag?.[1] ?? null, usedFact: fact, mapping: `원문 ↔ ${label}` }) + '\n```';
+      const meaning = user.includes('금칙뜻테스트') ? `${BLOCKED_IN_MEANING} 같은 뜻풀이예요.` : '테스트 뜻 풀이예요.';
+      const answer = (analogy, fact = usedFact) => '```json\n' + JSON.stringify({ meaning, analogy, nodeId, tagId: tag?.[1] ?? null, usedFact: fact, mapping: `원문 ↔ ${label}` }) + '\n```';
       // "펭귄" 문장: 후보가 여럿이면 맞는 비유 없음, 사용자가 하나를 골라 후보가 1개면 그 개념으로 (T-106)
       if (user.includes('펭귄') && /\[2\] id=/.test(user)) content = '```json\n' + JSON.stringify({ meaning: '테스트 뜻 풀이예요.', analogy: '', nodeId: null, tagId: null, mapping: '' }) + '\n```';
       else if (user.includes('입장횟수테스트')) content = answer('메이플로 치면 일주일에 7번만 입장할 수 있는 것과 같아요.');
+      else if (user.includes('금칙비유테스트')) content = answer(`메이플로 치면 ${label}과 같은 구조예요. ${BLOCKED_IN_ANALOGY}`);
       else if (user.includes('사실조작테스트')) content = answer('메이플로 치면 보스에 하루 세 번 들어가는 것과 같아요.', '보스는 하루에 세 번까지 입장할 수 있다.');
       else content = answer(`메이플로 치면 ${label}과 같은 구조예요.`);
     }
@@ -81,6 +87,7 @@ function staticPage(req, res) {
 // 문장에 표시어가 있을 때만 답한다. 그 밖의 문장(기존 e2e 문장 전부)은 500 → 확장이 로컬로 대체한다.
 //   '서버정상' → 정상 결과(후보는 공통 그래프 실제 id), '서버후보밖' → 후보 밖 nodeId,
 //   '서버지연' → SERVER_DELAY_MS 뒤 정상 결과(확장의 timeoutMs 보다 길게)
+//   '서버금칙' → 비유에 금칙어가 섞인 결과(확장이 서버 결과도 금칙어 재검사하는지, T-114)
 export const SERVER_DELAY_MS = 5000;
 export const SERVER_ANALOGY = '서버가 만든 비유예요: 스타포스 강화와 같은 구조예요.';
 function serverResult(nodeId) {
@@ -124,6 +131,7 @@ function mockAnalogyApi(req, res) {
     if (req.url !== '/v1/analogy') { res.writeHead(404, cors); return res.end(); }
     if (sentence.includes('서버정상')) return send(serverResult('starforce'));
     if (sentence.includes('서버후보밖')) return send(serverResult('not-a-candidate'));
+    if (sentence.includes('서버금칙')) return send({ ...serverResult('starforce'), analogy: `${SERVER_ANALOGY} ${BLOCKED_IN_ANALOGY}` });
     if (sentence.includes('서버지연')) return void setTimeout(() => send(serverResult('starforce')), SERVER_DELAY_MS);
     res.writeHead(500, { ...cors, 'content-type': 'application/json' });
     res.end(JSON.stringify({ detail: 'mock error' }));

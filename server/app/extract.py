@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from typing import Any, Iterable, Iterator, Mapping
 
 from app.prompts import tag_lines, vocabulary_tags
-from app.seed import TAG_ENTITY_TYPE
+from app.seed import TAG_ENTITY_TYPE, label_with_aliases
 
 ENTITY_TYPES: list[str] = ["게임시스템", "재화", "아이템", "보스", "지역", "추상구조"]
 # 마지막 "추상구조"는 시드 주입의 태그 엔티티 유형(app.seed.TAG_ENTITY_TYPE)과 같아야 한다(테스트가 확인).
@@ -43,8 +43,8 @@ def controlled_vocabulary(graph: Mapping[str, Any]) -> list[str]:
 
 
 def glossary(graph: Mapping[str, Any]) -> list[str]:
-    """메이플 용어 사전: 노드마다 "라벨: facts 첫 문장" 한 줄. 은어·별칭은 T-114에서 넓힌다."""
-    return [f"{n['label']}: {n['facts'][0]}" for n in graph.get("nodes", []) if n.get("label") and n.get("facts")]
+    """메이플 용어 사전: 노드마다 "라벨(별칭들): facts 첫 문장" 한 줄. 별칭(게임 은어)이 없으면 "라벨: facts 첫 문장"(T-114)."""
+    return [f"{label_with_aliases(n)}: {n['facts'][0]}" for n in graph.get("nodes", []) if n.get("label") and n.get("facts")]
 
 
 def _entity_types_guidance(graph: Mapping[str, Any]) -> str:

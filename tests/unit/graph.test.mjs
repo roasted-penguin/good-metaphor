@@ -126,3 +126,61 @@ test('태그는 통제 어휘 18개 그대로 (규칙 9)', () => {
     'role_division', 'scarcity_value', 'shared_bonus', 'temporary_multiplier', 'threshold_req'
   ]);
 });
+
+// --- T-114 별칭(aliases): 게임 은어로 쓴 문장도 검색되게 ---
+
+test('노드 aliases 검증: 문자열 배열, 각 1~20자 (T-114)', () => {
+  const g = aliases => ({ domain: 'd', tags: [{ id: 't', label: 'l' }], nodes: [{ id: 'n', label: '라벨', facts: ['f'], tags: ['t'], aliases }] });
+  assert.deepEqual(validateGraph(g(['재획', '스무 글자까지는 괜찮아요 정말로요요'])), []);
+  assert.deepEqual(validateGraph(g([])), []);
+  assert.match(validateGraph(g('재획')).join(), /aliases/);
+  assert.match(validateGraph(g([1])).join(), /aliases/);
+  assert.match(validateGraph(g([''])).join(), /aliases/);
+  assert.match(validateGraph(g(['   '])).join(), /aliases/);
+  assert.match(validateGraph(g(['가'.repeat(21)])).join(), /aliases/);
+  assert.deepEqual(validateGraph(g(['가'.repeat(20)])), []);
+});
+
+test('오버레이 노드의 aliases도 같은 규칙으로 검사한다 (T-114)', () => {
+  assert.match(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], aliases: [''] }] }).join(), /aliases/);
+  assert.deepEqual(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], aliases: ['별칭'] }] }), []);
+});
+
+test('nodeText: 별칭은 임베딩 텍스트에 넣지 않는다. 모든 노드가 예전과 바이트 단위로 같다 (벡터 캐시·검색 불변, T-114 재설계)', () => {
+  const tagMap = new Map(common.tags.map(t => [t.id, t]));
+  // 예전 구현 그대로(T-113)
+  const before = n => `${n.tags.map(id => tagMap.get(id)).filter(Boolean).map(tagText).join(' ')} ${n.label}. ${n.facts.join(' ')}`.trim();
+  for (const n of common.nodes) {
+    const { aliases, ...plain } = n;
+    assert.equal(nodeText(n, tagMap), before(plain), `${n.id}`);
+  }
+  const n = { id: 'x', label: '스타포스 강화', facts: ['사실.'], tags: [], aliases: ['펑', '프텍'] };
+  assert.equal(nodeText(n, tagMap), '스타포스 강화. 사실.');
+});
+
+test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드에 있다 (T-114)', () => {
+  const byId = Object.fromEntries(common.nodes.map(n => [n.id, n.aliases || []]));
+  const expected = {
+    hunting: ['재획'], skill_cooldown: ['극딜'], starforce: ['펑', '프텍'], arcane_symbol: ['세금'],
+    meso: ['쌀먹'], auction: ['쌀먹'], boss_entry: ['데카', '풀데카', '최소컷'], arcane_force: ['최소컷'],
+    cube: ['잡옵'], weekly_boss: ['메요일'],
+    // 기사·버스는 뉴스·교통 글에 흔한 일상어라 뺐다(최종 리뷰, 부정 평가 문장은 T-149)
+    party: []
+  };
+  for (const [id, aliases] of Object.entries(expected)) assert.deepEqual(byId[id], aliases, id);
+  assert.equal(common.version, '2026.11.08-2');
+});
+
+test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {
+  const evalSet = JSON.parse(readFileSync('tools/eval-set.json', 'utf8'));
+  const slang = evalSet.filter(c => c.since === 'T-114');
+  assert.equal(slang.length, 4);
+  const ids = new Set(common.nodes.map(n => n.id));
+  for (const c of slang) {
+    assert.equal(c.group, 'slang');
+    assert.ok(c.expectNodes.length && c.expectNodes.every(id => ids.has(id)), c.sentence);
+  }
+  const guard = JSON.parse(readFileSync('tools/eval-guard.json', 'utf8'));
+  const guardText = JSON.stringify(guard);
+  for (const c of slang) assert.ok(!guardText.includes(c.sentence), '은어 문장은 회귀 가드에 넣지 않는다');
+});
