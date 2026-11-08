@@ -20,6 +20,26 @@ function validAliases(a) {
   return Array.isArray(a) && a.every(x => typeof x === 'string' && x.trim().length > 0 && x.length <= ALIAS_MAX);
 }
 
+// 출처(T-118): http(s) URL 문자열 1개 이상
+function validSources(a) {
+  return Array.isArray(a) && a.length > 0 && a.every(u => {
+    if (typeof u !== 'string') return false;
+    try {
+      const url = new URL(u);
+      return (url.protocol === 'https:' || url.protocol === 'http:') && !!url.hostname;
+    } catch { return false; }
+  });
+}
+// 검수 날짜(T-118): YYYY-MM-DD 형식의 실제 날짜(2026-02-30 같은 없는 날은 오류)
+function validDate(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+// partial = 사용자 오버레이. 공통 그래프(partial 아님)는 노드마다 sources·verifiedAt이 꼭 있어야 하고(T-118, D-3),
+// 오버레이 노드는 둘 다 선택이지만 넣었으면 같은 형식을 따른다
 export function validateGraph(g, { partial = false } = {}) {
   const errors = [];
   if (!g || typeof g !== 'object') return ['그래프가 객체가 아니에요.'];
@@ -40,6 +60,12 @@ export function validateGraph(g, { partial = false } = {}) {
     if (!Array.isArray(n.tags) || !n.tags.length) errors.push(`노드 ${n.id || i}에 tags가 없어요.`);
     if (n.aliases !== undefined && !validAliases(n.aliases)) {
       errors.push(`노드 ${n.id || i}의 aliases는 1~20자 문자열 배열이어야 해요.`);
+    }
+    if (n.sources !== undefined || !partial) {
+      if (!validSources(n.sources)) errors.push(`노드 ${n.id || i}의 sources(출처)는 http(s) 주소 1개 이상인 배열이어야 해요.`);
+    }
+    if (n.verifiedAt !== undefined || !partial) {
+      if (!validDate(n.verifiedAt)) errors.push(`노드 ${n.id || i}의 verifiedAt(검수 날짜)은 YYYY-MM-DD 형식의 날짜여야 해요.`);
     }
     if (nodeIds.has(n.id)) errors.push(`노드 id 중복: ${n.id}`);
     nodeIds.add(n.id);

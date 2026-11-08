@@ -94,6 +94,34 @@ export function similarMemory(records, sentenceHash) {
   return out;
 }
 
+export const REPORT_THRESHOLD = 3;
+// 공통 노드만 제보 대상이다. 사용자 노드(source 'user' 또는 u: 접두어)는 자기 데이터라 빼지 않는다
+const isCommonNode = n => n && n.source !== 'user' && !String(n.id).startsWith('u:');
+// 검수 날짜(YYYY-MM-DD)의 로컬 자정(ms). 없거나 형식이 틀리면 0(모든 제보를 센다)
+function verifiedCutoff(verifiedAt) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(verifiedAt || '');
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : 0;
+}
+/**
+ * "사실이 틀렸어요" 제보로 후보에서 뺄 공통 노드 (T-118, D-3).
+ * 👎 + reason 'fact' 기록 중 그 노드 verifiedAt(로컬 자정) 이후의 것만, 같은 문장(sentenceHash)은 한 번만 센다.
+ * 서로 다른 문장이 threshold(기본 3) 이상이면 뺀다. 다시 검수해 verifiedAt이 오르면 예전 제보는 안 세져 저절로 풀린다.
+ * forced·meaning·none은 비유·뜻 문제라 세지 않는다. 로그인 전에는 기기 안 기록만(서버 집계는 L0 이후).
+ * @returns {Set<string>} 뺄 노드 id
+ */
+export function reportedNodes(records, graph, { threshold = REPORT_THRESHOLD } = {}) {
+  const nodes = new Map((graph?.nodes || []).filter(isCommonNode).map(n => [n.id, n]));
+  const bySentence = new Map(); // nodeId -> Set(sentenceHash)
+  for (const r of records || []) {
+    if (r?.vote !== 'down' || r.reason !== 'fact') continue;
+    const n = nodes.get(r.nodeId);
+    if (!n || !(r.ts >= verifiedCutoff(n.verifiedAt))) continue;
+    if (!bySentence.has(n.id)) bySentence.set(n.id, new Set());
+    bySentence.get(n.id).add(r.sentenceHash);
+  }
+  return new Set([...bySentence].filter(([, s]) => s.size >= threshold).map(([id]) => id));
+}
+
 // 그 문장 기록의 지문. 결과 캐시 키에 넣어 피드백이 바뀌면 캐시가 저절로 무효가 되게 한다
 export function feedbackKey(records, sentenceHash) {
   return recordsFor(records, sentenceHash).filter(r => r.vote !== 'up').map(r => `${r.id}:${r.vote}:${r.nodeId}:${r.pickedNodeId || ''}`).join(',');

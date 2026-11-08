@@ -196,3 +196,32 @@ def test_self_loop_edge_is_dropped():
     }
     kg = graph_to_custom_kg(g)
     assert [(r["src_id"], r["tgt_id"]) for r in kg["relationships"]] == [("노드1", "노드2")]
+
+
+# --- T-118 출처(sources)·검수 날짜(verifiedAt) ---
+
+def test_provenance_fields_do_not_change_seed(graph):
+    """sources·verifiedAt은 사실이 아니라 메타데이터다. 있어도 없어도 KG가 똑같다(URL이 설명·청크에 섞이지 않음)."""
+    with_prov = copy.deepcopy(graph)
+    for n in with_prov["nodes"]:
+        n["sources"] = ["https://maplestory.nexon.com/News/Update/799"]
+        n["verifiedAt"] = "2026-10-11"
+    without = copy.deepcopy(graph)
+    for n in without["nodes"]:
+        n.pop("sources", None)
+        n.pop("verifiedAt", None)
+    assert graph_to_custom_kg(with_prov) == graph_to_custom_kg(without)
+    text = json.dumps(graph_to_custom_kg(with_prov), ensure_ascii=False)
+    assert "maplestory.nexon.com" not in text and "2026-10-11" not in text
+
+
+def test_real_graph_nodes_have_provenance(graph):
+    """확장 validateGraph와 같은 규칙: 공통 노드마다 공식 출처 1개 이상 + YYYY-MM-DD 검수 날짜."""
+    import re
+    from datetime import date
+
+    for n in graph["nodes"]:
+        assert n.get("sources"), n["id"]
+        assert all(u.startswith("https://maplestory.nexon.com/") for u in n["sources"]), n["id"]
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", n["verifiedAt"]), n["id"]
+        date.fromisoformat(n["verifiedAt"])

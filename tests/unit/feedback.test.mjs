@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, feedbackPercent, formatFeedbackStats, similarMemory, boostForNode } from '../../extension/lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, feedbackPercent, formatFeedbackStats, similarMemory, boostForNode, reportedNodes } from '../../extension/lib/feedback.js';
 
 // 검색 후보(retrieve 결과 모양만 흉내)
 const cands = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, label: id.toUpperCase(), score: 1 - i * 0.1 }));
@@ -275,4 +275,63 @@ test('boostForNode: 👎 → 되돌리기 → 다시 👎를 반복해도 더 �
     recs = removeRecord(recs, `s3-${t}`);
     assert.equal(boostForNode(recs, 'cube'), 0);
   }
+});
+
+// --- T-118 "사실이 틀렸어요" 제보 3건이면 공통 노드를 후보에서 뺀다 ---
+
+const RG = {
+  nodes: [
+    { id: 'starforce', label: '스타포스', source: 'common', verifiedAt: '2026-10-11' },
+    { id: 'meso', label: '메소', source: 'common', verifiedAt: '2026-11-08' },
+    { id: 'u:mine', label: '내 노드', source: 'user' }
+  ]
+};
+const after = new Date(2026, 9, 12, 9).getTime();   // 2026-10-12 09:00 (로컬)
+const fact = (sentenceHash, over = {}) => rec({ sentenceHash, nodeId: 'starforce', vote: 'down', reason: 'fact', ts: after, ...over });
+
+test('제보: 서로 다른 문장 3건이면 그 공통 노드를 뺀다 (T-118)', () => {
+  assert.deepEqual([...reportedNodes([fact('s1'), fact('s2'), fact('s3')], RG)], ['starforce']);
+  assert.deepEqual([...reportedNodes([fact('s1'), fact('s2')], RG)], [], '2건은 아직');
+});
+
+test('제보: 같은 문장은 몇 번이어도 1건 (T-118)', () => {
+  assert.equal(reportedNodes([fact('s1'), fact('s1'), fact('s1')], RG).size, 0);
+  assert.equal(reportedNodes([fact('s1'), fact('s1'), fact('s2'), fact('s3')], RG).size, 1);
+});
+
+test('제보: verifiedAt(로컬 자정) 이전 제보는 세지 않는다 — 다시 검수하면 풀린다 (T-118)', () => {
+  const before = new Date(2026, 9, 10, 23, 59).getTime();
+  assert.equal(reportedNodes([fact('s1', { ts: before }), fact('s2'), fact('s3')], RG).size, 0);
+  const midnight = new Date(2026, 9, 11, 0, 0).getTime();
+  assert.equal(reportedNodes([fact('s1', { ts: midnight }), fact('s2'), fact('s3')], RG).size, 1, '검수 당일 자정부터 센다');
+  // 같은 기록이어도 노드를 다시 검수해 verifiedAt이 오르면 빠지지 않는다
+  const rechecked = { nodes: [{ ...RG.nodes[0], verifiedAt: '2026-11-01' }] };
+  assert.equal(reportedNodes([fact('s1'), fact('s2'), fact('s3')], rechecked).size, 0);
+});
+
+test('제보: forced·meaning·none·이유 없음·👍·고정은 세지 않는다 (T-118)', () => {
+  for (const reason of ['forced', 'meaning', 'none', undefined]) {
+    assert.equal(reportedNodes([fact('s1', { reason }), fact('s2', { reason }), fact('s3', { reason })], RG).size, 0, String(reason));
+  }
+  assert.equal(reportedNodes([fact('s1', { vote: 'up' }), fact('s2', { vote: 'pick' }), fact('s3')], RG).size, 0);
+});
+
+test('제보: 사용자 노드·그래프에 없는 노드는 대상이 아니다 (T-118)', () => {
+  const u = h => fact(h, { nodeId: 'u:mine' });
+  assert.equal(reportedNodes([u('s1'), u('s2'), u('s3')], RG).size, 0);
+  const gone = h => fact(h, { nodeId: 'gone' });
+  assert.equal(reportedNodes([gone('s1'), gone('s2'), gone('s3')], RG).size, 0);
+  // u: 접두어면 source 표시가 없어도 사용자 노드로 본다
+  const g2 = { nodes: [{ id: 'u:x', label: 'x', verifiedAt: '2020-01-01' }] };
+  const ux = h => fact(h, { nodeId: 'u:x' });
+  assert.equal(reportedNodes([ux('s1'), ux('s2'), ux('s3')], g2).size, 0);
+});
+
+test('제보: 노드마다 따로 세고 threshold를 바꿀 수 있다 (T-118)', () => {
+  const m = h => fact(h, { nodeId: 'meso', ts: new Date(2026, 10, 9).getTime() });
+  const recs = [fact('s1'), fact('s2'), fact('s3'), m('s1'), m('s2')];
+  assert.deepEqual([...reportedNodes(recs, RG)], ['starforce']);
+  assert.deepEqual([...reportedNodes(recs, RG, { threshold: 2 })].sort(), ['meso', 'starforce']);
+  assert.equal(reportedNodes([], RG).size, 0);
+  assert.equal(reportedNodes(undefined, RG).size, 0);
 });
