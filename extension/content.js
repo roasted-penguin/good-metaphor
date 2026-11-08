@@ -57,7 +57,10 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.settings) loadSettings();
-    if (Object.keys(changes).some(isGraphKey)) { themeStale = true; markTheme(); if (active() && themeWanted) refreshTheme(); }
+    // 공통 관심사(T-302)를 바꾸면 테마를 다시 받는다. 다른 설정 변경으로는 다시 받지 않는다
+    const interestOf = v => v?.interest || 'maplestory'; // 값이 없으면 기본 관심사(DEFAULT_SETTINGS와 같게)
+    const interestChanged = changes.settings && interestOf(changes.settings.oldValue) !== interestOf(changes.settings.newValue);
+    if (interestChanged || Object.keys(changes).some(isGraphKey)) { themeStale = true; markTheme(); if (active() && themeWanted) refreshTheme(); }
   });
 
   /* ───────── 테마 미리 받기 (T-108) ─────────
@@ -529,7 +532,8 @@
       } else if (r.analogy) {
         html += `<div class="row"><span class="label">${esc(euro(r.domain))} 보면</span><span class="analogy">${esc(r.analogy)}</span></div>`;
       } else {
-        html += `<div class="row muted">${esc(r.rejected || `${r.domain}에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.`)}</div>`;
+        // 비유 없음 문구는 관심사별(T-302, 결과의 noMatchText). 비었으면(내 관심사·서버 결과) 기본 문구
+        html += `<div class="row muted">${esc(r.rejected || r.noMatchText || `${r.domain}에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.`)}</div>`;
       }
       // 후보 칩: 👎 직후 "더 맞는 개념", 비유가 없을 때 "혹시 이 중에 있나요?" (고르면 그 개념으로 다시, 근거 검증은 그대로)
       // 지금 근거로 쓰인 개념은 다시 고를 필요가 없으니 뺀다

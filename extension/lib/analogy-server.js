@@ -83,10 +83,13 @@ export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000,
 
 // 서버를 건너뛰는 이유. 하나라도 걸리면 로컬, 서버를 쓰면 null:
 // 'off' 서버 주소 없음 / 'session' 로그인 세션(오버레이를 서버가 모름, 규칙 3)
+// 'interest' 공통 관심사가 메이플이 아님(서버는 메이플 그래프만 안다, T-302)
 // 'feedback' 그 문장에 👎·pick 기록(서버가 내 피드백을 모름, ADR 0010) / 'demo' 데모 제공자
-export function serverSkipReason({ admin, session, sentenceRecords, providerKind }) {
+// commonId: 병합 그래프의 공통 그래프 id(graph.sources.common.id). 생략하면 메이플(예전 호출 모양)
+export function serverSkipReason({ admin, session, sentenceRecords, providerKind, commonId = 'maplestory' }) {
   if (!admin?.analogyServer?.url) return 'off';
   if (session) return 'session';
+  if (commonId !== 'maplestory') return 'interest';
   if ((sentenceRecords || []).some(r => r?.vote === 'down' || r?.vote === 'pick')) return 'feedback';
   if (providerKind === 'demo') return 'demo';
   return null;
