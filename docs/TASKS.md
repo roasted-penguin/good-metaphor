@@ -46,7 +46,7 @@
 | T-110 | 벡터 캐시 정리 (모델 바뀌면 삭제, 상한) | 1 품질 | P2 | 완료 | |
 | T-111 | iframe·Shadow DOM 안 문장 지원 | 1 품질 | P2 | 완료 | |
 | T-147 | iframe 사용감: 커서가 iframe에 들어가면 최상위 프레임 좌표를 "밖"으로(Alt 이중 요청 막기), 다른 프레임에서 새 비유가 시작되면 이전 프레임 말풍선 닫기(판정: blur·커서 이탈만으로는 안 닫음), 작은(광고) 프레임은 말풍선·요청 없음 | 1 품질 | P2 | 완료 | T-111 |
-| T-148 | 프레임·shadow 보호 빈틈: 같은 출처 iframe이 부모의 비밀번호 폼 안이면 막기(`frameElement`), 하위 요소 shadow 안에 숨은 비밀번호 입력, 서브프레임 첫 호버 테마(첫 stage까지 숨김), 페이지 shadow에 남는 하이라이트 시트 정리 | 1 품질 | P2 | 진행 | T-111 |
+| T-148 | 프레임·shadow 보호 빈틈: 같은 출처 iframe이 부모의 비밀번호 폼 안이면 막기(`frameElement`), 하위 요소 shadow 안에 숨은 비밀번호 입력, 서브프레임 첫 호버 테마(첫 stage까지 숨김), 페이지 shadow에 남는 하이라이트 시트 정리 | 1 품질 | P2 | 리뷰 | T-111 |
 | T-112 | 윈도우에서 Alt 메뉴 포커스 충돌 확인 | 1 품질 | P2 | 대기 | |
 | T-115 | 앱 이름을 "좋은비유네용"으로 바꾸기 | 1 품질 | P1 | 완료 | |
 | T-114 | 메이플 커뮤니티 용어 사전: 은어 aliases + 멸칭 금칙어 필터 | 1 품질 | P1 | 완료 | |
@@ -551,6 +551,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-08 | T-148 | task/T-148-frame-shadow-gaps | | 프레임·shadow 보호 빈틈: 같은 출처 iframe이 부모 문서의 비밀번호 폼 안이면 프레임 전체 꺼짐(`frameElement` 사슬, 다른 출처는 볼 수 없음), 폼 안 하위 요소의 열린 shadow에 숨은 비밀번호 칸도 찾음(`hasPasswordDeep`, 깊이 10·노드 2,000 상한 — 넘으면 없음으로 봄: 큰 폼 전체가 꺼지는 손해가 더 커서), 서브프레임 첫 호버는 테마를 알 때까지 말풍선 지연, 닫을 때 페이지 shadow의 우리 하이라이트 시트 떼기. Opus·medium 서브에이전트. 단위 437·e2e 82. |
 | 2026-11-08 | T-147 | task/T-147-iframe-ux | [#43](https://github.com/roasted-penguin/good-metaphor/pull/43) | iframe 사용감: 프레임마다 `mouse.inside`(문서 밖·iframe 위로 나가면 false, 첫 mousemove 전에도 false)로 다른 프레임 위에서 누른 Alt가 옛 좌표 문장을 트리거하지 않음. 새 explain이 시작되면 background가 같은 탭 모든 프레임에 close-bubble(보낸 프레임 토큰은 무시)로 이전 말풍선 닫기. 가로 260·세로 160 미만 서브프레임은 말풍선·요청 없음(`place.js` `tinyFrame`). Opus·medium 서브에이전트. 단위 432·e2e 78. |
 | 2026-11-08 | T-114 | task/T-114-glossary | [#42](https://github.com/roasted-penguin/good-metaphor/pull/42) | 메이플 커뮤니티 용어 사전: (1) 노드 `aliases`(은어 11개 노드, 검증), 임베딩 텍스트는 그대로 두고 문장에 별칭이 낱말로 있으면 `aliasBoost` 0.08 — 첫 시도(nodeText에 별칭)는 회귀 4건이라 버림, 최종 혼합 31/39·은어 4/4·회귀 없음. "기사·버스"는 일상어라 뺌(T-149). 서버 시드·추출 용어 사전에도 별칭. (2) `blocklist.json` 금칙어 용어 카드(승인 8·제안 2, 매미·먹자는 일상어라 제안), 확장·서버 출력 직전 필터(스트리밍 뜻·서버 결과 재검사·정밀 모드 추상화 포함), 프롬프트 규칙 한 줄, 서버는 금칙어를 못 읽으면 503(`/health`에 표시). Opus·medium 서브에이전트(Task 2개, 재설계 1회, 최종 검토 수정 1회). 단위 430·e2e 75·서버 318. |
 | 2026-11-08 | T-115 | task/T-115-rename | [#41](https://github.com/roasted-penguin/good-metaphor/pull/41) | 앱 이름을 "좋은비유네용"으로: manifest(`좋은비유네용 (PoC)`·short_name·default_title), 팝업·설정 제목, `package.json` `good-metaphor`, README·CLAUDE.md·intro·아키텍처 페이지 제목, 내부 식별자 `analogy-helper-*` → `good-metaphor-*`(camelCase 전역은 그대로). 이름 일치 단위 테스트 추가. 기획서 아티팩트는 이 세션에서 열 수 없어 사람이 제목을 고쳐야 함. Opus·medium 서브에이전트. 단위 401·e2e 73. |
