@@ -1607,7 +1607,7 @@ test('말풍선 닫은 뒤(T-111 CI): 숨은 말풍선 자리 아래 글자도 �
 });
 
 /* ───────── iframe 사용감 (T-147) ───────── */
-// #sh-open 을 화면 위쪽(top 40px)에 두면 그 아래 fr-same·fr-cross 가 한 화면에 들어온다(스크롤로 닫히는 것과 구분)
+// #sh-open 을 화면 위쪽(top 40px)에 두면 그 아래 fr-same 이 한 화면에 들어온다(스크롤로 닫히는 것과 구분)
 async function topSentencePoint(page) {
   return page.evaluate(() => {
     window.scrollTo(0, window.scrollY + document.getElementById('sh-open').getBoundingClientRect().top - 40);
@@ -1652,11 +1652,11 @@ test('iframe(T-147): 커서가 iframe 문장에 있을 때 Alt → 요청은 ifr
 test('iframe(T-147): 최상위 말풍선(결과) → iframe 문장 Alt+호버 → 최상위 말풍선은 닫히고 iframe 말풍선이 뜬다', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
-  await frameOf(page, '#fr-cross');
+  await frameOf(page, '#fr-same');
   await altHoverAt(page, await topSentencePoint(page));
   await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
   const scrollY = await page.evaluate(() => window.scrollY);
-  const { frame, x, y } = await framePoint(page, '#fr-cross', '#fb');
+  const { frame, x, y } = await framePoint(page, '#fr-same', '#fb');
   // 전제: iframe 글자가 최상위 말풍선에 가려지지 않는다(가려지면 호버가 말풍선으로 감)
   const boxRect = await page.evaluate(() => document.getElementById('good-metaphor-host').shadowRoot.querySelector('.box').getBoundingClientRect().toJSON());
   expect(y > boxRect.bottom || x > boxRect.right || x < boxRect.left, 'iframe 글자는 최상위 말풍선 밖').toBe(true);

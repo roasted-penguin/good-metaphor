@@ -5,7 +5,9 @@
 
   const HL_NAME = 'good-metaphor-hl';
   let settings = { enabled: true, triggerMode: 'modifier', modifierKey: 'Alt', dwellMs: 900 };
-  let mouse = { x: 0, y: 0, alt: false, shift: false, ctrl: false, meta: false };
+  // inside(T-147): 커서가 이 문서 안에 있음. 첫 mousemove 전이나 iframe·창 밖으로 나가면 false라,
+  // 포커스가 이 문서에 남아 keydown(Alt)이 여기로 와도 옛 좌표 문장을 트리거하지 않는다
+  let mouse = { x: 0, y: 0, inside: false, alt: false, shift: false, ctrl: false, meta: false };
   let dwellTimer = null;
   let hideTimer = null;
   let current = null;       // { key, ranges, rects }
@@ -33,6 +35,8 @@
     });
   // 최상위를 모르는 서브프레임(불투명·가려진 출처 + referrer 없음)은 실패 시 닫힘: 강조·말풍선·메시지 모두 없음
   const excludedBy = list => !topKnown || hosts.some(h => SF.isExcludedHost(h, list));
+  // 이 프레임 표지(T-147). explain 때 background에 실어 보내면, 다른 프레임 말풍선 닫기 신호(close-bubble)에 그대로 돌아온다
+  const frameToken = Math.random().toString(36).slice(2) + Date.now().toString(36);
   // 서브프레임(광고 등)은 시작 시 테마를 미리 받지 않고 처음 보조키를 누를 때(trigger) 받는다(프레임 많은 페이지의 메시지 폭주 방지)
   let themeWanted = isTop;
   // 이 페이지 호스트가 제외 목록에 있음(T-107). 저장된 설정을 읽기 전에는 기본 목록으로 판정한다
@@ -535,7 +539,9 @@
   }
 
   function trigger() {
-    if (!active()) return;
+    if (!active() || !mouse.inside) return;
+    // 작은 서브프레임(광고·위젯, T-147)은 말풍선이 잘리니 테마도 받지 않고 아무것도 보내지 않는다
+    if (AP.tinyFrame({ isTop, vw: window.innerWidth, vh: window.innerHeight })) return;
     themeWanted = true; // 서브프레임은 여기(처음 보조키를 누르거나 머무른 순간)서 처음 받는다(T-111)
     refreshIfStale(); // 미리 받기가 실패했으면 호버 때 다시(이번 말풍선은 stage theme이 고침)
     const s = sentenceAt(mouse.x, mouse.y);
@@ -550,7 +556,7 @@
     render({ loading: true, stage: 'graph' });
     try {
       getPort().postMessage({
-        type: 'explain', id: reqId,
+        type: 'explain', id: reqId, frameToken,
         payload
       });
     } catch {
@@ -581,7 +587,7 @@
 
   let moveRaf = 0;
   document.addEventListener('mousemove', e => {
-    mouse.x = e.clientX; mouse.y = e.clientY;
+    mouse.x = e.clientX; mouse.y = e.clientY; mouse.inside = true;
     if (!active()) return;
     if (moveRaf) return;
     moveRaf = requestAnimationFrame(() => {
@@ -601,6 +607,27 @@
       }
     });
   }, { passive: true });
+
+  // 커서가 이 문서 밖(창 밖: relatedTarget 없음, 자식 iframe 안: relatedTarget 이 IFRAME·FRAME)으로 나가면 "밖"(T-147).
+  // 자동 모드에서 이미 걸어 둔 머무름 타이머도 지운다(옛 좌표로 트리거하지 않게)
+  document.addEventListener('mouseout', e => {
+    const to = e.relatedTarget;
+    if (to && to.tagName !== 'IFRAME' && to.tagName !== 'FRAME') return;
+    mouse.inside = false;
+    clearTimeout(dwellTimer);
+  }, { passive: true, capture: true });
+  document.addEventListener('mouseover', e => {
+    if (e.target?.tagName === 'IFRAME' || e.target?.tagName === 'FRAME') return; // iframe 요소 위 = 그 프레임 안
+    mouse.inside = true;
+    mouse.x = e.clientX; mouse.y = e.clientY;
+  }, { passive: true, capture: true });
+
+  // 다른 프레임에서 새 explain이 시작되면 이 프레임 말풍선을 닫는다(T-147, background가 같은 탭 모든 프레임에 보냄).
+  // 보낸 프레임 자신은 자기 표지라 무시한다. 꺼짐·제외 사이트여도 닫기만 하므로 문제없다
+  chrome.runtime.onMessage.addListener(msg => {
+    if (msg?.type !== 'close-bubble' || msg.exceptToken === frameToken) return;
+    if (current || view) hideTooltip();
+  });
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { hideTooltip(); return; }

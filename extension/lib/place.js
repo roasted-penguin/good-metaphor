@@ -37,5 +37,11 @@
     return { left, top, flipped };
   }
 
-  globalThis.AnalogyPlace = Object.freeze({ lineRects, pickLineIndex, pickLineRect, placeBox });
+  // 작은 서브프레임(광고·위젯, T-147): 말풍선이 잘리므로 띄우지도, 요청을 보내지도 않는다. 최상위는 창이 작아도 해당 없음
+  const MIN_FRAME_W = 260, MIN_FRAME_H = 160;
+  function tinyFrame({ isTop, vw, vh }) {
+    return !isTop && (vw < MIN_FRAME_W || vh < MIN_FRAME_H);
+  }
+
+  globalThis.AnalogyPlace = Object.freeze({ lineRects, pickLineIndex, pickLineRect, placeBox, tinyFrame });
 })();
