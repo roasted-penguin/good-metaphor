@@ -226,6 +226,27 @@ test('금칙어(T-114): 비유·뜻에 섞이면 말풍선 어디에도 안 보�
   expect(calls.at(-1).system).toContain('커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.');
 });
 
+test('금칙어(T-114): 서버 결과도 확장이 다시 검사하고, 정밀 모드 추상 구조도 debug에서 지운다', async ({ ext }) => {
+  const s = await ext.send({ type: 'explain', sentence: '서버금칙 확률형 강화는 실패하면 비용만 날아간다.', word: '', context: '', pageTitle: 't', noCache: true });
+  expect(s.data.source).toBe('server');
+  expect(s.data.analogy).toBe('');
+  expect(s.data.mapping).toBe('');
+  expect(s.data.meaning).toBe('서버 뜻 풀이예요.');
+  expect(s.data.rejected).toBe(BLOCKED_REJECTED);
+  expect(s.data.evidence).toBeNull();
+  expect(s.data.debug.blocked).toEqual({ field: 'analogy', term: '(가림)' });
+  expect(hasBlocked(JSON.stringify(s.data))).toBe(false);
+
+  await ext.setSettings({ preciseMode: true });
+  try {
+    const p = await ext.send({ type: 'explain', sentence: '금칙추상테스트 금리가 오르면 이자가 늘어난다.', noCache: true });
+    expect(p.data.debug.abstractText).toBe('');
+    expect(hasBlocked(JSON.stringify(p.data))).toBe(false);
+  } finally {
+    await ext.setSettings({ preciseMode: false });
+  }
+});
+
 test('피드백(T-129): 👎 → 다른 근거로 다시, 다시 물어도 반영, 되돌리기', async ({ ext }) => {
   const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
   const r1 = await ext.send({ type: 'explain', ...q });

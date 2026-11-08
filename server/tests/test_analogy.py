@@ -207,10 +207,24 @@ def test_default_blocklist_file_is_loaded():
     assert "선.족" not in res.text and "리선족" not in res.text
 
 
-def test_missing_blocklist_file_still_answers(tmp_path):
-    client, *_ = _client(settings=_settings(blocklist_path=str(tmp_path / "없음.json")))
-    body = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.").json()
-    assert body["analogy"].startswith("메이플로 치면")
+BLOCKLIST_MISSING = "금칙어 목록을 읽지 못해 비유를 멈췄어요."
+
+
+def test_missing_blocklist_file_fails_closed(tmp_path):
+    # 승인 카드가 하나도 없으면 비유를 내지 않는다(503, 한국어 JSON). LLM도 부르지 않는다
+    client, _, llm, _ = _client(settings=_settings(blocklist_path=str(tmp_path / "없음.json")))
+    res = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.")
+    assert res.status_code == 503
+    assert res.json() == {"error": BLOCKLIST_MISSING}
+    assert llm.calls == []
+
+
+def test_injected_empty_or_unapproved_blocklist_fails_closed():
+    for bl in ([], [{"term": "가나다", "variants": [], "status": "제안"}]):
+        client, *_ = _client(blocklist=bl)
+        res = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.")
+        assert res.status_code == 503
+        assert res.json() == {"error": BLOCKLIST_MISSING}
 
 
 def test_null_node_means_no_analogy():

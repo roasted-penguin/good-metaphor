@@ -163,10 +163,12 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
   const expected = {
     hunting: ['재획'], skill_cooldown: ['극딜'], starforce: ['펑', '프텍'], arcane_symbol: ['세금'],
     meso: ['쌀먹'], auction: ['쌀먹'], boss_entry: ['데카', '풀데카', '최소컷'], arcane_force: ['최소컷'],
-    cube: ['잡옵'], weekly_boss: ['메요일'], party: ['기사', '버스']
+    cube: ['잡옵'], weekly_boss: ['메요일'],
+    // 기사·버스는 뉴스·교통 글에 흔한 일상어라 뺐다(최종 리뷰, 부정 평가 문장은 T-149)
+    party: []
   };
   for (const [id, aliases] of Object.entries(expected)) assert.deepEqual(byId[id], aliases, id);
-  assert.equal(common.version, '2026.11.08-1');
+  assert.equal(common.version, '2026.11.08-2');
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {

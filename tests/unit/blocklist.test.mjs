@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normalizeForBlock, findBlocked, activeTerms, BLOCKED_REJECTED_TEXT } from '../../extension/lib/blocklist.js';
+import { normalizeForBlock, findBlocked, activeTerms, applyBlocklist, BLOCKED_REJECTED_TEXT } from '../../extension/lib/blocklist.js';
 
 const CASES = JSON.parse(readFileSync(new URL('../fixtures/blocklist-cases.json', import.meta.url), 'utf8'));
 const BLOCKLIST = JSON.parse(readFileSync(new URL('../../extension/data/common/blocklist.json', import.meta.url), 'utf8'));
@@ -65,4 +65,47 @@ test('activeTerms: 배열이나 { terms } 모두 받아 승인만 돌려준다',
   assert.deepEqual(activeTerms(list).map(c => c.term), ['가']);
   assert.deepEqual(activeTerms({ terms: list }).map(c => c.term), ['가']);
   assert.deepEqual(activeTerms(null), []);
+});
+
+test('번들 blocklist.json: 파싱되고 승인 카드가 하나 이상 있다', () => {
+  const raw = readFileSync(new URL('../../extension/data/common/blocklist.json', import.meta.url), 'utf8');
+  assert.ok(activeTerms(JSON.parse(raw)).length >= 1);
+});
+
+// applyBlocklist: runAnalogy와 서버 결과 재검사(background)가 같이 쓴다. 테스트용 가짜 낱말로 확인
+const TBL = [{ term: '금칙테스트말', variants: [], status: '승인' }];
+const SERVER_RESULT = {
+  meaning: '서버 뜻 풀이예요.', analogy: '서버 비유예요.', mapping: '원문 ↔ 스타포스', rejected: null,
+  evidence: { nodeId: 'starforce', nodeLabel: '스타포스 강화', source: 'common', tagLabel: null },
+  domain: '메이플스토리', theme: 'maple', debug: { candidates: [{ id: 'starforce' }] }
+};
+
+test('applyBlocklist: 서버 결과 analogy에 금칙어가 있으면 비유·대응·근거를 숨기고 문구', () => {
+  const { answer, blocked } = applyBlocklist({ ...SERVER_RESULT, analogy: '서버 비유 금.칙.테스트말' }, TBL);
+  assert.equal(answer.analogy, '');
+  assert.equal(answer.mapping, '');
+  assert.equal(answer.meaning, '서버 뜻 풀이예요.');
+  assert.equal(answer.evidence, null);
+  assert.equal(answer.rejected, BLOCKED_REJECTED_TEXT);
+  assert.deepEqual(blocked, { field: 'analogy', term: '(가림)' });
+  assert.equal(answer.domain, '메이플스토리'); // 다른 필드는 그대로
+  assert.ok(!JSON.stringify({ answer, blocked }).includes('테스트말'));
+});
+
+test('applyBlocklist: meaning이면 뜻도 지우고, 첫 필드만 기록', () => {
+  const { answer, blocked } = applyBlocklist({ ...SERVER_RESULT, meaning: '금칙테스트말', mapping: '금칙테스트말' }, TBL);
+  assert.equal(answer.meaning, '');
+  assert.equal(answer.analogy, '');
+  assert.equal(answer.mapping, '');
+  assert.deepEqual(blocked, { field: 'meaning', term: '(가림)' });
+});
+
+test('applyBlocklist: 걸리지 않으면 그대로, 원본은 바꾸지 않는다', () => {
+  const input = { ...SERVER_RESULT };
+  const { answer, blocked } = applyBlocklist(input, TBL);
+  assert.equal(blocked, null);
+  assert.deepEqual(answer, SERVER_RESULT);
+  const hit = applyBlocklist({ ...SERVER_RESULT, analogy: '금칙테스트말' }, TBL);
+  assert.equal(SERVER_RESULT.analogy, '서버 비유예요.');
+  assert.notEqual(hit.answer, SERVER_RESULT);
 });
