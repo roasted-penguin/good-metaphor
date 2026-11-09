@@ -46,6 +46,26 @@ docker compose down               # 볼륨(인덱스)은 남아요. 지우려면
 - 공통 그래프는 저장소의 `extension/data/common/`을 컨테이너 `/data/common`에 읽기 전용으로 마운트하고, `COMMON_GRAPH_PATH=/data/common/maplestory.json`으로 가리켜요. 추상 태그는 같은 폴더의 `tags.json`(`TAGS_PATH`)에서 읽어 `load_common_graph`가 합쳐요(T-304).
 - `.env`가 없으면 compose가 멈춰요(Compose v2.24 미만은 `env_file`의 `required: false`를 몰라요). `GEMINI_API_KEY=`를 비워 두어도 서버는 뜨고 `/health`는 200이에요.
 
+## 확장에서 부르기(CORS·권한, T-141)
+
+확장은 `chrome-extension://<확장 id>` 출처에서 `POST /v1/analogy`를 `content-type`·`X-Install-Token` 헤더로 불러요. 서버 CORS는 **기본이 닫힘**이라 아무 출처도 허용하지 않아요.
+
+- 운영: `ALLOWED_ORIGINS=chrome-extension://<확장 id 32자>`처럼 확장 출처를 쉼표로 적어요. 웹스토어 확장 id와 개발용 압축해제 확장 id가 다르면 둘 다 적어요.
+- 개발: `ALLOW_EXTENSION_ORIGINS=true`면 확장 id 형식(`^chrome-extension://[a-p]{32}$`) 전부를 허용해요. 운영에서는 켜지 않아요(아무 확장이나 이 서버를 부를 수 있어요).
+- 허용 메서드는 `POST`, 헤더는 `content-type`·`x-install-token`뿐이에요. 쿠키는 쓰지 않아요.
+- 확장 쪽: 서버 주소는 `config/admin.json` 또는 정책(`chrome.storage.managed`의 `analogyServer.url`·`timeoutMs`, `managed_schema.json`)으로 줘요. 사용자는 설정 화면 "AI 제공자" 아래 `서버 주소 허용`으로 그 출처의 선택 권한을 한 번 허용해요. 허용 전에는 서버를 부르지 않고 이 기기에서 만들어요(`debug.server.reason = 'no-permission'`).
+- 도메인이 정해지면(T-401) 확장 `manifest.json`의 `host_permissions`에 그 서버 주소를 고정으로 넣어 허용 단계를 없애요.
+
+로컬에서 확장과 함께 확인:
+
+```bash
+cd server
+LIGHTRAG_WORKING_DIR=/tmp/rag .venv/bin/python -m app.seed --reset
+ALLOW_EXTENSION_ORIGINS=true LIGHTRAG_WORKING_DIR=/tmp/rag .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8770
+```
+
+`--host 127.0.0.1`로만 열어요(규칙 10). 확장 `admin.json`의 `analogyServer.url`을 `http://127.0.0.1:8770`으로 두고 설정 화면에서 허용하면 말풍선 아래에 `서버`가 보여요.
+
 ## 공통 그래프 주입(시드)
 
 ```bash
@@ -84,3 +104,5 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 | `EMBEDDING_MODEL` | `bge-m3` | Ollama 임베딩 모델 |
 | `EMBEDDING_DIM` | `1024` | 임베딩 차원(bge-m3 = 1024) |
 | `BIND_ADDR` | `127.0.0.1` | 도커 compose만. 포트 8000을 열 주소 |
+| `ALLOWED_ORIGINS` | 없음(허용 없음) | CORS 허용 출처, 쉼표 구분. 운영은 확장 출처 `chrome-extension://<id>`(T-141) |
+| `ALLOW_EXTENSION_ORIGINS` | `false` | `true`면 모든 확장 id 형식 허용. 개발용, 운영에서는 끄기 |
