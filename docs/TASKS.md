@@ -86,7 +86,7 @@
 | T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 완료 | T-403 |
 | T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 완료 | T-402 |
 | T-141 | 서버 모드 실사용 준비: 서버 도메인 `host_permissions` + 서버 CORS(chrome-extension), `managed_schema.json`에 `analogyServer`, 서버 장애 중 로컬 결과는 세션 캐시에 안 남기기, 규칙 1을 로컬 그래프 노드로도 확인 | L 서버 | P1 | 완료 | T-404, T-401 |
-| T-159 | 서버 실패 뒤 잠깐 쉬기: 서버가 죽었거나 설정이 틀리면 호버마다 `timeoutMs`(4초)를 기다린 뒤 로컬로 가고 결과도 캐시 안 해서 매번 LLM을 부름. 실패 뒤 짧은 쿨다운(예: 1~5분) 동안은 서버를 건너뛰기(fallback.js 429 쿨다운처럼) | L 서버 | P2 | 진행 | T-141 |
+| T-159 | 서버 실패 뒤 잠깐 쉬기: 서버가 죽었거나 설정이 틀리면 호버마다 `timeoutMs`(4초)를 기다린 뒤 로컬로 가고 결과도 캐시 안 해서 매번 LLM을 부름. 실패 뒤 짧은 쿨다운(예: 1~5분) 동안은 서버를 건너뛰기(fallback.js 429 쿨다운처럼) | L 서버 | P2 | 리뷰 | T-141 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가 (관문 측정은 T-142로 분리) | L 서버 | P0 | 완료 | T-403 |
 | T-142 | [L0] 관문 측정: bge-m3 서버로 `npm run eval -- --server` → 서버 hit@1 ≥ 브라우저면 ADR 0006 채택 (T-405에서 분리) | L 서버 | P0 | 대기 | T-405, T-401 |
 | T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
@@ -561,6 +561,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-10 | T-159 | task/T-159-server-cooldown | | 서버 실패 뒤 쿨다운: 서버 호출이 실패하면 `chrome.storage.session` `serverCooldown`(1분부터 연속 실패마다 2배, 최대 10분, 429는 Retry-After), 성공하면 바로 해제. 쿨다운 중엔 서버를 건너뛰고(`cooldown`) 로컬 결과를 캐시하되 쿨다운 끝 시각에 만료(서버가 살아나면 다시 서버로). `admin`·`managed_schema`에 `cooldownMs`·`cooldownMaxMs`, 설정 화면 "서버가 잠깐 응답하지 않아 n분 뒤 다시 시도해요." 서버 429에 Retry-After 헤더는 아직 없음(서버 쪽 후속). Opus·medium 서브에이전트(수정 1회). 단위 670·e2e 118. |
 | 2026-11-10 | T-141 | task/T-141-server-mode-prep | [#68](https://github.com/roasted-penguin/good-metaphor/pull/68) | 서버 모드 실사용 준비(도메인 고정 권한 외): 서버 주소 권한이 없으면 조용히 로컬(`no-permission`, 권한 상태는 캐시 키에), 설정 화면 "서버 주소 허용"(그 출처만 요청), 서버 CORS는 기본 닫힘(`ALLOWED_ORIGINS`·`ALLOW_EXTENSION_ORIGINS`, POST·두 헤더만 — 실제 관문은 확장 권한·설치 토큰·한도), `managed_schema`에 `analogyServer`, 서버 실패로 만든 로컬 결과는 캐시 안 함, 규칙 1을 로컬 공통 노드로도. e2e 확장 사본을 기본(서버 없음)·서버 사본으로 나눔. 로컬 실서버(hash 임베딩·Gemini)로 호버 말풍선 `서버` 확인. 고정 도메인 권한은 T-401 때. 후속 T-159. Opus·medium 서브에이전트(수정 1회: 캐시 e2e 깨짐). 단위 658·서버 398·e2e 115. |
 | 2026-11-09 | T-146 | task/T-146-grounding-stats | [#66](https://github.com/roasted-penguin/good-metaphor/pull/66) | 근거 검사 실사용 오탐률(서버 전 단계, D-7): 근거 검사가 비유를 숨기면 이 기기 `groundingLog`에 이유·노드·가린 문장과 비유(금칙어 든 것은 저장 안 함, 300건), 날짜별 검사·숨김 수. 설정 "내 피드백"에 최근 7일 숨김 비율·이유별·"괜찮은 비유였어요" 오탐 표시. 운영자 교정 내보내기에 보내기 동의 시에만 `groundingSamples`(관심사별, 최대 50), 검사 도구 요약, 승인 절차 6-1, 처리방침 저장 표. 서버 결과는 아직 집계 밖(서버 켤 때 함께). Opus·medium 서브에이전트. 단위 649, 관련 e2e 통과(전체는 CI). |
 | 2026-11-09 | T-102 | task/T-102-embed-fallback | [#64](https://github.com/roasted-penguin/good-metaphor/pull/64) | 임베딩 모델 로드 마무리: **실제 버그 수정** — Hugging Face가 막히면 대체 검색으로 조용히 바뀌어야 하는데 오프스크린 상태의 `error` 필드 때문에 background가 매번 오류를 던져 호버가 실패하던 것(`loadError`로). 설정 화면 "대체 검색 사용 중 · 모델 로드 실패: 모델을 받지 못했어요(네트워크)". e2e: HF 차단(DNS), `fallbackOnError: false`, 느린 네트워크 40초 지연(크롬 직접 실행 + CDP로 서비스 워커 생존 확인 — Playwright 붙으면 유휴 종료가 안 일어나서). 모델 용량 문구 약 270MB(`embedding.sizeMB`), `embedding.remoteHost`(https 미러, 스토어 빌드는 금지). Opus·medium 서브에이전트(수정 1회). 단위 630, 관련 e2e 통과(전체는 CI). |
