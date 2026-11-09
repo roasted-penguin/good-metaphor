@@ -6,7 +6,7 @@ import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, comm
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
-import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown } from './lib/analogy-server.js';
+import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown, cacheEntryFor, readCacheEntry } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked, activeTerms } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
@@ -167,12 +167,13 @@ function recordGrounding({ grounding, hidden, sentence, interest, blocklist }) {
 const RESULT_CACHE_MAX = 200;
 async function cacheGet(key) {
   const got = await chrome.storage.session.get('results');
-  return got.results?.[key] || null;
+  // 쿨다운 중 결과는 쿨다운이 끝나면 놓침(T-159). 지난 항목은 다음 cachePut 이 덮거나 오래된 순으로 밀려난다
+  return readCacheEntry(got.results?.[key], Date.now());
 }
 async function cachePut(key, value) {
   const got = await chrome.storage.session.get('results');
   const results = got.results || {};
-  results[key] = value;
+  results[key] = cacheEntryFor(value); // 쿨다운 결과만 expiresAt(T-159), 나머지는 그대로
   const keys = Object.keys(results);
   if (keys.length > RESULT_CACHE_MAX) for (const k of keys.slice(0, keys.length - RESULT_CACHE_MAX)) delete results[k];
   await chrome.storage.session.set({ results });
@@ -370,7 +371,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     result.debug.server = serverInfo;
   }
   // 서버를 시도했다가 실패해서 만든 로컬 결과는 캐시하지 않는다(T-141). 서버가 살아나면 다음 호버에 서버로.
-  // 쿨다운으로 건너뛴 결과(T-159)는 캐시한다(lib/analogy-server.js INTENTIONAL_SKIPS)
+  // 쿨다운으로 건너뛴 결과(T-159)는 쿨다운이 끝날 때까지만 캐시한다(INTENTIONAL_SKIPS, cachePut 의 expiresAt)
   if (shouldCacheLocal(serverInfo)) await cachePut(cacheKey, result);
   return result;
 }

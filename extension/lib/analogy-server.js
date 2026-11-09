@@ -160,8 +160,7 @@ export function serverOriginPattern(url) {
 
 // 서버를 일부러 건너뛴 이유(T-141). 이때 만든 로컬 결과는 캐시한다.
 // 'no-permission' 은 권한 여부가 결과 캐시 키에 들어가 허용하면 저절로 갈린다. 'reported' 는 제보 목록이 키에 있다
-// 'cooldown'(T-159)은 캐시 키에 쿨다운 여부가 없어, 그 문장 결과는 서버가 살아난 뒤에도 세션 캐시가 남는 동안(브라우저를 닫거나 캐시를 지울 때까지) 로컬 결과로 남는다.
-// 쿨다운 동안 같은 문장에 LLM 을 거듭 부르지 않는 쪽을 골랐다
+// 'cooldown'(T-159)은 쿨다운 동안만 캐시한다 — cacheEntryFor 가 쿨다운 until 을 expiresAt 으로 붙여, 쿨다운이 끝나면 놓침이 되어 서버를 다시 부른다
 const INTENTIONAL_SKIPS = new Set(['off', 'session', 'interest', 'feedback', 'demo', 'no-permission', 'reported', 'cooldown']);
 
 // 로컬 결과를 결과 캐시에 넣을지. 서버를 시도했다가 실패해서(network·timeout·http-*·bad-*) 만든 결과는
@@ -169,6 +168,22 @@ const INTENTIONAL_SKIPS = new Set(['off', 'session', 'interest', 'feedback', 'de
 export function shouldCacheLocal(serverInfo) {
   if (!serverInfo || serverInfo.used) return true;
   return INTENTIONAL_SKIPS.has(serverInfo.reason);
+}
+
+// 결과 캐시 항목(T-159). 쿨다운으로 건너뛴 로컬 결과만 쿨다운 끝(until)을 expiresAt 으로 붙인다.
+// 다른 결과는 받은 객체 그대로(예전 캐시 모양)
+export function cacheEntryFor(result) {
+  const s = result?.debug?.server;
+  if (s?.reason !== 'cooldown' || !Number.isFinite(s.until)) return result;
+  return { ...result, expiresAt: s.until };
+}
+
+// 캐시 항목 → 결과. expiresAt 이 지났으면(그 순간 포함) null = 놓침, 아니면 expiresAt 을 뺀 결과. expiresAt 없으면 그대로
+export function readCacheEntry(entry, now) {
+  if (!entry) return null;
+  if (!('expiresAt' in entry)) return entry;
+  const { expiresAt, ...result } = entry;
+  return expiresAt > now ? result : null;
 }
 
 // 서버를 쓸지 판정한다
