@@ -126,3 +126,8 @@ def test_docker_compose_sets_blocklist_path_next_to_graph():
     # 볼륨이 확장 data/common 폴더 전체를 마운트하므로 blocklist.json도 들어간다
     assert "../extension/data/common:/data/common:ro" in compose
     assert (REPO_ROOT / "extension" / "data" / "common" / "blocklist.json").is_file()
+
+
+def test_t139_deliberate_break():
+    # T-139 CI 확인용 — 일부러 실패, 바로 되돌림
+    assert False
