@@ -18,6 +18,7 @@ from .cache import ResultCache, cache_key
 from .config import Settings, load_common_graph
 from .pipeline import AnalogyPipeline, AnalogyRequest, PipelineError
 from .ratelimit import RateLimiter
+from .seedmeta import index_status
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +105,10 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
     def health() -> dict[str, Any]:
         # 프로세스는 살아 있으면 ok. 금칙어가 없으면 비유 요청만 503(blocklist.loaded로 보인다)
         n = len(app.state.blocklist)
-        return {"ok": True, "version": __version__, "blocklist": {"loaded": n > 0, "approved": n}}
+        # 검색 인덱스: 파일과 seed-meta.json만 본다(LightRAG를 열지 않는다, T-140). 안 됐으면 이유에 할 일까지
+        ready, reason = index_status(app.state.settings)
+        return {"ok": True, "version": __version__, "blocklist": {"loaded": n > 0, "approved": n},
+                "index": {"ready": ready, "reason": reason}}
 
     @app.post("/v1/analogy")
     async def analogy(request: Request) -> JSONResponse:

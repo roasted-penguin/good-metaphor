@@ -121,6 +121,10 @@ class Settings:
     tags_path: str | None = None
 
     def __post_init__(self) -> None:
+        # 워크스페이스 이름은 --reset이 지우는 폴더 이름이 된다. 설정을 읽을 때 바로 막는다(T-140)
+        from .seedmeta import validate_workspace
+
+        validate_workspace(self.workspace)
         if not self.blocklist_path:
             object.__setattr__(self, "blocklist_path", str(Path(self.common_graph_path).parent / BLOCKLIST_FILENAME))
         if not self.tags_path:

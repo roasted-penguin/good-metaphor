@@ -38,8 +38,22 @@ def test_컨테이너의_그래프_경로를_마운트한_파일로_지정한다
     assert (REPO_ROOT / "extension" / "data" / "common" / "maplestory.json").is_file()
 
 
-def test_포트_8000을_연다():
-    assert "8000:8000" in load_service()["ports"]
+def test_포트_8000은_기본으로_127_0_0_1에만_연다():
+    # 맥에서 돌릴 때 인터넷(같은 망)에 포트를 열지 않는다(규칙 10). EC2에서는 BIND_ADDR로 바꾼다
+    assert load_service()["ports"] == ["${BIND_ADDR:-127.0.0.1}:8000:8000"]
+
+
+def test_인덱스는_이름_있는_볼륨에_두고_서버와_시드가_같은_경로를_쓴다():
+    compose = yaml.safe_load((SERVER_DIR / "docker-compose.yml").read_text(encoding="utf-8"))
+    service = compose["services"]["analogy-api"]
+    assert "rag_storage" in compose["volumes"]
+    assert "rag_storage:/data/rag_storage" in service["volumes"]
+    assert service["environment"]["LIGHTRAG_WORKING_DIR"] == "/data/rag_storage"
+
+
+def test_README에_도커_시드_절차가_있다():
+    readme = (SERVER_DIR / "README.md").read_text(encoding="utf-8")
+    assert "docker compose run --rm analogy-api python -m app.seed" in readme
 
 
 def test_키는_env_파일에서_읽고_compose에_직접_쓰지_않는다():

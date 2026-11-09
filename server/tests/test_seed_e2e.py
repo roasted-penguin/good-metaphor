@@ -147,7 +147,9 @@ def test_no_index_returns_503_and_does_not_create_one(tmp_path):
     with TestClient(_app(make_settings(wd))) as client:
         res = client.post("/v1/analogy", json={"sentence": SENTENCE}, headers=TOKEN)
     assert res.status_code == 503
+    # 사용자 문구는 짧게. 할 일(시드 명령)은 /health의 index.reason에(T-140)
     assert res.json() == {"error": UNAVAILABLE}
+    assert "python -m app.seed" in client.get("/health").json()["index"]["reason"]
     assert not wd.exists()  # 열어 보다가 빈 인덱스를 만들지 않는다
 
 

@@ -34,7 +34,14 @@ class Retriever(Protocol):
 
 
 class RetrieverUnavailable(Exception):
-    """검색 인덱스가 없거나 준비되지 않았을 때(503)."""
+    """검색 인덱스가 없거나 준비되지 않았을 때(503).
+
+    reason은 사용자에게 그대로 보여 줄 한국어 안내(무엇을 해야 하는지)다. 내부 오류처럼 보여 줄 게 없으면 None.
+    """
+
+    def __init__(self, message: str, reason: str | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 class RetrieverError(Exception):
@@ -167,7 +174,7 @@ class LazyLightRAGRetriever:
     """설정의 작업 디렉터리에 시드된 인덱스가 있으면 첫 검색 때 LightRAG를 열어 검색한다.
 
     - 앱 생성·import 때는 아무것도 열지 않는다.
-    - 인덱스 파일이 없으면 RetrieverUnavailable(503). 없다는 결과는 기억하지 않아, 나중에 시드하면 재시작 없이 쓴다.
+    - 인덱스 파일이 없거나 seed-meta.json이 지금 설정과 다르면 RetrieverUnavailable(503, 이유 포함). 없다는 결과는 기억하지 않아, 나중에 시드하면 재시작 없이 쓴다.
       없을 때 열지 않으므로 빈 인덱스를 만들지도 않는다.
     - 동시에 들어온 첫 요청들은 잠금으로 줄 세워 LightRAG를 한 번만 연다.
     - 열다가 실패하면 RetrieverUnavailable(503)로 바꾸고, 다음 요청 때 다시 시도한다.
@@ -192,8 +199,13 @@ class LazyLightRAGRetriever:
             # lightrag는 무거워서 실제로 열 때만 불러온다
             from . import rag as rag_mod
 
-            if not rag_mod.index_exists(self._settings):
-                raise RetrieverUnavailable(f"인덱스 파일이 없어요: {rag_mod.workspace_dir(self._settings)}")
+            # 인덱스 파일과 시드 기록(seed-meta.json)이 지금 설정(그래프 판본·임베딩)과 맞을 때만 연다(T-140).
+            # 안 맞으면 열지 않는다(차원이 다른 벡터를 섞거나 옛 그래프로 답하지 않게)
+            ready, reason = rag_mod.index_status(self._settings)
+            if not ready:
+                log.warning("검색 인덱스 준비 안 됨(%s/%s): %s", self._settings.lightrag_working_dir,
+                            self._settings.workspace, reason)
+                raise RetrieverUnavailable(f"인덱스 준비 안 됨: {reason}", reason=reason)
             try:
                 rag = await rag_mod.open_rag(self._settings)
             except Exception as e:  # 저장소 파일 손상·권한 등

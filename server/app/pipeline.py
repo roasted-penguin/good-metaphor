@@ -75,6 +75,7 @@ class AnalogyPipeline:
             candidates = await self.retriever.candidates(req.sentence, hl, ll, top_k=TOP_K)
         except RetrieverUnavailable as e:
             log.warning("검색기 준비 안 됨: %s", e)
+            # 사용자에게는 짧게. 할 일(다시 시드 명령)은 /health의 index.reason과 로그에 있다(T-140)
             raise PipelineError(503, "검색 인덱스가 아직 준비되지 않았어요.") from e
         except RetrieverError as e:
             log.warning("검색 실패: %s", e)
