@@ -76,7 +76,7 @@
 | T-304 | 추상 태그를 공통 파일로 분리 (`tags.json`) | 3 확장 | P1 | 완료 | |
 | T-302 | 두 번째 공통 관심사: 식당 그래프 + 로그인 없이 관심사 선택 | 3 확장 | P1 | 완료 | T-304 |
 | T-156 | 식당 관심사 1위 정답률 높이기: hit@1 10/21(48%)·hit@3 17/21(여유 한 문장). 넓은 태그(scarcity_value·efficiency_metric·expected_value)가 엉뚱한 노드를 끌어올림, 억지 태그 연결(fifo_storage·model_restaurant의 loss_risk, delivery_fee의 expected_value, price_board의 threshold_req) 재검토, 관심사별 감점 검토. 메이플 가드 회귀 0, 식당 가드 파일 만들기 | 3 확장 | P1 | 완료 | T-302 |
-| T-157 | 식당 교정 내보내기: `corrections:export`가 메이플로 고정돼 식당 👎·"더 맞는 개념"이 운영자 파일에 안 들어감. 내보내기에 관심사 표시, 승인 절차가 식당 평가셋으로 가게 | 3 확장 | P2 | 진행 | T-302, T-131 |
+| T-157 | 식당 교정 내보내기: `corrections:export`가 메이플로 고정돼 식당 👎·"더 맞는 개념"이 운영자 파일에 안 들어감. 내보내기에 관심사 표시, 승인 절차가 식당 평가셋으로 가게 | 3 확장 | P2 | 리뷰 | T-302, T-131 |
 | T-158 | 첫 실행 화면(T-116)에서 관심사(메이플/식당) 고르기 | 3 확장 | P2 | 대기 | T-302 |
 | T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 대기 | T-107, T-402 |
 | T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
@@ -560,6 +560,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-09 | T-157 | task/T-157-restaurant-corrections | | 식당 교정 내보내기: 운영자용 교정 내보내기가 지금 고른 관심사 하나만(최상위 `interest`, 그 관심사 공통 노드 교정만, 파일 이름에 관심사, 없으면 메이플로 읽음). 검사 도구가 `interest`를 읽어 그 관심사의 평가셋·가드·홀드아웃·그래프로 검사, 모르는 관심사는 오류. 승인 절차에 관심사별 파일 표, 공유 tags.json을 바꾸면 두 관심사 가드 모두. Opus·medium 서브에이전트. 단위 607, e2e는 CI 기준(이 맥은 화면 잠듦으로 느려 전체 실행이 시간 초과). |
 | 2026-11-09 | T-156 | task/T-156-restaurant-hit1 | [#58](https://github.com/roasted-penguin/good-metaphor/pull/58) | 식당 1위 정답률: 노드 태그가 사실로 뒷받침되는지 점검해 근거 없는 4개 제거 → 식당 hit@1 10→12/21, hit@3 17/21 그대로, 회귀 없음, 메이플 그대로. 관심사별 감점(그래프 `tagPenalty`, 지금은 아무 그래프도 안 씀)·`eval --interest --guard/--holdout`·식당 가드 12문장·식당 홀드아웃 8문장. 감점 변형은 일반화 안 돼 기각. 남은 억지 태그 2개(delivery_fee·fifo_storage)는 맞는 공유 태그가 없어 그대로 — 새 태그는 규칙 9 결정 필요. Opus·medium 서브에이전트. 단위 601·e2e 102. |
 | 2026-11-09 | T-302 | task/T-302-restaurant | [#57](https://github.com/roasted-penguin/good-metaphor/pull/57) | 두 번째 공통 관심사 식당: `restaurant.json` 15노드(공유 tags.json 18개에만 연결, 수치·가게·인물 없음, 출처는 실제로 연 공공 자료 — 식품안전나라·공정위·소진공·국립국어원 등, 못 찾은 두 후보는 뺌), `noMatchText` 관심사별. 로더 `loadCommonGraph(interestId)`, `eval --interest restaurant`(식당 평가셋 21문장, hit@3 17/21·hit@1 10/21). 팝업·설정에서 로그인 없이 메이플/식당 선택(`settings.interest`), 로그인 오버레이는 고른 관심사 위에, 식당은 "식당으로 비유하자면"·중립 테마·서버 건너뜀, 다른 관심사의 피드백은 조용히 무시(돌아오면 다시 적용). 메이플 결과 그대로. 후속 T-156·T-157·T-158. Opus·medium 서브에이전트(Task 2개 + 최종 검토 수정 1회). 단위 590·e2e 102. |
 | 2026-11-09 | T-301 | task/T-301-ai-graph-draft | [#56](https://github.com/roasted-penguin/good-metaphor/pull/56) | AI로 관심사 그래프 초안: 설정 "내 저장소"(로그인 상태만) "AI로 초안 만들기" — 관심사 이름 + 공통 위에 더하기/새 관심사. 기존 제공자 체인으로 한 번(전체 마감 120초·keepAlive), 프롬프트는 `tags.json` 태그 목록·수치·인물·멸칭 금지 규칙. `parseDraft`가 목록 밖 태그·금칙어·길이 거르고 숫자는 경고. 노드는 `draft`·`factsReviewed`로 미검수 → `mergeGraphs`에서 빠져 어떤 경로로도 근거가 안 됨(규칙 1), 사실을 하나씩 확인하면 일반 노드. 이름 금칙어 거절. 실제 무료 Gemini로 "야구" 초안 10노드 3.1초 확인. Opus·medium 서브에이전트(수정 1회). 단위 568·e2e 99. |
