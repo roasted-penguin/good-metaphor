@@ -2,7 +2,9 @@
 
 흐름(docs/architecture-lightrag.md "M2 맥 추출 노드", ADR 0006):
 - 큐는 워크스페이스 폴더 안 `extract-queue.json`(원자적 쓰기, 경로는 seedmeta.safe_workspace_dir로만).
-  청크: {id, docId, workspace, text, status: pending|running|done|failed, attempts, lastError, updatedAt, via}
+  청크: {id, docId, workspace, text, status: pending|running|done|failed, attempts, lastError, updatedAt, via,
+  stale?}. id는 문서·글 내용 기준(위치 번호 없음, T-162). 같은 docId를 다시 넣으면 새 판본에 없는 청크 중
+  pending·failed는 빼고 done·running은 stale로 남긴다(stale은 다시 추출하지 않음).
 - 주기(기본 300초)마다, 시간창(EXTRACT_WINDOW) 안에서만 창을 연다. 창마다 맥에 `GET /api/tags`(2초).
   응답하면 pending·failed(attempts < 상한) 청크를 순서대로 하나씩(동시 1 = llm_model_max_async=1) 처리한다.
 - 처리 순서: running 표시(attempts+1) → 추출 → 목록 밖 추상구조 버림(filter_extraction, 규칙 9)
@@ -16,8 +18,9 @@
 - 잠금: 큐 파일마다 옆 `extract-queue.lock`(fcntl.flock)을 읽고-고치고-쓰는 동안 쥔다. 복구·창 실행은
   작업 디렉터리의 `worker.lock`을 기다리지 않고 잡은 프로세스 하나만(두 번째 워커는 거절).
 - 큐 파일이 깨진 워크스페이스는 그 워크스페이스만 건너뛰고 나머지는 계속한다.
-- EXTRACT_FALLBACK=cloud: 맥 헬스체크가 실패했을 때만, 사용자 워크스페이스(common_ 아님) 청크만,
-  하루(UTC) 상한까지 클라우드로 추출한다. 공통 워크스페이스는 늘 맥만(운영자 승인 흐름).
+- EXTRACT_FALLBACK=cloud: 맥 헬스체크가 실패했을 때만, 사용자 워크스페이스(대소문자 무시로 common_으로
+  시작하지도 common 자체도 아님) 청크만, 하루(UTC) 상한까지 클라우드로 추출한다. 공통 워크스페이스는 늘 맥만
+  (운영자 승인 흐름). 사용량 파일이 깨지면 그날은 상한에 닿은 것으로 본다(닫힘, T-162).
 
 규칙 8: 호버 경로와 따로 돈다. 규칙 10: 맥 주소는 테일넷 주소만 설정에 둔다(키는 없다, 로그에 주소만).
 """
@@ -134,12 +137,14 @@ def _sha(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
 
-def chunk_id(doc_id: str, index: int, text: str) -> str:
-    """같은 문서·같은 자리·같은 글이면 같은 id(다시 넣어도 중복 없음). 파일 이름으로 써도 안전한 글자만."""
-    return f"{_sha(doc_id)[:10]}-{index:04d}-{_sha(text)[:10]}"
+def chunk_id(doc_id: str, text: str) -> str:
+    """같은 문서·같은 글이면 같은 id(T-162, 위치 번호 없음). 문서 앞부분을 고쳐도 바뀌지 않은 청크는 같은 id라
+    다시 넣지 않는다. 파일 이름으로 써도 안전한 글자만(`<문서 sha1 10자>-<글 sha1 16자>`)."""
+    return f"{_sha(doc_id)[:10]}-{_sha(text)[:16]}"
 
 
-# 청크 id는 chunk_id()가 만든 모양(소문자 16진수·숫자·-)만. 결과 파일 이름으로 쓰므로 경로 글자를 막는다
+# 청크 id는 chunk_id()가 만든 모양(소문자 16진수·숫자·-)만. 결과 파일 이름으로 쓰므로 경로 글자를 막는다.
+# T-162 전 형식(`<10>-<4자리 번호>-<10>`)도 같은 패턴이라 이미 있는 큐 파일도 그대로 읽힌다
 CHUNK_ID_RE = re.compile(r"^[0-9a-f]+(?:-[0-9a-f]+)*$")
 
 
@@ -296,22 +301,58 @@ def _iso(now: datetime | None) -> str:
     return (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
 
 
-def enqueue(settings: Settings, workspace: str, doc_id: str, text: str, now: datetime | None = None) -> int:
-    """문서를 청크로 나눠 pending으로 넣는다. 이미 있는 청크 id는 건너뛴다. 새로 넣은 수를 돌려준다."""
+def enqueue(settings: Settings, workspace: str, doc_id: str, text: str,
+            now: datetime | None = None) -> dict[str, int]:
+    """문서를 청크로 나눠 pending으로 넣는다. 반환: {added, removed, stale}.
+
+    - 이미 있는 청크 id는 건너뛴다. 같은 문서 안 똑같은 글의 청크는 하나만(id가 같다).
+    - 같은 docId를 다시 넣으면(T-162) 새 청크 집합에 없는 그 문서의 기존 청크 중 pending·failed는 큐에서 뺀다
+      (처리 전이라 버려도 됨). done·running은 남기고 `stale: true`로 표시한다(LightRAG에서 지우기는 T-421
+      `adelete_by_doc_id`). 낡았던 청크가 새 판본에 다시 있으면 표시를 지운다.
+    """
     parts = chunk_text(text)
 
-    def add(chunks: list[dict]) -> tuple[bool, int]:
+    def add(chunks: list[dict]) -> tuple[bool, dict[str, int]]:
+        new_ids: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for part in parts:
+            cid = chunk_id(doc_id, part)
+            if cid not in seen:
+                seen.add(cid)
+                new_ids.append((cid, part))
+        removed = stale = 0
+        changed = False
+        kept: list[dict] = []
+        for c in chunks:
+            if c.get("docId") != doc_id:
+                kept.append(c)
+                continue
+            if c.get("id") in seen:
+                if c.get("stale"):
+                    c.pop("stale", None)
+                    c["updatedAt"] = _iso(now)
+                    changed = True
+                kept.append(c)
+                continue
+            if c.get("status") in ("done", "running"):
+                if not c.get("stale"):
+                    c.update(stale=True, updatedAt=_iso(now))
+                    stale += 1
+                kept.append(c)
+            else:
+                removed += 1
+        chunks[:] = kept
         have = {c.get("id") for c in chunks}
         added = 0
-        for i, part in enumerate(parts):
-            cid = chunk_id(doc_id, i, part)
+        for cid, part in new_ids:
             if cid in have:
                 continue
             chunks.append({"id": cid, "docId": doc_id, "workspace": workspace, "text": part, "status": "pending",
                            "attempts": 0, "lastError": None, "updatedAt": _iso(now), "via": None})
             have.add(cid)
             added += 1
-        return added > 0, added
+        result = {"added": added, "removed": removed, "stale": stale}
+        return changed or any(result.values()), result
 
     return _mutate(settings, workspace, add)
 
@@ -374,7 +415,10 @@ def status_counts(settings: Settings, workspace: str, max_attempts: int) -> dict
 
 
 def is_common(workspace: str) -> bool:
-    return workspace.startswith(COMMON_PREFIX)
+    """공통 워크스페이스인지(T-162): 대소문자 무시로 `common_`으로 시작하거나 이름이 `common` 자체.
+    공통은 클라우드로 보내지 않으므로(운영자 승인 흐름) 애매하면 공통 쪽으로 본다."""
+    name = workspace.casefold()
+    return name == COMMON_PREFIX.rstrip("_") or name.startswith(COMMON_PREFIX)
 
 
 # ── 시간창 ───────────────────────────────────────────
@@ -497,7 +541,9 @@ def make_ollama_extractor(ollama_url: str, model: str, graph: Mapping[str, Any],
 
 
 def make_cloud_extractor(llm: Any, graph: Mapping[str, Any]) -> Extractor:
-    """서버 LLM(app.llm, 기본 Gemini)으로 추출하는 함수. 클라우드 대체(EXTRACT_FALLBACK=cloud)에서만 쓴다."""
+    """서버 LLM(app.llm, 기본 Gemini)으로 추출하는 함수. 클라우드 대체(EXTRACT_FALLBACK=cloud)에서만 쓴다.
+
+    타임아웃은 llm을 만들 때 정한다(_default_cloud: EXTRACT_CLOUD_TIMEOUT_S, T-162)."""
     from app.llm import LLMError
 
     system = extraction_system_prompt(graph)
@@ -543,23 +589,52 @@ def _usage_path(settings: Settings) -> Path:
     return Path(settings.lightrag_working_dir).resolve() / USAGE_FILE
 
 
-def read_cloud_usage(settings: Settings, now: datetime) -> int:
-    """오늘(UTC) 클라우드로 처리한 청크 수. 날짜가 바뀌었거나 파일이 없으면 0."""
+# 사용량 파일이 깨졌을 때 read_cloud_usage가 돌려주는 값(어떤 상한보다도 크다 = 그날 클라우드 대체 안 함)
+USAGE_BROKEN = sys.maxsize
+
+
+def _load_usage(settings: Settings, now: datetime) -> int | None:
+    """오늘(UTC) 사용 수. 파일이 없거나 날짜가 지났으면 0, 깨졌거나 모양이 다르면 None(경고 로그)."""
+    path = _usage_path(settings)
     try:
-        data = json.loads(_usage_path(settings).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
         return 0
-    if not isinstance(data, dict) or data.get("date") != _utc_date(now):
-        return 0
-    return int(data.get("cloudChunks") or 0)
+    except OSError as e:
+        log.warning("클라우드 사용량 파일(%s)을 읽지 못해 오늘은 클라우드 대체를 쓰지 않아요: %s", USAGE_FILE, type(e).__name__)
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        data = None
+    count = data.get("cloudChunks") if isinstance(data, dict) else None
+    if (not isinstance(data, dict) or not isinstance(data.get("date"), str)
+            or not isinstance(count, int) or isinstance(count, bool) or count < 0):
+        log.warning("클라우드 사용량 파일(%s)이 깨져 오늘은 클라우드 대체를 쓰지 않아요. 확인한 뒤 고치거나 지워 주세요.",
+                    USAGE_FILE)
+        return None
+    return count if data["date"] == _utc_date(now) else 0
+
+
+def read_cloud_usage(settings: Settings, now: datetime) -> int:
+    """오늘(UTC) 클라우드로 처리한 청크 수. 날짜가 바뀌었거나 파일이 없으면 0.
+
+    파일은 있는데 깨졌거나 모양이 다르면 상한에 닿은 것으로 본다(USAGE_BROKEN, 닫힘, T-162).
+    """
+    count = _load_usage(settings, now)
+    return USAGE_BROKEN if count is None else count
 
 
 def _add_cloud_usage(settings: Settings, now: datetime, delta: int = 1) -> None:
-    """사용 수를 더한다(worker_lock을 쥔 워커 한 곳에서만 쓴다)."""
+    """사용 수를 더한다(worker_lock을 쥔 워커 한 곳에서만 쓴다). 깨진 파일은 덮어쓰지 않는다(운영자가 보도록)."""
     path = _usage_path(settings)
+    current = _load_usage(settings, now)
+    if current is None:
+        # 깨졌으면 그날은 클라우드를 안 쓰니 불릴 일이 없다. 혹시 불려도 경고만(파일은 그대로)
+        log.warning("클라우드 사용량 파일이 깨져 사용 수를 더하지 않았어요.")
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
-    count = max(0, read_cloud_usage(settings, now) + delta)
-    seedmeta.atomic_write_json(path, {"date": _utc_date(now), "cloudChunks": count})
+    seedmeta.atomic_write_json(path, {"date": _utc_date(now), "cloudChunks": max(0, current + delta)})
 
 
 # ── 워커 ────────────────────────────────────────────
@@ -594,8 +669,10 @@ class ExtractWorker:
         self.daily_cap = settings.extract_cloud_daily_cap if daily_cap is None else daily_cap
 
     def _eligible(self, c: Mapping[str, Any]) -> bool:
-        # pending도 시도 수 상한을 본다: 처리 중 프로세스를 죽이는 청크가 복구·재시도를 끝없이 되풀이하지 않게
-        return c.get("status") in ("pending", "failed") and not is_given_up(c, self.max_attempts)
+        # pending도 시도 수 상한을 본다: 처리 중 프로세스를 죽이는 청크가 복구·재시도를 끝없이 되풀이하지 않게.
+        # 낡은 청크(stale, 문서 새 판본에 없음, T-162)는 다시 추출하지 않는다(처리 중 죽어 복구된 것 포함)
+        return (c.get("status") in ("pending", "failed") and not c.get("stale")
+                and not is_given_up(c, self.max_attempts))
 
     async def run_window(self, now: datetime) -> dict[str, Any]:
         """창 한 번. 반환: {healthy, done, failed, cloud, stopped, skipped, errors(큐를 못 읽은 워크스페이스)}."""
@@ -762,7 +839,9 @@ def _default_cloud(settings: Settings, graph: Mapping[str, Any]) -> Extractor | 
         return None
     from app.llm import GeminiLLM
 
-    return make_cloud_extractor(GeminiLLM(settings.gemini_api_key, settings.keyword_model), graph)
+    # 추출은 호버보다 긴 글을 다루므로 따로 타임아웃(EXTRACT_CLOUD_TIMEOUT_S, T-162). 호버 GeminiLLM 기본값은 그대로
+    llm = GeminiLLM(settings.gemini_api_key, settings.keyword_model, timeout=settings.extract_cloud_timeout_s)
+    return make_cloud_extractor(llm, graph)
 
 
 def build_default_worker(settings: Settings, workspaces: Iterable[str] | None = None) -> ExtractWorker:
@@ -815,7 +894,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--status", action="store_true", help="워크스페이스별 상태 개수")
     parser.add_argument("--workspace", action="append",
                         help="워크스페이스(여러 번 가능). 기본: --enqueue는 WORKSPACE, 나머지는 EXTRACT_WORKSPACES")
-    parser.add_argument("--doc-id", help="--enqueue 문서 id(기본: 파일 이름)")
+    parser.add_argument("--doc-id", help="--enqueue 문서 id(기본: file:<파일 절대 경로>, 운영은 <출처 URL>#<판본>)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
@@ -826,10 +905,12 @@ def main(argv: list[str] | None = None) -> int:
         path = Path(args.enqueue)
         text = path.read_text(encoding="utf-8")
         ws = (args.workspace or [settings.workspace])[0]
-        doc_id = args.doc_id or path.name
-        total = len(chunk_text(text))
-        added = enqueue(settings, ws, doc_id, text)
-        print(f"{ws}: 청크 {total}개 중 {added}개를 넣었어요(이미 있던 {total - added}개는 건너뜀).")
+        # 기본 docId는 정규화한 절대 경로(이름만 같은 다른 폴더 파일과 겹치지 않게, T-162)
+        doc_id = args.doc_id or f"file:{path.resolve()}"
+        total = len(set(chunk_text(text)))
+        r = enqueue(settings, ws, doc_id, text)
+        print(f"{ws}: 청크 {total}개 중 {r['added']}개를 넣었어요(이미 있던 {total - r['added']}개는 건너뜀). "
+              f"새 판본에 없는 청크 {r['removed']}개를 뺐고 {r['stale']}개는 낡음(stale)으로 표시했어요.")
         return 0
 
     if args.status:

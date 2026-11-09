@@ -865,48 +865,48 @@ def test_editing_front_of_doc_keeps_unchanged_chunk_ids(tmp_path):
     q = ew.load_queue(s, COMMON_WS)
     ids = {c["id"] for c in q}
     assert before[LONG_B[-50:]] in ids
-    assert r["added"] == len(ids) - 2 + r["removed"]
+    # 새 청크는 C, (C 끝)+A. 옛 A 청크(pending)는 새 판본에 없어 빠진다
+    assert r == {"added": 2, "removed": 1, "stale": 0} and len(q) == 3
 
 
-def test_duplicate_text_in_same_doc_is_one_chunk(tmp_path):
+def test_duplicate_text_in_same_doc_is_one_chunk(tmp_path, monkeypatch):
     s = make_settings(tmp_path)
-    r = ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B, LONG_A))
+    # 청크 나누기가 똑같은 글을 두 번 내도 큐에는 하나만
+    monkeypatch.setattr(ew, "chunk_text", lambda text: ["같은 글", "다른 글", "같은 글"])
+    r = ew.enqueue(s, COMMON_WS, "doc", "무엇이든")
     q = ew.load_queue(s, COMMON_WS)
-    assert len({c["id"] for c in q}) == len(q)
-    assert r["added"] == len(q)
+    assert [c["text"] for c in q] == ["같은 글", "다른 글"]
+    assert r == {"added": 2, "removed": 0, "stale": 0}
 
 
 def test_reenqueue_removes_stale_pending_and_failed_but_keeps_done_and_running(tmp_path):
     s = make_settings(tmp_path)
-    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B, LONG_C))
+    long_d, long_e = "라" * 1000, "마" * 1000
+    # 청크: A, (A 끝)+B, (B 끝)+C, (C 끝)+D — 청크 끝 50자로 어느 문단인지 본다
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B, LONG_C, long_d))
     ew.enqueue(s, COMMON_WS, "other", "다른 문서 글")
     q = ew.load_queue(s, COMMON_WS)
-    assert len(q) == 4
-    statuses_by_text = {LONG_A: "done", LONG_B: "running", LONG_C: "failed"}
+    assert len(q) == 5
+    by_end = {LONG_A[-50:]: "pending", LONG_B[-50:]: "done", LONG_C[-50:]: "running", long_d[-50:]: "failed"}
     for c in q:
         if c["docId"] == "doc":
-            c["status"] = statuses_by_text[c["text"]]
-    # 남을 청크 하나(pending)를 더 만든다: 새 판본에 그대로 있는 문단
+            c["status"] = by_end[c["text"][-50:]]
     ew.save_queue(s, COMMON_WS, q)
-    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B, LONG_C, "남는 문단"))
-    q = ew.load_queue(s, COMMON_WS)
-    keep_pending = [c for c in q if c["text"] == "남는 문단"]
-    assert keep_pending
-    # 새 판본: A·B·C가 모두 빠지고 "남는 문단"과 새 문단만
-    r = ew.enqueue(s, COMMON_WS, "doc", _doc("남는 문단", "새 문단"))
+    # 새 판본: A는 그대로(같은 id), B·C·D는 빠지고 E가 새로
+    r = ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, long_e))
     assert r == {"added": 1, "removed": 1, "stale": 2}
     q = ew.load_queue(s, COMMON_WS)
-    by_text = {c["text"]: c for c in q if c["docId"] == "doc"}
-    # failed(C)는 빠지고, done(A)·running(B)는 남되 stale
-    assert LONG_C not in by_text
-    assert by_text[LONG_A]["status"] == "done" and by_text[LONG_A]["stale"] is True
-    assert by_text[LONG_B]["status"] == "running" and by_text[LONG_B]["stale"] is True
-    assert by_text["남는 문단"]["status"] == "pending" and not by_text["남는 문단"].get("stale")
-    assert by_text["새 문단"]["status"] == "pending"
+    doc = {c["text"][-50:]: c for c in q if c["docId"] == "doc"}
+    # failed(D)는 빠지고, done(B)·running(C)는 남되 stale, A는 pending 그대로
+    assert long_d[-50:] not in doc
+    assert doc[LONG_B[-50:]]["status"] == "done" and doc[LONG_B[-50:]]["stale"] is True
+    assert doc[LONG_C[-50:]]["status"] == "running" and doc[LONG_C[-50:]]["stale"] is True
+    assert doc[LONG_A[-50:]]["status"] == "pending" and not doc[LONG_A[-50:]].get("stale")
+    assert doc[long_e[-50:]]["status"] == "pending"
     # 다른 문서는 건드리지 않는다
     assert [c["text"] for c in q if c["docId"] == "other"] == ["다른 문서 글"]
     # 같은 판본을 다시 넣어도 아무것도 바뀌지 않는다
-    assert ew.enqueue(s, COMMON_WS, "doc", _doc("남는 문단", "새 문단")) == {"added": 0, "removed": 0, "stale": 0}
+    assert ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, long_e)) == {"added": 0, "removed": 0, "stale": 0}
 
 
 def test_reenqueue_removes_stale_pending(tmp_path):
