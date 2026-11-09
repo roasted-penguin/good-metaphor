@@ -225,9 +225,9 @@ def test_chunk_text_splits_long_paragraph_and_skips_blank():
 def test_enqueue_writes_pending_chunks_and_is_idempotent(tmp_path):
     s = make_settings(tmp_path)
     added = ew.enqueue(s, COMMON_WS, "guide-1", "첫 문단이에요.\n\n둘째 문단이에요.")
-    assert added == 1
+    assert added == {"added": 1, "removed": 0, "stale": 0}
     again = ew.enqueue(s, COMMON_WS, "guide-1", "첫 문단이에요.\n\n둘째 문단이에요.")
-    assert again == 0  # 같은 문서·같은 청크는 다시 넣지 않는다
+    assert again == {"added": 0, "removed": 0, "stale": 0}  # 같은 문서·같은 청크는 다시 넣지 않는다
     q = ew.load_queue(s, COMMON_WS)
     assert len(q) == 1
     c = q[0]
@@ -743,7 +743,7 @@ def test_result_writer_rejects_bad_id_and_uses_given_workspace(tmp_path):
     write = ew.make_result_writer(s)
     with pytest.raises(ValueError):
         asyncio.run(write({"id": "../x", "docId": "d", "workspace": COMMON_WS}, [], []))
-    good = ew.chunk_id("d", 0, "글")
+    good = ew.chunk_id("d", "글")
     asyncio.run(write({"id": good, "docId": "d", "workspace": COMMON_WS}, [], []))
     assert (tmp_path / "rag" / COMMON_WS / ew.RESULTS_DIR / f"{good}.json").is_file()
 
@@ -827,3 +827,244 @@ def test_insert_connection_error_stops_window(tmp_path, ollama):
     assert summary["stopped"] == "연결 끊김"
     assert [c["status"] for c in q] == ["failed", "pending"] and "삽입 중 연결" in q[0]["lastError"]
     assert len(ollama.chat_calls) == 1
+
+
+# ── T-162 큐 정리(T-421 넘김 (4)·(5)) ──────────────────
+
+LONG_A = "가" * 1000
+LONG_B = "나" * 1000
+LONG_C = "다" * 1000
+
+
+def _doc(*paras: str) -> str:
+    # 문단 하나가 청크 하나가 되게(각 1000자, 둘이 합치면 1200자를 넘는다)
+    return "\n\n".join(paras)
+
+
+def test_chunk_id_is_content_based_without_position():
+    a = ew.chunk_id("doc", "같은 글")
+    assert a == ew.chunk_id("doc", "같은 글")
+    assert a != ew.chunk_id("doc", "다른 글") and a != ew.chunk_id("other", "같은 글")
+    head, tail = a.split("-")
+    assert len(head) == 10 and len(tail) == 16
+    assert ew.valid_chunk_id(a)
+
+
+def test_old_format_chunk_id_still_valid():
+    # T-162 전 형식 <10>-<4자리 번호>-<10>: 이미 있는 큐 파일 호환
+    assert ew.valid_chunk_id("0123456789-0003-abcdef0123")
+
+
+def test_editing_front_of_doc_keeps_unchanged_chunk_ids(tmp_path):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B))
+    before = {c["text"][-50:]: c["id"] for c in ew.load_queue(s, COMMON_WS)}
+    assert len(before) == 2
+    # 앞에 문단을 하나 더 넣어도 B 청크는 같은 id라 다시 넣지 않는다
+    r = ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_C, LONG_A, LONG_B))
+    q = ew.load_queue(s, COMMON_WS)
+    ids = {c["id"] for c in q}
+    assert before[LONG_B[-50:]] in ids
+    assert r["added"] == len(ids) - 2 + r["removed"]
+
+
+def test_duplicate_text_in_same_doc_is_one_chunk(tmp_path):
+    s = make_settings(tmp_path)
+    r = ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B, LONG_A))
+    q = ew.load_queue(s, COMMON_WS)
+    assert len({c["id"] for c in q}) == len(q)
+    assert r["added"] == len(q)
+
+
+def test_reenqueue_removes_stale_pending_and_failed_but_keeps_done_and_running(tmp_path):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B, LONG_C))
+    ew.enqueue(s, COMMON_WS, "other", "다른 문서 글")
+    q = ew.load_queue(s, COMMON_WS)
+    assert len(q) == 4
+    statuses_by_text = {LONG_A: "done", LONG_B: "running", LONG_C: "failed"}
+    for c in q:
+        if c["docId"] == "doc":
+            c["status"] = statuses_by_text[c["text"]]
+    # 남을 청크 하나(pending)를 더 만든다: 새 판본에 그대로 있는 문단
+    ew.save_queue(s, COMMON_WS, q)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B, LONG_C, "남는 문단"))
+    q = ew.load_queue(s, COMMON_WS)
+    keep_pending = [c for c in q if c["text"] == "남는 문단"]
+    assert keep_pending
+    # 새 판본: A·B·C가 모두 빠지고 "남는 문단"과 새 문단만
+    r = ew.enqueue(s, COMMON_WS, "doc", _doc("남는 문단", "새 문단"))
+    assert r == {"added": 1, "removed": 1, "stale": 2}
+    q = ew.load_queue(s, COMMON_WS)
+    by_text = {c["text"]: c for c in q if c["docId"] == "doc"}
+    # failed(C)는 빠지고, done(A)·running(B)는 남되 stale
+    assert LONG_C not in by_text
+    assert by_text[LONG_A]["status"] == "done" and by_text[LONG_A]["stale"] is True
+    assert by_text[LONG_B]["status"] == "running" and by_text[LONG_B]["stale"] is True
+    assert by_text["남는 문단"]["status"] == "pending" and not by_text["남는 문단"].get("stale")
+    assert by_text["새 문단"]["status"] == "pending"
+    # 다른 문서는 건드리지 않는다
+    assert [c["text"] for c in q if c["docId"] == "other"] == ["다른 문서 글"]
+    # 같은 판본을 다시 넣어도 아무것도 바뀌지 않는다
+    assert ew.enqueue(s, COMMON_WS, "doc", _doc("남는 문단", "새 문단")) == {"added": 0, "removed": 0, "stale": 0}
+
+
+def test_reenqueue_removes_stale_pending(tmp_path):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B))
+    r = ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A))
+    assert r == {"added": 0, "removed": 1, "stale": 0}
+    assert [c["text"] for c in ew.load_queue(s, COMMON_WS)] == [LONG_A]
+
+
+def test_stale_chunk_back_in_new_version_is_unmarked(tmp_path):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B))
+    q = ew.load_queue(s, COMMON_WS)
+    for c in q:
+        c["status"] = "done"
+    ew.save_queue(s, COMMON_WS, q)
+    assert ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A))["stale"] == 1
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B))
+    assert not any(c.get("stale") for c in ew.load_queue(s, COMMON_WS))
+
+
+def test_stale_running_chunk_is_not_retried_after_recovery(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B))
+    q = ew.load_queue(s, COMMON_WS)
+    q[1]["status"] = "running"
+    ew.save_queue(s, COMMON_WS, q)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A))  # B가 빠짐 → running B는 stale
+    ew.recover_running(s, [COMMON_WS])
+    ins = Inserted()
+    asyncio.run(make_worker(s, ollama.url, ins).run_window(IN_WINDOW))
+    q = ew.load_queue(s, COMMON_WS)
+    assert ins.ids() == [q[0]["id"]]  # 낡은 청크는 다시 추출하지 않는다
+
+
+def test_old_format_queue_file_still_works(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    d = tmp_path / "rag" / COMMON_WS
+    d.mkdir(parents=True)
+    old_id = "0123456789-0000-abcdef0123"
+    (d / ew.QUEUE_FILE).write_text(json.dumps({"version": 1, "chunks": [
+        {"id": old_id, "docId": "old", "workspace": COMMON_WS, "text": "옛 청크: 스타포스 강화", "status": "pending",
+         "attempts": 0, "lastError": None, "updatedAt": "2026-11-01T00:00:00+00:00", "via": None}]},
+        ensure_ascii=False), "utf-8")
+    ew.enqueue(s, COMMON_WS, "new", "새 글")
+    ins = Inserted()
+    asyncio.run(make_worker(s, ollama.url, ins).run_window(IN_WINDOW))
+    assert old_id in ins.ids() and statuses(s) == ["done", "done"]
+
+
+def test_cli_enqueue_default_doc_id_is_absolute_file_path(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("LIGHTRAG_WORKING_DIR", str(tmp_path / "rag"))
+    monkeypatch.setenv("COMMON_GRAPH_PATH", str(COMMON_GRAPH))
+    monkeypatch.setenv("WORKSPACE", USER_WS)
+    for sub in ("a", "b"):
+        (tmp_path / sub).mkdir()
+        (tmp_path / sub / "guide.txt").write_text("같은 이름 다른 폴더", "utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert ew.main(["--enqueue", "a/../a/guide.txt"]) == 0
+    assert ew.main(["--enqueue", str(tmp_path / "b" / "guide.txt")]) == 0
+    out = capsys.readouterr().out
+    assert "넣었어요" in out
+    q = ew.load_queue(Settings.from_env(), USER_WS)
+    assert [c["docId"] for c in q] == [f"file:{(tmp_path / 'a' / 'guide.txt').resolve()}",
+                                       f"file:{(tmp_path / 'b' / 'guide.txt').resolve()}"]
+    # --doc-id를 주면 그대로
+    assert ew.main(["--enqueue", "a/guide.txt", "--doc-id", "https://example.invalid/g#2026-11"]) == 0
+    assert ew.load_queue(Settings.from_env(), USER_WS)[-1]["docId"] == "https://example.invalid/g#2026-11"
+
+
+def test_cli_enqueue_reports_removed_and_stale(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("LIGHTRAG_WORKING_DIR", str(tmp_path / "rag"))
+    monkeypatch.setenv("COMMON_GRAPH_PATH", str(COMMON_GRAPH))
+    monkeypatch.setenv("WORKSPACE", USER_WS)
+    f = tmp_path / "doc.txt"
+    f.write_text(_doc(LONG_A, LONG_B), "utf-8")
+    assert ew.main(["--enqueue", str(f), "--doc-id", "d"]) == 0
+    f.write_text(_doc(LONG_A), "utf-8")
+    capsys.readouterr()
+    assert ew.main(["--enqueue", str(f), "--doc-id", "d"]) == 0
+    out = capsys.readouterr().out.strip()
+    assert len(out.splitlines()) == 1 and "1개를 뺐" in out
+
+
+@pytest.mark.parametrize("raw", ["{깨짐", "[]", '{"date": "2026-11-10"}', '{"date": "2026-11-10", "cloudChunks": "x"}',
+                                 '{"date": 3, "cloudChunks": 1}', '{"date": "2026-11-10", "cloudChunks": -1}'])
+def test_broken_usage_file_means_cap_reached(tmp_path, ollama, raw, caplog):
+    s = make_settings(tmp_path, EXTRACT_FALLBACK="cloud", EXTRACT_CLOUD_DAILY_CAP="5")
+    usage = tmp_path / "rag" / ew.USAGE_FILE
+    usage.parent.mkdir(parents=True, exist_ok=True)
+    usage.write_text(raw, "utf-8")
+    with caplog.at_level("WARNING"):
+        assert ew.read_cloud_usage(s, IN_WINDOW) >= 5
+    assert any("사용" in r.getMessage() for r in caplog.records)
+    enqueue_n(s, USER_WS, 1)
+    ollama.stop()
+    cloud = FakeCloud()
+    summary = asyncio.run(make_worker(s, ollama.url, Inserted(), workspaces=(USER_WS,),
+                                      cloud_extractor=cloud).run_window(IN_WINDOW))
+    assert cloud.texts == [] and summary["stopped"] == "클라우드 하루 상한"
+    # 깨진 파일은 덮어쓰지 않는다(운영자가 보도록)
+    ew._add_cloud_usage(s, IN_WINDOW)
+    assert usage.read_text("utf-8") == raw
+
+
+def test_usage_file_missing_or_old_date_is_zero(tmp_path):
+    s = make_settings(tmp_path)
+    assert ew.read_cloud_usage(s, IN_WINDOW) == 0
+    usage = tmp_path / "rag" / ew.USAGE_FILE
+    usage.parent.mkdir(parents=True)
+    usage.write_text('{"date": "2026-11-09", "cloudChunks": 7}', "utf-8")
+    assert ew.read_cloud_usage(s, IN_WINDOW) == 0
+    ew._add_cloud_usage(s, IN_WINDOW)
+    assert ew.read_cloud_usage(s, IN_WINDOW) == 1
+
+
+def test_extract_cloud_timeout_setting(tmp_path):
+    assert make_settings(tmp_path).extract_cloud_timeout_s == 120
+    assert make_settings(tmp_path, EXTRACT_CLOUD_TIMEOUT_S="45").extract_cloud_timeout_s == 45
+
+
+def test_default_cloud_passes_extract_timeout_to_gemini(tmp_path, monkeypatch):
+    import app.llm as llm_mod
+
+    seen: dict = {}
+
+    class FakeGemini:
+        def __init__(self, api_key, model, *args, **kwargs):
+            seen.update(kwargs, model=model)
+
+    monkeypatch.setattr(llm_mod, "GeminiLLM", FakeGemini)
+    s = make_settings(tmp_path, EXTRACT_FALLBACK="cloud", GEMINI_API_KEY="dummy-not-a-key", EXTRACT_CLOUD_TIMEOUT_S="77")
+    assert ew._default_cloud(s, load_common_graph(COMMON_GRAPH)) is not None
+    assert seen["timeout"] == 77
+
+
+def test_gemini_default_timeout_unchanged_for_hover():
+    import httpx
+
+    from app.llm import GeminiLLM
+
+    llm = GeminiLLM("dummy-not-a-key", "m")
+    assert llm._client.timeout == httpx.Timeout(30.0)
+    assert GeminiLLM("dummy-not-a-key", "m", timeout=120)._client.timeout == httpx.Timeout(120.0)
+
+
+@pytest.mark.parametrize("ws", ["Common_x", "COMMON_maple", "common", "Common", COMMON_WS])
+def test_common_workspace_any_case_never_goes_to_cloud(tmp_path, ollama, ws):
+    assert ew.is_common(ws)
+    s = make_settings(tmp_path, EXTRACT_FALLBACK="cloud")
+    enqueue_n(s, ws, 1)
+    ollama.stop()
+    cloud = FakeCloud()
+    asyncio.run(make_worker(s, ollama.url, Inserted(), workspaces=(ws,), cloud_extractor=cloud).run_window(IN_WINDOW))
+    assert cloud.texts == [] and statuses(s, ws) == ["pending"]
+
+
+@pytest.mark.parametrize("ws", ["u_common", "commons", "commonx", USER_WS])
+def test_non_common_workspace_names(ws):
+    assert not ew.is_common(ws)
