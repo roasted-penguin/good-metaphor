@@ -83,7 +83,7 @@
 | T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 완료 | |
 | T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 완료 | T-402 |
 | T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 완료 | T-402 |
-| T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 진행 | T-403 |
+| T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 리뷰 | T-403 |
 | T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 완료 | T-402 |
 | T-141 | 서버 모드 실사용 준비: 서버 도메인 `host_permissions` + 서버 CORS(chrome-extension), `managed_schema.json`에 `analogyServer`, 서버 장애 중 로컬 결과는 세션 캐시에 안 남기기, 규칙 1을 로컬 그래프 노드로도 확인 | L 서버 | P1 | 대기 | T-404, T-401 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가 (관문 측정은 T-142로 분리) | L 서버 | P0 | 완료 | T-403 |
@@ -560,6 +560,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-09 | T-140 | task/T-140-seed-index | | 시드 인덱스 다듬기: 시드가 `seed-meta.json`(그래프+태그 버전, 임베딩 공급자·모델·차원)을 원자적으로 기록, 서버는 열기 전에 비교해 없음·깨짐·다름이면 503(`/health.index.reason`에 다시 시드 명령), `--reset`은 작업 디렉터리 바로 아래 워크스페이스만(이름 검증·심볼릭 링크 거절·오류 숨기지 않음), reset 없이 다른 설정 인덱스 위 시드는 거절. compose `rag_storage` 볼륨·`BIND_ADDR` 기본 127.0.0.1, initialize 실패 정리, Ollama 차원 확인, 자기 엣지는 LightRAG 정규화 이름으로. docker에서 시드 인덱스로 실제 200(Gemini, 2.3초). Opus·medium 서브에이전트(수정 1회: reset 경로 안전). 서버 390·단위 620. |
 | 2026-11-09 | T-139 | task/T-139-ci-server | [#62](https://github.com/roasted-penguin/good-metaphor/pull/62) | CI에 서버 잡 `server` 추가(Python 3.12, pip 캐시, `cd server && python -m pytest -q`, 네트워크·키 없이 339개). 기존 `test` 체크 이름 그대로. 일부러 깨뜨린 커밋으로 실패하는 것 확인 후 되돌림. Opus·medium 서브에이전트. |
 | 2026-11-09 | T-303 | task/T-303-store-prep | [#61](https://github.com/roasted-penguin/good-metaphor/pull/61) | 웹스토어 공개 준비: `docs/store/` 권한 사유서(manifest 전 항목)·개인정보 처리방침(코드와 문장별 대조, 한국어+영어 요약)·README(사람이 할 일)·스크린샷 5장(1280×800). `npm run build:store`: git 추적 파일만, local-dev → none, 데모 제공자 숨김, 이름에서 (PoC) 뺌, 로그인 없으면 `identity` 제거, 서버 주소가 채워져 있으면 빌드 실패(처리방침 "서버 없음"과 어긋나지 않게), `dist/good-metaphor-<ver>.zip`. 업로드·계정·처리방침 공개 URL·연락처는 사람 몫. Opus·medium 서브에이전트(수정 1회). 단위 620, 스토어 빌드 e2e 통과(전체는 CI). |
 | 2026-11-09 | T-158 | task/T-158-onboarding-interest | [#60](https://github.com/roasted-penguin/good-metaphor/pull/60) | 첫 실행 안내 1단계 "무엇으로 비유할까요?"(메이플스토리(추천)/식당, `COMMON_INTERESTS`로 그림): 시작하기면 `settings.interest` 저장·사용 방식 칸도 같은 값, 넘기기면 그대로. Opus·medium 서브에이전트. 단위 607, 관련 e2e 통과(전체는 CI). |
