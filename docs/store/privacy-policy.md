@@ -15,9 +15,11 @@
 - 페이지 제목(최대 120자)
 - 확장 안에 번들된 관심사 그래프에서 고른 개념 3개의 이름과 사실(사용자 정보 아님)
 
+설정에서 "정밀 모드"를 켜면 호버 한 번에 제공자를 두 번 불러요. 첫 번째 호출에는 문장, 커서 아래 낱말, 페이지 제목만 보내 추상 구조를 받고, 두 번째 호출은 위와 같아요.
+
 설정 화면의 "시험해 보기"에 사용자가 직접 입력한 문장도 같은 방식으로 전송돼요. 페이지 주소(URL), 페이지 전체 내용, 쿠키, 방문 기록은 보내지 않아요.
 
-**받는 곳:** 사용자가 설정에서 고른 AI 제공자, 또는 고르지 않았으면 관리자 기본 제공자예요. 그 제공자가 요청 한도·서버 오류로 실패하면 미리 정한 다음 순위 제공자로 넘어가요. API 키가 없는 제공자는 부르지 않아요. 요청에는 사용자가 넣은 그 제공자의 API 키가 함께 가요.
+**받는 곳:** 사용자가 설정에서 고른 AI 제공자, 또는 고르지 않았으면 관리자 기본 제공자예요. 그 제공자가 요청 한도·서버 오류로 실패하면 미리 정한 다음 순위 제공자로 넘어가요. API 키가 없는 제공자는 부르지 않아요. 예외는 키가 필요 없는 로컬 Ollama(이 컴퓨터 안)와 사용자가 직접 넣은 OpenAI 호환 주소예요. 요청에는 사용자가 넣은 그 제공자의 API 키가 함께 가요.
 
 | 제공자 | 처리방침 |
 | --- | --- |
@@ -44,7 +46,7 @@
 
 ## 4. 기기에 저장하는 정보
 
-모두 사용자 크롬 프로필의 확장 저장소(`chrome.storage`)에만 있고, 확장을 지우면 함께 지워져요.
+모두 사용자 크롬 프로필 안의 이 확장 저장 공간(`chrome.storage`와, 검색 모델 파일은 브라우저 캐시 저장소)에만 있고, 확장을 지우면 함께 지워져요.
 
 | 무엇 | 어디 | 지우는 방법 |
 | --- | --- | --- |
@@ -54,6 +56,7 @@
 | 관심사 그래프 벡터 캐시(번들 그래프에서 계산한 숫자, 최대 2,000개) | `chrome.storage.local` | 설정 화면 "검색 모델"의 "캐시 비우기" |
 | 최근 결과 캐시(최대 200개), AI 요청 한도 대기 시간 | `chrome.storage.session`(브라우저를 닫으면 사라짐) | 브라우저 종료, 결과 캐시는 "캐시 비우기"로도 |
 | 첫 실행 안내를 마쳤는지 | `chrome.storage.local` | 확장 삭제 |
+| 검색 모델 파일 | 브라우저 캐시 저장소 | 확장 삭제 |
 
 API 키는 이 크롬 프로필에만 저장되고, 그 제공자를 부를 때만 그 제공자에게 보내요.
 
@@ -86,10 +89,10 @@ API 키는 이 크롬 프로필에만 저장되고, 그 제공자를 부를 때�
 
 Good Metaphor ("좋은비유네용") explains a sentence on a web page with an analogy from the user's chosen interest.
 
-- **What is sent:** Only when the user holds the modifier key (Alt by default) over a sentence (or, if the user opts into auto mode, rests the cursor on it), the extension sends that sentence, the previous sentence (up to 300 characters), the word under the cursor, and the page title (up to 120 characters) to the AI provider the user selected (or the administrator default), plus facts from the bundled interest graph. If that provider fails, the next provider in the configured order is tried; providers without an API key are skipped. Providers: Groq, Google Gemini, NVIDIA, OpenAI, Anthropic, a user-entered OpenAI-compatible URL, or a local Ollama on the user's own computer. Page URLs, full page content, cookies and history are not sent.
+- **What is sent:** Only when the user holds the modifier key (Alt by default) over a sentence (or, if the user opts into auto mode, rests the cursor on it), the extension sends that sentence, the previous sentence (up to 300 characters), the word under the cursor, and the page title (up to 120 characters) to the AI provider the user selected (or the administrator default), plus facts from the bundled interest graph. If that provider fails, the next provider in the configured order is tried; providers without an API key are skipped, except the local Ollama and a user-entered OpenAI-compatible URL, which need no key. In precise mode (opt-in) each hover makes two provider calls; the first sends only the sentence, the word and the page title. Providers: Groq, Google Gemini, NVIDIA, OpenAI, Anthropic, a user-entered OpenAI-compatible URL, or a local Ollama on the user's own computer. Page URLs, full page content, cookies and history are not sent.
 - **What is not sent:** nothing before the modifier key is pressed; nothing on excluded sites (mail, account login and banking sites by default, editable by the user); nothing from forms with a password field, input fields or code blocks.
 - **Model download:** the embedding model weights are downloaded once from Hugging Face. No user text is sent there. Search runs inside the browser.
-- **Stored on the device only** (`chrome.storage`): settings including API keys, up to 500 feedback records (with the original sentence), daily usage counts, a vector cache, and a session-only result cache. Feedback can be cleared from Settings → "내 피드백" → "전부 지우기".
+- **Stored on the device only** (`chrome.storage`, plus the model files in the browser cache storage): settings including API keys, up to 500 feedback records (with the original sentence), daily usage counts, a vector cache, and a session-only result cache. Feedback can be cleared from Settings → "내 피드백" → "전부 지우기".
 - **Feedback sharing consent:** the user can opt in, but there is no server yet, so nothing is transmitted; only the choice is stored. It can be withdrawn at any time in Settings.
 - **No** analytics, ads, tracking, data sale, developer-operated servers, or remote code.
 - Contact: [연락처]

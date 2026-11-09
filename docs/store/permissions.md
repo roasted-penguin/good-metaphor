@@ -1,6 +1,6 @@
 # 권한 사용 이유 (웹스토어 제출용)
 
-웹스토어 개발자 대시보드 "개인정보 보호 관행" 탭의 칸에 그대로 붙여 넣을 수 있게 정리했어요. 기준은 `extension/manifest.json`(판 0.1.0)과 2026-11-09 코드예요. 권한을 바꾸면 이 문서도 함께 고쳐요.
+웹스토어 개발자 대시보드 "개인정보 보호 관행" 탭의 칸에 그대로 붙여 넣을 수 있게 정리했어요. 기준은 스토어 빌드(`npm run build:store`)의 `dist/store/manifest.json`(판 0.1.0)과 2026-11-09 코드예요. 권한을 바꾸면 이 문서도 함께 고쳐요.
 
 ## 단일 목적
 
@@ -13,7 +13,6 @@
 | `storage` | 사용자 설정(관심사, 띄우는 방법, 제외 사이트, AI 제공자와 API 키), 말풍선 피드백 기록, 검색용 벡터 캐시를 `chrome.storage.local`에 저장하고, 최근 결과와 요청 한도 대기 시간을 `chrome.storage.session`에 잠깐 둬요. 조직 배포 시 관리자 정책(`chrome.storage.managed`)도 읽어요. |
 | `offscreen` | 문장 검색용 임베딩 모델(transformers.js, WebAssembly)을 서비스 워커에서 돌릴 수 없어서, 오프스크린 문서(`offscreen.html`, 사유 `WORKERS`)에서 실행해요. 화면에 보이지 않고 페이지 내용에 접근하지 않아요. |
 | `unlimitedStorage` | 관심사 그래프의 개념·태그 벡터 캐시(기본 최대 2,000개, 768차원)와 피드백 기록(최대 500건, 문장 벡터 포함)이 기본 저장 한도(10MB)를 넘을 수 있어요. 캐시를 저장하지 못하면 호버할 때마다 임베딩을 다시 계산해 느려져요. 데이터는 이 기기에만 있어요. |
-| `identity` | 관리자가 서버 계정 저장소(`userStore.adapter: "remote"`)를 켰을 때만 `chrome.identity.launchWebAuthFlow`로 로그인 창을 열어요. **주의: 스토어 빌드는 로그인이 꺼져 있어(`none`) 지금은 이 권한을 쓰는 코드가 실행되지 않아요.** 제출 전에 이 권한을 뺄지 정해야 해요(아래 "확인 필요"). |
 | `activeTab` | 툴바 팝업을 열었을 때 그 탭의 주소(호스트)를 읽어 "이 사이트에서 끄기" 체크 상태를 보여 주고 제외 목록에 넣고 빼요. 팝업을 연 그 탭에만, 그 순간에만 쓰여요. |
 
 ## host_permissions
@@ -49,5 +48,5 @@ AI 제공자는 사용자가 설정 화면에서 고른 제공자를 먼저 부�
 
 ## 확인 필요 (제출 전에 사람이 정할 것)
 
-1. **`identity`가 스토어 빌드에서 쓰이지 않아요.** `chrome.identity`를 부르는 곳은 `extension/lib/stores.js`의 서버 계정 어댑터(`remote`)뿐이고, 스토어 빌드는 `userStore.adapter`가 `none`이라 실행되지 않아요. 웹스토어는 쓰지 않는 권한을 반려 사유로 보기 때문에, 로그인(D-2, L3)이 생기기 전에 올린다면 스토어 빌드 manifest에서 빼는 것을 권해요. 뺄지는 아직 정하지 않았어요(이 문서는 지금 manifest 그대로를 설명해요).
+1. **`identity`는 스토어 빌드에 없어요.** 개발용 `extension/manifest.json`에는 있지만, `chrome.identity`를 부르는 곳은 `extension/lib/stores.js`의 서버 계정 어댑터(`remote`)뿐이라, 스토어 빌드는 로그인이 꺼져 있으면(`userStore.adapter: "none"`) 이 권한을 빼요(`scripts/store-transform.mjs` `transformManifest`). 나중에 서버 계정 로그인(D-2, L3)을 켜서 배포하면 빌드가 `identity`를 남기고, 그때 이 표에 "서버 계정 로그인 창(`launchWebAuthFlow`)" 사유를 다시 넣어야 해요. 조직이 정책(`chrome.storage.managed`)으로 `remote` 어댑터를 켜는 경우도 `identity`가 필요한데, 스토어 빌드에는 없어 로그인 창이 열리지 않아요. 그런 배포는 `remote`로 맞춘 admin.json으로 따로 빌드해요.
 2. `host_permissions`의 OpenAI·Anthropic은 기본 체인에 없고 사용자가 고를 때만 써요. 심사에서 물으면 "사용자가 고를 수 있는 제공자"라고 답하면 돼요.
