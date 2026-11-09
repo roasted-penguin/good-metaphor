@@ -26,8 +26,8 @@ log = logging.getLogger(__name__)
 MAX_SENTENCE_CHARS = 2000
 
 
-def _error(status: int, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status, content={"error": message})
+def _error(status: int, message: str, headers: dict[str, str] | None = None) -> JSONResponse:
+    return JSONResponse(status_code=status, content={"error": message}, headers=headers)
 
 
 def _opt_str(value: Any) -> str | None:
@@ -61,6 +61,8 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
             allow_origin_regex=EXTENSION_ORIGIN_REGEX if settings.allow_extension_origins else None,
             allow_methods=["POST"],
             allow_headers=["content-type", "x-install-token"],
+            # 429 의 Retry-After 를 허용 출처의 브라우저가 읽을 수 있게(T-160)
+            expose_headers=["Retry-After"],
             allow_credentials=False,
             max_age=600,
         )
@@ -147,7 +149,9 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
 
         # 한도 → 캐시 → 파이프라인
         if not app.state.rate_limiter.allow(token):
-            return _error(429, "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요.")
+            # Retry-After: 다시 받아 줄 때까지 남은 정수 초(T-160). 확장 쿨다운·평가 도구가 이만큼 쉰다
+            wait = max(1, app.state.rate_limiter.retry_after(token))
+            return _error(429, "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요.", {"Retry-After": str(wait)})
         word = _opt_str(body.get("word"))
         key = cache_key(sentence, word, app.state.settings.workspace_version)
         hit = app.state.cache.get(key)

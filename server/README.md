@@ -58,6 +58,7 @@ CORS 설정(기본은 닫힘, 아무 출처도 허용하지 않아요):
 - 운영: `ALLOWED_ORIGINS=chrome-extension://<확장 id 32자>`처럼 확장 출처를 쉼표로 적어요. 웹스토어 확장 id와 개발용 압축해제 확장 id가 다르면 둘 다 적어요.
 - 개발: `ALLOW_EXTENSION_ORIGINS=true`면 확장 id 형식(`^chrome-extension://[a-p]{32}$`) 전부를 허용해요. 운영에서는 켜지 않아요(아무 확장이나 이 서버를 부를 수 있어요).
 - 허용 메서드는 `POST`, 헤더는 `content-type`·`x-install-token`뿐이에요. 쿠키는 쓰지 않아요.
+- 응답 헤더는 `Retry-After`(429일 때)만 브라우저에 노출해요(T-160).
 - 확장 쪽: 서버 주소는 `config/admin.json` 또는 정책(`chrome.storage.managed`의 `analogyServer.url`·`timeoutMs`, `managed_schema.json`)으로 줘요. 사용자는 설정 화면 "AI 제공자" 아래 `서버 주소 허용`으로 그 출처의 선택 권한을 한 번 허용해요.
 - 도메인이 정해지면(T-401) 확장 `manifest.json`의 `host_permissions`에 그 서버 주소를 고정으로 넣어 허용 단계를 없애요.
 
@@ -120,7 +121,7 @@ EXTRACT_OLLAMA_URL=http://<맥 테일넷 주소>:11434 .venv/bin/python -m app.e
 | `GEMINI_API_KEY` | 없음 | 없어도 서버는 떠요. 로컬은 셸 환경, 도커는 `server/.env`(커밋 안 함)에서 읽어요. |
 | `WORKSPACE` | `common_maplestory` | LightRAG 워크스페이스 이름 |
 | `WORKSPACE_VERSION` | `그래프 version+태그 version`(태그가 그래프 안에 있거나 태그 파일을 못 읽으면 그래프 version만) | 캐시 키에 붙는 판본. 태그만 바뀌어도 캐시가 갈려요(T-304) |
-| `RATE_LIMIT_PER_MIN` | `30` | 설치 토큰별 분당 요청 한도 |
+| `RATE_LIMIT_PER_MIN` | `30` | 설치 토큰별 분당 요청 한도. 넘으면 429 + `Retry-After`(다시 받아 줄 때까지 남은 정수 초, T-160) |
 | `COMMON_GRAPH_PATH` | 저장소의 `extension/data/common/maplestory.json` | 실행 위치(cwd)와 무관하게 저장소 루트 기준으로 찾아요. 도커에서는 compose가 `/data/common/maplestory.json`으로 지정해요. |
 | `TAGS_PATH` | 공통 그래프 파일 옆 `tags.json` | 추상 태그(통제 어휘)의 원본(T-304, ADR 0012). 그래프에 `tags`가 이미 있으면 읽지 않아요. 도커에서는 `/data/common/tags.json`. |
 | `LIGHTRAG_WORKING_DIR` | `server/rag_storage` | LightRAG 인덱스 폴더. 아래에 워크스페이스별 폴더가 생겨요. 도커에서는 볼륨 `rag_storage`의 `/data/rag_storage`. |
