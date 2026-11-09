@@ -10,11 +10,15 @@ import { COMMON_INTERESTS } from '../../extension/lib/graph.js';
 import { openBrowserEmbedder } from '../../tools/browser-embedder.mjs';
 
 const EXT = path.resolve('.tmp/ext-e2e');
+// 서버 모드 사본(T-141): 가짜 analogy-api(:8767) 주소 + 출처 권한. 서버를 보는 시험만 serverTest 로 이 사본을 쓴다
+const EXT_SERVER = path.resolve('.tmp/ext-e2e-server');
 
 const test = base.extend({
-  context: async ({}, use) => {
+  // 불러올 확장 사본. 기본은 서버 주소 없음(서버 모드 꺼짐)
+  extPath: async ({}, use) => { await use(EXT); },
+  context: async ({ extPath }, use) => {
     // localhost iframe(T-111)이 CI의 IPv6 우선 해석에 기대지 않게 127.0.0.1 로 고정한다
-    const args = [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, '--host-resolver-rules=MAP localhost 127.0.0.1'];
+    const args = [`--disable-extensions-except=${extPath}`, `--load-extension=${extPath}`, '--host-resolver-rules=MAP localhost 127.0.0.1'];
     const opts = process.env.CHROMIUM_PATH
       ? { executablePath: process.env.CHROMIUM_PATH, headless: false, args: ['--headless=new', ...args] }
       : { channel: 'chromium', headless: !process.env.HEADED, args };
@@ -38,6 +42,9 @@ const test = base.extend({
     await use({ page, send, setSettings });
   }
 });
+
+// 서버 모드 시험(T-404·T-141)과 서버 요청 0을 함께 보는 개인정보 시험(T-107·T-111·T-144·T-147·T-148)
+const serverTest = test.extend({ extPath: async ({}, use) => { await use(EXT_SERVER); } });
 
 let stop;
 test.beforeAll(async () => { stop = await startServers(); });
@@ -315,7 +322,7 @@ test('금칙어(T-114): 비유·뜻에 섞이면 말풍선 어디에도 안 보�
   expect(calls.at(-1).system).toContain('커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.');
 });
 
-test('금칙어(T-114): 서버 결과도 확장이 다시 검사하고, 정밀 모드 추상 구조도 debug에서 지운다', async ({ ext }) => {
+serverTest('금칙어(T-114): 서버 결과도 확장이 다시 검사하고, 정밀 모드 추상 구조도 debug에서 지운다', async ({ ext }) => {
   const s = await ext.send({ type: 'explain', sentence: '서버금칙 확률형 강화는 실패하면 비용만 날아간다.', word: '', context: '', pageTitle: 't', noCache: true });
   expect(s.data.source).toBe('server');
   expect(s.data.analogy).toBe('');
@@ -1346,7 +1353,7 @@ test('fallback 체인: 429 모델은 다음 순서로 넘기고 쿨다운 동안
 const REJECTED = '모델이 근거 목록에 없는 개념을 골라서 비유를 숨겼어요.';
 const footText = page => page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.foot span')?.innerText ?? '');
 
-test('서버 모드(T-404): 서버 결과를 말풍선에 보이고 foot에 서버, 요청마다 같은 설치 토큰', async ({ context, ext }) => {
+serverTest('서버 모드(T-404): 서버 결과를 말풍선에 보이고 foot에 서버, 요청마다 같은 설치 토큰', async ({ context, ext }) => {
   const before = analogyCalls.length;
   const llmBefore = calls.length;
   const page = await context.newPage();
@@ -1382,7 +1389,7 @@ test('서버 모드(T-404): 서버 결과를 말풍선에 보이고 foot에 서�
   expect(analogyCalls.length - before).toBe(2);
 });
 
-test('서버 모드(T-404): 서버 500이면 로컬 결과, foot에 로컬', async ({ context, ext }) => {
+serverTest('서버 모드(T-404): 서버 500이면 로컬 결과, foot에 로컬', async ({ context, ext }) => {
   const r = await ext.send({ type: 'explain', sentence: '서버오류 금리가 오르면 이자가 늘어난다.', noCache: true });
   expect(r.data.source).toBe('local');
   expect(r.data.debug.server).toEqual({ used: false, reason: 'http-500' });
@@ -1396,7 +1403,7 @@ test('서버 모드(T-404): 서버 500이면 로컬 결과, foot에 로컬', asy
   await expect.poll(() => footText(page)).toBe('custom/mock-model · 로컬');
 });
 
-test('서버 모드(T-404): 서버가 느리면 timeoutMs에서 끊고 로컬로', async ({ ext }) => {
+serverTest('서버 모드(T-404): 서버가 느리면 timeoutMs에서 끊고 로컬로', async ({ ext }) => {
   await ext.send({ type: 'embed:warmup' }); // 모델 준비 시간을 재지 않게
   const t0 = Date.now();
   const r = await ext.send({ type: 'explain', sentence: '서버지연 환율이 오르면 수입품 값이 비싸진다.', noCache: true });
@@ -1407,7 +1414,7 @@ test('서버 모드(T-404): 서버가 느리면 timeoutMs에서 끊고 로컬로
   expect(ms, '서버 지연(5초)을 기다리지 않음').toBeLessThan(3000);
 });
 
-test('서버 모드(T-404): 서버가 후보 밖 nodeId를 대면 비유를 숨긴다(규칙 1)', async ({ ext }) => {
+serverTest('서버 모드(T-404): 서버가 후보 밖 nodeId를 대면 비유를 숨긴다(규칙 1)', async ({ ext }) => {
   const r = await ext.send({ type: 'explain', sentence: '서버후보밖 레버리지는 손익을 키운다.', noCache: true });
   expect(r.data.source).toBe('server');
   expect(r.data.analogy).toBe('');
@@ -1416,7 +1423,7 @@ test('서버 모드(T-404): 서버가 후보 밖 nodeId를 대면 비유를 숨�
   expect(r.data.meaning).toBe('서버 뜻 풀이예요.');
 });
 
-test('서버 모드(T-404): 그 문장에 👎 기록이 있으면 서버를 부르지 않는다', async ({ ext }) => {
+serverTest('서버 모드(T-404): 그 문장에 👎 기록이 있으면 서버를 부르지 않는다', async ({ ext }) => {
   const q = { sentence: '서버정상 물가가 오르면 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
   const r1 = await ext.send({ type: 'explain', ...q });
   expect(r1.data.source).toBe('server');
@@ -1430,7 +1437,7 @@ test('서버 모드(T-404): 그 문장에 👎 기록이 있으면 서버를 부
   expect(analogyCalls.length - before, '가짜 서버 요청 수 그대로').toBe(0);
 });
 
-test('서버 모드(T-404): 로그인 세션이면 서버를 부르지 않는다', async ({ ext }) => {
+serverTest('서버 모드(T-404): 로그인 세션이면 서버를 부르지 않는다', async ({ ext }) => {
   const { send } = ext;
   await send({ type: 'auth:login', nickname: '테스터' });
   const before = analogyCalls.length;
@@ -1442,7 +1449,9 @@ test('서버 모드(T-404): 로그인 세션이면 서버를 부르지 않는다
 });
 
 /* ───────────── 서버 모드 실사용 준비(T-141) ───────────── */
-// e2e 사본은 :8767 권한을 manifest 에 미리 받는다(scripts/prepare-e2e.mjs). 권한 없음은 서비스 워커의 contains 를 바꿔 흉내 낸다
+// 서버 사본(.tmp/ext-e2e-server)은 :8767 권한을 manifest 에 미리 받는다(scripts/prepare-e2e.mjs). 권한 없음은 서비스 워커의 contains 를 바꿔 흉내 낸다.
+// 주의: 바꾼 함수는 그 서비스 워커 실행 안에만 있다. 시험 도중 워커가 잠들었다 다시 뜨면 원래 contains(권한 있음)로 돌아가
+// 서버를 부르게 되어 간헐 실패할 수 있다(필수 권한은 permissions.remove 로 못 지우고, 요청 창은 headless 에서 못 누른다)
 async function denyServerPermission(context) {
   const sw = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
   await sw.evaluate(() => {
@@ -1451,7 +1460,7 @@ async function denyServerPermission(context) {
   });
 }
 
-test('서버 모드(T-141): 서버 출처 권한이 없으면 서버를 부르지 않고 조용히 로컬(no-permission), 이 결과는 캐시', async ({ context, ext }) => {
+serverTest('서버 모드(T-141): 서버 출처 권한이 없으면 서버를 부르지 않고 조용히 로컬(no-permission), 이 결과는 캐시', async ({ context, ext }) => {
   await denyServerPermission(context);
   const q = { sentence: '서버정상 권한 없음 확인 문장이에요.', word: '', context: '', pageTitle: 't' };
   const before = analogyCalls.length;
@@ -1467,7 +1476,7 @@ test('서버 모드(T-141): 서버 출처 권한이 없으면 서버를 부르�
   expect(c.data.debug.server).toEqual({ used: false, reason: 'no-permission' });
 });
 
-test('서버 모드(T-141): 서버 실패로 만든 로컬 결과는 캐시하지 않아 다음 호버에 서버를 다시 부른다', async ({ ext }) => {
+serverTest('서버 모드(T-141): 서버 실패로 만든 로컬 결과는 캐시하지 않아 다음 호버에 서버를 다시 부른다', async ({ ext }) => {
   const q = { sentence: '서버오류 실패 결과 캐시 확인 문장이에요.', word: '', context: '', pageTitle: 't' };
   const before = analogyCalls.length;
   const r1 = await ext.send({ type: 'explain', ...q });
@@ -1479,7 +1488,7 @@ test('서버 모드(T-141): 서버 실패로 만든 로컬 결과는 캐시하�
   expect(analogyCalls.length - before, '두 번 모두 서버를 다시 시도').toBe(2);
 });
 
-test('서버 모드(T-141): 서버 근거가 서버 후보 안이어도 확장 공통 그래프에 없으면 비유를 숨긴다(규칙 1)', async ({ ext }) => {
+serverTest('서버 모드(T-141): 서버 근거가 서버 후보 안이어도 확장 공통 그래프에 없으면 비유를 숨긴다(규칙 1)', async ({ ext }) => {
   const r = await ext.send({ type: 'explain', sentence: '서버로컬밖 레버리지는 손익을 키운다.', noCache: true });
   expect(r.data.source).toBe('server');
   expect(r.data.debug.candidates.map(c => c.id)).toContain(GHOST_NODE);
@@ -1489,7 +1498,7 @@ test('서버 모드(T-141): 서버 근거가 서버 후보 안이어도 확장 �
   expect(r.data.meaning).toBe('서버 뜻 풀이예요.');
 });
 
-test('설정 화면(T-141): 서버 주소 권한이 있으면 서버 허용됨, 없으면 허용 버튼으로 그 출처만 요청', async ({ context, extId }) => {
+serverTest('설정 화면(T-141): 서버 주소 권한이 있으면 서버 허용됨, 없으면 허용 버튼으로 그 출처만 요청', async ({ context, extId }) => {
   const ok = await context.newPage();
   await ok.goto(`chrome-extension://${extId}/options.html`);
   await expect(ok.locator('#serverPermRow')).toBeVisible();
@@ -1517,7 +1526,7 @@ test('설정 화면(T-141): 서버 주소 권한이 있으면 서버 허용됨, 
 // 가짜 LLM·가짜 analogy-api 요청 수 합계. 제외면 둘 다 그대로여야 한다
 const sentCount = () => calls.length + analogyCalls.length;
 
-test('제외 사이트(T-107): 목록에 넣으면 떠 있던 말풍선이 닫히고 Alt+호버해도 안 보냄, 빼면 새로고침 없이 다시 동작', async ({ context, ext }) => {
+serverTest('제외 사이트(T-107): 목록에 넣으면 떠 있던 말풍선이 닫히고 Alt+호버해도 안 보냄, 빼면 새로고침 없이 다시 동작', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
   await altHover(page, '#p1');
@@ -1540,7 +1549,7 @@ test('제외 사이트(T-107): 목록에 넣으면 떠 있던 말풍선이 닫�
   expect(sentCount() - before).toBeGreaterThan(0);
 });
 
-test('비밀번호 폼(T-107): 폼 안 문장은 안 보내고, 같은 페이지 폼 밖 문장은 정상', async ({ context, ext }) => {
+serverTest('비밀번호 폼(T-107): 폼 안 문장은 안 보내고, 같은 페이지 폼 밖 문장은 정상', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
   const before = sentCount();
@@ -1563,7 +1572,7 @@ test('팝업(T-107): 탭 주소를 못 읽으면(확장 페이지로 연 팝업,
   await expect(page.locator('#siteHost')).toHaveText('이 페이지에서는 쓸 수 없어요.');
 });
 
-test('비밀번호 폼(T-107): 같은 블록 안 비밀번호 폼 글자는 문장·앞 문장으로 새지 않는다', async ({ context, ext }) => {
+serverTest('비밀번호 폼(T-107): 같은 블록 안 비밀번호 폼 글자는 문장·앞 문장으로 새지 않는다', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
   const before = calls.length, serverBefore = analogyCalls.length;
@@ -1578,7 +1587,7 @@ test('비밀번호 폼(T-107): 같은 블록 안 비밀번호 폼 글자는 문�
 /* ───────── 제외 사이트 다듬기 (T-144) ───────── */
 const siteItems = p => p.locator('#siteList li');
 
-test('설정 화면 제외 사이트(T-144): 기본 17개, 추가하면 열린 탭이 바로 꺼지고 지우면 다시 동작', async ({ context, ext }) => {
+serverTest('설정 화면 제외 사이트(T-144): 기본 17개, 추가하면 열린 탭이 바로 꺼지고 지우면 다시 동작', async ({ context, ext }) => {
   const opt = ext.page;
   await expect(siteItems(opt)).toHaveCount(17);
   await expect(opt.locator('#sec-sites h2')).toHaveText('제외 사이트');
@@ -1654,7 +1663,7 @@ const hook = (page, kind, payload) => page.evaluate(([k, p]) => new Promise((res
   window.postMessage({ __e2eHook: k, id, payload: p }, '*');
 }), [kind, payload]);
 
-test('이중 방어(T-144): content.js를 건너뛰어도 background가 port·sendMessage·피드백 rerun 모두 막고, 빼면 정상', async ({ context, ext }) => {
+serverTest('이중 방어(T-144): content.js를 건너뛰어도 background가 port·sendMessage·피드백 rerun 모두 막고, 빼면 정상', async ({ context, ext }) => {
   await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
@@ -1892,7 +1901,7 @@ test('iframe(T-111): 같은 출처 iframe 안 문장도 Alt+호버로 그 프레
   expect(await tooltip(page), '최상위 문서에는 말풍선 없음').toBeFalsy();
 });
 
-test('iframe(T-111): 다른 출처 iframe 안 문장도 동작, 최상위 호스트가 제외면 iframe 문장도 요청 0', async ({ context, ext }) => {
+serverTest('iframe(T-111): 다른 출처 iframe 안 문장도 동작, 최상위 호스트가 제외면 iframe 문장도 요청 0', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
   let frame = await altHoverFrame(page, '#fr-cross', '#fb');
@@ -1912,7 +1921,7 @@ test('iframe(T-111): 다른 출처 iframe 안 문장도 동작, 최상위 호스
   expect(sentCount() - before, '최상위가 제외면 iframe 문장도 보내지 않음').toBe(0);
 });
 
-test('iframe 이중 방어(T-111): content.js를 건너뛴 iframe 요청도 payload.topHost 가 제외면 background가 막는다', async ({ context, ext }) => {
+serverTest('iframe 이중 방어(T-111): content.js를 건너뛴 iframe 요청도 payload.topHost 가 제외면 background가 막는다', async ({ context, ext }) => {
   await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
@@ -1949,7 +1958,7 @@ test('iframe(T-111): 서브프레임은 시작 시 테마를 미리 받지 않�
   await waitTheme(frame, 'maple');
 });
 
-test('iframe(T-111): 최상위 호스트를 알 수 없는 프레임(가려진 출처·referrer 없음)은 실패 시 닫힘, 요청 0', async ({ context, ext }) => {
+serverTest('iframe(T-111): 최상위 호스트를 알 수 없는 프레임(가려진 출처·referrer 없음)은 실패 시 닫힘, 요청 0', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/masked.html');
   const { frame } = await frameOf(page, '#fr-masked');
@@ -2061,7 +2070,7 @@ test('Shadow DOM(T-111): shadow 안 shadow(중첩) 문장도 동작', async ({ c
   expect(await hlText(page)).toBe('중첩섀도테스트 API 서버는 분당 요청 수에 상한을 두어 자원 독점을 막는다.');
 });
 
-test('Shadow DOM(T-111): 닫힌 shadow 안 문장은 요청 0(접근 불가)', async ({ context, ext }) => {
+serverTest('Shadow DOM(T-111): 닫힌 shadow 안 문장은 요청 0(접근 불가)', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
   await waitTheme(page, 'maple'); // content.js 가 준비된 뒤 호버
@@ -2073,7 +2082,7 @@ test('Shadow DOM(T-111): 닫힌 shadow 안 문장은 요청 0(접근 불가)', a
   expect(calls.some(c => c.user.includes('닫힌섀도테스트'))).toBe(false);
 });
 
-test('비밀번호 폼 × Shadow DOM(T-111): 비밀번호 칸이 있는 폼 안 호스트의 shadow 문장, shadow 안 폼 문장 모두 요청 0', async ({ context, ext }) => {
+serverTest('비밀번호 폼 × Shadow DOM(T-111): 비밀번호 칸이 있는 폼 안 호스트의 shadow 문장, shadow 안 폼 문장 모두 요청 0', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
   await waitTheme(page, 'maple');
@@ -2182,7 +2191,7 @@ test('iframe(T-147): 최상위 말풍선(결과) → iframe 문장 Alt+호버 �
   expect(await tooltip(frame)).toContain('같은 구조예요');
 });
 
-test('iframe(T-147): 작은(200×120) iframe 문장은 Alt+호버해도 요청 0·말풍선 없음', async ({ context, ext }) => {
+serverTest('iframe(T-147): 작은(200×120) iframe 문장은 Alt+호버해도 요청 0·말풍선 없음', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
   const { frame } = await frameOf(page, '#fr-tiny');
@@ -2197,7 +2206,7 @@ test('iframe(T-147): 작은(200×120) iframe 문장은 Alt+호버해도 요청 0
 });
 
 /* ───────── 프레임·shadow 보호 빈틈 (T-148) ───────── */
-test('iframe(T-148): 부모 문서의 비밀번호 폼 안 같은 출처 iframe 문장은 요청 0, 부모 폼에 나중에 칸이 생겨도 막고, 폼 밖 iframe 은 정상', async ({ context, ext }) => {
+serverTest('iframe(T-148): 부모 문서의 비밀번호 폼 안 같은 출처 iframe 문장은 요청 0, 부모 폼에 나중에 칸이 생겨도 막고, 폼 밖 iframe 은 정상', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/pwframe.html');
   const before = sentCount();
@@ -2222,7 +2231,7 @@ test('iframe(T-148): 부모 문서의 비밀번호 폼 안 같은 출처 iframe 
   await expect.poll(() => tooltip(ok)).toContain('같은 구조예요');
 });
 
-test('비밀번호 폼(T-148): 폼 안 호스트의 열린 shadow(2겹) 안에만 비밀번호 칸이 있어도 폼의 light DOM 문장은 요청 0', async ({ context, ext }) => {
+serverTest('비밀번호 폼(T-148): 폼 안 호스트의 열린 shadow(2겹) 안에만 비밀번호 칸이 있어도 폼의 light DOM 문장은 요청 0', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
   await waitTheme(page, 'maple'); // content.js 가 준비된 뒤 호버
@@ -2314,7 +2323,7 @@ test('제보 제외(T-118): 같은 공통 노드에 서로 다른 문장 fact �
   expect(r3.data.evidence?.nodeId).not.toBe(x);
 });
 
-test('제보 제외(T-118): 서버 결과 근거가 제보 제외 노드면 로컬로 대체(reason reported)', async ({ ext }) => {
+serverTest('제보 제외(T-118): 서버 결과 근거가 제보 제외 노드면 로컬로 대체(reason reported)', async ({ ext }) => {
   const q = { sentence: '서버정상 제보 제외 확인 문장이에요.', word: '', context: '', pageTitle: 't', noCache: true };
   const r1 = await ext.send({ type: 'explain', ...q });
   expect(r1.data.source).toBe('server');
@@ -2567,7 +2576,7 @@ test('관심사(T-302): 로그아웃 상태에서 팝업으로 식당 → "식�
   await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain(MAPLE_NO_MATCH);
 });
 
-test('관심사(T-302): 식당이면 서버 모드여도 서버를 부르지 않고 로컬(reason interest), 메이플로 되돌리면 다시 서버', async ({ ext }) => {
+serverTest('관심사(T-302): 식당이면 서버 모드여도 서버를 부르지 않고 로컬(reason interest), 메이플로 되돌리면 다시 서버', async ({ ext }) => {
   await ext.setSettings({ interest: 'restaurant' });
   const before = analogyCalls.length;
   const r = await ext.send({ type: 'explain', sentence: '서버정상 식당 관심사 확인 문장이에요.', noCache: true });
