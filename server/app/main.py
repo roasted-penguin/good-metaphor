@@ -10,12 +10,13 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import __version__
 from .blocklist import active_terms, load_blocklist
 from .cache import ResultCache, cache_key
-from .config import Settings, load_common_graph
+from .config import EXTENSION_ORIGIN_REGEX, Settings, load_common_graph
 from .pipeline import AnalogyPipeline, AnalogyRequest, PipelineError
 from .ratelimit import RateLimiter
 from .seedmeta import index_status
@@ -50,6 +51,18 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
 
     app = FastAPI(title="analogy-api", version=__version__, lifespan=lifespan)
     app.state.settings = settings
+    # CORS(T-141): 기본은 닫힘. 확장(chrome-extension://)이 부르려면 ALLOWED_ORIGINS 에 그 확장 출처를 적거나,
+    # 개발 중에만 ALLOW_EXTENSION_ORIGINS=true(확장 id 형식 전부). 쿠키는 쓰지 않는다(설치 토큰은 헤더)
+    if settings.allowed_origins or settings.allow_extension_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.allowed_origins),
+            allow_origin_regex=EXTENSION_ORIGIN_REGEX if settings.allow_extension_origins else None,
+            allow_methods=["POST"],
+            allow_headers=["content-type", "x-install-token"],
+            allow_credentials=False,
+            max_age=600,
+        )
     app.state.deps = deps
     app.state.cache = deps.get("cache") or ResultCache()
     app.state.rate_limiter = deps.get("rate_limiter") or RateLimiter(settings.rate_limit_per_min)

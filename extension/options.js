@@ -5,6 +5,7 @@ import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, cl
 import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
 import { COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
 import { embedStatusText, modelSizeText, statusKind } from './lib/embed-status.js';
+import { serverOriginPattern } from './lib/analogy-server.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 const SF = globalThis.AnalogySiteFilter;
@@ -220,6 +221,36 @@ $('#testProvider').addEventListener('click', async () => {
     const r = await send('provider:test');
     setStatus($('#providerStatus'), `연결됨: ${r.text}`, 'ok');
   } catch (e) { setStatus($('#providerStatus'), e.message, 'err'); }
+});
+
+/* ───────── 서버 주소 권한(T-141) ───────── */
+// 관리자(admin.json·정책)가 analogyServer.url 을 줬을 때만 보인다. 권한이 없으면 확장은 조용히 로컬로 만든다(no-permission)
+function serverUrl() { return state.admin.analogyServer?.url || ''; }
+async function renderServerPermission() {
+  const url = serverUrl();
+  $('#serverPermRow').hidden = !url;
+  if (!url) return;
+  const pattern = serverOriginPattern(url);
+  if (!pattern) {
+    $('#grantServer').hidden = true;
+    $('#serverPermHint').hidden = false;
+    return setStatus($('#serverPermStatus'), '서버 주소 형식이 올바르지 않아요. 관리자에게 알려 주세요.', 'err');
+  }
+  let granted = false;
+  try { granted = await chrome.permissions.contains({ origins: [pattern] }); } catch { /* 확인 실패 = 허용 안 됨 */ }
+  $('#grantServer').hidden = granted;
+  $('#serverPermHint').hidden = granted;
+  if (granted) setStatus($('#serverPermStatus'), '서버 허용됨', 'ok');
+  else setStatus($('#serverPermStatus'), `서버(${new URL(url).origin})를 쓰려면 허용이 필요해요.`, 'warn');
+}
+$('#grantServer').addEventListener('click', async () => {
+  const pattern = serverOriginPattern(serverUrl());
+  if (!pattern) return;
+  // 사용자 제스처 안에서 바로 요청해야 한다(앞에 다른 await 를 두지 않는다)
+  let granted = false;
+  try { granted = await chrome.permissions.request({ origins: [pattern] }); } catch { /* 거절과 같게 */ }
+  await renderServerPermission();
+  if (!granted) setStatus($('#serverPermStatus'), '허용하지 않았어요. 이 기기에서 바로 비유를 만들게요.', 'warn');
 });
 
 /* ───────── 저장소 ───────── */
@@ -818,6 +849,7 @@ $('#fbShare').addEventListener('change', async () => {
     $('#provider').disabled = true;
     $('#model').disabled = true;
   }
+  renderServerPermission().catch(e => console.warn('서버 권한 확인 실패', e));
   loadFeedback().catch(e => setStatus($('#fbStatus'), '피드백을 불러오지 못했어요: ' + e.message, 'err'));
   await loadStore().catch(e => { $('#commonTitle').textContent = '불러오기 실패: ' + e.message; });
   pollEmbed();

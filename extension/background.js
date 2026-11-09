@@ -6,7 +6,7 @@ import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, comm
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
-import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
+import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPattern, shouldCacheLocal } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked, activeTerms } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
@@ -208,7 +208,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // "사실이 틀렸어요" 제보 3건으로 빠지는 공통 노드(T-118). 다른 문장 기록으로 정해지니 캐시 키에도 넣는다
   const reported = reportedNodes(feedbackRecords, graph);
   const reportedKey = [...reported].sort().join(',');
-  const cacheKey = await sha1([sentence, word, graphKey, provider.id, provider.model, settings.preciseMode, feedbackKey(feedbackRecords, sentenceHash), memoryKey, reportedKey].join('|'));
+  // 서버 출처 권한(T-141). 주소가 있을 때만 확인하고, 허용 여부를 캐시 키에 넣어 허용하면 권한 없음 결과가 저절로 갈린다
+  const serverPerm = await serverPermission(admin.analogyServer?.url);
+  const cacheKey = await sha1([sentence, word, graphKey, provider.id, provider.model, settings.preciseMode, feedbackKey(feedbackRecords, sentenceHash), memoryKey, reportedKey, serverPerm.key].join('|'));
   if (!noCache) {
     const hit = await cacheGet(cacheKey);
     if (hit) return { ...hit, cached: true };
@@ -219,7 +221,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const skip = serverSkipReason({
     admin, session, providerKind: provider.def.kind,
     commonId: graph.sources.common?.id ?? null, // 서버는 메이플만 안다(T-302)
-    sentenceRecords: feedbackRecords.filter(r => r.sentenceHash === sentenceHash)
+    sentenceRecords: feedbackRecords.filter(r => r.sentenceHash === sentenceHash),
+    hasPermission: serverPerm.granted
   });
   let serverInfo = skip === 'off' ? null : { used: false, reason: skip };
   // 금칙어 목록(T-114): 서버 결과 재검사·로컬 생성·정밀 모드 추상 구조에 같이 쓴다
@@ -231,7 +234,9 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       url: admin.analogyServer.url,
       token,
       timeoutMs: admin.analogyServer.timeoutMs,
-      payload: { sentence, word: word || '', context: context || '', pageTitle: pageTitle || '' }
+      payload: { sentence, word: word || '', context: context || '', pageTitle: pageTitle || '' },
+      // 규칙 1(T-141): 서버 근거는 서버 후보뿐 아니라 지금 관심사의 로컬 공통 노드에도 있어야 한다
+      localNodeIds: new Set(graph.nodes.filter(n => n.source === 'common').map(n => n.id))
     });
     // 서버는 내 제보를 모른다(ADR 0010). 근거가 제보로 빠진 노드면 서버 결과를 버리고 로컬로 간다(T-118)
     if (r.ok && reported.has(r.result.evidence?.nodeId)) {
@@ -348,8 +353,22 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     result.source = 'local';
     result.debug.server = serverInfo;
   }
-  await cachePut(cacheKey, result);
+  // 서버를 시도했다가 실패해서 만든 로컬 결과는 캐시하지 않는다(T-141). 서버가 살아나면 다음 호버에 서버로
+  if (shouldCacheLocal(serverInfo)) await cachePut(cacheKey, result);
   return result;
+}
+
+// 서버 주소의 출처 권한(T-141). 주소가 없으면 확인하지 않는다(key 빈 값 = 예전 캐시 키 모양).
+// 틀린 주소·확인 실패는 권한 없음으로 본다 → 서버를 부르지 않고 조용히 로컬(no-permission)
+async function serverPermission(url) {
+  if (!url) return { granted: true, key: '' };
+  const pattern = serverOriginPattern(url);
+  let granted = false;
+  if (pattern) {
+    try { granted = await chrome.permissions.contains({ origins: [pattern] }); }
+    catch (e) { console.warn('[server] 권한을 확인하지 못했어요', e); }
+  }
+  return { granted, key: granted ? 'server-ok' : 'server-denied' };
 }
 
 /* ───────────── 메시지 ───────────── */

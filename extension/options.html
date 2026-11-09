@@ -124,6 +124,11 @@
         <span></span>
         <div class="row"><button class="primary" id="saveProvider">저장</button><button id="testProvider">연결 테스트</button><span class="status" id="providerStatus"></span></div>
       </div>
+      <!-- 서버 모드(T-141): 관리자가 서버 주소를 줬을 때만 보인다. 그 출처만 선택 권한으로 요청 -->
+      <div id="serverPermRow" hidden style="margin-top:12px">
+        <div class="row"><span class="status" id="serverPermStatus" role="status"></span><button id="grantServer" hidden>서버 주소 허용</button></div>
+        <p class="hint" id="serverPermHint" hidden>허용하기 전에는 이 기기에서 바로 비유를 만들어요.</p>
+      </div>
     </section>
 
     <!-- 3. 관심사 저장소 -->
