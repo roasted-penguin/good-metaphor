@@ -25,11 +25,47 @@ export function transformAdmin(admin, providerIds) {
   return out;
 }
 
-/** manifest.json → 스토어용. 표시 이름에서 " (PoC)" 만 뺀다 */
-export function transformManifest(manifest) {
+/**
+ * manifest.json → 스토어용. 표시 이름에서 " (PoC)" 를 빼고,
+ * 변환된 admin 의 로그인이 꺼져 있으면(userStore.adapter none) 쓰이지 않는 identity 권한을 뺀다.
+ * identity 는 서버 계정 어댑터(remote, stores.js launchWebAuthFlow)만 쓴다. remote 면 남긴다
+ * @param {object} manifest
+ * @param {object} admin transformAdmin 결과
+ */
+export function transformManifest(manifest, admin) {
   const out = structuredClone(manifest);
   if (typeof out.name === 'string') out.name = out.name.replace(/\s*\(PoC\)\s*$/, '');
+  const adapter = admin?.userStore?.adapter || 'none';
+  if (adapter === 'none' && Array.isArray(out.permissions)) out.permissions = out.permissions.filter(p => p !== 'identity');
   return out;
+}
+
+// 처리방침은 "확장 제작자 서버로 보내는 정보 없음"이라 적는다. 서버 주소가 들어간 admin 으로는 스토어 빌드를 만들지 않는다
+const SERVER_URL_KEYS = [
+  ['analogyServer.url', a => a.analogyServer?.url],
+  ['commonStore.url', a => a.commonStore?.url],
+  ['userStore.baseUrl', a => a.userStore?.baseUrl]
+];
+
+/** 비어 있지 않은 서버 주소마다 한국어 오류 한 줄 */
+export function serverUrlErrors(admin) {
+  return SERVER_URL_KEYS
+    .filter(([, get]) => String(get(admin || {}) ?? '').trim())
+    .map(([key]) => `admin.json ${key} 에 서버 주소가 있어요. 개인정보 처리방침(§1·§6)을 먼저 고친 뒤 이 검사를 바꿔 주세요.`);
+}
+
+// 스토어 zip 에 꼭 있어야 하는 빌드 산출물(npm run build, 커밋돼 있다)
+const REQUIRED = ['manifest.json', 'offscreen.js', 'vendor/ort-wasm-simd-threaded.asyncify.wasm', 'vendor/ort-wasm-simd-threaded.asyncify.mjs'];
+
+/**
+ * `git ls-files extension` 출력 → extension/ 아래 상대 경로 목록. 추적 안 되는 파일(로컬 임시 파일 등)은 스토어 빌드에 들어가지 않는다.
+ * 빌드 산출물이 추적 목록에 없으면 오류
+ */
+export function trackedExtensionFiles(lsFilesOutput) {
+  const files = String(lsFilesOutput).split('\n').map(l => l.trim()).filter(l => l.startsWith('extension/')).map(l => l.slice('extension/'.length));
+  const missing = REQUIRED.filter(f => !files.includes(f));
+  if (missing.length) throw new Error(`git 에 추적되는 extension/ 파일 중 ${missing.join(', ')} 이 없어요. npm run build 뒤 커밋해 주세요.`);
+  return files;
 }
 
 // 스토어 zip 에 들어가면 안 되는 파일: e2e 사본 전용 파일, 소스맵, 테스트, 맥 메타 파일

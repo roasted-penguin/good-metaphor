@@ -3,25 +3,31 @@
 // 스토어 빌드는 실제 제공자(키 없음)라 LLM·모델 다운로드를 부르지 않는 화면만 확인한다
 import { test, expect, chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, cpSync, readFileSync } from 'node:fs';
+import { mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { forbiddenFiles } from '../../scripts/store-transform.mjs';
 
 let ext;
+// git 에 추적되지 않는 파일은 스토어 빌드에 들어가지 않는다(T-303 수정 1). 빌드하는 동안만 만들어 둔다
+const UNTRACKED = 'extension/zz-untracked-e2e.txt';
 test.beforeAll(() => {
-  execFileSync(process.execPath, ['scripts/build-store.mjs'], { stdio: 'pipe' });
+  writeFileSync(UNTRACKED, '추적 안 되는 임시 파일');
+  try { execFileSync(process.execPath, ['scripts/build-store.mjs'], { stdio: 'pipe' }); }
+  finally { rmSync(UNTRACKED, { force: true }); }
   ext = mkdtempSync(path.join(tmpdir(), 'ah-store-ext-'));
   cpSync('dist/store', ext, { recursive: true });
 });
 
-test('스토어 빌드(T-303): zip 에 테스트 파일이 없고, 확장이 뜨며 설정 화면에 데모 제공자·개발용 로그인이 없다', async () => {
+test('스토어 빌드(T-303): zip 에 테스트·추적 안 되는 파일이 없고 identity 가 빠지며, 확장이 뜨며 설정 화면에 데모 제공자·개발용 로그인이 없다', async () => {
   test.setTimeout(90_000);
-  const { version, name } = JSON.parse(readFileSync(path.join(ext, 'manifest.json'), 'utf8'));
+  const { version, name, permissions } = JSON.parse(readFileSync(path.join(ext, 'manifest.json'), 'utf8'));
   expect(name).toBe('좋은비유네용');
+  expect(permissions).not.toContain('identity'); // 로그인 꺼짐(none)이면 identity 를 뺀다
   const listed = execFileSync('unzip', ['-Z1', `dist/good-metaphor-${version}.zip`], { encoding: 'utf8' }).split('\n').filter(Boolean);
   expect(listed).toContain('manifest.json'); // zip 최상위에 manifest
   expect(forbiddenFiles(listed)).toEqual([]);
+  expect(listed).not.toContain('zz-untracked-e2e.txt');
 
   const args = [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`];
   const opts = process.env.CHROMIUM_PATH

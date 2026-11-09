@@ -69,11 +69,11 @@ function prepareExtension() {
   rmSync(EXT, { recursive: true, force: true });
   cpSync('.tmp/ext-e2e', EXT, { recursive: true });
   const mp = path.join(EXT, 'manifest.json');
-  const m = transformManifest(JSON.parse(readFileSync(mp, 'utf8')));
-  m.content_scripts = m.content_scripts.filter(cs => !cs.js.includes('e2e-hook.js'));
-  writeFileSync(mp, JSON.stringify(m, null, 2));
   const ap = path.join(EXT, 'config/admin.json');
   const a = transformAdmin(JSON.parse(readFileSync(ap, 'utf8')), Object.keys(PROVIDERS));
+  const m = transformManifest(JSON.parse(readFileSync(mp, 'utf8')), a);
+  m.content_scripts = m.content_scripts.filter(cs => !cs.js.includes('e2e-hook.js'));
+  writeFileSync(mp, JSON.stringify(m, null, 2));
   a.customBaseUrl = `http://127.0.0.1:${PROXY}/v1`;
   a.analogyServer = { url: '', timeoutMs: 800 };
   writeFileSync(ap, JSON.stringify(a, null, 2));
