@@ -29,21 +29,36 @@ const MEANINGS = [
   ['변동금리 대출', '변동금리로 돈을 빌리면 기준금리가 오를 때 매달 내는 이자도 따라서 많아진다는 뜻이에요.']
 ];
 
-// 스크린샷용 기사 페이지. 테스트 페이지 문장만 담는다
-const ARTICLE = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>경제 기초 읽기</title>
+// 스크린샷용 기사 페이지. 테스트 페이지 문장만 담는다.
+// 말풍선이 본문을 가리지 않게, 호버할 문단(last)을 맨 아래에 둔다: /rate → 레이트 리밋 문단, /loan → 금리 문단
+// 맨 아래 문단은 호버할 문장 하나만 둔다(이어지는 문장이 말풍선 밑으로 가려지지 않게). 다른 주제 문단은 문장 둘 그대로
+const FULL = {
+  loan: `<p>${SENTENCES.loan} ${SENTENCES.fixed}</p>`,
+  rate: `<p>${SENTENCES.rate} ${SENTENCES.rate2}</p>`
+};
+const article = last => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>경제 기초 읽기</title>
 <style>body{font:19px/1.75 -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;max-width:720px;margin:56px auto;color:#222;background:#fff}
 h1{font-size:30px;margin:0 0 8px}small{color:#888}p{margin:22px 0}</style></head><body>
 <h1>변동금리와 고정금리, 무엇이 다를까</h1><small>예시 문서</small>
-<p id="loan">${SENTENCES.loan} ${SENTENCES.fixed}</p>
-<p id="rate">${SENTENCES.rate} ${SENTENCES.rate2}</p>
+${FULL[last === 'loan' ? 'rate' : 'loan']}
 <p>펭귄은 날지 못하지만 헤엄을 아주 잘 친다. 남극에 산다.</p>
+<p id="${last}">${SENTENCES[last]}</p>
 </body></html>`;
+
+// 말풍선 아래 제공자 표시: 가짜 LLM(custom/mock-model) 대신 팝업과 같은 스토어 기본 제공자로 보이게 바꿔 적는다(화면만)
+const FOOT_PROVIDER = 'groq/openai/gpt-oss-120b';
+async function relabelFoot(page) {
+  await page.evaluate(label => {
+    const span = document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.box .foot > span');
+    if (span) span.textContent = span.textContent.replace(/^custom\/mock-model/, label);
+  }, FOOT_PROVIDER);
+}
 
 function startProxy() {
   const server = http.createServer((req, res) => {
     const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
-    if (req.method !== 'POST') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(ARTICLE); }
+    if (req.method !== 'POST') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(article(req.url.includes('loan') ? 'loan' : 'rate')); }
     let body = '';
     req.on('data', c => (body += c));
     req.on('end', async () => {
@@ -130,26 +145,29 @@ async function main() {
     for (const p of context.pages()) if (p !== opt) await p.close();
 
     const page = await context.newPage();
-    await page.goto(`http://127.0.0.1:${PROXY}/`);
+    await page.goto(`http://127.0.0.1:${PROXY}/rate`);
     // (1) 메이플 말풍선
     await altHover(page, '#rate', 8);
     await inBox(page, '.analogy').waitFor({ timeout: 60_000 });
     await page.waitForTimeout(600);
+    await relabelFoot(page);
     await shot(page, '1-maple-bubble.png');
     // (5) 👎 뒤 피드백 칩(다른 개념·이유). 마우스가 말풍선 위에 있으면 칩이 남는다
     await inBox(page, '.fbtn.down').click();
     await inBox(page, '.chip.reason').first().waitFor({ timeout: 60_000 });
     await page.waitForTimeout(600);
+    await relabelFoot(page);
     await shot(page, '5-feedback-chips.png');
     await page.keyboard.press('Escape');
 
     // (2) 식당 관심사 말풍선
     await setSettings({ interest: 'restaurant' });
-    await page.reload();
+    await page.goto(`http://127.0.0.1:${PROXY}/loan`);
     await page.mouse.move(5, 5);
     await altHover(page, '#loan', 6);
     await inBox(page, '.analogy').waitFor({ timeout: 60_000 });
     await page.waitForTimeout(600);
+    await relabelFoot(page);
     await shot(page, '2-restaurant-bubble.png');
     await setSettings({ interest: 'maplestory' });
 
