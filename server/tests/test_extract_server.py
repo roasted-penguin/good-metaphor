@@ -19,7 +19,7 @@ from app import seedmeta
 from app.config import Settings, load_common_graph
 from app.seed import seed
 from fakes import FakeLLM, FakeRetriever
-from test_extract_worker import COMMON_GRAPH, COMMON_WS, Inserted, enqueue_n, make_worker, ollama  # noqa: F401
+from test_extract_worker import COMMON_GRAPH, COMMON_WS, IN_WINDOW, Inserted, enqueue_n, make_worker, ollama  # noqa: F401
 
 GRAPH = load_common_graph(COMMON_GRAPH)
 TOKEN = {"X-Install-Token": "install-t161"}
@@ -154,7 +154,16 @@ def test_queue_lock_held_does_not_block_health_or_hover(tmp_path, ollama, where)
             await asyncio.sleep(0.01)
         return True
 
-    app = make_app(s, make_worker(s, ollama.url, Inserted(), health_fn=gated_health))
+    worker = make_worker(s, ollama.url, Inserted(), health_fn=gated_health)
+    picking = threading.Event()
+    orig_pick = worker._pick
+
+    def signalled_pick(*a):
+        picking.set()  # 창이 청크를 고르러 들어옴(곧 큐 잠금을 기다린다)
+        return orig_pick(*a)
+
+    worker._pick = signalled_pick
+    app = make_app(s, worker)
     replies: dict[str, int] = {}
     ready = threading.Event()
     go = threading.Event()
@@ -181,7 +190,7 @@ def test_queue_lock_held_does_not_block_health_or_hover(tmp_path, ollama, where)
         assert ready.wait(5) and wait_until(lambda: app.state.extract_running)
         lock.__enter__()
         gate.set()  # 이제 창이 청크를 고르러 큐 잠금을 기다린다
-        time.sleep(0.2)
+        assert picking.wait(5)
         go.set()
     try:
         assert wait_until(lambda: len(replies) == 2, timeout=3), replies
@@ -277,3 +286,126 @@ def test_seed_cli_reset_refusal_is_one_line(tmp_path, monkeypatch, capsys):
             main(["--reset"])
     assert ex.value.code == 2
     assert RUNNING_MSG in capsys.readouterr().err
+
+
+# ── 수정 1회차(리뷰): 리셋 안전성·종료 중 스레드 작업 ─────────────
+
+
+def _raw_queue(s: Settings) -> str:
+    return ew.queue_path(s, COMMON_WS).read_text("utf-8")
+
+
+def test_reset_failure_mid_delete_keeps_queue_file(tmp_path, monkeypatch):
+    import app.seed as seed_mod
+
+    s = server_settings(tmp_path)
+    asyncio.run(seed(s))
+    _queue_with_states(s)
+    before = _raw_queue(s)
+    calls = []
+    orig = seed_mod._remove_entry
+
+    def flaky(path):
+        calls.append(path.name)
+        if len(calls) == 2:
+            raise OSError("디렉터리가 비어 있지 않음(흉내)")
+        orig(path)
+
+    monkeypatch.setattr(seed_mod, "_remove_entry", flaky)
+    with pytest.raises(OSError):
+        asyncio.run(seed(s, reset=True))
+    assert len(calls) == 2
+    assert ew.QUEUE_FILE not in calls and ew.QUEUE_LOCK_FILE not in calls
+    # 원래 큐 파일이 그대로(done도 아직 done)
+    assert _raw_queue(s) == before
+
+
+def test_reset_keeps_lock_file_inode_and_serializes_enqueue(tmp_path, monkeypatch):
+    import app.seed as seed_mod
+
+    s = server_settings(tmp_path)
+    asyncio.run(seed(s))
+    before = _queue_with_states(s)
+    lock_file = seedmeta.safe_workspace_dir(s) / ew.QUEUE_LOCK_FILE
+    inode = lock_file.stat().st_ino
+    orig = seed_mod._remove_entry
+    added = threading.Event()
+    state: dict = {}
+
+    def enqueue_other():
+        ew.enqueue(s, COMMON_WS, "reset-중-추가", "리셋 중에 들어온 문단이에요.")
+        added.set()
+
+    def remove_and_race(path):
+        if "thread" not in state:
+            t = threading.Thread(target=enqueue_other, daemon=True)
+            state["thread"] = t
+            t.start()
+            # 리셋이 큐 잠금을 쥐고 있으니 enqueue는 기다린다
+            state["waited"] = not added.wait(0.3)
+        orig(path)
+
+    monkeypatch.setattr(seed_mod, "_remove_entry", remove_and_race)
+    asyncio.run(seed(s, reset=True))
+    state["thread"].join(5)
+    assert state["waited"] and added.is_set()
+    q = ew.load_queue(s, COMMON_WS)
+    # 되살린 큐 뒤에 붙었다(잃은 청크 없음)
+    assert [c["id"] for c in q[:4]] == [c["id"] for c in before]
+    assert q[1]["status"] == "pending"
+    assert len(q) == 5 and q[4]["docId"] == "reset-중-추가"
+    assert lock_file.stat().st_ino == inode
+    assert seedmeta.index_status(s) == (True, None)
+
+
+def test_cancel_during_queue_op_waits_for_thread_before_releasing_lock(tmp_path, ollama):
+    s = server_settings(tmp_path, ollama.url)
+    enqueue_n(s, COMMON_WS, 1)
+    worker = make_worker(s, ollama.url, Inserted())
+    picking = threading.Event()
+    orig_pick = worker._pick
+
+    def signalled_pick(*a):
+        picking.set()
+        return orig_pick(*a)
+
+    worker._pick = signalled_pick
+    held = threading.Event()
+    release = threading.Event()
+
+    def holder():
+        # 다른 프로세스(--enqueue)가 큐 잠금을 잠깐 쥔 것처럼
+        with ew.queue_lock(s, COMMON_WS):
+            held.set()
+            release.wait(5)
+
+    th = threading.Thread(target=holder, daemon=True)
+
+    async def main() -> str:
+        # 복구가 끝난 뒤(on_start) 잠금을 쥔다: 창의 _pick이 그 잠금을 기다리게
+        task = asyncio.create_task(ew.run_forever(worker, clock=lambda: IN_WINDOW, max_iterations=1,
+                                                  on_start=lambda: (th.start(), held.wait(5))))
+        for _ in range(300):
+            if picking.is_set() or task.done():
+                break
+            await asyncio.sleep(0.01)
+        assert picking.is_set(), task
+        await asyncio.sleep(0.05)  # 스레드가 큐 잠금에서 기다리는 중
+        task.cancel()
+        asyncio.get_running_loop().call_later(0.3, release.set)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        # 태스크가 끝난(= worker.lock을 푼) 순간의 큐 파일(잠금 없이 읽음)
+        return _raw_queue(s)
+
+    snap = asyncio.run(main())
+    th.join(5)
+    q = json.loads(snap)["chunks"]
+    # 스레드의 쓰기(running 표시)는 잠금을 풀기 전에 끝났고, 그 뒤에는 쓰지 않았다
+    assert [(c["status"], c["attempts"]) for c in q] == [("running", 1)]
+    time.sleep(0.2)
+    assert _raw_queue(s) == snap
+    with ew.worker_lock(s):  # 잠금은 풀렸다
+        pass
+    # 다음 시작의 복구가 되돌린다
+    assert ew.recover_running(s, [COMMON_WS]) == 1

@@ -65,6 +65,8 @@ EXTRACT_TIMEOUT_S = 600.0
 EXTRACT_CONNECT_TIMEOUT_S = 5.0
 EXTRACT_NUM_CTX = 16384
 ERROR_MAX_LEN = 200
+# 종료(취소) 때 진행 중인 큐 스레드 작업을 기다리는 상한(초). 그동안 worker.lock을 쥐고 있는다(T-161)
+THREAD_DRAIN_TIMEOUT_S = 10.0
 
 STATUSES = ("pending", "running", "done", "failed")
 
@@ -149,6 +151,30 @@ def result_name(cid: str) -> str:
     if not valid_chunk_id(cid):
         raise ValueError(f"청크 id 모양이 안전하지 않아요: {cid!r}")
     return cid
+
+
+# ── 스레드 실행 ──────────────────────────────────────
+
+
+async def _in_thread(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """큐 잠금·파일 입출력을 이벤트 루프 밖 스레드에서(서버의 호버 응답을 막지 않게, T-161).
+
+    취소(서버 종료)되면 그 스레드가 끝날 때까지(최대 THREAD_DRAIN_TIMEOUT_S) 기다린 뒤 취소를 올린다.
+    그래야 worker.lock을 푼 뒤에 스레드가 큐·결과 파일을 고치지 않는다(--once·seed --reset과 겹치지 않게).
+    """
+    fut = asyncio.ensure_future(asyncio.to_thread(fn, *args, **kwargs))
+    try:
+        return await asyncio.shield(fut)
+    except asyncio.CancelledError:
+        if not fut.done():
+            log.info("추출 워커: 종료 중이라 진행 중인 큐 작업이 끝나길 기다려요(최대 %.0f초).", THREAD_DRAIN_TIMEOUT_S)
+            done, _ = await asyncio.wait({fut}, timeout=THREAD_DRAIN_TIMEOUT_S)
+            if not done:
+                log.warning("추출 워커: 큐 작업이 %.0f초 안에 끝나지 않아 그대로 멈춰요(처리 중 청크는 다음 시작 때 복구).",
+                            THREAD_DRAIN_TIMEOUT_S)
+        if fut.done() and not fut.cancelled():
+            fut.exception()  # 결과는 버린다(경고 '예외를 읽지 않음' 막기)
+        raise
 
 
 # ── 큐 파일·잠금 ─────────────────────────────────────
@@ -505,7 +531,7 @@ def make_result_writer(settings: Settings) -> Inserter:
 
     async def write(chunk: dict, entities: list, relationships: list) -> None:
         # 파일 쓰기는 이벤트 루프 밖 스레드에서(서버 안에서 돌 때 호버 응답을 막지 않게, T-161)
-        await asyncio.to_thread(write_sync, chunk, entities, relationships)
+        await _in_thread(write_sync, chunk, entities, relationships)
 
     return write
 
@@ -634,11 +660,11 @@ class ExtractWorker:
         # 이번 창에서 이미 시도한 청크는 다시 집지 않는다(파싱 실패 청크를 한 창에서 되풀이하지 않게)
         tried: set[str] = set()
         while True:
-            # 큐 잠금·파일 입출력은 모두 asyncio.to_thread로: 다른 프로세스(--enqueue 등)가 큐 잠금을 쥐어도
+            # 큐 잠금·파일 입출력은 모두 스레드(_in_thread)로: 다른 프로세스(--enqueue 등)가 큐 잠금을 쥐어도
             # 이벤트 루프(서버의 /health·/v1/analogy)는 막히지 않는다(T-161)
-            if via == "cloud" and await asyncio.to_thread(read_cloud_usage, self.settings, now) >= self.daily_cap:
+            if via == "cloud" and await _in_thread(read_cloud_usage, self.settings, now) >= self.daily_cap:
                 return "클라우드 하루 상한"
-            picked = await asyncio.to_thread(self._pick, ws, tried, now)
+            picked = await _in_thread(self._pick, ws, tried, now)
             if picked is None:
                 return None
             if picked["kind"] == "bad":
@@ -649,16 +675,16 @@ class ExtractWorker:
             cid = chunk["id"]
             if via == "cloud":
                 # 호출 전에 센다(실패해도 비용이 드니까). 설정 오류(4xx)면 되돌린다
-                await asyncio.to_thread(_add_cloud_usage, self.settings, now)
+                await _in_thread(_add_cloud_usage, self.settings, now)
             try:
                 entities, relationships = await extractor(chunk["text"])
                 entities, relationships = filter_extraction(entities, relationships, self.vocabulary)
             except ExtractConfigError as e:
                 # 설정 오류: 청크는 이전 상태·시도 수 그대로 되돌리고 창을 멈춘다(상한에 닿아 포기되지 않게)
-                await asyncio.to_thread(_update, self.settings, ws, cid, now, status=prev["status"],
+                await _in_thread(_update, self.settings, ws, cid, now, status=prev["status"],
                                         attempts=prev["attempts"], lastError=_short(e))
                 if via == "cloud":
-                    await asyncio.to_thread(_add_cloud_usage, self.settings, now, -1)
+                    await _in_thread(_add_cloud_usage, self.settings, now, -1)
                 log.error("추출 큐 %s: %s 설정 오류, 이번 창을 멈춰요(시도 수는 그대로): %s", ws, via, e)
                 return "설정 오류"
             except ExtractConnectionError as e:
@@ -679,13 +705,13 @@ class ExtractWorker:
                 await self._fail(ws, cid, now, f"삽입 실패: {type(e).__name__}: {_short(e)}", summary)
                 log.warning("추출 큐 %s: 청크 %s 삽입 실패: %s", ws, cid, e)
                 continue
-            await asyncio.to_thread(_update, self.settings, ws, cid, now, status="done", lastError=None, via=via)
+            await _in_thread(_update, self.settings, ws, cid, now, status="done", lastError=None, via=via)
             summary["done"] += 1
             if via == "cloud":
                 summary["cloud"] += 1
 
     async def _fail(self, ws: str, cid: str, now: datetime, message: str, summary: dict) -> None:
-        await asyncio.to_thread(_update, self.settings, ws, cid, now, status="failed",
+        await _in_thread(_update, self.settings, ws, cid, now, status="failed",
                                 lastError=message[:ERROR_MAX_LEN])
         summary["failed"] += 1
 
@@ -708,7 +734,7 @@ async def run_forever(worker: ExtractWorker, clock: Callable[[], datetime] = _de
     results: list[dict] = []
     # 잠금은 기다리지 않고 잡으므로 루프 안에서 바로. 복구는 큐 잠금을 기다릴 수 있어 스레드에서(T-161)
     with worker_lock(worker.settings):
-        await asyncio.to_thread(recover_running, worker.settings, worker.workspaces)
+        await _in_thread(recover_running, worker.settings, worker.workspaces)
         if on_start is not None:
             on_start()
         i = 0
@@ -766,25 +792,19 @@ def requeue_after_reset(chunks: list[dict], now: datetime | None = None) -> list
     return out
 
 
-def read_queue_for_reset(settings: Settings, workspace: str) -> list[dict]:
-    """리셋 전에 큐를 큐 잠금 아래 읽는다. 깨졌으면 QueueError(부르는 쪽이 리셋을 거절한다)."""
-    with queue_lock(settings, workspace, shared=True):
-        return _read_queue(settings, workspace)
+@contextmanager
+def reset_queue_guard(settings: Settings, workspace: str) -> Iterator[list[dict]]:
+    """seed --reset용(T-161): 배타 큐 잠금을 쥔 채 큐를 읽어 준다(깨졌으면 QueueError, 아무것도 안 건드림).
 
-
-def restore_queue_after_reset(settings: Settings, workspace: str, chunks: list[dict],
-                              now: datetime | None = None) -> None:
-    """리셋으로 새로 만든 워크스페이스 폴더에 큐를 되돌려 쓴다(done → pending).
-
-    그사이 --enqueue가 넣은 청크가 있으면 뒤에 붙인다(잃지 않게).
+    블록이 예외 없이 끝나면 같은 잠금 아래에서 같은 자리에 done → pending으로 원자적으로 고쳐 쓴다.
+    블록 안에서 실패하면 원래 큐 파일을 그대로 둔다. 큐·잠금 파일은 지우지 않으므로(잠금 inode 유지)
+    리셋 중 들어온 --enqueue는 잠금을 기다렸다가 되살린 큐 뒤에 붙는다.
     """
-    restored = requeue_after_reset(chunks, now)
-    if not restored:
-        return
     with queue_lock(settings, workspace):
-        have = {c.get("id") for c in restored}
-        current = _read_queue(settings, workspace)
-        _write_queue(settings, workspace, restored + [c for c in current if c.get("id") not in have])
+        chunks = _read_queue(settings, workspace)
+        yield chunks
+        if chunks:
+            _write_queue(settings, workspace, requeue_after_reset(chunks))
 
 
 def main(argv: list[str] | None = None) -> int:

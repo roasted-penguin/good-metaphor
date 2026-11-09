@@ -88,7 +88,7 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 - 서버는 인덱스를 열기 전에 `seed-meta.json`을 지금 설정(`WORKSPACE_VERSION`, `EMBEDDING_*`)과 비교해요. 없거나(옛 인덱스) 다르면 열지 않고 `/v1/analogy`가 503("검색 인덱스가 아직 준비되지 않았어요."), `/health`의 `index`가 `{"ready": false, "reason": ...}`예요. 이유와 다시 시드 명령은 `index.reason`과 서버 로그에 있어요(경로는 로그에만).
 - `--reset` 없이 시드 기록이 없거나 지금 설정과 다른 인덱스 위에 넣으려 하면 시드가 아무것도 건드리지 않고 멈춰요(`--reset`을 쓰라고 알려 줘요). 그래프 판본을 모를 때도 멈춰요.
 - `WORKSPACE`는 영문·숫자·`_`·`-`만 돼요. `--reset`은 `LIGHTRAG_WORKING_DIR` 바로 아래 그 폴더만 지우고, 심볼릭 링크면 거절해요.
-- `--reset`은 그 폴더의 추출 큐(`extract-queue.json`)는 지우지 않고 되살려요(T-161, 아래 "추출 큐 워커").
+- `--reset`은 그 폴더(`WORKSPACE`)의 추출 큐(`extract-queue.json`)는 지우지 않고 되살려요(T-161, 아래 "추출 큐 워커").
 - Ollama 응답 벡터 차원이 `EMBEDDING_DIM`과 다르면 시드가 한국어 오류로 멈춰요.
 - LLM은 부르지 않아요. LightRAG가 LLM을 부르려 하면 오류로 멈춰요(버그라는 뜻이에요).
 - 해시 임베딩은 네트워크 없이 도는 개발·테스트용이에요. 실제 검색 품질은 `ollama`로 넣은 인덱스로 봐요. 임베딩을 바꾸면 작업 디렉터리를 지우고 다시 넣어요(벡터 차원·모델이 섞이면 안 돼요).
@@ -115,9 +115,9 @@ EXTRACT_OLLAMA_URL=http://<맥 테일넷 주소>:11434 .venv/bin/python -m app.e
 - 큐에서 청크 id 모양이 안전하지 않거나 워크스페이스가 맞지 않는 청크는 포기로 표시하고 건너뛰어요.
 - `EXTRACT_OLLAMA_URL`이 비어 있으면 워커 전체가 꺼져요(클라우드 대체 포함). `EXTRACT_FALLBACK=cloud`면 맥 주소가 있고 맥이 답하지 않을 때만 사용자 워크스페이스(`common_`으로 시작하지 않는 것) 청크를 서버 LLM(Gemini, `GEMINI_API_KEY`)으로 추출해요. 하루(UTC) `EXTRACT_CLOUD_DAILY_CAP`개까지, 사용 수는 작업 디렉터리의 `extract-usage.json`. 공통 워크스페이스는 늘 맥만.
 - 실제 LightRAG 삽입은 T-421에서 이어요. 지금은 서버 안 루프도 `--once`도 결과를 `<워크스페이스>/extract-results/<청크 id>.json`에 남겨요.
-- 서버 안 루프(T-161): 서버가 뜰 때 `worker.lock`을 잡고 `running` 복구 뒤 창을 열어요. 잠금을 이미 `--once`나 다른 프로세스(uvicorn 워커 여럿 등)가 쥐고 있으면 경고 로그만 남기고 워커 없이 떠요(서버는 정상). 서버를 멈추면 루프를 취소하고 잠금을 풀어요(처리 중이던 청크는 다음 시작 때 `pending`으로). 워커 오류로 서버가 죽지 않아요. 큐 잠금·파일 입출력은 이벤트 루프 밖 스레드에서 해서, `--enqueue`가 큐 잠금을 쥐고 있어도 `/health`·`/v1/analogy`는 기다리지 않아요.
+- 서버 안 루프(T-161): 서버가 뜰 때 `worker.lock`을 잡고 `running` 복구 뒤 창을 열어요. 잠금을 이미 `--once`나 다른 프로세스(uvicorn 워커 여럿 등)가 쥐고 있으면 경고 로그만 남기고 워커 없이 떠요(서버는 정상). 서버를 멈추면 루프를 취소하고, 진행 중인 큐 파일 작업이 끝나길(최대 10초) 기다린 뒤 잠금을 풀어요(처리 중이던 청크는 다음 시작 때 `pending`으로). 워커 오류로 서버가 죽지 않아요. 큐 잠금·파일 입출력은 이벤트 루프 밖 스레드에서 해서, `--enqueue`가 큐 잠금을 쥐고 있어도 `/health`·`/v1/analogy`는 기다리지 않아요.
 - `/health`의 `extract`: `{"enabled": EXTRACT_OLLAMA_URL이 있음, "running": 이 서버가 워커 잠금을 잡고 도는 중}`. 맥 주소·큐 내용은 내보내지 않아요(규칙 10). 개수는 `--status`로 봐요.
-- `seed --reset`과 큐(T-161): 리셋은 워크스페이스 폴더를 지우기 전에 큐를 읽어 두었다가 새 폴더에 되돌려 써요. 인덱스가 지워졌으니 `done` 청크는 `pending`(시도 0)으로 돌아가 다시 추출·삽입되고, `failed`(포기 포함)·`pending`은 그대로예요. `extract-results/`는 인덱스와 함께 지워져요. 추출 워커가 돌고 있으면(서버 실행 중) "추출 워커가 돌고 있어 리셋할 수 없어요. 서버를 멈춘 뒤 다시 해 주세요."로, 큐 파일이 깨졌으면 그 경로와 함께 거절하고 아무것도 지우지 않아요.
+- `seed --reset`과 큐(T-161): 리셋은 리셋하는 워크스페이스(`WORKSPACE`, `settings.workspace`) 하나의 큐만 다뤄요(`EXTRACT_WORKSPACES`의 다른 워크스페이스는 건드리지 않아요). 큐 잠금을 쥔 채 그 폴더에서 `extract-queue.json`·`extract-queue.lock`만 남기고 나머지를 지운 뒤, 같은 잠금 아래 큐를 제자리에서 고쳐 써요(임시 파일 → 이름 바꾸기). 중간에 실패해도 원래 큐 파일이 남고, 리셋 중 `--enqueue`는 잠금을 기다렸다가 되살린 큐 뒤에 붙어요. 인덱스가 지워졌으니 `done` 청크는 `pending`(시도 0)으로 돌아가 다시 추출·삽입되고, `failed`(포기 포함)·`pending`은 그대로예요. `extract-results/`는 인덱스와 함께 지워져요. 추출 워커가 돌고 있으면(서버 실행 중) "추출 워커가 돌고 있어 리셋할 수 없어요. 서버를 멈춘 뒤 다시 해 주세요."로, 큐 파일이 깨졌으면 그 경로와 함께 거절하고 아무것도 지우지 않아요.
 - 맥 포트는 테일넷에만(규칙 10, T-411). `EXTRACT_OLLAMA_URL`이 비면 맥 추출은 꺼져 있어요.
 
 ## 환경변수
