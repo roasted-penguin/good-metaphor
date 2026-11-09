@@ -53,6 +53,7 @@
 | 설정(관심사, 띄우는 방법, 제외 사이트, 고른 제공자·모델, **API 키**) | `chrome.storage.local` | 설정 화면에서 바꾸거나 확장 삭제 |
 | 말풍선 피드백 기록(👍/👎, 고른 개념, 이유, 그 문장 원문과 문장 벡터), 최대 500건, 넘으면 오래된 것부터 지워짐 | `chrome.storage.local` | 설정 화면 "내 피드백"에서 한 건씩 되돌리기 또는 "전부 지우기" |
 | 날짜별 사용 횟수(피드백 통계용, 숫자만) | `chrome.storage.local` | 확장 삭제 |
+| 근거 검사로 숨긴 비유 기록(메일·전화번호·긴 숫자·웹 주소를 가린 문장과 비유 각 200자까지, 숨긴 이유, 개념, 관심사, "괜찮은 비유였어요" 표시), 최대 300건, 넘으면 오래된 것부터 지워짐. 금칙어가 든 것은 남기지 않음. 날짜별 검사 횟수(숫자만, 14일) | `chrome.storage.local`(`groundingLog`, `groundingCounts`) | 설정 화면 "내 피드백"의 "전부 지우기" |
 | 관심사 그래프 벡터 캐시(번들 그래프에서 계산한 숫자, 최대 2,000개) | `chrome.storage.local` | 설정 화면 "검색 모델"의 "캐시 비우기" |
 | 최근 결과 캐시(최대 200개), AI 요청 한도 대기 시간 | `chrome.storage.session`(브라우저를 닫으면 사라짐) | 브라우저 종료, 결과 캐시는 "캐시 비우기"로도 |
 | 첫 실행 안내를 마쳤는지 | `chrome.storage.local` | 확장 삭제 |
@@ -60,7 +61,7 @@
 
 API 키는 이 크롬 프로필에만 저장되고, 그 제공자를 부를 때만 그 제공자에게 보내요.
 
-설정 화면 "내 피드백"의 "JSON으로 내보내기"·"운영자용 교정 내보내기"는 사용자가 누를 때만 사용자 컴퓨터에 파일로 저장돼요. 어디로도 전송되지 않아요.
+설정 화면 "내 피드백"의 "JSON으로 내보내기"·"운영자용 교정 내보내기"는 사용자가 누를 때만 사용자 컴퓨터에 파일로 저장돼요. 어디로도 전송되지 않아요. "운영자용 교정 내보내기" 파일에는 "공통 그래프 개선에 보내기"를 켠 경우에만 최근 7일 근거 검사로 숨긴 비유(가린 문장·비유, 이유, 개념, 날짜, 최대 50건)도 담겨요.
 
 ## 5. 피드백 보내기 동의
 
@@ -92,7 +93,7 @@ Good Metaphor ("좋은비유네용") explains a sentence on a web page with an a
 - **What is sent:** Only when the user holds the modifier key (Alt by default) over a sentence (or, if the user opts into auto mode, rests the cursor on it), the extension sends that sentence, the previous sentence (up to 300 characters), the word under the cursor, and the page title (up to 120 characters) to the AI provider the user selected (or the administrator default), plus facts from the bundled interest graph. If that provider fails, the next provider in the configured order is tried; providers without an API key are skipped, except the local Ollama and a user-entered OpenAI-compatible URL, which need no key. In precise mode (opt-in) each hover makes two provider calls; the first sends only the sentence, the word and the page title. Providers: Groq, Google Gemini, NVIDIA, OpenAI, Anthropic, a user-entered OpenAI-compatible URL, or a local Ollama on the user's own computer. Page URLs, full page content, cookies and history are not sent.
 - **What is not sent:** nothing before the modifier key is pressed; nothing on excluded sites (mail, account login and banking sites by default, editable by the user); nothing from forms with a password field, input fields or code blocks.
 - **Model download:** the embedding model weights are downloaded once from Hugging Face. No user text is sent there. Search runs inside the browser.
-- **Stored on the device only** (`chrome.storage`, plus the model files in the browser cache storage): settings including API keys, up to 500 feedback records (with the original sentence), daily usage counts, a vector cache, and a session-only result cache. Feedback can be cleared from Settings → "내 피드백" → "전부 지우기".
+- **Stored on the device only** (`chrome.storage`, plus the model files in the browser cache storage): settings including API keys, up to 500 feedback records (with the original sentence), up to 300 records of analogies hidden by the grounding check (masked sentence and analogy, reason, concept), daily usage and check counts, a vector cache, and a session-only result cache. Feedback and the grounding-check records can be cleared from Settings → "내 피드백" → "전부 지우기". The hidden-analogy samples go into the operator export file only when the user has opted into feedback sharing.
 - **Feedback sharing consent:** the user can opt in, but there is no server yet, so nothing is transmitted; only the choice is stored. It can be withdrawn at any time in Settings.
 - **No** analytics, ads, tracking, data sale, developer-operated servers, or remote code.
 - Contact: [연락처]

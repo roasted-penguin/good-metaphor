@@ -31,6 +31,7 @@ argument-hint: "<내보낸 JSON 경로, 예: ~/Downloads/good-metaphor-correctio
    - `alsoExampleCandidate: true`인 후보는 4단계에서 같은 문장을 예문으로 넣었으면 버리고, 예문으로 넣지 않았을 때만 평가·가드 후보로 읽는다. 확인: 이번에 넣은 예문과 평가·가드에 넣을 문장 사이에 비슷한 문장이 없는지 다시 `npm run check:corrections`로 본다(4단계 뒤 `tags.json`이 바뀌었으니 공통 예문 대조가 그 문장을 평가·가드 후보에서 뺀다).
    - `evalCandidates` 중 고른 것을 그 관심사 평가셋(표, 메이플 `tools/eval-set.json` / 식당 `tools/eval-set-restaurant.json`)에(메이플에서 학습에 쓰지 않는 검증용이면 `tools/eval-holdout.json`에) `{ sentence, expectNodes, expectTag }` 모양으로. `source`·`alsoExampleCandidate` 필드는 빼고, 3단계와 같은 기준(개인정보·분야 중립·[숫자] 정리)으로 읽는다. `expectNodes`가 정말 맞는 개념인지 사람이 판단한다(한 사용자의 교정이 틀렸을 수 있다).
    - `guardCandidates` 중 지금 그 관심사 평가(`npm run eval -v` / `npm run eval -- --interest restaurant -v`)에서 실제로 맞히는 문장만 그 관심사 가드(표)에 더한다. 식당 가드 파일은 문장만 담은 배열이다. 가드에서 빼는 일은 사용자 승인 없이 하지 않는다.
+6-1. **근거 검사 오탐 샘플(T-146)** 보내기 동의한 사용자의 파일에만 `groundingSamples`가 있다(없으면 건너뛴다). `npm run check:corrections`가 이유별 개수와 오탐 표시(`userFlag: "false-positive"`, 사용자가 "괜찮은 비유였어요"를 누름) 수를 출력한다. 샘플의 가린 문장·비유·`reason`(`fact-mismatch`·`number-outside`)을 읽고, 근거 검사 규칙(T-143 usedFact 대조, T-145 숫자 읽기 후보)을 고칠지 판단한다. 고칠 만하면 공통 데이터가 아니라 새 T-번호 작업으로 `docs/TASKS.md`에 적는다(확장·서버 공유 사례 `tests/fixtures`에 문장을 넣을 때도 개인정보·금칙어 기준은 3단계와 같다).
 7. **판본 올리기** 예문을 바꿨으면 `tags.json`의 `version`을 올리고, 그 관심사 공통 그래프(표)의 `version`도 올린다(서버·확장 결과 캐시 키에 둘이 들어간다).
 8. `npm run test:unit`(그래프·태그 파일 무결성 포함)과 `npm test`를 통과시킨다.
 9. **기록** `docs/EVAL_LOG.md`에 한 줄: 날짜, 반영한 예문 수(태그별), 평가셋·가드에 더한 수, 관심사, 두 관심사의 `eval --guard` 결과(회귀 0), hit@1·hit@3 전후. 내보낸 원본 JSON 파일은 커밋하지 않는다(사용자 문장이다).
