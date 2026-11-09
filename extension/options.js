@@ -240,9 +240,18 @@ async function renderServerPermission() {
   try { granted = await chrome.permissions.contains({ origins: [pattern] }); } catch { /* 확인 실패 = 허용 안 됨 */ }
   $('#grantServer').hidden = granted;
   $('#serverPermHint').hidden = granted;
-  if (granted) setStatus($('#serverPermStatus'), '서버 허용됨', 'ok');
-  else setStatus($('#serverPermStatus'), `서버(${new URL(url).origin})를 쓰려면 허용이 필요해요.`, 'warn');
+  if (!granted) return setStatus($('#serverPermStatus'), `서버(${new URL(url).origin})를 쓰려면 허용이 필요해요.`, 'warn');
+  // 서버가 막 실패해 쉬는 중이면(T-159) 언제 다시 시도하는지 보인다
+  let cd = null;
+  try { cd = (await chrome.storage.session.get('serverCooldown')).serverCooldown; } catch { /* 못 읽으면 쿨다운 없음으로 */ }
+  const left = (Number(cd?.until) || 0) - Date.now();
+  if (left > 0) setStatus($('#serverPermStatus'), `서버가 잠깐 응답하지 않아 ${Math.ceil(left / 60_000)}분 뒤 다시 시도해요.`, 'warn');
+  else setStatus($('#serverPermStatus'), '서버 허용됨', 'ok');
 }
+// 쿨다운이 생기거나 풀리면 문구를 다시 그린다(T-159)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'session' && 'serverCooldown' in changes) renderServerPermission().catch(e => console.warn('서버 상태 확인 실패', e));
+});
 $('#grantServer').addEventListener('click', async () => {
   const pattern = serverOriginPattern(serverUrl());
   if (!pattern) return;
