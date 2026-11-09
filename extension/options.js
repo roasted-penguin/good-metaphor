@@ -2,6 +2,7 @@ import { localDay, formatFeedbackStats } from './lib/feedback.js';
 import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.js';
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
 import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
+import { COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 const SF = globalThis.AnalogySiteFilter;
@@ -129,6 +130,16 @@ async function initOnboarding() {
     $('#onboarding').dataset.ready = '1'; // 보일지 말지 정해졌다는 표시(e2e가 기다림)
   }
 }
+// 1단계 관심사: COMMON_INTERESTS로 라디오를 그린다. 기본(추천)은 DEFAULT_INTEREST, 안내에서는 정식 이름으로 보여 준다
+const OB_INTEREST_LABELS = { maplestory: '메이플스토리' };
+for (const it of COMMON_INTERESTS) {
+  const label = document.createElement('label');
+  const input = Object.assign(document.createElement('input'), { type: 'radio', name: 'obInterest', value: it.id, checked: it.id === DEFAULT_INTEREST });
+  const span = document.createElement('span');
+  span.textContent = (OB_INTEREST_LABELS[it.id] || it.label) + (it.id === DEFAULT_INTEREST ? ' (추천)' : '');
+  label.append(input, span);
+  $('#obInterest').append(label);
+}
 document.querySelectorAll('input[name=obTrigger]').forEach(r => r.addEventListener('change', () => {
   $('#obAutoWarn').hidden = document.querySelector('input[name=obTrigger]:checked')?.value !== 'auto';
 }));
@@ -143,10 +154,15 @@ async function finishOnboarding(patch) {
     await chrome.storage.local.set({ onboarding: { pending: false, doneAt: Date.now() } });
     $('#onboarding').hidden = true;
     renderTrigger(state.settings);
+    if (document.querySelector('input[name=interest]:checked')?.value !== (state.settings.interest || DEFAULT_INTEREST)) { // 사용 방식 관심사·공통 저장소 칸도 저장된 값으로
+      renderInterest(state.settings.interest);
+      await refreshCommon().catch(err => { $('#commonTitle').textContent = '불러오기 실패: ' + err.message; });
+    }
     await loadFeedback(); // #fbShare를 저장된 값으로
   } catch (err) { setStatus($('#obStatus'), err.message, 'err'); }
 }
 $('#obStart').addEventListener('click', () => finishOnboarding({
+  interest: document.querySelector('input[name=obInterest]:checked')?.value || DEFAULT_INTEREST,
   triggerMode: document.querySelector('input[name=obTrigger]:checked')?.value || 'modifier',
   feedbackShare: $('#obShareYes').getAttribute('aria-pressed') === 'true'
 }));

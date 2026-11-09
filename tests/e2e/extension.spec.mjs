@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startServers, calls, analogyCalls, SERVER_ANALOGY, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES } from './servers.mjs';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
+import { COMMON_INTERESTS } from '../../extension/lib/graph.js';
 import { openBrowserEmbedder } from '../../tools/browser-embedder.mjs';
 
 const EXT = path.resolve('.tmp/ext-e2e');
@@ -708,7 +709,7 @@ async function openFirstRun(ext) {
 test('첫 실행 안내(T-116): 자동 + 보내기 → 시작하기면 저장되고 아래 칸도 같은 값, 새로고침해도 안 뜸', async ({ ext }) => {
   const op = await openFirstRun(ext);
   await expect(op.locator('#onboarding')).toBeVisible();
-  await expect(op.locator('#onboarding h2')).toHaveText('처음 오셨네요. 두 가지만 골라 주세요');
+  await expect(op.locator('#onboarding h2')).toHaveText('처음 오셨네요. 세 가지만 골라 주세요');
   await expect(op.locator('input[name=obTrigger][value=modifier]')).toBeChecked();
   await expect(op.locator('#obAutoWarn')).toBeHidden();
   // 동의는 미리 선택된 값 없음
@@ -759,6 +760,44 @@ test('첫 실행 안내(T-116): 아무것도 안 고르고 넘기기 → 설정�
   await op.reload();
   await expect(op.locator('#onboarding[data-ready="1"]')).toHaveCount(1);
   await expect(op.locator('#onboarding')).toBeHidden();
+});
+
+test('첫 실행 안내(T-158): 1단계 관심사 — 목록은 COMMON_INTERESTS, 기본 메이플, 식당 고르고 시작하기면 저장·사용 방식·팝업도 식당', async ({ context, ext, extId }) => {
+  const op = await openFirstRun(ext);
+  await expect(op.locator('#onboarding')).toBeVisible();
+  // 단계 번호: 관심사가 1번, 기존 두 단계는 2·3번
+  await expect(op.locator('#onboarding .ob-step h3')).toHaveText([
+    '1. 무엇으로 비유할까요?', '2. 언제 설명을 띄울까요?', '3. 더 나은 비유를 위해 피드백을 보내 주실래요?'
+  ]);
+  const radios = op.locator('input[name=obInterest]');
+  await expect(radios).toHaveCount(COMMON_INTERESTS.length);
+  expect(await radios.evaluateAll(rs => rs.map(r => r.value))).toEqual(COMMON_INTERESTS.map(i => i.id));
+  await expect(op.locator('#obInterest label')).toHaveText(['메이플스토리 (추천)', '식당']);
+  await expect(op.locator('input[name=obInterest][value=maplestory]')).toBeChecked();
+
+  await op.locator('label:has(input[name=obInterest][value=restaurant])').click();
+  await expect(op.locator('input[name=obInterest][value=restaurant]')).toBeChecked();
+  await op.click('#obStart');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'settings'))?.interest).toBe('restaurant');
+  await expect(op.locator('input[name=interest][value=restaurant]')).toBeChecked(); // 사용 방식 칸도 같은 값
+  await expect(op.locator('#commonTitle')).toHaveText(/^식당 · /);
+
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await expect(popup.locator('input[name=interest][value=restaurant]')).toBeChecked();
+  await popup.close();
+});
+
+test('첫 실행 안내(T-158): 넘기기는 저장된 관심사를 바꾸지 않는다(안내에서 메이플이 골라져 있어도)', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  await ext.setSettings({ interest: 'restaurant' });
+  await expect(op.locator('input[name=obInterest][value=maplestory]')).toBeChecked();
+  await op.click('#obSkip');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  expect((await storageGet(op, 'settings')).interest).toBe('restaurant');
+  await expect(op.locator('input[name=interest][value=restaurant]')).toBeChecked();
 });
 
 test('첫 실행 안내(T-137): 보내기 동의 버튼은 이름 붙은 group으로 묶인다', async ({ ext }) => {
