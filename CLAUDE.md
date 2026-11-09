@@ -116,7 +116,8 @@ scripts/                     build, prepare-e2e
 - 확장 페이지는 `eval`이 막혀 있어 Playwright `waitForFunction('문자열')`이 실패한다. `page.evaluate(함수)`나 `expect.poll`을 쓴다.
 - 모델 다운로드처럼 긴 작업 중 서비스 워커가 잠들 수 있다. `keepAlive()`로 감싼다.
 - **검색 조정은 회귀 0이어야 한다**(사용자 원칙, 2026-10-18). 합계가 올라도 잘 맞던 문장이 틀리면 채택하지 않는다. q8 임베딩은 함께 묶인 배치에 따라, 그리고 Node와 브라우저 사이에서 벡터가 달라진다. 임베딩은 항상 `embedEach`로 한 문장씩, 평가는 실제 확장 안에서 한다(ADR 0011). Node 수치를 실제 결과처럼 보고하지 말 것.
-- 회사망 등에서 Hugging Face가 막히면 모델 로드가 실패하고 대체 임베더로 조용히 바뀐다(`fallbackOnError`). 품질 비교 때 `debug.embedderId`를 꼭 확인.
+- 회사망 등에서 Hugging Face가 막히면 모델 로드가 실패하고 대체 임베더로 바뀐다(`fallbackOnError`, T-102 전에는 오프스크린 상태의 `error` 필드 때문에 실제로는 대체로 안 바뀌고 "Failed to fetch"로 실패했다). 설정 화면 검색 모델 칸에 "대체 검색 사용 중 · 모델 로드 실패: <한국어 원인>"이 보인다. 오프스크린 응답에 `error` 키를 상태 값으로 넣지 말 것(`offscreen()`이 요청 실패로 보고 던진다, 로드 실패 원문은 `loadError`). 품질 비교 때 `debug.embedderId`를 꼭 확인.
+- `admin.json` `embedding.remoteHost`로 모델 파일을 사내 미러에서 받을 수 있다(https만, localhost는 http 허용, e2e 느린 네트워크 테스트가 씀). 개인정보 처리방침은 모델 출처를 Hugging Face로만 적어서 **스토어 빌드는 기본값이 아니면 멈춘다**(`serverUrlErrors`). 서비스 워커 수명 확인은 Playwright가 서비스 워커에 붙으면 유휴 종료가 꺼지므로 `tests/e2e/raw-cdp.mjs`로 한다.
 - 모델 ID·가격은 2026-09-28에 각 사 문서로 확인한 값이다. 바뀌면 `config/admin.json`의 `defaultModels`·`fallbackChain`과 `lib/providers.js`를 함께 고친다.
 - **모델을 고르거나 바꿀 때 성능 비교는 [Artificial Analysis 리더보드](https://artificialanalysis.ai/leaderboards/models)를 먼저 참고한다**(지능 지수, 출력 속도, 첫 토큰 지연, 가격). 후보를 거기서 추린 뒤 `npm run smoke:providers`(`--all-models`)로 이 앱 기준(뜻까지 시간, 존댓말, 근거 준수, JSON, 무료 한도)을 직접 잰다. 리더보드 수치는 확인한 날짜와 함께 적는다.
 - Gemini 3.x는 `thinkingConfig`를 받지 않는 모델이 있어 400이면 빼고 재시도한다.

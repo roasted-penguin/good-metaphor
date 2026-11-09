@@ -14,6 +14,7 @@ import { syncCorrectionExamples, buildCorrectionsExport } from './lib/correction
 import { buildDraftPrompt } from './lib/prompt.js';
 import { parseDraft, validDraftName, draftNameError, demoDraftText, withDeadline, draftError, DRAFT_DEADLINE_MS } from './lib/draft.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
+import { loadErrorReason } from './lib/embed-status.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -84,6 +85,8 @@ async function saveVecCache() {
 
 async function ensureGraphVectors(graph) {
   const init = await keepAlive(offscreen('init'));
+  // fallbackOnError false면 대체 검색으로 넘어가지 않고 여기서 멈춘다(원인은 짧은 한국어로)
+  if (init.status === 'error') throw new Error('검색 모델을 준비하지 못했어요: ' + loadErrorReason(init.loadError));
   const embedderId = init.embedderId;
   const cache = await loadVecCache();
   const admin = await getAdminConfig();
@@ -106,7 +109,7 @@ async function ensureGraphVectors(graph) {
     if (missing.length || removed) await saveVecCache();
   }
   const vecs = new Map(items.map(it => [it.key, pruned.get(it.cacheKey)]));
-  return { vecs, embedderId, embedderStatus: init.status };
+  return { vecs, embedderId, embedderStatus: init.status, loadError: init.loadError || null };
 }
 
 /* ───────────── 설명 파이프라인 ───────────── */
@@ -507,7 +510,7 @@ const handlers = {
   async 'embed:warmup'() {
     const { graph } = await getMergedGraph();
     const r = await ensureGraphVectors(graph);
-    return { embedderId: r.embedderId, status: r.embedderStatus, vectors: r.vecs.size };
+    return { embedderId: r.embedderId, status: r.embedderStatus, vectors: r.vecs.size, loadError: r.loadError };
   },
   async 'embed:status'() {
     const ctx = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });

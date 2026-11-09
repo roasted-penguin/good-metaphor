@@ -3,6 +3,7 @@
 import { pipeline, env } from '@huggingface/transformers';
 import { hashEmbed, FALLBACK_ID } from '../extension/lib/fallback-embed.js';
 import { embedEach } from '../extension/lib/embed-each.js';
+import { remoteHostError } from '../extension/lib/embed-status.js';
 
 env.allowLocalModels = false;
 env.useWasmCache = false; // blob: URL import 는 확장 CSP 에서 막히므로 끔
@@ -12,7 +13,8 @@ env.backends.onnx.wasm.wasmPaths = {
 };
 env.backends.onnx.wasm.numThreads = 1;
 
-const state = { status: 'idle', embedderId: null, progress: 0, file: '', error: null };
+// loadError: 모델 로드 실패 원문. 'error'라고 부르지 않는다 — background의 offscreen()은 응답의 error를 요청 실패로 보고 던진다(T-102)
+const state = { status: 'idle', embedderId: null, progress: 0, file: '', loadError: null };
 let extractor = null;
 let loading = null;
 let cfg = null;
@@ -23,11 +25,15 @@ async function load(config) {
   if (loading) return loading;
   loading = (async () => {
     if (config.model === '__fallback__') {
-      Object.assign(state, { status: 'fallback', embedderId: FALLBACK_ID, error: null });
+      Object.assign(state, { status: 'fallback', embedderId: FALLBACK_ID, loadError: null });
       return state;
     }
+    // 모델 파일(데이터)만 받는 주소. 기본은 Hugging Face, 관리자가 사내 미러를 둘 수 있다(e2e는 느린 가짜 서버)
     state.status = 'loading';
     try {
+      const hostErr = remoteHostError(config.remoteHost);
+      if (hostErr) throw new Error(hostErr); // https가 아니면 받지 않고 실패로(대체 검색 또는 오류)
+      if (config.remoteHost) env.remoteHost = config.remoteHost;
       const files = new Map();
       extractor = await pipeline('feature-extraction', config.model, {
         dtype: config.dtype || 'q8',
@@ -42,10 +48,10 @@ async function load(config) {
           }
         }
       });
-      Object.assign(state, { status: 'ready', embedderId: `${config.model}@${config.dtype || 'q8'}`, progress: 1, error: null });
+      Object.assign(state, { status: 'ready', embedderId: `${config.model}@${config.dtype || 'q8'}`, progress: 1, loadError: null });
     } catch (e) {
       console.error('[offscreen] 모델 로드 실패', e);
-      state.error = String(e?.message || e);
+      state.loadError = String(e?.message || e);
       if (config.fallbackOnError !== false) {
         Object.assign(state, { status: 'fallback', embedderId: FALLBACK_ID });
       } else {
@@ -73,6 +79,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case 'status': return { ...state };
       case 'embed': {
         if (!extractor && state.status !== 'fallback') await load(msg.config || cfg);
+        // fallbackOnError false로 로드에 실패했으면 대체 벡터를 몰래 돌려주지 않는다
+        if (state.status === 'error') throw new Error('검색 모델을 준비하지 못했어요: ' + (state.loadError || '알 수 없는 오류'));
         return { vectors: await embed(msg.texts, msg.kind), embedderId: state.embedderId };
       }
       default: throw new Error('알 수 없는 요청: ' + msg.type);
