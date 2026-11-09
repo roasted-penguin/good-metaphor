@@ -76,6 +76,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/shadow.js              열린 shadow root 모으기·shadow 경계 블록·`composedParent` (클래식 스크립트, T-111)
   lib/vec-cache.js           그래프 벡터 캐시 정리: 다른 임베더 삭제, 2,000개 LRU (T-110)
   lib/blocklist.js           금칙어 필터(`applyBlocklist`): 출력 직전·스트리밍 뜻·서버 결과·정밀 모드 추상화까지. 확장·서버 같은 규칙 (T-114)
+  lib/grounding-log.js       근거 검사로 숨긴 비유를 이 기기에 기록(가린 문장, 금칙어 제외, 300건)·7일 집계·오탐 표시, 보내기 동의 시 운영자 내보내기에 샘플 (T-146)
   lib/prompt.js              프롬프트, 데모 응답, 조사 처리
   lib/fallback-embed.js      모델 없을 때 쓰는 글자 n-gram 임베더
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)

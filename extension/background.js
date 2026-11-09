@@ -8,9 +8,10 @@ import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
-import { applyBlocklist, findBlocked } from './lib/blocklist.js';
+import { applyBlocklist, findBlocked, activeTerms } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
 import { syncCorrectionExamples, buildCorrectionsExport } from './lib/corrections.js';
+import { makeGroundingEntry, addGroundingEntry, bumpGroundingCount, flagGroundingEntry, summarizeGrounding } from './lib/grounding-log.js';
 import { buildDraftPrompt } from './lib/prompt.js';
 import { parseDraft, validDraftName, draftNameError, demoDraftText, withDeadline, draftError, DRAFT_DEADLINE_MS } from './lib/draft.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
@@ -137,6 +138,25 @@ function countHover() {
   return hoverQueue;
 }
 const sentenceHashOf = sentence => sha1(String(sentence || '').trim());
+
+// 근거 검사 실사용 오탐률(T-146). 이 기기에만 쌓는다(D-7, 서버로 보내지 않음).
+// 숨김은 groundingLog에 가린 문장·비유로 한 건, 통과는 groundingCounts에 날짜별 개수만.
+// 호버 응답을 늦추지 않게 기다리지 않고 부르고, 실패해도 결과는 그대로(경고만). countHover처럼 차례로 쓴다
+let groundingQueue = Promise.resolve();
+function recordGrounding({ grounding, hidden, sentence, interest, blocklist }) {
+  if (!grounding) return groundingQueue; // 근거 검사를 안 한 결과(규칙 1 숨김, 비유 없음)는 세지 않는다
+  const ts = Date.now();
+  groundingQueue = groundingQueue.then(async () => {
+    const { groundingLog, groundingCounts } = await chrome.storage.local.get(['groundingLog', 'groundingCounts']);
+    const patch = { groundingCounts: bumpGroundingCount(groundingCounts || {}, localDay(ts), !grounding.ok) };
+    if (!grounding.ok) {
+      const entry = makeGroundingEntry({ id: crypto.randomUUID(), ts, reason: grounding.reason, nodeId: hidden?.nodeId, interest, sentence, analogy: hidden?.analogy }, activeTerms(blocklist));
+      if (entry) patch.groundingLog = addGroundingEntry(groundingLog || [], entry);
+    }
+    await chrome.storage.local.set(patch);
+  }).catch(e => console.warn('근거 검사 기록 실패', e));
+  return groundingQueue;
+}
 
 const RESULT_CACHE_MAX = 200;
 async function cacheGet(key) {
@@ -288,10 +308,13 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const tags = topTags(q, graph, vecs, 5);
 
   // 비유 프롬프트 → LLM → 파싱 → 규칙 1 nodeId 검증 → 근거 검사(T-123) → 금칙어 검사(T-114)는 lib/pipeline.js(T-104)
-  const { answer, grounding, evidence, blocked } = await runAnalogy({
+  const { answer, grounding, groundingHidden, evidence, blocked } = await runAnalogy({
     sentence, word, context, pageTitle, graph, candidates, ask,
     providerKind: provider.def.kind, onStage, onPartial, blocklist
   });
+  // 기기 안 오탐률 기록(T-146). 기다리지 않는다. 관심사는 공통 그래프 id(내 관심사만 쓰면 null)
+  try { recordGrounding({ grounding, hidden: groundingHidden, sentence, interest: graph.sources?.common?.id ?? null, blocklist }); }
+  catch (e) { console.warn('근거 검사 기록 실패', e); }
 
   const result = {
     meaning: answer.meaning || '',
@@ -578,17 +601,36 @@ const handlers = {
     const { hoverCounts } = await chrome.storage.local.get('hoverCounts');
     return summarizeFeedback(await feedbackStore.get(), hoverCounts || {}, localDay(Date.now()));
   },
+  // 근거 검사 주간 집계(T-146, "내 피드백" 아래)
+  async 'grounding:stats'() {
+    const { groundingLog, groundingCounts } = await chrome.storage.local.get(['groundingLog', 'groundingCounts']);
+    return summarizeGrounding(groundingLog || [], groundingCounts || {}, localDay(Date.now()));
+  },
+  // "괜찮은 비유였어요"(오탐 표시). flag null이면 표시를 뗀다. 기록 쓰기와 겹치지 않게 같은 차례로
+  async 'grounding:flag'({ id, flag }) {
+    const job = groundingQueue.then(async () => {
+      const { groundingLog } = await chrome.storage.local.get('groundingLog');
+      await chrome.storage.local.set({ groundingLog: flagGroundingEntry(groundingLog || [], id, flag ?? null) });
+    });
+    groundingQueue = job.catch(() => {}); // 실패해도 다음 기록은 이어서
+    await job;
+    return true;
+  },
   // 운영자용 교정 내보내기(T-131). 공통 노드·공통 태그 대상만, 가린 문장만. 서버로 보내지 않는다(설정 화면이 로컬 파일로 받는다)
   async 'corrections:export'() {
     // 공통 그래프로 노드·기존 예문을 찾는다(내 관심사만 쓰는 useCommon false여도 공통 노드 교정을 내보낸다).
     // 지금 고른 관심사(settings.interest) 하나만(T-157). 파일 최상위 interest로 승인 절차가 그 관심사 평가셋·가드로 간다.
     // 다른 관심사 기록은 buildCorrectionsExport가 걸러 한 파일에 섞이지 않는다. 모르는 값이면 로더처럼 메이플
-    const [records, settings, blockTerms] = await Promise.all([feedbackStore.get(), getSettings(), loadBlocklist()]);
+    const [records, settings, blockTerms, { groundingLog }] = await Promise.all([feedbackStore.get(), getSettings(), loadBlocklist(), chrome.storage.local.get('groundingLog')]);
     const interest = commonInterest(settings.interest)?.id || DEFAULT_INTEREST;
     const common = await loadCommonGraph(interest);
     return buildCorrectionsExport(records, common, {
       interest,
       blockTerms,
+      // 근거 검사 숨김 샘플(T-146)은 보내기 동의가 켜졌을 때만 싣는다
+      share: settings.feedbackShare === true,
+      groundingLog: groundingLog || [],
+      today: localDay(Date.now()),
       commonTagIds: new Set(common.tags.map(t => t.id)),
       commonGraphVersion: common.version ?? null,
       tagsVersion: common.tagsVersion ?? null
@@ -597,6 +639,10 @@ const handlers = {
   // 결과 캐시 키에 피드백 지문이 있어서 캐시는 따로 안 지워도 된다
   async 'feedback:clear'() {
     await feedbackStore.set([]);
+    // 근거 검사 기록(T-146)도 함께 지운다(처리방침과 같게). 기록 쓰기 차례 뒤에 지워 지운 뒤 되살아나지 않게
+    const job = groundingQueue.then(() => chrome.storage.local.remove(['groundingLog', 'groundingCounts']));
+    groundingQueue = job.catch(() => {});
+    await job;
     await syncBoosts([]);
     await syncCorrections([]);
     return true;

@@ -1,4 +1,5 @@
 import { localDay, formatFeedbackStats } from './lib/feedback.js';
+import { formatGroundingStats, GROUNDING_REASON_LABEL, FALSE_POSITIVE } from './lib/grounding-log.js';
 import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.js';
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
 import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
@@ -671,10 +672,13 @@ let fbLoadSeq = 0;
 let fbSharePending = false; // 보내기 토글 저장 중
 async function loadFeedback() {
   const seq = ++fbLoadSeq;
-  const [list, st] = await Promise.all([send('feedback:list'), send('feedback:stats')]);
+  const [list, st, gst] = await Promise.all([send('feedback:list'), send('feedback:stats'),
+    send('grounding:stats').catch(() => null)]); // 근거 검사 집계가 실패해도 피드백 목록은 그린다
+  const gTotal = gst?.total || 0;
   if (seq !== fbLoadSeq) return;
   fbItems = list.items;
   $('#fbStats').textContent = formatFeedbackStats(st);
+  renderGrounding(gst);
   $('#fbList').innerHTML = fbItems.map(it => {
     // 라벨이 없으면(고른 개념 없음 등) 날짜만. 구분점이 홀로 남지 않게
     const meta = [it.vote === 'pick' ? it.pickedLabel : it.nodeLabel, localDay(it.ts)].filter(Boolean).join(' · ');
@@ -692,8 +696,30 @@ async function loadFeedback() {
   if (!fbSharePending) $('#fbShare').checked = list.share; // 저장 중이면 누른 값을 덮지 않는다
   renderSharePreview();
   $('#fbExport').disabled = !fbItems.length;
-  $('#fbCorrections').disabled = !fbItems.length;
-  $('#fbClear').disabled = !fbItems.length;
+  // 근거 검사 기록(T-146)만 있어도 운영자 파일(동의 시 샘플)·지우기를 쓸 수 있다
+  $('#fbCorrections').disabled = !fbItems.length && !gTotal;
+  $('#fbClear').disabled = !fbItems.length && !gTotal;
+}
+
+// 근거 검사 주간 집계와 최근 숨김(T-146). 문장·비유는 이미 가린 것만 온다
+function renderGrounding(gst) {
+  if (!gst) {
+    $('#fbGroundingStats').textContent = '근거 검사 기록을 읽지 못했어요.';
+    $('#fbGroundingList').hidden = true;
+    return;
+  }
+  $('#fbGroundingStats').textContent = formatGroundingStats(gst);
+  $('#fbGroundingList').innerHTML = gst.recent.map(e => {
+    const flagged = e.userFlag === FALSE_POSITIVE;
+    return `
+    <li data-id="${esc(e.id)}">
+      <span class="fb-reason">${esc(GROUNDING_REASON_LABEL[e.reason] || e.reason)}</span>
+      <span class="fb-text"><span class="fb-sentence" title="${esc(e.sentenceMasked)}">${esc(clip(e.sentenceMasked))}</span>
+        <span class="hint" title="${esc(e.analogyMasked)}">${esc(clip(e.analogyMasked, 60))} · ${esc(localDay(e.ts))}</span></span>
+      <button class="fb-flag" aria-pressed="${flagged}">${flagged ? '표시했어요 · 취소' : '괜찮은 비유였어요'}</button>
+    </li>`;
+  }).join('');
+  $('#fbGroundingList').hidden = !gst.recent.length;
 }
 // 되돌리기·지우기 뒤 다시 읽기. 실패하면 이전 목록을 두고 오류 문구
 const reloadFeedback = () => loadFeedback().catch(() => setStatus($('#fbStatus'), '목록을 다시 읽지 못했어요.', 'err'));
@@ -702,7 +728,7 @@ const reloadFeedback = () => loadFeedback().catch(() => setStatus($('#fbStatus')
 // 호버가 이어질 때 매번 읽지 않게 짧게 모아서 한 번만 읽는다
 let fbChangeTimer = null;
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !(changes.feedback || changes.hoverCounts)) return;
+  if (area !== 'local' || !(changes.feedback || changes.hoverCounts || changes.groundingLog || changes.groundingCounts)) return;
   clearTimeout(fbChangeTimer);
   fbChangeTimer = setTimeout(reloadFeedback, 150);
 });
@@ -711,6 +737,17 @@ $('#fbList').addEventListener('click', async e => {
   const li = e.target.closest('.fb-undo')?.closest('li');
   if (!li) return;
   try { await send('feedback-undo', { id: li.dataset.id }); setStatus($('#fbStatus'), '되돌렸어요.', 'ok'); }
+  catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+  await reloadFeedback();
+});
+
+// "괜찮은 비유였어요"(오탐 표시, T-146). 다시 누르면 표시를 뗀다
+$('#fbGroundingList').addEventListener('click', async e => {
+  const btn = e.target.closest('.fb-flag');
+  const li = btn?.closest('li');
+  if (!li) return;
+  const on = btn.getAttribute('aria-pressed') !== 'true';
+  try { await send('grounding:flag', { id: li.dataset.id, flag: on ? FALSE_POSITIVE : null }); setStatus($('#fbStatus'), on ? '괜찮은 비유였다고 표시했어요.' : '표시를 뗐어요.', 'ok'); }
   catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
   await reloadFeedback();
 });
@@ -734,12 +771,14 @@ $('#fbCorrections').addEventListener('click', async () => {
     // 파일 이름에 관심사 id(T-157). 승인 절차가 그 관심사 평가셋·가드로 간다
     downloadJson(data, `good-metaphor-corrections-${data.interest}-${localDay(Date.now())}.json`);
     const n = data.exampleCandidates.length;
-    setStatus($('#fbStatus'), n ? `예문 후보 ${n}개를 내보냈어요.` : '공통 그래프 교정이 아직 없어요. 빈 파일을 내보냈어요.', 'ok');
+    // 근거 검사 샘플(T-146)은 보내기 동의가 켜졌을 때만 들어 있다
+    const g = data.groundingSamples?.length ? ` 근거 검사 샘플 ${data.groundingSamples.length}개도 담았어요.` : '';
+    setStatus($('#fbStatus'), (n ? `예문 후보 ${n}개를 내보냈어요.` : '공통 그래프 교정이 아직 없어요. 빈 파일을 내보냈어요.') + g, 'ok');
   } catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
 });
 
 $('#fbClear').addEventListener('click', async () => {
-  if (!confirm('남긴 피드백을 모두 지울까요? 되돌릴 수 없어요.')) return;
+  if (!confirm('남긴 피드백과 근거 검사 기록을 모두 지울까요? 되돌릴 수 없어요.')) return;
   try { await send('feedback:clear'); setStatus($('#fbStatus'), '모두 지웠어요.', 'ok'); }
   catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
   await reloadFeedback();

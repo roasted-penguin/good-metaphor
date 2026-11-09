@@ -22,9 +22,10 @@ export async function runAbstract({ sentence, word, pageTitle, ask, onStage = ()
 //   뜻에 금칙어가 있으면 보내지 않는다
 // - blocklist: 금칙어 용어 카드 배열(data/common/blocklist.json 의 terms). 부르는 쪽이 읽어 준다. 없으면 빈 목록
 // - JSON 이 아니면 '모델 응답을 해석하지 못했어요: …' 오류를 던진다.
-// 돌려주는 값: { answer, chosen, rejected, grounding, evidence, blocked }
+// 돌려주는 값: { answer, chosen, rejected, grounding, groundingHidden, evidence, blocked }
 //   answer: 검증 뒤의 모델 답(규칙 1·근거·금칙어 위반이면 analogy '', rejected 문구)
 //   chosen: 검증을 통과한 후보(없으면 null), grounding: 근거 검사 결과(검사 안 했으면 null)
+//   groundingHidden: 근거 검사로 숨긴 비유 { analogy, nodeId } 또는 null(T-146 기기 안 기록용, 결과에 싣지 않는다)
 //   blocked: 금칙어에 걸린 첫 필드 { field, term: '(가림)' } 또는 null. 금칙어 자체는 담지 않는다
 export async function runAnalogy({ sentence, word, context, pageTitle, graph, candidates, ask, providerKind, onStage = () => {}, onPartial = null, blocklist = [] }) {
   onStage('generate');
@@ -56,10 +57,13 @@ export async function runAnalogy({ sentence, word, context, pageTitle, graph, ca
   }
   // 근거 검사(T-123): 고른 노드 facts 밖의 사실(usedFact 불일치, 지어낸 숫자)이면 비유를 버린다
   let grounding = null;
+  let groundingHidden = null;
   if (answer.analogy && chosen) {
     const labels = [chosen.label, ...(chosen.neighbors || []).map(n => n.label)];
     grounding = checkGrounding({ analogy: answer.analogy, usedFact: answer.usedFact, facts: chosen.facts, sentence, context, labels });
     if (!grounding.ok) {
+      // 숨긴 비유는 기기 안 오탐률 기록(T-146)에만 넘긴다. 말풍선·결과 캐시에는 싣지 않는다
+      groundingHidden = { analogy: answer.analogy, nodeId: chosen.id };
       answer.analogy = '';
       answer.rejected = GROUNDING_REJECTED_TEXT;
       chosen = null;
@@ -80,5 +84,5 @@ export async function runAnalogy({ sentence, word, context, pageTitle, graph, ca
     // 공통 노드의 검수 날짜(T-118). 말풍선이 "검수 YYYY-MM"으로 보인다. 사용자 노드·날짜 없음은 null
     verifiedAt: chosen.source === 'common' ? (graph.nodes || []).find(n => n.id === chosen.id)?.verifiedAt || null : null
   } : null;
-  return { answer, chosen, rejected: answer.rejected || null, grounding, evidence, blocked };
+  return { answer, chosen, rejected: answer.rejected || null, grounding, groundingHidden, evidence, blocked };
 }

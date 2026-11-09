@@ -228,3 +228,13 @@ test('근거에 공통 노드의 검수 날짜(verifiedAt)를 싣는다, 사용�
   const r2 = await runAnalogy(base({ ask: ask2, graph: userGraph, candidates: userCands }));
   assert.equal(r2.evidence.verifiedAt, null, '사용자 노드는 표시하지 않는다');
 });
+
+test('근거 검사(T-146): 숨긴 비유와 그 노드를 groundingHidden으로 돌려준다(기기 안 오탐률 기록용), 통과면 null', async () => {
+  const bad = '메이플로 치면 주간 보스를 일주일에 7번만 잡는 것과 같아요.';
+  const r = await runAnalogy(base({ ask: fakeAsk(JSON.stringify({ ...OK_ANSWER, analogy: bad })).ask }));
+  assert.deepEqual(r.groundingHidden, { analogy: bad, nodeId: 'weekly-boss' });
+  const ok = await runAnalogy(base({ ask: fakeAsk(JSON.stringify(OK_ANSWER)).ask }));
+  assert.equal(ok.groundingHidden, null);
+  const rule1 = await runAnalogy(base({ ask: fakeAsk(JSON.stringify({ ...OK_ANSWER, nodeId: 'starforce' })).ask }));
+  assert.equal(rule1.groundingHidden, null);
+});

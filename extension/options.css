@@ -86,6 +86,13 @@ kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-
 .site-add { margin-top: 10px; flex-wrap: wrap; }
 .site-add input { flex: 1; min-width: 180px; }
 #siteStatus { margin: 6px 0 0; min-height: 1em; }
+/* 근거 검사 오탐률 (T-146) */
+.fb-grounding { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.fb-grounding h3 { font-size: 13.5px; margin: 0 0 6px; }
+.fb-grounding .hint { margin: 6px 0 0; }
+.fb-reason { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); min-width: 72px; }
+.fb-flag { flex: none; padding: 4px 10px; font-size: 12px; }
+.fb-flag[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .fb-share { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .fb-share > label { font-weight: 600; }
 .fb-preview { margin-top: 8px; background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; word-break: break-all; }
