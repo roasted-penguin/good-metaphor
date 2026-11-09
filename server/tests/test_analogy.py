@@ -348,6 +348,53 @@ def test_rate_limiter_window_slides():
     assert rl.allow("t")
 
 
+def test_rate_limit_429_has_retry_after_header():
+    # T-160: 한도 초과 429 에 Retry-After(정수 초, 1 이상 창 길이 이하). 다른 응답에는 없다
+    client, *_ = _client(settings=_settings(rate_limit_per_min=1))
+    ok = _post(client, "강화 문장 하나예요.")
+    assert ok.status_code == 200
+    assert "retry-after" not in ok.headers
+    res = _post(client, "강화 문장 둘이에요.")
+    assert res.status_code == 429
+    assert res.json() == {"error": "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요."}
+    value = res.headers["retry-after"]
+    assert value.isdigit(), value
+    assert 1 <= int(value) <= 60
+
+
+def test_retry_after_zero_when_not_blocked():
+    from app.ratelimit import RateLimiter
+
+    now = [1000.0]
+    rl = RateLimiter(limit=2, window=60, clock=lambda: now[0])
+    assert rl.retry_after("없는 토큰") == 0
+    assert rl.allow("t")
+    assert rl.retry_after("t") == 0  # 아직 한 자리 남음
+    assert "없는 토큰" not in rl._hits  # 읽기만 한다
+
+
+def test_retry_after_counts_until_oldest_hit_leaves_window():
+    from app.ratelimit import RateLimiter
+
+    now = [1000.0]
+    rl = RateLimiter(limit=2, window=60, clock=lambda: now[0])
+    assert rl.allow("t")
+    now[0] = 1010.0
+    assert rl.allow("t")
+    assert not rl.allow("t")
+    assert rl.retry_after("t") == 50  # 가장 오래된 1000 이 1060 에 창 밖으로
+    now[0] = 1030.4
+    assert rl.retry_after("t") == 30  # 29.6 → 올림 30
+    now[0] = 1059.99
+    assert rl.retry_after("t") == 1  # 소수 초도 최소 1
+    now[0] = 1060.0
+    assert rl.retry_after("t") == 0  # 정확히 창 끝이면 allow 가 통과시킨다
+    assert rl.allow("t")
+    assert rl.retry_after("t") == 10  # 이제 가장 오래된 기록은 1010
+    # retry_after 는 기록을 바꾸지 않는다
+    assert len(rl._hits["t"]) == 2
+
+
 def test_missing_token_is_400():
     client, *_ = _client()
     res = _post(client, "강화 문장이에요.", headers={})

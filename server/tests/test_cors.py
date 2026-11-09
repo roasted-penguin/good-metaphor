@@ -97,3 +97,11 @@ def test_preflight_rejects_other_methods_and_headers():
     assert res.status_code == 400
     res = _preflight(client, EXT_ORIGIN, headers="content-type,x-other")
     assert res.status_code == 400
+
+
+def test_allowed_response_exposes_retry_after():
+    # T-160: 허용 출처의 브라우저가 429 의 Retry-After 를 읽을 수 있게 노출한다
+    client = _client(allowed_origins=(EXT_ORIGIN,))
+    res = client.post("/v1/analogy", json={"sentence": "x"}, headers={"Origin": EXT_ORIGIN})
+    assert res.headers["access-control-allow-origin"] == EXT_ORIGIN
+    assert "retry-after" in res.headers.get("access-control-expose-headers", "").lower()
