@@ -209,6 +209,8 @@ $('#testProvider').addEventListener('click', async () => {
 function renderCommon(info) {
   const c = info.common;
   $('#commonTitle').textContent = `${c.domain} · ${c.version}`;
+  // 운영자용 교정 내보내기는 지금 고른 관심사만(T-157). 관심사 이름은 그래프 domain
+  $('#fbCorrectionsHint').textContent = `지금 관심사(${c.domain}) 교정만 내보내요.`;
   $('#commonStats').innerHTML = `<div><b>${c.nodes}</b>개념 노드</div><div><b>${c.tags}</b>추상 태그</div><div><b>${info.merged.usesCommon ? '사용 중' : '꺼짐'}</b>현재 검색 대상</div>`;
   $('#commonList').innerHTML = `<p><b>노드</b> ${c.nodeList.map(n => esc(n.label)).join(' · ')}</p><p><b>태그</b> ${c.tagList.map(t => `${esc(t.label)} <code>${esc(t.id)}</code>`).join(' · ')}</p>`;
 }
@@ -712,11 +714,12 @@ function downloadJson(data, filename) {
 // 목록 응답의 items 배열을 그대로 파일로
 $('#fbExport').addEventListener('click', () => downloadJson(fbItems, `good-metaphor-feedback-${localDay(Date.now())}.json`));
 
-// 운영자용 교정 내보내기(T-131). 공통 노드·공통 태그 대상만, 문장은 가린 것만. 로컬 파일로만 받는다
+// 운영자용 교정 내보내기(T-131). 지금 관심사(T-157)의 공통 노드·공통 태그 대상만, 문장은 가린 것만. 로컬 파일로만 받는다
 $('#fbCorrections').addEventListener('click', async () => {
   try {
     const data = await send('corrections:export');
-    downloadJson(data, `good-metaphor-corrections-${localDay(Date.now())}.json`);
+    // 파일 이름에 관심사 id(T-157). 승인 절차가 그 관심사 평가셋·가드로 간다
+    downloadJson(data, `good-metaphor-corrections-${data.interest}-${localDay(Date.now())}.json`);
     const n = data.exampleCandidates.length;
     setStatus($('#fbStatus'), n ? `예문 후보 ${n}개를 내보냈어요.` : '공통 그래프 교정이 아직 없어요. 빈 파일을 내보냈어요.', 'ok');
   } catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
