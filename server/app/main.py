@@ -1,10 +1,12 @@
 """FastAPI 앱 생성. deps로 설정·가짜 부품을 주입할 수 있다(테스트용).
 
-deps 키: settings, graph, llm(키워드·비유 공용) 또는 keyword_llm·analogy_llm, retriever, rag, cache, rate_limiter.
+deps 키: settings, graph, llm(키워드·비유 공용) 또는 keyword_llm·analogy_llm, retriever, rag, cache, rate_limiter,
+extract_worker(추출 워커, EXTRACT_OLLAMA_URL이 있을 때만 돌린다).
 주입하지 않은 부품은 첫 요청 때 실제 것으로 만든다(앱 생성·import 때는 네트워크·LightRAG를 건드리지 않는다).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
@@ -38,9 +40,57 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
     deps = dict(deps or {})
     settings = deps.get("settings") or Settings.from_env()
 
+    async def run_extract_worker(worker: Any) -> None:
+        """추출 워커 주기 루프(T-161, ADR 0006). 호버 경로와 따로 돌고, 어떤 예외로도 서버를 멈추지 않는다."""
+        from .extract_worker import WorkerLocked, run_forever
+
+        def started() -> None:
+            app.state.extract_running = True
+
+        try:
+            await run_forever(worker, on_start=started)
+        except WorkerLocked as e:
+            # CLI --once나 다른 프로세스가 이미 워커 잠금을 쥠: 서버는 워커 없이 뜬다
+            log.warning("추출 워커를 시작하지 않아요: %s", e)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # 워커가 죽어도 서버는 계속
+            log.exception("추출 워커가 멈췄어요: %s", e)
+        finally:
+            app.state.extract_running = False
+
+    def make_extract_worker() -> Any | None:
+        injected = deps.get("extract_worker")
+        if injected is not None:
+            return injected
+        from .extract_worker import build_default_worker
+
+        try:
+            return build_default_worker(settings)
+        except Exception as e:  # 그래프를 못 읽는 등: 워커 없이 뜬다
+            log.error("추출 워커를 만들지 못했어요: %s", e)
+            return None
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        yield
+        # 맥 주소가 있을 때만 추출 워커를 백그라운드로 돌린다. run_window를 직접 부르지 않는다(worker.lock에 기댐)
+        if settings.extract_ollama_url:
+            worker = make_extract_worker()
+            if worker is not None:
+                _app.state.extract_task = asyncio.create_task(run_extract_worker(worker))
+        try:
+            yield
+        finally:
+            task = _app.state.extract_task
+            if task is not None:
+                # 종료: 취소하고 끝날 때까지 기다린다(처리 중 running 청크는 다음 시작의 복구가 되돌린다)
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:  # 종료 중 오류는 기록만 한다
+                    log.warning("추출 워커 종료 중 오류: %s", e)
         # 앱이 직접 만든 검색기만 닫는다(첫 검색 때 연 LightRAG 저장소). 주입된 부품은 건드리지 않는다
         owned = _app.state.owned_retriever
         if owned is not None:
@@ -71,6 +121,9 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
     app.state.rate_limiter = deps.get("rate_limiter") or RateLimiter(settings.rate_limit_per_min)
     app.state.pipeline = None
     app.state.owned_retriever = None
+    # 추출 워커(T-161): 태스크와 "잠금을 잡고 도는 중" 여부. /health는 이 둘만 본다(파일 잠금 없이)
+    app.state.extract_task = None
+    app.state.extract_running = False
     # 금칙어(T-114): 시작할 때 한 번 읽는다. 승인 카드가 하나도 없으면 /v1/analogy를 503으로 막는다(실패 시 닫힘)
     injected = deps.get("blocklist")
     app.state.blocklist = active_terms(injected) if injected is not None else load_blocklist(settings.blocklist_path)
@@ -123,8 +176,11 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
         n = len(app.state.blocklist)
         # 검색 인덱스: 파일과 seed-meta.json만 본다(LightRAG를 열지 않는다, T-140). 안 됐으면 이유에 할 일까지
         ready, reason = index_status(app.state.settings)
+        # 추출 워커: 켜짐·도는 중만(맥 주소·큐 내용은 내보내지 않는다, 규칙 10)
+        extract = {"enabled": bool(app.state.settings.extract_ollama_url),
+                   "running": bool(app.state.extract_running)}
         return {"ok": True, "version": __version__, "blocklist": {"loaded": n > 0, "approved": n},
-                "index": {"ready": ready, "reason": reason}}
+                "index": {"ready": ready, "reason": reason}, "extract": extract}
 
     @app.post("/v1/analogy")
     async def analogy(request: Request) -> JSONResponse:

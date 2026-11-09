@@ -14,6 +14,8 @@ label은 사람이 읽는 이름이라 엔티티 벡터(이름 + 설명)에도 i
 from __future__ import annotations
 
 import shutil
+from contextlib import ExitStack
+from pathlib import Path
 from typing import Any
 
 TAG_ENTITY_TYPE = "추상구조"
@@ -118,6 +120,64 @@ def graph_to_custom_kg(graph: dict[str, Any]) -> dict[str, list[dict[str, Any]]]
     return {"chunks": chunks, "entities": entities, "relationships": relationships}
 
 
+RESET_WORKER_RUNNING = "추출 워커가 돌고 있어 리셋할 수 없어요. 서버를 멈춘 뒤 다시 해 주세요."
+
+
+def _hold_worker_lock(stack: ExitStack, settings: Any) -> None:
+    """리셋 동안 worker.lock을 기다리지 않고 쥔다(stack이 닫힐 때 푼다). 워커(서버 안 루프·--once)가 돌고 있으면 SeedRefused(T-161)."""
+    from app.extract_worker import WorkerLocked, worker_lock
+    from app.seedmeta import SeedRefused
+
+    try:
+        stack.enter_context(worker_lock(settings))
+    except WorkerLocked as e:
+        raise SeedRefused(RESET_WORKER_RUNNING) from e
+
+
+def _enter_reset_queue_guard(stack: ExitStack, settings: Any) -> list[dict[str, Any]]:
+    """리셋 동안 배타 큐 잠금을 쥐고 큐를 읽는다(stack이 닫힐 때 done → pending으로 고쳐 쓰고 푼다).
+
+    깨졌으면 지우면 처리 전 문서를 잃으니 SeedRefused(파일 경로를 알려 준다). 아직 아무것도 지우지 않았다.
+    """
+    from app.extract_worker import QueueError, queue_path, reset_queue_guard
+    from app.seedmeta import SeedRefused
+
+    try:
+        return stack.enter_context(reset_queue_guard(settings, settings.workspace))
+    except QueueError as e:
+        raise SeedRefused(f"추출 큐 파일이 깨져 리셋하지 않았어요(지우면 처리 전 문서를 잃어요): "
+                          f"{queue_path(settings, settings.workspace)}. 고치거나 옮긴 뒤 다시 해 주세요.") from e
+
+
+def _remove_entry(path: Path) -> None:
+    """워크스페이스 폴더 안 항목 하나를 지운다. 심볼릭 링크는 따라가지 않고 링크만 지운다."""
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _clear_workspace_keeping_queue(settings: Any) -> None:
+    """워크스페이스 폴더에서 추출 큐·큐 잠금 파일만 남기고 모두 지운다(T-161).
+
+    폴더 자체는 지우지 않는다: 큐 파일이 디스크에 계속 있고(중간에 실패해도 그대로), 큐 잠금 파일의 inode도
+    유지돼 리셋 중 --enqueue가 같은 잠금으로 기다린다. 경로는 safe_workspace_dir로만(심볼릭 링크·밖 경로 거절).
+    """
+    from app.extract_worker import QUEUE_FILE, QUEUE_LOCK_FILE
+    from app.seedmeta import SEED_META_FILE, safe_workspace_dir
+
+    d = safe_workspace_dir(settings)
+    if not d.is_dir():
+        return
+    keep = {QUEUE_FILE, QUEUE_LOCK_FILE}
+    # seed-meta.json을 일부러 맨 먼저 지운다: 중간에 실패해도 인덱스는 늘 '준비 안 됨'(서버가 반쯤 지운 인덱스를 열지 않게)
+    entries = sorted(d.iterdir(), key=lambda p: (p.name != SEED_META_FILE, p.name))
+    for entry in entries:
+        if entry.name in keep:
+            continue
+        _remove_entry(entry)
+
+
 def seed_counts(custom_kg: dict[str, Any]) -> dict[str, int]:
     """주입할 엔티티·관계 수."""
     return {
@@ -132,36 +192,46 @@ async def seed(settings: Any, reset: bool = False) -> dict[str, Any]:
     멱등: ainsert_custom_kg(1.5.7)는 엔티티·관계·청크를 이름/쌍/내용 해시로 덮어쓴다(설명을 이어 붙이지 않는다).
     그래서 같은 그래프를 다시 넣어도 수와 설명이 그대로다(test_seed_inject가 확인).
 
-    reset=True면 워크스페이스 폴더를 지우고 새로 넣는다(그래프 판본·임베딩이 바뀌었을 때, 시드는 덮어쓰기만 해서).
+    reset=True면 워크스페이스 폴더를 비우고 새로 넣는다(그래프 판본·임베딩이 바뀌었을 때, 시드는 덮어쓰기만 해서).
     시작할 때 옛 seed-meta.json을 지우고, 끝까지 성공하면 새로 쓴다(T-140). 중간에 실패하면 메타가 없어
     서버가 이 인덱스를 열지 않는다.
+
+    리셋은 settings.workspace의 추출 큐(extract-queue.json)·큐 잠금 파일을 지우지 않는다(T-161): 배타 큐 잠금을 쥔 채
+    나머지 항목만 지우고, 같은 잠금 아래 큐를 제자리에서 원자적으로 고쳐 쓴다. 중간에 실패해도 원래 큐 파일이 남는다.
+    인덱스가 지워졌으니 done 청크는 pending(시도 0)으로, failed는 그대로. extract-results/는 인덱스와 함께 지워진다.
+    추출 워커가 돌고 있으면(worker.lock) 거절하고, 시드가 끝날 때까지 잠금을 쥐어 워커가 끼어들지 못하게 한다.
+    큐 파일이 깨졌으면 처리 전 문서를 잃지 않게 거절한다. 둘 다 아무것도 지우지 않는다.
     """
     from app.config import load_common_graph
     from app.rag import open_rag  # LightRAG는 무거워서 실제로 넣을 때만 불러온다
-    from app.seedmeta import check_can_seed, remove_seed_meta, safe_workspace_dir, write_seed_meta
+    from app.seedmeta import check_can_seed, remove_seed_meta, write_seed_meta
 
     # 태그는 tags.json에서 온다(T-304, 규칙 9). 합치는 곳은 load_common_graph 하나
     graph = load_common_graph(settings.common_graph_path, getattr(settings, "tags_path", None))
     custom_kg = graph_to_custom_kg(graph)
     # 판본을 모르거나, --reset 없이 옛·다른 설정의 인덱스 위에 넣으려 하면 SeedRefused(아무것도 건드리지 않는다)
     check_can_seed(settings, reset)
-    if reset:
-        # 작업 디렉터리 바로 아래 폴더만(심볼릭 링크·밖 경로는 WorkspaceError). 없는 것만 괜찮고 다른 오류는 시드를 멈춘다
+    with ExitStack() as stack:
+        if reset:
+            _hold_worker_lock(stack, settings)
+            # 큐 잠금은 지우기·고쳐 쓰기가 끝날 때까지만 쥔다(LightRAG 주입 동안 --enqueue를 막지 않게)
+            with ExitStack() as qstack:
+                # 처리 전 문서를 잃지 않게 큐를 먼저 읽는다(깨졌으면 여기서 거절, 아직 아무것도 안 지움)
+                _enter_reset_queue_guard(qstack, settings)
+                # 작업 디렉터리 바로 아래 폴더 안만(심볼릭 링크·밖 경로는 WorkspaceError). 오류는 시드를 멈춘다(큐 파일은 그대로)
+                _clear_workspace_keeping_queue(settings)
+                # 여기서 qstack이 닫히며 같은 잠금 아래 큐를 done → pending으로 고쳐 쓴다
+        remove_seed_meta(settings)
+        rag = await open_rag(settings)
         try:
-            shutil.rmtree(safe_workspace_dir(settings))
-        except FileNotFoundError:
-            pass
-    remove_seed_meta(settings)
-    rag = await open_rag(settings)
-    try:
-        await rag.ainsert_custom_kg(custom_kg)
-        store = rag.chunk_entity_relation_graph
-        nodes = await store.get_all_nodes()
-        edges = await store.get_all_edges()
-    finally:
-        await rag.finalize_storages()
-    # 저장소를 다 닫은(파일에 쓴) 뒤에 기록한다
-    write_seed_meta(settings)
+            await rag.ainsert_custom_kg(custom_kg)
+            store = rag.chunk_entity_relation_graph
+            nodes = await store.get_all_nodes()
+            edges = await store.get_all_edges()
+        finally:
+            await rag.finalize_storages()
+        # 저장소를 다 닫은(파일에 쓴) 뒤에 기록한다
+        write_seed_meta(settings)
     return {
         "entities": len(nodes),
         "relationships": len(edges),

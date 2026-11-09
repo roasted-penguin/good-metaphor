@@ -352,7 +352,8 @@ def test_reset_permission_error_aborts_seed(tmp_path, monkeypatch):
     def denied(path, *a, **k):
         raise PermissionError("권한 없음")
 
-    monkeypatch.setattr(seed_mod.shutil, "rmtree", denied)
+    # T-161: 리셋은 큐 파일을 남기고 나머지 항목만 지운다. 항목 하나 지우기가 권한 오류면 시드가 멈춘다
+    monkeypatch.setattr(seed_mod, "_remove_entry", denied)
     with pytest.raises(PermissionError):
         asyncio.run(seed(s, reset=True))
 

@@ -4,6 +4,9 @@
 services:
   analogy-api:
     build: .
+    # 종료 유예: 서버를 멈출 때 추출 워커(T-161)가 진행 중인 큐 파일 작업을 최대 10초(THREAD_DRAIN_TIMEOUT_S)
+    # 기다린 뒤 worker.lock을 푼다. 도커 기본 10초면 그 전에 SIGKILL될 수 있어 넉넉히 20초로 둔다
+    stop_grace_period: 20s
     ports:
       # 기본은 이 컴퓨터에서만 열린다(맥에서 돌릴 때 같은 망에 포트를 열지 않는다, 규칙 10).
       # 서버(EC2)에서 바깥에 열어야 하면 BIND_ADDR=0.0.0.0 으로 바꾼다
