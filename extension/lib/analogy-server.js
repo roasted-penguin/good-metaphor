@@ -13,8 +13,9 @@ function badShape(why) {
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 // 서버 결과 모양을 확인하고 규칙 1(후보 밖 근거면 비유 숨김)을 한 번 더 적용한다.
+// localNodeIds(Set, T-141): 주면 근거 노드가 확장의 로컬 병합 그래프에도 있어야 한다(서버 후보 목록만 믿지 않는다).
 // 원본은 바꾸지 않고 새 객체를 돌려준다. 모양이 틀리면 code 'bad-shape' 오류를 던진다.
-export function checkServerResult(result) {
+export function checkServerResult(result, localNodeIds = null) {
   if (!isObj(result)) throw badShape('객체가 아님');
   for (const k of ['meaning', 'analogy', 'domain', 'theme']) {
     if (!(k in result)) throw badShape(`${k} 없음`);
@@ -27,7 +28,7 @@ export function checkServerResult(result) {
   const out = { ...result, debug: { ...result.debug } };
   const ids = new Set(result.debug.candidates.map(c => c?.id));
   const nodeId = result.evidence?.nodeId;
-  const chosen = nodeId != null && ids.has(nodeId);
+  const chosen = nodeId != null && ids.has(nodeId) && (!localNodeIds || localNodeIds.has(nodeId));
   if (!chosen) {
     // 후보에 없는 근거는 근거로 보이지 않는다
     out.evidence = null;
@@ -43,7 +44,8 @@ export function checkServerResult(result) {
 
 // POST {url}/v1/analogy. 성공이면 { ok: true, result, ms }, 실패면 { ok: false, reason }.
 // reason: 'network' | 'timeout' | 'http-<status>' | 'bad-json' | 'bad-shape'
-export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000, fetchImpl = fetch }) {
+// localNodeIds: checkServerResult 로 넘기는 로컬 그래프 노드 id 집합(T-141)
+export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000, localNodeIds = null, fetchImpl = fetch }) {
   const endpoint = `${String(url).replace(/\/$/, '')}/v1/analogy`;
   const ctrl = new AbortController();
   let timedOut = false;
@@ -71,7 +73,7 @@ export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000,
     }
     let result;
     try {
-      result = checkServerResult(body);
+      result = checkServerResult(body, localNodeIds);
     } catch {
       return { ok: false, reason: 'bad-shape' };
     }
@@ -85,14 +87,39 @@ export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000,
 // 'off' 서버 주소 없음 / 'session' 로그인 세션(오버레이를 서버가 모름, 규칙 3)
 // 'interest' 공통 관심사가 메이플이 아님(서버는 메이플 그래프만 안다, T-302)
 // 'feedback' 그 문장에 👎·pick 기록(서버가 내 피드백을 모름, ADR 0010) / 'demo' 데모 제공자
+// 'no-permission' 서버 출처 권한이 없음(T-141, 설정 화면에서 허용). 다른 이유가 먼저다
 // commonId: 병합 그래프의 공통 그래프 id(graph.sources.common.id). 생략하면 메이플(예전 호출 모양)
-export function serverSkipReason({ admin, session, sentenceRecords, providerKind, commonId = 'maplestory' }) {
+// hasPermission: 서버 출처 권한(chrome.permissions.contains). 생략하면 있음(예전 호출 모양)
+export function serverSkipReason({ admin, session, sentenceRecords, providerKind, commonId = 'maplestory', hasPermission = true }) {
   if (!admin?.analogyServer?.url) return 'off';
   if (session) return 'session';
   if (commonId !== 'maplestory') return 'interest';
   if ((sentenceRecords || []).some(r => r?.vote === 'down' || r?.vote === 'pick')) return 'feedback';
   if (providerKind === 'demo') return 'demo';
+  if (!hasPermission) return 'no-permission';
   return null;
+}
+
+// 서버 주소 → 권한 요청·확인용 출처 패턴(https://host:port/*). http(s)가 아니거나 틀린 주소면 null(T-141)
+export function serverOriginPattern(url) {
+  try {
+    const u = new URL(String(url ?? ''));
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return `${u.origin}/*`;
+  } catch {
+    return null;
+  }
+}
+
+// 서버를 일부러 건너뛴 이유(T-141). 이때 만든 로컬 결과는 캐시한다.
+// 'no-permission' 은 권한 여부가 결과 캐시 키에 들어가 허용하면 저절로 갈린다. 'reported' 는 제보 목록이 키에 있다
+const INTENTIONAL_SKIPS = new Set(['off', 'session', 'interest', 'feedback', 'demo', 'no-permission', 'reported']);
+
+// 로컬 결과를 결과 캐시에 넣을지. 서버를 시도했다가 실패해서(network·timeout·http-*·bad-*) 만든 결과는
+// 넣지 않는다 — 서버가 살아나면 다음 호버에서 다시 서버를 부르게(T-141). serverInfo 가 없으면(서버 모드 꺼짐) 넣는다
+export function shouldCacheLocal(serverInfo) {
+  if (!serverInfo || serverInfo.used) return true;
+  return INTENTIONAL_SKIPS.has(serverInfo.reason);
 }
 
 // 서버를 쓸지 판정한다

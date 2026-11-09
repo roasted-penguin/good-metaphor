@@ -10,7 +10,8 @@ COMMON_GRAPH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
 
 def _clear_env(monkeypatch):
     for name in ("GEMINI_API_KEY", "WORKSPACE", "WORKSPACE_VERSION",
-                 "RATE_LIMIT_PER_MIN", "COMMON_GRAPH_PATH", "BLOCKLIST_PATH", "TAGS_PATH"):
+                 "RATE_LIMIT_PER_MIN", "COMMON_GRAPH_PATH", "BLOCKLIST_PATH", "TAGS_PATH",
+                 "ALLOWED_ORIGINS", "ALLOW_EXTENSION_ORIGINS"):
         monkeypatch.delenv(name, raising=False)
 
 

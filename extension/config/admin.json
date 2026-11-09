@@ -30,7 +30,7 @@
     "url": ""
   },
 
-  "_analogyServerComment": "analogy-api 서버(T-404). url 이 비면 서버 모드 꺼짐(브라우저 파이프라인만). 있으면 POST {url}/v1/analogy 를 먼저 부르고, 실패·timeoutMs 초과·로그인 세션·그 문장 피드백·데모 제공자면 로컬로 간다.",
+  "_analogyServerComment": "analogy-api 서버(T-404). url 이 비면 서버 모드 꺼짐(브라우저 파이프라인만). 있으면 POST {url}/v1/analogy 를 먼저 부르고, 실패·timeoutMs 초과·로그인 세션·그 문장 피드백·데모 제공자·서버 출처 권한 없음(설정 화면에서 허용, T-141)이면 로컬로 간다. 정책(managed_schema.json)으로도 줄 수 있다.",
   "analogyServer": { "url": "", "timeoutMs": 4000 },
 
   "userStore": {

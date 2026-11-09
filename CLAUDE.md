@@ -21,7 +21,7 @@ PoC 완료, 실제 키·실제 모델로 확인됨.
 - **다음 큰 기능:** 말풍선 원클릭 피드백 루프(ADR 0010, 제안). 👎 한 번이면 그 자리에서 다시 비유하고, 교정은 승인 뒤 태그 예문으로 그래프에 들어간다. 순서 T-129 → T-106 → T-130·T-131·T-132, 서버 전송 동의는 첫 실행 화면(T-116, D-7 결정).
 - 테스트는 가짜 LLM 서버와 대체 임베더로 돈다. Node 22 이상.
 
-방향: 검색을 EC2의 LightRAG 서버로 옮기고, 엔티티·관계 추출만 사용자의 M2 Pro 맥(16GB, Ollama)에 Tailscale로 맡긴다(ADR 0006, 제안 상태). 지금 확장의 브라우저 파이프라인은 서버 장애 시 대체 경로로 남는다. 다음 작업 순서는 T-113 → T-117 → T-122 → T-115, 서버 트랙은 L0(T-401~T-405, AWS·도메인 준비 필요). 서버 코드는 `server/`(Python, FastAPI)에 있다. T-402 뼈대로 `/health`와 `/v1/analogy`가 있고, 테스트는 `cd server && .venv/bin/pytest -q`(CI는 `ci.yml`의 `server` 잡에서 같은 테스트를 돌린다), 로컬 실행은 `server/`에서 `docker compose up`. 인프라 절차는 `infra/`에 둔다(아직 없음).
+방향: 검색을 EC2의 LightRAG 서버로 옮기고, 엔티티·관계 추출만 사용자의 M2 Pro 맥(16GB, Ollama)에 Tailscale로 맡긴다(ADR 0006, 제안 상태). 지금 확장의 브라우저 파이프라인은 서버 장애 시 대체 경로로 남는다. 다음 작업 순서는 T-113 → T-117 → T-122 → T-115, 서버 트랙은 L0(T-401~T-405, AWS·도메인 준비 필요). 서버 코드는 `server/`(Python, FastAPI)에 있다. 확장이 서버를 쓰는 데 꼭 필요한 것은 확장의 서버 출처 권한이다(설정 화면 `서버 주소 허용`, 없으면 `no-permission`으로 로컬). 권한이 있으면 서비스 워커 fetch는 CORS에 묶이지 않는다. 서버 CORS(`ALLOWED_ORIGINS`, 기본 닫힘)는 권장하는 덧댐일 뿐 접근 제어가 아니고, 실제 관문은 설치 토큰 + 요청 한도다(T-141, `server/README.md`). T-402 뼈대로 `/health`와 `/v1/analogy`가 있고, 테스트는 `cd server && .venv/bin/pytest -q`(CI는 `ci.yml`의 `server` 잡에서 같은 테스트를 돌린다), 로컬 실행은 `server/`에서 `docker compose up`. 인프라 절차는 `infra/`에 둔다(아직 없음).
 
 ## 여러 세션이 동시에 작업할 때
 

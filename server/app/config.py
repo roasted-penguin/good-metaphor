@@ -26,6 +26,17 @@ DEFAULT_EMBEDDING_PROVIDER = "hash"
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_EMBEDDING_MODEL = "bge-m3"
 DEFAULT_EMBEDDING_DIM = 1024
+# CORS(T-141): 확장 출처 형식(chrome-extension:// + a~p 32자). ALLOW_EXTENSION_ORIGINS=true 일 때만 쓴다
+EXTENSION_ORIGIN_REGEX = r"^chrome-extension://[a-p]{32}$"
+
+
+def _parse_origins(raw: str | None) -> tuple[str, ...]:
+    """쉼표 구분 출처 목록. 빈 칸·공백은 버린다."""
+    return tuple(o.strip() for o in (raw or "").split(",") if o.strip())
+
+
+def _parse_bool(raw: str | None) -> bool:
+    return (raw or "").strip().lower() in ("1", "true", "yes")
 
 
 def read_graph_version(path: str | os.PathLike) -> str | None:
@@ -119,6 +130,10 @@ class Settings:
     blocklist_path: str | None = None
     # 비우면 common_graph_path 옆 tags.json (T-304)
     tags_path: str | None = None
+    # CORS(T-141). 기본은 닫힘: 어떤 출처도 허용하지 않는다. 운영은 확장 id를 allowed_origins 에 적는다
+    allowed_origins: tuple[str, ...] = ()
+    # true 면 모든 확장 id 형식을 허용(개발용). 운영에서는 끈다
+    allow_extension_origins: bool = False
 
     def __post_init__(self) -> None:
         # 워크스페이스 이름은 --reset이 지우는 폴더 이름이 된다. 설정을 읽을 때 바로 막는다(T-140)
@@ -157,4 +172,6 @@ class Settings:
             embedding_dim=int(env.get("EMBEDDING_DIM") or DEFAULT_EMBEDDING_DIM),
             blocklist_path=env.get("BLOCKLIST_PATH") or None,
             tags_path=tags_path,
+            allowed_origins=_parse_origins(env.get("ALLOWED_ORIGINS")),
+            allow_extension_origins=_parse_bool(env.get("ALLOW_EXTENSION_ORIGINS")),
         )

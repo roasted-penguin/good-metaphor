@@ -15,8 +15,9 @@ admin.customBaseUrl = 'http://127.0.0.1:8765/v1';
 admin.defaultModels.custom = 'mock-model';
 // fallback 체인(T-124): 'mock-busy'(가짜 LLM이 429)를 고르면 mock-model 로 넘어간다
 admin.fallbackChain = [{ provider: 'custom', model: 'mock-model' }];
-// 서버 모드(T-404): 가짜 analogy-api. 표시어 없는 문장은 500이라 기존 e2e는 로컬 결과 그대로
-admin.analogyServer = { url: 'http://127.0.0.1:8767', timeoutMs: 800 };
+// 서버 모드(T-404·T-141): 기본 사본은 서버 주소 없음(꺼짐 = 의도적 건너뜀, 결과 캐시도 예전 그대로).
+// 서버 모드 시험은 아래에서 따로 만드는 SERVER_OUT 사본을 쓴다(extension.spec.mjs serverTest)
+admin.analogyServer = { url: '', timeoutMs: 800 };
 // AI 초안 전체 마감(T-301): 시험이 빨리 끝나게 짧게. 가짜 LLM의 "초안지연테스트"는 이보다 늦게 답한다
 admin.draft = { deadlineMs: 2500 };
 writeFileSync(p, JSON.stringify(admin, null, 2));
@@ -32,4 +33,13 @@ writeFileSync(mp, JSON.stringify(manifest, null, 2));
 await build({ entryPoints: ['tests/e2e/ort-smoke-src.js'], bundle: true, format: 'esm', platform: 'browser', outfile: `${OUT}/ort-smoke.js`, logLevel: 'warning' });
 copyFileSync('tests/e2e/add.onnx', `${OUT}/add.onnx`);
 writeFileSync(`${OUT}/ort-smoke.html`, '<!doctype html><meta charset="utf-8"><title>ORT_PENDING</title><script type="module" src="ort-smoke.js"></script>');
-console.log('prepared', OUT);
+
+// 서버 모드 사본(T-141): 같은 사본 + 가짜 analogy-api(:8767) 주소와 그 출처 권한.
+// 표시어 없는 문장은 가짜 서버가 500 → 서버 실패라 결과를 캐시하지 않는다. 캐시를 보는 시험은 기본 사본을 쓴다.
+// 실제 확장은 설정 화면에서 선택 권한을 요청한다. e2e는 요청 창을 누를 수 없어 manifest 에 미리 준다
+const SERVER_OUT = '.tmp/ext-e2e-server';
+rmSync(SERVER_OUT, { recursive: true, force: true });
+cpSync(OUT, SERVER_OUT, { recursive: true });
+writeFileSync(`${SERVER_OUT}/config/admin.json`, JSON.stringify({ ...admin, analogyServer: { url: 'http://127.0.0.1:8767', timeoutMs: 800 } }, null, 2));
+writeFileSync(`${SERVER_OUT}/manifest.json`, JSON.stringify({ ...manifest, host_permissions: [...manifest.host_permissions, 'http://127.0.0.1:8767/*'] }, null, 2));
+console.log('prepared', OUT, SERVER_OUT);
