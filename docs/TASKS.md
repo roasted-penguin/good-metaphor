@@ -18,7 +18,7 @@
 | T-123 | 비유가 근거 facts 밖 사실을 쓰는지 검사 (nodeId만으로는 못 잡음) | 1 품질 | P1 | 완료 | |
 | T-143 | 근거 검사 빈틈: 한글 수사·만/천 단위로 지어낸 수치, 숫자 없는 지어낸 규칙(usedFact는 진짜 fact 인용) | 1 품질 | P2 | 완료 | T-123 |
 | T-145 | 근거 검사 한글 수 남은 빈틈: "200만"(=200뿐) 오변환, 붙여 쓴 "두배·세살", "이십일", "네 차례"(=너의) 오탐, 실제 사용 `debug.grounding` 이유 모아 오탐률 | 1 품질 | P2 | 완료 | T-143 |
-| T-146 | 근거 검사 실사용 오탐률: `debug.grounding` 이유(fact-mismatch·number-outside)와 해당 비유를 모아(동의한 사용자만, D-7) 주간 집계 | 1 품질 | P2 | 진행 | T-145, T-129 |
+| T-146 | 근거 검사 실사용 오탐률: `debug.grounding` 이유(fact-mismatch·number-outside)와 해당 비유를 모아(동의한 사용자만, D-7) 주간 집계 | 1 품질 | P2 | 리뷰 | T-145, T-129 |
 | T-124 | **[사용자 추가]** 모델 순위 fallback 체인(지금 1·2순위, 순위는 더 붙음) + 429 쿨다운 | 1 품질 | P0 | 완료 | T-117 |
 | T-125 | **[사용자 추가]** 체인 2·3순위 교체: Gemini 3.5 Flash-Lite, NVIDIA Build(thinking 끔) | 1 품질 | P0 | 완료 | T-124 |
 | T-126 | 하루 한도 429(TPD·RPD)는 리셋 시각까지 쿨다운 (지금은 상한 10분마다 재시도) | 1 품질 | P2 | 완료 | T-125 |
@@ -560,6 +560,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-09 | T-146 | task/T-146-grounding-stats | | 근거 검사 실사용 오탐률(서버 전 단계, D-7): 근거 검사가 비유를 숨기면 이 기기 `groundingLog`에 이유·노드·가린 문장과 비유(금칙어 든 것은 저장 안 함, 300건), 날짜별 검사·숨김 수. 설정 "내 피드백"에 최근 7일 숨김 비율·이유별·"괜찮은 비유였어요" 오탐 표시. 운영자 교정 내보내기에 보내기 동의 시에만 `groundingSamples`(관심사별, 최대 50), 검사 도구 요약, 승인 절차 6-1, 처리방침 저장 표. 서버 결과는 아직 집계 밖(서버 켤 때 함께). Opus·medium 서브에이전트. 단위 649, 관련 e2e 통과(전체는 CI). |
 | 2026-11-09 | T-102 | task/T-102-embed-fallback | [#64](https://github.com/roasted-penguin/good-metaphor/pull/64) | 임베딩 모델 로드 마무리: **실제 버그 수정** — Hugging Face가 막히면 대체 검색으로 조용히 바뀌어야 하는데 오프스크린 상태의 `error` 필드 때문에 background가 매번 오류를 던져 호버가 실패하던 것(`loadError`로). 설정 화면 "대체 검색 사용 중 · 모델 로드 실패: 모델을 받지 못했어요(네트워크)". e2e: HF 차단(DNS), `fallbackOnError: false`, 느린 네트워크 40초 지연(크롬 직접 실행 + CDP로 서비스 워커 생존 확인 — Playwright 붙으면 유휴 종료가 안 일어나서). 모델 용량 문구 약 270MB(`embedding.sizeMB`), `embedding.remoteHost`(https 미러, 스토어 빌드는 금지). Opus·medium 서브에이전트(수정 1회). 단위 630, 관련 e2e 통과(전체는 CI). |
 | 2026-11-09 | T-140 | task/T-140-seed-index | [#63](https://github.com/roasted-penguin/good-metaphor/pull/63) | 시드 인덱스 다듬기: 시드가 `seed-meta.json`(그래프+태그 버전, 임베딩 공급자·모델·차원)을 원자적으로 기록, 서버는 열기 전에 비교해 없음·깨짐·다름이면 503(`/health.index.reason`에 다시 시드 명령), `--reset`은 작업 디렉터리 바로 아래 워크스페이스만(이름 검증·심볼릭 링크 거절·오류 숨기지 않음), reset 없이 다른 설정 인덱스 위 시드는 거절. compose `rag_storage` 볼륨·`BIND_ADDR` 기본 127.0.0.1, initialize 실패 정리, Ollama 차원 확인, 자기 엣지는 LightRAG 정규화 이름으로. docker에서 시드 인덱스로 실제 200(Gemini, 2.3초). Opus·medium 서브에이전트(수정 1회: reset 경로 안전). 서버 390·단위 620. |
 | 2026-11-09 | T-139 | task/T-139-ci-server | [#62](https://github.com/roasted-penguin/good-metaphor/pull/62) | CI에 서버 잡 `server` 추가(Python 3.12, pip 캐시, `cd server && python -m pytest -q`, 네트워크·키 없이 339개). 기존 `test` 체크 이름 그대로. 일부러 깨뜨린 커밋으로 실패하는 것 확인 후 되돌림. Opus·medium 서브에이전트. |
