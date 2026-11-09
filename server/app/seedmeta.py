@@ -94,22 +94,29 @@ def write_seed_meta(settings: Any, now: datetime | None = None) -> dict[str, Any
     """seed-meta.json을 원자적으로 쓴다: 같은 폴더의 임시 파일에 쓰고 os.replace. 실패하면 옛 파일이 그대로 남는다."""
     meta = {**expected_seed_meta(settings),
             "seededAt": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")}
-    d = workspace_dir(settings)
-    d.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".seed-meta.", suffix=".tmp", dir=d)
+    workspace_dir(settings).mkdir(parents=True, exist_ok=True)
+    atomic_write_json(meta_path(settings), meta)
+    return meta
+
+
+def atomic_write_json(path: Path, data: Any) -> None:
+    """같은 폴더의 임시 파일에 쓰고 os.replace. 실패하면 옛 파일이 그대로 남고 임시 파일은 지운다.
+
+    시드 기록과 추출 큐(T-414)가 같이 쓴다. 폴더는 부르는 쪽이 만든다.
+    """
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.stem}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, meta_path(settings))
+        os.replace(tmp, path)
     except BaseException:
         try:
             os.unlink(tmp)
         except OSError:
             pass
         raise
-    return meta
 
 
 def remove_seed_meta(settings: Any) -> None:

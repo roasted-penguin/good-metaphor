@@ -50,6 +50,7 @@ class FakeOllama:
         self.die_on_call: int | None = None
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        self._stopper: threading.Thread | None = None
 
     @property
     def url(self) -> str:
@@ -57,9 +58,23 @@ class FakeOllama:
 
     @property
     def running(self) -> bool:
+        self._join_stopper()
         return self._server is not None
 
+    def _join_stopper(self) -> None:
+        if self._stopper is not None:
+            self._stopper.join(timeout=5)
+            self._stopper = None
+
+    def stop_in_background(self) -> None:
+        """요청 처리 스레드에서 부른다. 서버는 바로 '꺼짐'으로 보고, 실제 종료는 다른 스레드에서."""
+        server, self._server = self._server, None
+        if server is not None:
+            self._stopper = threading.Thread(target=lambda: (server.shutdown(), server.server_close()), daemon=True)
+            self._stopper.start()
+
     def start(self) -> None:
+        self._join_stopper()
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -95,7 +110,7 @@ class FakeOllama:
                         self.connection.shutdown(socket.SHUT_RDWR)
                     except OSError:
                         pass
-                    threading.Thread(target=fake.stop, daemon=True).start()
+                    fake.stop_in_background()
                     return
                 user = body["messages"][-1]["content"]
                 if "깨진응답" in user:
@@ -117,10 +132,12 @@ class FakeOllama:
 
         self._server = ThreadingHTTPServer(("127.0.0.1", self.port), Handler)
         self._server.daemon_threads = True
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread = threading.Thread(target=self._server.serve_forever, kwargs={"poll_interval": 0.02},
+                                        daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
+        self._join_stopper()
         server, self._server = self._server, None
         if server is not None:
             server.shutdown()
