@@ -203,6 +203,8 @@ class LazyLightRAGRetriever:
             # 안 맞으면 열지 않는다(차원이 다른 벡터를 섞거나 옛 그래프로 답하지 않게)
             ready, reason = rag_mod.index_status(self._settings)
             if not ready:
+                log.warning("검색 인덱스 준비 안 됨(%s/%s): %s", self._settings.lightrag_working_dir,
+                            self._settings.workspace, reason)
                 raise RetrieverUnavailable(f"인덱스 준비 안 됨: {reason}", reason=reason)
             try:
                 rag = await rag_mod.open_rag(self._settings)

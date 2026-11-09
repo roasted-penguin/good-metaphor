@@ -13,6 +13,7 @@ label은 사람이 읽는 이름이라 엔티티 벡터(이름 + 설명)에도 i
 """
 from __future__ import annotations
 
+import shutil
 from typing import Any
 
 TAG_ENTITY_TYPE = "추상구조"
@@ -38,6 +39,13 @@ def label_with_aliases(node: dict[str, Any]) -> str:
     """
     aliases = node.get("aliases") or []
     return f"{node['label']}({', '.join(aliases)})" if aliases else node["label"]
+
+
+def _entity_key(name: str) -> str:
+    """LightRAG ainsert_custom_kg가 엔티티 이름에 쓰는 정규화(1.5.7 normalize_entity_name)와 같은 키."""
+    from lightrag.utils import normalize_entity_name  # 무거운 패키지라 쓸 때만 불러온다
+
+    return normalize_entity_name(name)
 
 
 def graph_to_custom_kg(graph: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -93,9 +101,9 @@ def graph_to_custom_kg(graph: dict[str, Any]) -> dict[str, list[dict[str, Any]]]
         src, tgt = node_label.get(e.get("from")), node_label.get(e.get("to"))
         if src is None or tgt is None:  # 그래프에 없는 노드를 가리키는 엣지는 버린다
             continue
-        # 자기 자신 엣지: LightRAG가 예외로 주입 전체를 멈춘다. id가 달라도 라벨(엔티티 이름)이 같으면
-        # LightRAG 안에서는 같은 엔티티라 자기 자신 관계가 된다. 그래서 해석된 이름으로 비교한다(T-140)
-        if src == tgt:
+        # 자기 자신 엣지: LightRAG가 예외로 주입 전체를 멈춘다. id가 달라도 라벨(엔티티 이름)이 LightRAG 정규화
+        # (앞뒤 공백·따옴표·전각 괄호 등) 뒤 같으면 같은 엔티티라 자기 자신 관계가 된다. 그래서 정규화 이름으로 비교한다(T-140)
+        if _entity_key(src) == _entity_key(tgt):
             continue
         relationships.append({
             "src_id": src,
@@ -128,17 +136,21 @@ async def seed(settings: Any, reset: bool = False) -> dict[str, Any]:
     시작할 때 옛 seed-meta.json을 지우고, 끝까지 성공하면 새로 쓴다(T-140). 중간에 실패하면 메타가 없어
     서버가 이 인덱스를 열지 않는다.
     """
-    import shutil
-
     from app.config import load_common_graph
     from app.rag import open_rag  # LightRAG는 무거워서 실제로 넣을 때만 불러온다
-    from app.seedmeta import remove_seed_meta, workspace_dir, write_seed_meta
+    from app.seedmeta import check_can_seed, remove_seed_meta, safe_workspace_dir, write_seed_meta
 
     # 태그는 tags.json에서 온다(T-304, 규칙 9). 합치는 곳은 load_common_graph 하나
     graph = load_common_graph(settings.common_graph_path, getattr(settings, "tags_path", None))
     custom_kg = graph_to_custom_kg(graph)
+    # 판본을 모르거나, --reset 없이 옛·다른 설정의 인덱스 위에 넣으려 하면 SeedRefused(아무것도 건드리지 않는다)
+    check_can_seed(settings, reset)
     if reset:
-        shutil.rmtree(workspace_dir(settings), ignore_errors=True)
+        # 작업 디렉터리 바로 아래 폴더만(심볼릭 링크·밖 경로는 WorkspaceError). 없는 것만 괜찮고 다른 오류는 시드를 멈춘다
+        try:
+            shutil.rmtree(safe_workspace_dir(settings))
+        except FileNotFoundError:
+            pass
     remove_seed_meta(settings)
     rag = await open_rag(settings)
     try:
@@ -162,6 +174,7 @@ def main(argv: list[str] | None = None) -> None:
     import argparse
     import asyncio
     import logging
+    import sys
 
     import lightrag.utils  # noqa: F401  불러올 때 로거를 INFO로 다시 맞추므로 먼저 불러 둔다
 
@@ -175,7 +188,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--reset", action="store_true",
                         help="워크스페이스 폴더를 지우고 새로 넣어요(그래프 판본·임베딩이 바뀌었을 때)")
     args = parser.parse_args(argv)
-    out = asyncio.run(seed(Settings.from_env(), reset=args.reset))
+    from app.seedmeta import SeedRefused, WorkspaceError
+
+    try:
+        out = asyncio.run(seed(Settings.from_env(), reset=args.reset))
+    except (SeedRefused, WorkspaceError) as e:
+        # 설정·상태 문제는 한 줄 한국어로(트레이스백 없이) 알리고 0이 아닌 코드로 끝낸다
+        print(f"시드하지 않았어요: {e}", file=sys.stderr)
+        raise SystemExit(2) from None
     print(f"시드 주입 완료: 엔티티 {out['entities']}, 관계 {out['relationships']}, "
           f"워크스페이스 {out['workspace']}, 작업 디렉터리 {out['working_dir']}")
 

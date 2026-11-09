@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,8 +30,42 @@ RESEED_CMD = "python -m app.seed --reset"
 DOCKER_HINT = "도커: docker compose run --rm analogy-api {cmd}"
 
 
+# 워크스페이스 이름은 작업 디렉터리 바로 아래 폴더 하나다. 경로 구분자·점·공백을 받지 않는다(--reset이 지우는 곳)
+WORKSPACE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+class WorkspaceError(ValueError):
+    """WORKSPACE·작업 디렉터리 설정이 안전하지 않을 때(설정 오류)."""
+
+
+class SeedRefused(RuntimeError):
+    """시드를 하면 안 되는 상태(옛·다른 인덱스 위에 --reset 없이, 판본을 모름)."""
+
+
+def validate_workspace(name: Any) -> str:
+    if not isinstance(name, str) or not WORKSPACE_RE.fullmatch(name):
+        raise WorkspaceError(f"WORKSPACE는 영문·숫자·_·-만 쓸 수 있어요: {name!r}")
+    return name
+
+
+def safe_workspace_dir(settings: Any) -> Path:
+    """작업 디렉터리 바로 아래의 워크스페이스 폴더(절대 경로). 벗어나거나 심볼릭 링크면 WorkspaceError.
+
+    --reset이 이 경로를 통째로 지우므로, 어떤 설정으로도 작업 디렉터리 밖·작업 디렉터리 자체를 가리키지 않게 한다.
+    """
+    name = validate_workspace(settings.workspace)
+    base = Path(settings.lightrag_working_dir).resolve()
+    target = base / name
+    if target.is_symlink():
+        raise WorkspaceError(f"워크스페이스 폴더가 심볼릭 링크라 쓰지 않아요: {name}")
+    resolved = target.resolve()
+    if resolved.parent != base or resolved == base:
+        raise WorkspaceError(f"워크스페이스 폴더가 작업 디렉터리 바로 아래가 아니에요: {name}")
+    return resolved
+
+
 def workspace_dir(settings: Any) -> Path:
-    return Path(settings.lightrag_working_dir) / settings.workspace
+    return safe_workspace_dir(settings)
 
 
 def meta_path(settings: Any) -> Path:
@@ -101,10 +136,18 @@ def _emb_text(e: Any) -> str:
 
 
 def index_status(settings: Any) -> tuple[bool, str | None]:
-    """(준비됨, 이유). 준비되지 않았으면 이유는 무엇을 해야 하는지까지 담은 한국어 한 줄."""
-    if not index_exists(settings):
-        return False, (f"검색 인덱스가 없어요({workspace_dir(settings)}). "
-                       f"시드해 주세요: {SEED_CMD} ({DOCKER_HINT.format(cmd=SEED_CMD)})")
+    """(준비됨, 이유). 준비되지 않았으면 이유는 무엇을 해야 하는지까지 담은 운영자용 한국어 한 줄.
+
+    /health에 그대로 나가므로 절대 경로는 넣지 않는다(경로는 부르는 쪽이 로그에 남긴다).
+    """
+    if settings.workspace_version is None:
+        return False, "공통 그래프 판본(version)을 알 수 없어요. 그래프·태그 파일의 version을 확인해 주세요."
+    try:
+        exists = index_exists(settings)
+    except WorkspaceError as e:
+        return False, f"{e} WORKSPACE·LIGHTRAG_WORKING_DIR 설정을 확인해 주세요."
+    if not exists:
+        return False, f"검색 인덱스가 없어요. 시드해 주세요: {SEED_CMD} ({DOCKER_HINT.format(cmd=SEED_CMD)})"
     reseed = f"다시 시드해 주세요: {RESEED_CMD} ({DOCKER_HINT.format(cmd=RESEED_CMD)}), 그다음 서버를 재시작해요."
     if not meta_path(settings).is_file():
         return False, f"시드 기록({SEED_META_FILE})이 없는 옛 인덱스예요. {reseed}"
@@ -119,3 +162,18 @@ def index_status(settings: Any) -> tuple[bool, str | None]:
         return False, (f"인덱스의 임베딩({_emb_text(meta.get('embedding'))})이 지금 설정"
                        f"({_emb_text(want['embedding'])})과 달라요. EMBEDDING_*를 시드 때와 같게 맞추거나 {reseed}")
     return True, None
+
+
+def check_can_seed(settings: Any, reset: bool) -> None:
+    """시드 전에 확인한다. --reset 없이 옛(메타 없음)·다른 설정의 인덱스 위에 덮어써 '준비됨'을 찍지 않게."""
+    if settings.workspace_version is None:
+        raise SeedRefused("공통 그래프 판본(version)을 알 수 없어 시드하지 않아요. 그래프·태그 파일의 version을 확인해 주세요.")
+    safe_workspace_dir(settings)  # 경로가 안전하지 않으면 여기서 멈춘다
+    if reset or not index_exists(settings):
+        return
+    meta = read_seed_meta(settings)
+    if meta is None:
+        raise SeedRefused(f"시드 기록이 없는 옛 인덱스가 있어요. 지우고 새로 넣으려면 {RESEED_CMD}")
+    if {k: meta.get(k) for k in ("graphVersion", "embedding")} != expected_seed_meta(settings):
+        raise SeedRefused("이미 있는 인덱스가 지금 설정(그래프 판본·임베딩)과 달라요. "
+                          f"지우고 새로 넣으려면 {RESEED_CMD}")
