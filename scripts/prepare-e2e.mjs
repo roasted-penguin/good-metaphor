@@ -26,6 +26,8 @@ copyFileSync('tests/e2e/hook-content.js', `${OUT}/e2e-hook.js`);
 const mp = `${OUT}/manifest.json`;
 const manifest = JSON.parse(readFileSync(mp, 'utf8'));
 // all_frames(T-111): iframe 안에서도 content.js 주입 확인·background 이중 방어(topHost) 확인에 쓴다
+// 서버 출처 권한(T-141): 실제 확장은 설정 화면에서 선택 권한을 요청한다. e2e는 요청 창을 누를 수 없어 사본에만 미리 준다
+manifest.host_permissions.push('http://127.0.0.1:8767/*');
 manifest.content_scripts.push({ matches: ['http://127.0.0.1:8766/*', 'http://localhost:8766/*'], js: ['e2e-hook.js'], run_at: 'document_start', all_frames: true });
 writeFileSync(mp, JSON.stringify(manifest, null, 2));
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { callAnalogyServer, checkServerResult, shouldUseServer, serverSkipReason, getInstallToken, REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
+import { callAnalogyServer, checkServerResult, shouldUseServer, serverSkipReason, getInstallToken, REJECTED_TEXT, serverOriginPattern, shouldCacheLocal } from '../../extension/lib/analogy-server.js';
 
 // 서버 응답 모양(server/app/pipeline.py 반환값을 흉내)
 const serverResult = (over = {}) => ({
@@ -211,4 +211,68 @@ test('serverSkipReason: 공통 관심사가 메이플이 아니면 interest, 메
   // 주소가 없으면 off가 먼저, 로그인이면 session이 먼저
   assert.equal(serverSkipReason({ ...base, admin: {}, commonId: 'restaurant' }), 'off');
   assert.equal(serverSkipReason({ ...base, session: { name: 'u' }, commonId: 'restaurant' }), 'session');
+});
+
+/* ───────── T-141 서버 모드 실사용 준비 ───────── */
+
+// 규칙 1 로컬 확인: 서버 후보 안이어도 로컬 그래프에 없는 노드면 숨긴다
+test('규칙 1(T-141): nodeId 가 서버 후보 안이지만 로컬 노드 집합에 없으면 숨긴다', () => {
+  const r = serverResult({
+    evidence: { nodeId: 'ghost', nodeLabel: '없는 개념', source: 'common', tagLabel: null },
+    debug: { candidates: [{ id: 'ghost', label: '없는 개념' }, { id: 'meso', label: '메소' }] }
+  });
+  const out = checkServerResult(r, new Set(['meso', 'auction']));
+  assert.equal(out.analogy, '');
+  assert.equal(out.rejected, REJECTED_TEXT);
+  assert.equal(out.evidence, null);
+  assert.equal(out.meaning, r.meaning, '뜻은 그대로 보인다');
+});
+
+test('규칙 1(T-141): 서버 후보 안이면서 로컬 노드 집합에도 있으면 그대로', () => {
+  const out = checkServerResult(serverResult(), new Set(['meso']));
+  assert.equal(out.analogy, '메소를 빌려주는 것과 같아요.');
+  assert.equal(out.evidence.nodeId, 'meso');
+  assert.equal(out.rejected, null);
+});
+
+test('규칙 1(T-141): 로컬 노드 집합을 안 주면 예전처럼 서버 후보만 본다', () => {
+  assert.equal(checkServerResult(serverResult()).evidence.nodeId, 'meso');
+});
+
+test('callAnalogyServer(T-141): localNodeIds 를 넘기면 결과 검증에 쓴다', async () => {
+  const r = await callAnalogyServer({ url: 'https://a', token: 't', payload, timeoutMs: 1000, localNodeIds: new Set(['auction']), fetchImpl: async () => jsonRes(serverResult()) });
+  assert.equal(r.ok, true);
+  assert.equal(r.result.analogy, '');
+  assert.equal(r.result.rejected, REJECTED_TEXT);
+});
+
+test('serverSkipReason(T-141): 서버 출처 권한이 없으면 no-permission, 다른 건너뜀 이유가 먼저', () => {
+  const base = { admin, session: null, sentenceRecords: [], providerKind: 'gemini' };
+  assert.equal(serverSkipReason({ ...base, hasPermission: false }), 'no-permission');
+  assert.equal(serverSkipReason({ ...base, hasPermission: true }), null);
+  assert.equal(serverSkipReason(base), null, '생략하면 권한 있음(예전 호출 모양)');
+  assert.equal(serverSkipReason({ ...base, admin: {}, hasPermission: false }), 'off');
+  assert.equal(serverSkipReason({ ...base, session: { name: 'u' }, hasPermission: false }), 'session');
+  assert.equal(serverSkipReason({ ...base, commonId: 'restaurant', hasPermission: false }), 'interest');
+  assert.equal(serverSkipReason({ ...base, sentenceRecords: [{ vote: 'down' }], hasPermission: false }), 'feedback');
+  assert.equal(serverSkipReason({ ...base, providerKind: 'demo', hasPermission: false }), 'demo');
+});
+
+test('serverOriginPattern(T-141): 서버 주소 → 권한 요청용 출처 패턴, 틀린 주소는 null', () => {
+  assert.equal(serverOriginPattern('http://127.0.0.1:8000/'), 'http://127.0.0.1:8000/*');
+  assert.equal(serverOriginPattern('https://api.example.com/base/path'), 'https://api.example.com/*');
+  assert.equal(serverOriginPattern(''), null);
+  assert.equal(serverOriginPattern(undefined), null);
+  assert.equal(serverOriginPattern('주소 아님'), null);
+  assert.equal(serverOriginPattern('ftp://example.com/'), null, 'http(s)만');
+});
+
+test('shouldCacheLocal(T-141): 서버 실패로 만든 로컬 결과는 캐시하지 않고, 의도적 건너뜀은 캐시', () => {
+  assert.equal(shouldCacheLocal(null), true, '서버 모드 꺼짐(serverInfo 없음)');
+  for (const reason of ['off', 'session', 'interest', 'feedback', 'demo', 'no-permission', 'reported']) {
+    assert.equal(shouldCacheLocal({ used: false, reason }), true, reason);
+  }
+  for (const reason of ['network', 'timeout', 'http-500', 'http-503', 'http-429', 'bad-json', 'bad-shape', '모르는 이유']) {
+    assert.equal(shouldCacheLocal({ used: false, reason }), false, reason);
+  }
 });

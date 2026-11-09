@@ -104,7 +104,9 @@ function staticPage(req, res) {
 //   '서버정상' → 정상 결과(후보는 공통 그래프 실제 id), '서버후보밖' → 후보 밖 nodeId,
 //   '서버지연' → SERVER_DELAY_MS 뒤 정상 결과(확장의 timeoutMs 보다 길게)
 //   '서버금칙' → 비유에 금칙어가 섞인 결과(확장이 서버 결과도 금칙어 재검사하는지, T-114)
+//   '서버로컬밖' → 근거가 서버 후보 안이지만 확장 공통 그래프에 없는 노드(T-141, 규칙 1 로컬 확인)
 export const SERVER_DELAY_MS = 5000;
+export const GHOST_NODE = 'ghost-node-t141';
 export const SERVER_ANALOGY = '서버가 만든 비유예요: 스타포스 강화와 같은 구조예요.';
 function serverResult(nodeId) {
   return {
@@ -121,7 +123,9 @@ function serverResult(nodeId) {
       candidates: [
         { id: 'starforce', label: '스타포스 강화', score: 0.8, direct: 0.8, tag: null, tagSim: null, source: 'common' },
         { id: 'cube', label: '잠재능력 재설정(큐브)', score: 0.7, direct: 0.7, tag: null, tagSim: null, source: 'common' },
-        { id: 'meso', label: '메소', score: 0.6, direct: 0.6, tag: null, tagSim: null, source: 'common' }
+        { id: 'meso', label: '메소', score: 0.6, direct: 0.6, tag: null, tagSim: null, source: 'common' },
+        // '서버로컬밖'(T-141): 서버 후보에는 있지만 확장의 공통 그래프에는 없는 노드
+        ...(nodeId === GHOST_NODE ? [{ id: GHOST_NODE, label: '없는 개념', score: 0.9, direct: 0.9, tag: null, tagSim: null, source: 'common' }] : [])
       ],
       topTags: [], abstractText: null, embedderId: null, embedderStatus: null,
       provider: 'server/mock-analogy', fallbacks: [], llmRetries: 0, user: null,
@@ -147,6 +151,7 @@ function mockAnalogyApi(req, res) {
     if (req.url !== '/v1/analogy') { res.writeHead(404, cors); return res.end(); }
     if (sentence.includes('서버정상')) return send(serverResult('starforce'));
     if (sentence.includes('서버후보밖')) return send(serverResult('not-a-candidate'));
+    if (sentence.includes('서버로컬밖')) return send(serverResult(GHOST_NODE));
     if (sentence.includes('서버금칙')) return send({ ...serverResult('starforce'), analogy: `${SERVER_ANALOGY} ${BLOCKED_IN_ANALOGY}` });
     if (sentence.includes('서버지연')) return void setTimeout(() => send(serverResult('starforce')), SERVER_DELAY_MS);
     res.writeHead(500, { ...cors, 'content-type': 'application/json' });

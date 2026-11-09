@@ -4,7 +4,7 @@ import { test as base, expect, chromium } from '@playwright/test';
 import { mkdtempSync, readFileSync, cpSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startServers, calls, analogyCalls, SERVER_ANALOGY, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES } from './servers.mjs';
+import { startServers, calls, analogyCalls, SERVER_ANALOGY, GHOST_NODE, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES } from './servers.mjs';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
 import { COMMON_INTERESTS } from '../../extension/lib/graph.js';
 import { openBrowserEmbedder } from '../../tools/browser-embedder.mjs';
@@ -1439,6 +1439,78 @@ test('서버 모드(T-404): 로그인 세션이면 서버를 부르지 않는다
   expect(r.data.debug.server).toEqual({ used: false, reason: 'session' });
   expect(analogyCalls.length - before).toBe(0);
   await send({ type: 'auth:logout' });
+});
+
+/* ───────────── 서버 모드 실사용 준비(T-141) ───────────── */
+// e2e 사본은 :8767 권한을 manifest 에 미리 받는다(scripts/prepare-e2e.mjs). 권한 없음은 서비스 워커의 contains 를 바꿔 흉내 낸다
+async function denyServerPermission(context) {
+  const sw = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+  await sw.evaluate(() => {
+    const real = chrome.permissions.contains.bind(chrome.permissions);
+    chrome.permissions.contains = async q => (q?.origins || []).some(o => o.startsWith('http://127.0.0.1:8767')) ? false : real(q);
+  });
+}
+
+test('서버 모드(T-141): 서버 출처 권한이 없으면 서버를 부르지 않고 조용히 로컬(no-permission), 이 결과는 캐시', async ({ context, ext }) => {
+  await denyServerPermission(context);
+  const q = { sentence: '서버정상 권한 없음 확인 문장이에요.', word: '', context: '', pageTitle: 't' };
+  const before = analogyCalls.length;
+  const r = await ext.send({ type: 'explain', ...q });
+  expect(r.ok).toBe(true);
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'no-permission' });
+  expect(r.data.analogy).toContain('같은 구조예요');
+  expect(analogyCalls.length - before, '서버 요청 없음').toBe(0);
+  // 의도적 건너뜀이라 캐시한다
+  const c = await ext.send({ type: 'explain', ...q });
+  expect(c.data.cached).toBe(true);
+  expect(c.data.debug.server).toEqual({ used: false, reason: 'no-permission' });
+});
+
+test('서버 모드(T-141): 서버 실패로 만든 로컬 결과는 캐시하지 않아 다음 호버에 서버를 다시 부른다', async ({ ext }) => {
+  const q = { sentence: '서버오류 실패 결과 캐시 확인 문장이에요.', word: '', context: '', pageTitle: 't' };
+  const before = analogyCalls.length;
+  const r1 = await ext.send({ type: 'explain', ...q });
+  expect(r1.data.source).toBe('local');
+  expect(r1.data.debug.server).toEqual({ used: false, reason: 'http-500' });
+  const r2 = await ext.send({ type: 'explain', ...q });
+  expect(r2.data.cached, '실패 결과는 캐시에 없다').toBeFalsy();
+  expect(r2.data.debug.server).toEqual({ used: false, reason: 'http-500' });
+  expect(analogyCalls.length - before, '두 번 모두 서버를 다시 시도').toBe(2);
+});
+
+test('서버 모드(T-141): 서버 근거가 서버 후보 안이어도 확장 공통 그래프에 없으면 비유를 숨긴다(규칙 1)', async ({ ext }) => {
+  const r = await ext.send({ type: 'explain', sentence: '서버로컬밖 레버리지는 손익을 키운다.', noCache: true });
+  expect(r.data.source).toBe('server');
+  expect(r.data.debug.candidates.map(c => c.id)).toContain(GHOST_NODE);
+  expect(r.data.analogy).toBe('');
+  expect(r.data.rejected).toBe(REJECTED);
+  expect(r.data.evidence).toBeNull();
+  expect(r.data.meaning).toBe('서버 뜻 풀이예요.');
+});
+
+test('설정 화면(T-141): 서버 주소 권한이 있으면 서버 허용됨, 없으면 허용 버튼으로 그 출처만 요청', async ({ context, extId }) => {
+  const ok = await context.newPage();
+  await ok.goto(`chrome-extension://${extId}/options.html`);
+  await expect(ok.locator('#serverPermRow')).toBeVisible();
+  await expect(ok.locator('#serverPermStatus')).toHaveText('서버 허용됨');
+  await expect(ok.locator('#grantServer')).toBeHidden();
+
+  // 권한 없음 흉내: 요청 창은 누를 수 없어 contains·request 를 페이지에서 바꾼다
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    let granted = false;
+    window.__permAsked = [];
+    chrome.permissions.contains = async q => (q?.origins || []).some(o => o.startsWith('http://127.0.0.1:8767')) ? granted : true;
+    chrome.permissions.request = async q => { window.__permAsked.push(q); granted = true; return true; };
+  });
+  await page.goto(`chrome-extension://${extId}/options.html`);
+  await expect(page.locator('#serverPermStatus')).toHaveText('서버(http://127.0.0.1:8767)를 쓰려면 허용이 필요해요.');
+  await expect(page.locator('#grantServer')).toBeVisible();
+  await page.click('#grantServer');
+  await expect(page.locator('#serverPermStatus')).toHaveText('서버 허용됨');
+  expect(await page.evaluate(() => window.__permAsked)).toEqual([{ origins: ['http://127.0.0.1:8767/*'] }]);
+  await expect(page.locator('#grantServer')).toBeHidden();
 });
 
 /* ───────── 제외 사이트 (T-107) ───────── */
