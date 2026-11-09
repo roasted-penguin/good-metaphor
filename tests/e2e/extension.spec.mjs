@@ -225,6 +225,65 @@ test('근거 검사(T-123): 프롬프트에 usedFact, 정상은 통과, 숫자·
   expect(fact.data.debug.grounding).toEqual({ ok: false, reason: 'fact-mismatch' });
 });
 
+// 근거 검사 오탐률 기록(T-146): 숨김은 기기 안 groundingLog에 가린 문장·비유로, 통과는 날짜별 개수만
+const P6_SENTENCE = '입장횟수테스트 이 적금은 한 달에 한 번만 넣을 수 있다.';
+const groundingLog = page => page.evaluate(async () => (await chrome.storage.local.get('groundingLog')).groundingLog || []);
+
+test('근거 검사 기록(T-146): 호버로 숨긴 비유가 groundingLog에 1건, 설정 집계에 숨김 1개, 괜찮은 비유였어요 표시', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p6');
+  await recordTooltip(page, t => t.includes(GROUNDING_REJECTED));
+  const op = ext.page;
+  await expect.poll(async () => (await groundingLog(op)).length).toBe(1);
+  const [e] = await groundingLog(op);
+  expect(e.reason).toBe('number-outside');
+  expect(e.sentenceMasked).toBe(P6_SENTENCE);
+  expect(e.analogyMasked).toContain('7번만');
+  expect(e.nodeId).toBeTruthy();
+  expect(e.interest).toBe('maplestory');
+  for (const k of ['sentence', 'analogy']) expect(e).not.toHaveProperty(k);
+  const counts = await op.evaluate(async () => (await chrome.storage.local.get('groundingCounts')).groundingCounts);
+  expect(Object.values(counts)[0]).toEqual({ checked: 1, hidden: 1 });
+
+  await op.reload();
+  await expect(op.locator('#fbGroundingStats')).toContainText('숨김 1개');
+  await expect(op.locator('#fbGroundingStats')).toContainText('근거 밖 숫자 1');
+  const li = op.locator('#fbGroundingList li');
+  await expect(li).toHaveCount(1);
+  await expect(li).toContainText('7번만');
+  // 피드백이 없어도 근거 검사 기록이 있으면 지우기를 누를 수 있다
+  await expect(op.locator('#fbClear')).toBeEnabled();
+  await li.locator('.fb-flag').click();
+  await expect.poll(async () => (await groundingLog(op))[0].userFlag).toBe('false-positive');
+  await expect(op.locator('#fbGroundingStats')).toContainText('괜찮았다고 표시 1');
+  await li.locator('.fb-flag').click();
+  await expect.poll(async () => (await groundingLog(op))[0].userFlag).toBeUndefined();
+});
+
+test('근거 검사 기록(T-146): 통과한 비유는 개수만, 동의 꺼짐이면 내보내기에 샘플 없음·켜면 있음, 전부 지우기가 기록도 지운다', async ({ ext }) => {
+  const { send, setSettings, page: op } = ext;
+  await send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  await send({ type: 'explain', sentence: P6_SENTENCE, noCache: true });
+  await expect.poll(async () => (await groundingLog(op)).length).toBe(1);
+  await expect.poll(async () => (await send({ type: 'grounding:stats' })).data.checked).toBe(2);
+  const st = (await send({ type: 'grounding:stats' })).data;
+  expect(st.hidden).toBe(1);
+  expect(st.percent).toBe(50);
+
+  const off = (await send({ type: 'corrections:export' })).data;
+  expect(off).not.toHaveProperty('groundingSamples');
+  await setSettings({ feedbackShare: true });
+  const on = (await send({ type: 'corrections:export' })).data;
+  expect(on.groundingSamples).toHaveLength(1);
+  expect(on.groundingSamples[0]).toMatchObject({ reason: 'number-outside', sentence: P6_SENTENCE });
+  expect(on.groundingSamples[0].analogy).toContain('7번만');
+
+  expect((await send({ type: 'feedback:clear' })).ok).toBe(true);
+  expect(await groundingLog(op)).toEqual([]);
+  expect((await send({ type: 'grounding:stats' })).data.checked).toBe(0);
+});
+
 // 금칙어 필터(T-114): 가짜 LLM은 "금칙비유테스트"면 비유에, "금칙뜻테스트"면 뜻에 금칙어를 섞는다
 const BLOCKED_REJECTED = '부적절한 표현이 섞여 있어서 비유를 숨겼어요.';
 const hasBlocked = t => [BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING].some(w => t.replace(/[\s.]/g, '').includes(w.replace(/[\s.]/g, '')));

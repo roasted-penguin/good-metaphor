@@ -408,3 +408,52 @@ test('운영자 도구(T-157): 그 관심사 그래프에 없는 노드 후보�
   assert.equal(out.interest, 'restaurant');
   assert.equal(ex.exampleCandidates.length, 2); // 원본은 그대로
 });
+
+/* ───── 근거 검사 오탐 샘플 (T-146) ───── */
+
+const GDAY = '2026-11-09';
+const gAt = h => new Date(2026, 10, 9, h).getTime();
+const gEntry = over => ({ id: 'g' + ++seq, ts: gAt(12), reason: 'number-outside', nodeId: 'meso', interest: 'maplestory', sentenceMasked: '이 적금은 한 달에 한 번만 넣을 수 있다.', analogyMasked: '메이플로 치면 7번만 같아요.', ...over });
+
+test('buildCorrectionsExport(T-146): 보내기 동의가 꺼져 있으면 groundingSamples 필드가 없다', () => {
+  const log = [gEntry({})];
+  assert.equal('groundingSamples' in buildCorrectionsExport([], graph, { ...meta, groundingLog: log, today: GDAY }), false);
+  assert.equal('groundingSamples' in buildCorrectionsExport([], graph, { ...meta, groundingLog: log, share: false, today: GDAY }), false);
+});
+
+test('buildCorrectionsExport(T-146): 동의하면 그 관심사·공통 노드 샘플만, 금칙어 거름, 오탐 표시 우선', () => {
+  const log = [
+    gEntry({ id: 'a', ts: gAt(9) }),
+    gEntry({ id: 'f', ts: gAt(8), reason: 'fact-mismatch', userFlag: 'false-positive', nodeId: 'cube' }),
+    gEntry({ id: 'u', nodeId: 'u:focus' }),
+    gEntry({ id: 'r', interest: 'restaurant' }),
+    gEntry({ id: 'b', analogyMasked: '나 쁜 말 같아요.' })
+  ];
+  const ex = buildCorrectionsExport([], graph, { ...meta, interest: 'maplestory', share: true, groundingLog: log, today: GDAY });
+  assert.deepEqual(ex.groundingSamples.map(s => [s.nodeId, s.reason, s.userFlag || null]), [['cube', 'fact-mismatch', 'false-positive'], ['meso', 'number-outside', null]]);
+  const s = JSON.stringify(ex.groundingSamples);
+  for (const bad of ['u:focus', '나 쁜 말', '"id"']) assert.ok(!s.includes(bad), bad);
+  // 기록이 없어도 동의하면 빈 배열(동의했지만 샘플 없음)
+  assert.deepEqual(buildCorrectionsExport([], graph, { ...meta, share: true, groundingLog: [], today: GDAY }).groundingSamples, []);
+});
+
+test('운영자 도구(T-146): 샘플도 그래프에 없는 노드·금칙어를 다시 거르고 요약 줄을 만든다', async () => {
+  const { dropUnknownNodes, groundingSampleLines } = await import('../../tools/check-corrections.mjs');
+  const ex = {
+    kind: 'good-metaphor-corrections', version: 1, interest: 'maplestory', rejected: [], exampleCandidates: [], evalCandidates: [], guardCandidates: [],
+    groundingSamples: [
+      { reason: 'number-outside', nodeId: 'meso', sentence: '문장', analogy: '비유', day: GDAY, userFlag: 'false-positive' },
+      { reason: 'fact-mismatch', nodeId: 'meso', sentence: '문장', analogy: '비유', day: GDAY },
+      { reason: 'fact-mismatch', nodeId: 'lunch_peak', sentence: '문장', analogy: '비유', day: GDAY }
+    ]
+  };
+  const { out, dropped } = dropUnknownNodes(ex, graph);
+  assert.equal(dropped, 1);
+  assert.equal(out.groundingSamples.length, 2);
+  const lines = groundingSampleLines(out.groundingSamples);
+  assert.deepEqual(lines, ['근거 검사 숨김 샘플 2개 (오탐 표시 1개)', '  fact-mismatch 1', '  number-outside 1']);
+  // 동의하지 않은 파일(필드 없음)은 그렇다고 한 줄
+  assert.deepEqual(groundingSampleLines(undefined), ['근거 검사 샘플 없음(보내기 동의가 꺼져 있었어요)']);
+  // 동의 없는 파일은 dropUnknownNodes가 필드를 만들지 않는다
+  assert.equal('groundingSamples' in dropUnknownNodes({ ...ex, groundingSamples: undefined }, graph).out, false);
+});
