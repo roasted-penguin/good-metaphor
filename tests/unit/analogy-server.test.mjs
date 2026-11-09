@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { callAnalogyServer, checkServerResult, shouldUseServer, serverSkipReason, getInstallToken, REJECTED_TEXT, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown, parseRetryAfter } from '../../extension/lib/analogy-server.js';
+import { callAnalogyServer, checkServerResult, shouldUseServer, serverSkipReason, getInstallToken, REJECTED_TEXT, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown, parseRetryAfter, cacheEntryFor, readCacheEntry } from '../../extension/lib/analogy-server.js';
 
 // 서버 응답 모양(server/app/pipeline.py 반환값을 흉내)
 const serverResult = (over = {}) => ({
@@ -371,4 +371,27 @@ test('callAnalogyServer(T-159): 429 에 Retry-After 가 있으면 retryAfterMs �
   const other = { ...jsonRes({ detail: 'x' }, 503), headers: new Headers({ 'retry-after': '12' }) };
   const r3 = await callAnalogyServer({ url: 'https://a', token: 't', payload, timeoutMs: 1000, fetchImpl: async () => other });
   assert.deepEqual(r3, { ok: false, reason: 'http-503' }, '429 만 Retry-After 를 본다');
+});
+
+/* ───────── 쿨다운 결과의 캐시 만료(T-159 수정 1회차) ───────── */
+test('cacheEntryFor(T-159): cooldown 결과는 쿨다운 until 을 expiresAt 으로 붙이고, 다른 결과는 그대로(같은 객체)', () => {
+  const cd = { meaning: 'm', debug: { server: { used: false, reason: 'cooldown', until: NOW + 5000 } } };
+  assert.deepEqual(cacheEntryFor(cd), { ...cd, expiresAt: NOW + 5000 });
+  for (const r of [
+    { meaning: 'm', debug: {} },
+    { meaning: 'm', debug: { server: { used: false, reason: 'no-permission' } } },
+    { meaning: 'm', source: 'server', debug: { server: { used: true, ms: 3 } } },
+    { meaning: 'm', debug: { server: { used: false, reason: 'cooldown' } } } // until 없음 → 만료 없이
+  ]) assert.equal(cacheEntryFor(r), r);
+});
+
+test('readCacheEntry(T-159): expiresAt 이 지나면 null(놓침), 전이면 expiresAt 을 뺀 결과, 없으면 그대로', () => {
+  const plain = { meaning: 'm', debug: {} };
+  assert.equal(readCacheEntry(plain, NOW), plain, 'expiresAt 없는 항목은 예전처럼 그대로');
+  assert.equal(readCacheEntry(null, NOW), null);
+  assert.equal(readCacheEntry(undefined, NOW), null);
+  const live = { meaning: 'm', expiresAt: NOW + 1 };
+  assert.deepEqual(readCacheEntry(live, NOW), { meaning: 'm' });
+  assert.equal(readCacheEntry({ meaning: 'm', expiresAt: NOW }, NOW), null, '쿨다운이 끝나는 순간부터 놓침');
+  assert.equal(readCacheEntry({ meaning: 'm', expiresAt: NOW - 1 }, NOW), null);
 });

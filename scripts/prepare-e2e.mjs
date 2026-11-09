@@ -36,11 +36,11 @@ writeFileSync(`${OUT}/ort-smoke.html`, '<!doctype html><meta charset="utf-8"><ti
 
 // 서버 모드 사본(T-141): 같은 사본 + 가짜 analogy-api(:8767) 주소와 그 출처 권한.
 // 표시어 없는 문장은 가짜 서버가 500 → 서버 실패라 결과를 캐시하지 않는다. 캐시를 보는 시험은 기본 사본을 쓴다.
-// 서버 실패 뒤 쿨다운(T-159)은 시험이 기다릴 수 있게 짧게(3초부터, 상한 6초). 쿨다운 중 결과는 캐시한다
+// 서버 실패 뒤 쿨다운(T-159)은 시험이 기다릴 수 있게 짧게(8초부터, 상한 16초). 쿨다운 중 결과는 쿨다운이 끝날 때까지만 캐시한다
 // 실제 확장은 설정 화면에서 선택 권한을 요청한다. e2e는 요청 창을 누를 수 없어 manifest 에 미리 준다
 const SERVER_OUT = '.tmp/ext-e2e-server';
 rmSync(SERVER_OUT, { recursive: true, force: true });
 cpSync(OUT, SERVER_OUT, { recursive: true });
-writeFileSync(`${SERVER_OUT}/config/admin.json`, JSON.stringify({ ...admin, analogyServer: { url: 'http://127.0.0.1:8767', timeoutMs: 800, cooldownMs: 3000, cooldownMaxMs: 6000 } }, null, 2));
+writeFileSync(`${SERVER_OUT}/config/admin.json`, JSON.stringify({ ...admin, analogyServer: { url: 'http://127.0.0.1:8767', timeoutMs: 800, cooldownMs: 8000, cooldownMaxMs: 16000 } }, null, 2));
 writeFileSync(`${SERVER_OUT}/manifest.json`, JSON.stringify({ ...manifest, host_permissions: [...manifest.host_permissions, 'http://127.0.0.1:8767/*'] }, null, 2));
 console.log('prepared', OUT, SERVER_OUT);

@@ -1477,15 +1477,15 @@ serverTest('서버 모드(T-141): 서버 출처 권한이 없으면 서버를 �
 });
 
 /* ───────── 서버 실패 뒤 쿨다운(T-159) ───────── */
-// 서버 사본은 cooldownMs 3000·cooldownMaxMs 6000(scripts/prepare-e2e.mjs). 시험마다 새 브라우저라 session 저장소는 비어 있다
+// 서버 사본은 cooldownMs 8000·cooldownMaxMs 16000(scripts/prepare-e2e.mjs). 시험마다 새 브라우저라 session 저장소는 비어 있다.
+// 건너뜀을 보는 부분은 쿨다운 상태를 저장소에 직접 넣어, 로컬 생성이 느려도 쿨다운이 먼저 끝나지 않게 한다
 const getServerCooldown = ext => ext.page.evaluate(async () => (await chrome.storage.session.get('serverCooldown')).serverCooldown ?? null);
-const waitServerCooldownOver = async ext => {
-  const cd = await getServerCooldown(ext);
-  if (cd) await new Promise(r => setTimeout(r, Math.max(0, cd.until - Date.now()) + 100));
-};
+const setServerCooldown = (ext, cd) => ext.page.evaluate(c => chrome.storage.session.set({ serverCooldown: c }), cd);
+// 쿨다운 끝(until)까지 고정 sleep 대신 시계를 폴링한다
+const waitPast = until => expect.poll(() => Date.now() > until, { timeout: 20_000, intervals: [200] }).toBe(true);
 
-serverTest('서버 모드(T-141·T-159): 서버 실패 뒤 쿨다운 동안은 서버를 건너뛰고(cooldown) 그 결과는 캐시, 지나면 다시 서버, 실패 결과는 캐시 안 함', async ({ ext }) => {
-  await ext.send({ type: 'embed:warmup' }); // 모델 준비 시간이 쿨다운(3초)을 먹지 않게
+serverTest('서버 모드(T-141·T-159): 서버 실패 뒤 쿨다운 동안은 서버를 건너뛰고(cooldown) 그 결과는 쿨다운까지만 캐시, 지나면 같은 문장도 다시 서버, 실패 결과는 캐시 안 함', async ({ ext }) => {
+  await ext.send({ type: 'embed:warmup' }); // 모델 준비 시간을 재지 않게
   const fail = { sentence: '서버오류 실패 결과 캐시 확인 문장이에요.', word: '', context: '', pageTitle: 't' };
   const before = analogyCalls.length;
   const t0 = Date.now();
@@ -1495,36 +1495,51 @@ serverTest('서버 모드(T-141·T-159): 서버 실패 뒤 쿨다운 동안은 �
   expect(analogyCalls.length - before).toBe(1);
   const cd1 = await getServerCooldown(ext);
   expect(cd1).toMatchObject({ reason: 'http-500', failures: 1 });
-  expect(cd1.until - t0).toBeGreaterThanOrEqual(3000);
-  expect(cd1.until - Date.now()).toBeLessThanOrEqual(3000);
+  expect(cd1.until - t0).toBeGreaterThanOrEqual(8000);
+  expect(cd1.until - Date.now()).toBeLessThanOrEqual(8000);
 
-  // 쿨다운 중: 서버가 답할 문장이어도 서버를 부르지 않고 로컬, 의도적 건너뜀이라 캐시
+  // 쿨다운 중: 서버가 답할 문장이어도 서버를 부르지 않고 로컬, 의도적 건너뜀이라 캐시(쿨다운 끝까지만).
+  // 로컬 생성 시간과 무관하게 지금부터 8초로 다시 잡는다
+  const until = Date.now() + 8000;
+  await setServerCooldown(ext, { ...cd1, until });
   const other = { sentence: '서버정상 쿨다운 중 다른 문장이에요.', word: '', context: '', pageTitle: 't' };
   const r2 = await ext.send({ type: 'explain', ...other });
   expect(r2.data.source).toBe('local');
-  expect(r2.data.debug.server).toEqual({ used: false, reason: 'cooldown', until: cd1.until });
+  expect(r2.data.debug.server).toEqual({ used: false, reason: 'cooldown', until });
   expect(r2.data.analogy).toContain('같은 구조예요');
   expect(analogyCalls.length - before, '쿨다운 중 서버 요청 없음').toBe(1);
   const c2 = await ext.send({ type: 'explain', ...other });
   expect(c2.data.cached).toBe(true);
   expect(c2.data.debug.server.reason).toBe('cooldown');
+  expect(c2.data.expiresAt, '만료 시각은 결과에 섞이지 않는다').toBeUndefined();
 
-  // 쿨다운이 지나면 다시 서버. 실패로 만든 결과는 캐시에 없어 같은 문장도 서버를 다시 시도(T-141), 연속 실패라 두 배(상한 6000)
-  await waitServerCooldownOver(ext);
-  const t3 = Date.now();
-  const r3 = await ext.send({ type: 'explain', ...fail });
-  expect(r3.data.cached, '실패 결과는 캐시에 없다').toBeFalsy();
-  expect(r3.data.debug.server).toEqual({ used: false, reason: 'http-500' });
-  expect(analogyCalls.length - before, '쿨다운 뒤 서버를 다시 시도').toBe(2);
+  // 쿨다운이 지나면 쿨다운 중 캐시는 놓침 → 같은 문장도 서버를 부르고, 성공하면 쿨다운이 풀린다
+  await waitPast(until);
+  const r3 = await ext.send({ type: 'explain', ...other });
+  expect(r3.data.cached, '쿨다운 중 결과는 쿨다운 뒤에 쓰지 않는다').toBeFalsy();
+  expect(r3.data.source).toBe('server');
+  expect(analogyCalls.length - before).toBe(2);
+  expect(await getServerCooldown(ext), '성공하면 지운다').toBeNull();
+  const c3 = await ext.send({ type: 'explain', ...other });
+  expect(c3.data.cached).toBe(true);
+  expect(c3.data.source).toBe('server');
+
+  // 실패로 만든 결과는 캐시에 없어 같은 문장도 서버를 다시 시도(T-141). 연속 실패라 두 배(상한 16000)
+  await setServerCooldown(ext, { until: Date.now() - 1, reason: 'http-500', failures: 1 });
+  const t4 = Date.now();
+  const r4 = await ext.send({ type: 'explain', ...fail });
+  expect(r4.data.cached, '실패 결과는 캐시에 없다').toBeFalsy();
+  expect(r4.data.debug.server).toEqual({ used: false, reason: 'http-500' });
+  expect(analogyCalls.length - before, '쿨다운 뒤 서버를 다시 시도').toBe(3);
   const cd2 = await getServerCooldown(ext);
   expect(cd2).toMatchObject({ reason: 'http-500', failures: 2 });
-  expect(cd2.until - t3).toBeGreaterThanOrEqual(6000);
-  expect(cd2.until - Date.now()).toBeLessThanOrEqual(6000);
+  expect(cd2.until - t4).toBeGreaterThanOrEqual(16000);
+  expect(cd2.until - Date.now()).toBeLessThanOrEqual(16000);
 });
 
 serverTest('서버 모드(T-159): 서버가 성공하면 쿨다운이 바로 풀리고, 다음 실패는 다시 처음 길이부터', async ({ ext }) => {
   // 연속 실패 2번 뒤 쿨다운이 막 끝난 상태를 만든다
-  await ext.page.evaluate(() => chrome.storage.session.set({ serverCooldown: { until: Date.now() - 1, reason: 'http-500', failures: 2 } }));
+  await setServerCooldown(ext, { until: Date.now() - 1, reason: 'http-500', failures: 2 });
   const ok = await ext.send({ type: 'explain', sentence: '서버정상 쿨다운 해제 확인 문장이에요.', noCache: true });
   expect(ok.data.source).toBe('server');
   expect(await getServerCooldown(ext), '성공하면 지운다').toBeNull();
@@ -1533,8 +1548,8 @@ serverTest('서버 모드(T-159): 서버가 성공하면 쿨다운이 바로 풀
   expect(r.data.debug.server).toEqual({ used: false, reason: 'http-500' });
   const cd = await getServerCooldown(ext);
   expect(cd.failures).toBe(1);
-  expect(cd.until - t).toBeGreaterThanOrEqual(3000);
-  expect(cd.until - Date.now()).toBeLessThanOrEqual(3000);
+  expect(cd.until - t).toBeGreaterThanOrEqual(8000);
+  expect(cd.until - Date.now()).toBeLessThanOrEqual(8000);
 });
 
 serverTest('서버 모드(T-159): 서버가 429 와 Retry-After 를 주면 그 시간만큼 쉰다', async ({ ext }) => {
@@ -1544,7 +1559,7 @@ serverTest('서버 모드(T-159): 서버가 429 와 Retry-After 를 주면 그 �
   expect(r.data.debug.server).toEqual({ used: false, reason: 'http-429' });
   const cd = await getServerCooldown(ext);
   expect(cd).toMatchObject({ reason: 'http-429', failures: 1 });
-  // 가짜 서버 Retry-After: 1(초). cooldownMs(3000)가 아니라 1초
+  // 가짜 서버 Retry-After: 1(초). cooldownMs(8000)가 아니라 1초
   expect(cd.until - t).toBeGreaterThanOrEqual(1000);
   expect(cd.until - Date.now()).toBeLessThanOrEqual(1000);
 });
