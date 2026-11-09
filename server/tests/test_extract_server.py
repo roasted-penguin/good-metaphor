@@ -409,3 +409,29 @@ def test_cancel_during_queue_op_waits_for_thread_before_releasing_lock(tmp_path,
         pass
     # 다음 시작의 복구가 되돌린다
     assert ew.recover_running(s, [COMMON_WS]) == 1
+
+
+def test_reset_removes_seed_meta_first_so_partial_failure_is_not_ready(tmp_path, monkeypatch):
+    import app.seed as seed_mod
+
+    s = server_settings(tmp_path)
+    asyncio.run(seed(s))
+    _queue_with_states(s)
+    before = _raw_queue(s)
+    calls: list[str] = []
+    orig = seed_mod._remove_entry
+
+    def fail_after_first(path):
+        calls.append(path.name)
+        if len(calls) == 2:
+            raise OSError("지우기 실패(흉내)")
+        orig(path)
+
+    monkeypatch.setattr(seed_mod, "_remove_entry", fail_after_first)
+    with pytest.raises(OSError):
+        asyncio.run(seed(s, reset=True))
+    # 첫 번째로 지운 것은 seed-meta.json: 중간에 멈춰도 인덱스는 '준비 안 됨'
+    assert calls[0] == seedmeta.SEED_META_FILE
+    assert not (seedmeta.safe_workspace_dir(s) / seedmeta.SEED_META_FILE).exists()
+    assert seedmeta.index_status(s)[0] is False
+    assert _raw_queue(s) == before

@@ -75,3 +75,11 @@ def test_dockerignore가_비밀값과_가상환경을_뺀다():
                (SERVER_DIR / ".dockerignore").read_text(encoding="utf-8").splitlines()]
     for name in (".env", ".venv", "__pycache__", ".pytest_cache", "tests"):
         assert name in ignored, name
+
+
+def test_종료_유예가_추출_워커_대기_상한보다_길다():
+    # 서버 종료 때 추출 워커가 진행 중 큐 작업을 최대 THREAD_DRAIN_TIMEOUT_S 기다린다(T-161). 도커가 그 전에 죽이지 않게
+    from app.extract_worker import THREAD_DRAIN_TIMEOUT_S
+
+    grace = load_service()["stop_grace_period"]
+    assert grace.endswith("s") and int(grace[:-1]) > THREAD_DRAIN_TIMEOUT_S

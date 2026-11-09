@@ -164,13 +164,15 @@ def _clear_workspace_keeping_queue(settings: Any) -> None:
     유지돼 리셋 중 --enqueue가 같은 잠금으로 기다린다. 경로는 safe_workspace_dir로만(심볼릭 링크·밖 경로 거절).
     """
     from app.extract_worker import QUEUE_FILE, QUEUE_LOCK_FILE
-    from app.seedmeta import safe_workspace_dir
+    from app.seedmeta import SEED_META_FILE, safe_workspace_dir
 
     d = safe_workspace_dir(settings)
     if not d.is_dir():
         return
     keep = {QUEUE_FILE, QUEUE_LOCK_FILE}
-    for entry in sorted(d.iterdir()):
+    # seed-meta.json을 일부러 맨 먼저 지운다: 중간에 실패해도 인덱스는 늘 '준비 안 됨'(서버가 반쯤 지운 인덱스를 열지 않게)
+    entries = sorted(d.iterdir(), key=lambda p: (p.name != SEED_META_FILE, p.name))
+    for entry in entries:
         if entry.name in keep:
             continue
         _remove_entry(entry)
