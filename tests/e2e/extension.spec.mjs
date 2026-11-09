@@ -940,10 +940,11 @@ test('교정(T-131): 공통 노드 pick은 오버레이를 안 건드리고, 설
   await op.reload();
   await expect(op.locator('#fbCorrections')).toBeEnabled();
   const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbCorrections')]);
-  expect(download.suggestedFilename()).toMatch(/^good-metaphor-corrections-\d{4}-\d{2}-\d{2}\.json$/);
+  expect(download.suggestedFilename()).toMatch(/^good-metaphor-corrections-maplestory-\d{4}-\d{2}-\d{2}\.json$/);
   const data = JSON.parse(readFileSync(await download.path(), 'utf8'));
   expect(data.kind).toBe('good-metaphor-corrections');
   expect(data.version).toBe(1);
+  expect(data.interest).toBe('maplestory');
   const common = loadCommonGraphFromDisk();
   expect(data.commonGraphVersion).toBe(common.version);
   expect(data.tagsVersion).toBe(common.tagsVersion);
@@ -2431,4 +2432,38 @@ test('관심사(T-302): 메이플에서 남긴 👎·고정은 식당에서 조�
   await ext.setSettings({ interest: 'maplestory' });
   const back = await ext.send({ type: 'explain', sentence, noCache: true });
   expect(back.data.debug.feedback.pinned, '메이플로 돌아오면 고정이 다시 적용').toBe(alt);
+});
+
+test('교정 내보내기(T-157): 지금 고른 관심사만 — 식당이면 interest restaurant·식당 노드만, 메이플로 바꾸면 메이플만', async ({ ext }) => {
+  const { send, page: op } = ext;
+  const SR = '점심시간에는 손님이 한꺼번에 몰려서 한 사람이 하루에 받을 수 있는 양이 정해진다.';
+  const SM = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 저축한 돈의 구매력이 줄어든다.';
+  await send({ type: 'feedback', record: { sentence: SM, nodeId: 'cube', tagId: null, vote: 'pick', pickedNodeId: 'meso' } });
+  await send({ type: 'feedback', record: { sentence: SR, nodeId: null, tagId: null, vote: 'pick', pickedNodeId: 'lunch_peak' } });
+  await ext.setSettings({ interest: 'restaurant' });
+
+  await op.reload();
+  await expect(op.locator('#fbCorrectionsHint')).toHaveText('지금 관심사(식당) 교정만 내보내요.');
+  await expect(op.locator('#fbCorrections')).toBeEnabled();
+  const exportOnce = async () => {
+    const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbCorrections')]);
+    return { name: download.suggestedFilename(), data: JSON.parse(readFileSync(await download.path(), 'utf8')) };
+  };
+  const r = await exportOnce();
+  expect(r.name).toMatch(/^good-metaphor-corrections-restaurant-\d{4}-\d{2}-\d{2}\.json$/);
+  expect(r.data.interest).toBe('restaurant');
+  const rest = loadCommonGraphFromDisk('extension/data/common/restaurant.json');
+  expect(r.data.commonGraphVersion).toBe(rest.version);
+  expect(r.data.exampleCandidates.map(c => c.nodeId)).toEqual(['lunch_peak']);
+  expect(r.data.evalCandidates.map(c => c.expectNodes)).toEqual([['lunch_peak']]);
+  expect(JSON.stringify(r.data)).not.toContain('meso');
+
+  // 설정 화면에서 메이플로 바꾸면 안내와 내보내기가 메이플로
+  await op.locator('label:has(input[name=interest][value=maplestory])').click();
+  await expect(op.locator('#fbCorrectionsHint')).toHaveText('지금 관심사(메이플스토리) 교정만 내보내요.');
+  const m = await exportOnce();
+  expect(m.name).toMatch(/^good-metaphor-corrections-maplestory-\d{4}-\d{2}-\d{2}\.json$/);
+  expect(m.data.interest).toBe('maplestory');
+  expect(m.data.exampleCandidates.map(c => c.nodeId)).toEqual(['meso']);
+  expect(JSON.stringify(m.data)).not.toContain('lunch_peak');
 });
