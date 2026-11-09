@@ -93,7 +93,9 @@ def graph_to_custom_kg(graph: dict[str, Any]) -> dict[str, list[dict[str, Any]]]
         src, tgt = node_label.get(e.get("from")), node_label.get(e.get("to"))
         if src is None or tgt is None:  # 그래프에 없는 노드를 가리키는 엣지는 버린다
             continue
-        if e.get("from") == e.get("to"):  # 자기 자신 엣지: LightRAG가 예외로 주입 전체를 멈춘다
+        # 자기 자신 엣지: LightRAG가 예외로 주입 전체를 멈춘다. id가 달라도 라벨(엔티티 이름)이 같으면
+        # LightRAG 안에서는 같은 엔티티라 자기 자신 관계가 된다. 그래서 해석된 이름으로 비교한다(T-140)
+        if src == tgt:
             continue
         relationships.append({
             "src_id": src,
@@ -116,18 +118,28 @@ def seed_counts(custom_kg: dict[str, Any]) -> dict[str, int]:
     }
 
 
-async def seed(settings: Any) -> dict[str, Any]:
+async def seed(settings: Any, reset: bool = False) -> dict[str, Any]:
     """공통 그래프를 LightRAG 워크스페이스에 넣고, 그래프 저장소에 실제로 있는 엔티티·관계 수를 돌려준다.
 
     멱등: ainsert_custom_kg(1.5.7)는 엔티티·관계·청크를 이름/쌍/내용 해시로 덮어쓴다(설명을 이어 붙이지 않는다).
     그래서 같은 그래프를 다시 넣어도 수와 설명이 그대로다(test_seed_inject가 확인).
+
+    reset=True면 워크스페이스 폴더를 지우고 새로 넣는다(그래프 판본·임베딩이 바뀌었을 때, 시드는 덮어쓰기만 해서).
+    시작할 때 옛 seed-meta.json을 지우고, 끝까지 성공하면 새로 쓴다(T-140). 중간에 실패하면 메타가 없어
+    서버가 이 인덱스를 열지 않는다.
     """
+    import shutil
+
     from app.config import load_common_graph
     from app.rag import open_rag  # LightRAG는 무거워서 실제로 넣을 때만 불러온다
+    from app.seedmeta import remove_seed_meta, workspace_dir, write_seed_meta
 
     # 태그는 tags.json에서 온다(T-304, 규칙 9). 합치는 곳은 load_common_graph 하나
     graph = load_common_graph(settings.common_graph_path, getattr(settings, "tags_path", None))
     custom_kg = graph_to_custom_kg(graph)
+    if reset:
+        shutil.rmtree(workspace_dir(settings), ignore_errors=True)
+    remove_seed_meta(settings)
     rag = await open_rag(settings)
     try:
         await rag.ainsert_custom_kg(custom_kg)
@@ -136,6 +148,8 @@ async def seed(settings: Any) -> dict[str, Any]:
         edges = await store.get_all_edges()
     finally:
         await rag.finalize_storages()
+    # 저장소를 다 닫은(파일에 쓴) 뒤에 기록한다
+    write_seed_meta(settings)
     return {
         "entities": len(nodes),
         "relationships": len(edges),
@@ -144,7 +158,8 @@ async def seed(settings: Any) -> dict[str, Any]:
     }
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    import argparse
     import asyncio
     import logging
 
@@ -156,7 +171,11 @@ def main() -> None:
     for name in ("lightrag", "nano-vectordb"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
-    out = asyncio.run(seed(Settings.from_env()))
+    parser = argparse.ArgumentParser(prog="python -m app.seed", description="공통 그래프를 LightRAG 인덱스에 넣어요.")
+    parser.add_argument("--reset", action="store_true",
+                        help="워크스페이스 폴더를 지우고 새로 넣어요(그래프 판본·임베딩이 바뀌었을 때)")
+    args = parser.parse_args(argv)
+    out = asyncio.run(seed(Settings.from_env(), reset=args.reset))
     print(f"시드 주입 완료: 엔티티 {out['entities']}, 관계 {out['relationships']}, "
           f"워크스페이스 {out['workspace']}, 작업 디렉터리 {out['working_dir']}")
 

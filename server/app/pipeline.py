@@ -75,7 +75,9 @@ class AnalogyPipeline:
             candidates = await self.retriever.candidates(req.sentence, hl, ll, top_k=TOP_K)
         except RetrieverUnavailable as e:
             log.warning("검색기 준비 안 됨: %s", e)
-            raise PipelineError(503, "검색 인덱스가 아직 준비되지 않았어요.") from e
+            reason = getattr(e, "reason", None)
+            message = "검색 인덱스가 아직 준비되지 않았어요."
+            raise PipelineError(503, f"{message} {reason}" if reason else message) from e
         except RetrieverError as e:
             log.warning("검색 실패: %s", e)
             raise PipelineError(502, "검색 중에 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.") from e

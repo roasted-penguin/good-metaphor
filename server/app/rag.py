@@ -9,8 +9,8 @@ lightrag-hku 1.5.7 기준.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -19,8 +19,10 @@ from lightrag import LightRAG
 from lightrag.utils import EmbeddingFunc, Tokenizer
 
 from app.config import Settings
+# 인덱스 파일·시드 메타 판정은 LightRAG 없이 도는 seedmeta에 있다(여기서는 예전 이름 그대로 다시 내보낸다)
+from app.seedmeta import HASH_MODEL_NAME, INDEX_FILES, index_exists, index_status, workspace_dir  # noqa: F401
 
-HASH_MODEL_NAME = "hash-ngram-v1"
+log = logging.getLogger(__name__)
 # 해시 임베딩은 토큰 한도가 없지만, LightRAG가 요약 길이 판단에 쓰므로 Ollama bge-m3와 같은 값을 둔다
 MAX_TOKEN_SIZE = 8192
 OLLAMA_TIMEOUT_S = 60.0
@@ -96,26 +98,18 @@ def make_embedding_func(settings: Settings, transport: httpx.AsyncBaseTransport 
             async with httpx.AsyncClient(transport=transport, timeout=OLLAMA_TIMEOUT_S) as client:
                 r = await client.post(url, json={"model": model, "input": list(texts)})
                 r.raise_for_status()
-                return np.asarray(r.json()["embeddings"], dtype=np.float32)
+                out = np.asarray(r.json()["embeddings"], dtype=np.float32)
+            # 모델과 EMBEDDING_DIM이 어긋나면 LightRAG 벡터 저장소가 알아보기 어려운 오류를 내거나 벡터가 섞인다. 여기서 막는다
+            if out.ndim != 2 or out.shape[0] != len(texts):
+                raise ValueError(f"Ollama 임베딩 개수가 맞지 않아요: 글 {len(texts)}개, 응답 모양 {out.shape}")
+            if out.shape[1] != dim:
+                raise ValueError(f"Ollama 임베딩 차원이 설정과 달라요: 응답 {out.shape[1]}, EMBEDDING_DIM {dim} "
+                                 f"(모델 {model}). EMBEDDING_DIM 또는 EMBEDDING_MODEL을 확인해 주세요.")
+            return out
 
         return EmbeddingFunc(embedding_dim=dim, func=_ollama, max_token_size=MAX_TOKEN_SIZE, model_name=model)
 
     raise ValueError(f"EMBEDDING_PROVIDER는 hash 또는 ollama여야 해요: {provider!r}")
-
-
-# 시드 주입이 워크스페이스 폴더에 남기는 파일. 그래프와 개체 벡터가 둘 다 있어야 검색할 수 있다.
-# open_rag는 빈 워크스페이스 폴더를 만들기만 하므로(파일 없음) 폴더 존재로는 판단하지 않는다.
-INDEX_FILES = ("graph_chunk_entity_relation.graphml", "vdb_entities.json")
-
-
-def workspace_dir(settings: Settings) -> Path:
-    return Path(settings.lightrag_working_dir) / settings.workspace
-
-
-def index_exists(settings: Settings) -> bool:
-    """시드된 인덱스가 작업 디렉터리에 있는지. 파일만 본다(LightRAG를 열지 않는다)."""
-    d = workspace_dir(settings)
-    return all((d / name).is_file() for name in INDEX_FILES)
 
 
 async def open_rag(settings: Settings) -> LightRAG:
@@ -127,5 +121,14 @@ async def open_rag(settings: Settings) -> LightRAG:
         llm_model_func=forbidden_llm,
         tokenizer=make_tokenizer(),
     )
-    await rag.initialize_storages()
+    try:
+        await rag.initialize_storages()
+    except BaseException:
+        # 중간에 실패하면 이미 연 저장소(파일 잠금·백그라운드 작업)를 닫고 인스턴스를 버린 뒤 원래 오류를 다시 던진다
+        try:
+            await rag.finalize_storages()
+        except Exception as e:  # 정리 실패가 원래 오류를 가리지 않게 기록만 한다
+            log.warning("열다 실패한 LightRAG 저장소를 닫지 못함: %s: %s", type(e).__name__, e)
+        del rag
+        raise
     return rag
