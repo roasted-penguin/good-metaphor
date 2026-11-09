@@ -122,6 +122,7 @@ def test_index_status_missing_index(tmp_path):
     ready, reason = seedmeta.index_status(make_settings(tmp_path / "없음"))
     assert ready is False
     assert "시드" in reason and "python -m app.seed" in reason
+    assert str(tmp_path) not in reason  # 절대 경로는 응답에 넣지 않는다(로그에만)
 
 
 def test_index_status_old_index_without_meta(tmp_path, seeded_dir):
@@ -179,8 +180,8 @@ def test_mismatch_returns_503_with_reason_and_does_not_open(seeded_dir, monkeypa
     with TestClient(_app(make_settings(seeded_dir, EMBEDDING_DIM="32"))) as client:
         res = client.post("/v1/analogy", json={"sentence": SENTENCE}, headers=TOKEN)
     assert res.status_code == 503
-    err = res.json()["error"]
-    assert err.startswith(UNAVAILABLE) and "임베딩" in err
+    # 사용자에게는 짧은 문구만. 자세한 이유(할 일)는 /health·로그에(fix 1)
+    assert res.json() == {"error": UNAVAILABLE}
 
 
 def test_matching_meta_returns_200(seeded_dir):
@@ -296,3 +297,155 @@ def test_edge_between_distinct_nodes_with_same_label_is_dropped():
 def test_real_graph_has_no_self_relationships():
     kg = graph_to_custom_kg(load_common_graph(COMMON_GRAPH))
     assert all(r["src_id"] != r["tgt_id"] for r in kg["relationships"])
+
+
+# ── fix 1: 워크스페이스 경로 검증(--reset이 아무 경로나 지우지 않게) ─────────
+
+
+@pytest.mark.parametrize("bad", ["/", "/etc", "..", ".", "../..", "a/b", "", "공백 있음", "x/../y"])
+def test_bad_workspace_is_rejected_at_settings_load(tmp_path, bad):
+    if bad == "":
+        pytest.skip("빈 값은 기본 워크스페이스로 바뀐다")
+    with pytest.raises(seedmeta.WorkspaceError, match="WORKSPACE"):
+        make_settings(tmp_path / "rag", WORKSPACE=bad)
+
+
+def test_bad_workspace_is_rejected_by_safe_workspace_dir(tmp_path):
+    """Settings 검증을 건너뛴 객체가 와도 safe_workspace_dir가 막는다."""
+    import types
+
+    for bad in ("/", "/etc", "..", ".", str(tmp_path)):
+        fake = types.SimpleNamespace(lightrag_working_dir=str(tmp_path / "rag"), workspace=bad)
+        with pytest.raises(seedmeta.WorkspaceError):
+            seedmeta.safe_workspace_dir(fake)
+
+
+def test_safe_workspace_dir_is_child_of_working_dir(tmp_path):
+    s = make_settings(tmp_path / "rag")
+    d = seedmeta.safe_workspace_dir(s)
+    assert d.parent == (tmp_path / "rag").resolve() and d.name == "common_maplestory"
+    assert seedmeta.workspace_dir(s) == d
+
+
+def test_reset_refuses_symlinked_workspace_and_keeps_target(tmp_path):
+    victim = tmp_path / "지키는폴더"
+    victim.mkdir()
+    (victim / "중요.txt").write_text("x", "utf-8")
+    base = tmp_path / "rag"
+    base.mkdir()
+    (base / "common_maplestory").symlink_to(victim, target_is_directory=True)
+    s = make_settings(base)
+    with pytest.raises(seedmeta.WorkspaceError, match="심볼릭"):
+        asyncio.run(seed(s, reset=True))
+    assert (victim / "중요.txt").is_file()
+
+
+def test_reset_with_missing_workspace_is_ok(tmp_path):
+    s = make_settings(tmp_path / "rag")
+    asyncio.run(seed(s, reset=True))
+    assert seedmeta.index_status(s) == (True, None)
+
+
+def test_reset_permission_error_aborts_seed(tmp_path, monkeypatch):
+    s = make_settings(tmp_path / "rag")
+    asyncio.run(seed(s))
+    import app.seed as seed_mod
+
+    def denied(path, *a, **k):
+        raise PermissionError("권한 없음")
+
+    monkeypatch.setattr(seed_mod.shutil, "rmtree", denied)
+    with pytest.raises(PermissionError):
+        asyncio.run(seed(s, reset=True))
+
+
+def test_health_with_symlinked_workspace_is_not_ready(tmp_path):
+    other = tmp_path / "다른곳"
+    other.mkdir()
+    base = tmp_path / "rag"
+    base.mkdir()
+    (base / "common_maplestory").symlink_to(other, target_is_directory=True)
+    body = TestClient(_app(make_settings(base))).get("/health").json()
+    assert body["index"]["ready"] is False and str(tmp_path) not in body["index"]["reason"]
+
+
+# ── fix 2: 자기 엣지를 LightRAG 정규화 이름으로 ─────────────────
+
+
+@pytest.mark.parametrize("a, b", [("같은이름 ", "같은이름"), ('"같은이름"', "같은이름"), ("노드（가）", "노드(가)")])
+def test_self_edge_detected_after_lightrag_normalization(a, b):
+    g = {
+        "tags": [],
+        "nodes": [{"id": "a", "label": a, "facts": ["사실1."], "tags": []},
+                  {"id": "b", "label": b, "facts": ["사실2."], "tags": []},
+                  {"id": "c", "label": "다른이름", "facts": ["사실3."], "tags": []}],
+        "edges": [{"from": "a", "to": "b", "rel": "겹침"}, {"from": "a", "to": "c", "rel": "이어짐"}],
+    }
+    rels = graph_to_custom_kg(g)["relationships"]
+    assert [r["tgt_id"] for r in rels] == ["다른이름"]
+
+
+# ── fix 3: --reset 없이 옛·다른 인덱스 위에 시드하지 않는다 ──────────
+
+
+def test_seed_without_reset_refuses_index_with_different_meta(tmp_path):
+    s = make_settings(tmp_path / "rag")
+    asyncio.run(seed(s))
+    other = make_settings(tmp_path / "rag", EMBEDDING_DIM="32")
+    with pytest.raises(seedmeta.SeedRefused, match="--reset"):
+        asyncio.run(seed(other))
+    # 옛 메타는 그대로(다른 설정으로 준비됨 도장이 찍히지 않는다)
+    assert seedmeta.index_status(s) == (True, None)
+    assert seedmeta.index_status(other)[0] is False
+    asyncio.run(seed(other, reset=True))
+    assert seedmeta.index_status(other) == (True, None)
+
+
+def test_seed_without_reset_refuses_old_index_without_meta(tmp_path):
+    s = make_settings(tmp_path / "rag")
+    asyncio.run(seed(s))
+    seedmeta.meta_path(s).unlink()
+    with pytest.raises(seedmeta.SeedRefused, match="--reset"):
+        asyncio.run(seed(s))
+    assert seedmeta.read_seed_meta(s) is None
+
+
+def test_seed_without_reset_over_same_meta_is_ok(tmp_path):
+    s = make_settings(tmp_path / "rag")
+    asyncio.run(seed(s))
+    asyncio.run(seed(s))
+    assert seedmeta.index_status(s) == (True, None)
+
+
+def test_seed_cli_refusal_is_korean_one_line_and_nonzero(tmp_path):
+    import subprocess
+    import sys
+
+    env = {"PATH": "/usr/bin:/bin", "LIGHTRAG_WORKING_DIR": str(tmp_path / "rag"),
+           "EMBEDDING_PROVIDER": "hash", "EMBEDDING_DIM": "32"}
+    server = Path(__file__).resolve().parents[1]
+    run = lambda e: subprocess.run([sys.executable, "-m", "app.seed"], cwd=server, env=e,
+                                   capture_output=True, text=True, timeout=120)
+    assert run(env).returncode == 0
+    r = run({**env, "EMBEDDING_DIM": "16"})
+    assert r.returncode != 0
+    assert "--reset" in r.stderr and "Traceback" not in r.stderr
+
+
+# ── fix 4: 판본을 모르면 준비 안 됨 ───────────────────────────
+
+
+def test_unknown_graph_version_is_not_ready(seeded_dir):
+    import dataclasses
+
+    s = dataclasses.replace(make_settings(seeded_dir), workspace_version=None)
+    ready, reason = seedmeta.index_status(s)
+    assert ready is False and "판본" in reason
+
+
+def test_seed_refuses_unknown_graph_version(tmp_path):
+    import dataclasses
+
+    s = dataclasses.replace(make_settings(tmp_path / "rag"), workspace_version=None)
+    with pytest.raises(seedmeta.SeedRefused, match="판본"):
+        asyncio.run(seed(s))
