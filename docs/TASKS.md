@@ -85,8 +85,8 @@
 | T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 완료 | T-402 |
 | T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 완료 | T-403 |
 | T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 완료 | T-402 |
-| T-141 | 서버 모드 실사용 준비: 서버 도메인 `host_permissions` + 서버 CORS(chrome-extension), `managed_schema.json`에 `analogyServer`, 서버 장애 중 로컬 결과는 세션 캐시에 안 남기기, 규칙 1을 로컬 그래프 노드로도 확인 | L 서버 | P1 | 리뷰 | T-404, T-401 |
-| T-159 | 서버 실패 뒤 잠깐 쉬기: 서버가 죽었거나 설정이 틀리면 호버마다 `timeoutMs`(4초)를 기다린 뒤 로컬로 가고 결과도 캐시 안 해서 매번 LLM을 부름. 실패 뒤 짧은 쿨다운(예: 1~5분) 동안은 서버를 건너뛰기(fallback.js 429 쿨다운처럼) | L 서버 | P2 | 대기 | T-141 |
+| T-141 | 서버 모드 실사용 준비: 서버 도메인 `host_permissions` + 서버 CORS(chrome-extension), `managed_schema.json`에 `analogyServer`, 서버 장애 중 로컬 결과는 세션 캐시에 안 남기기, 규칙 1을 로컬 그래프 노드로도 확인 | L 서버 | P1 | 완료 | T-404, T-401 |
+| T-159 | 서버 실패 뒤 잠깐 쉬기: 서버가 죽었거나 설정이 틀리면 호버마다 `timeoutMs`(4초)를 기다린 뒤 로컬로 가고 결과도 캐시 안 해서 매번 LLM을 부름. 실패 뒤 짧은 쿨다운(예: 1~5분) 동안은 서버를 건너뛰기(fallback.js 429 쿨다운처럼) | L 서버 | P2 | 진행 | T-141 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가 (관문 측정은 T-142로 분리) | L 서버 | P0 | 완료 | T-403 |
 | T-142 | [L0] 관문 측정: bge-m3 서버로 `npm run eval -- --server` → 서버 hit@1 ≥ 브라우저면 ADR 0006 채택 (T-405에서 분리) | L 서버 | P0 | 대기 | T-405, T-401 |
 | T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
