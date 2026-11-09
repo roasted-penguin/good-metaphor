@@ -50,6 +50,8 @@ class FakeOllama:
         self.die_on_call: int | None = None
         # 0이 아니면 /api/chat이 이 상태 코드로 답한다(설정 오류 흉내, 예 404 모델 없음)
         self.chat_status = 0
+        # 0보다 크면 /api/chat이 이만큼(초) 늦게 답한다(청크 중간 타임아웃 흉내)
+        self.delay_s = 0.0
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._stopper: threading.Thread | None = None
@@ -114,6 +116,9 @@ class FakeOllama:
                         pass
                     fake.stop_in_background()
                     return
+                if fake.delay_s:
+                    import time as _time
+                    _time.sleep(fake.delay_s)
                 if fake.chat_status:
                     self._json(fake.chat_status, {"error": f"model '{body.get('model')}' not found"})
                     return
@@ -132,8 +137,11 @@ class FakeOllama:
                             {"source": "스타포스 강화", "target": "목록밖구조", "keywords": "x", "description": "버려질 관계."},
                         ],
                     }, ensure_ascii=False)
-                self._json(200, {"model": body.get("model"), "message": {"role": "assistant", "content": content},
-                                 "done": True})
+                try:
+                    self._json(200, {"model": body.get("model"), "message": {"role": "assistant", "content": content},
+                                     "done": True})
+                except OSError:  # 클라이언트가 타임아웃으로 먼저 끊음
+                    pass
 
         self._server = ThreadingHTTPServer(("127.0.0.1", self.port), Handler)
         self._server.daemon_threads = True
@@ -242,7 +250,8 @@ def test_queue_write_is_atomic_and_leaves_no_temp_files(tmp_path, monkeypatch):
         ew.enqueue(s, COMMON_WS, "d2", "둘")
     monkeypatch.undo()
     assert (tmp_path / "rag" / COMMON_WS / ew.QUEUE_FILE).read_text("utf-8") == before
-    assert sorted(p.name for p in (tmp_path / "rag" / COMMON_WS).iterdir()) == [ew.QUEUE_FILE]
+    # 임시 파일은 남지 않는다(잠금 파일만 옆에 있다)
+    assert sorted(p.name for p in (tmp_path / "rag" / COMMON_WS).iterdir()) == [ew.QUEUE_FILE, ew.QUEUE_LOCK_FILE]
 
 
 @pytest.mark.parametrize("bad", ["../escape", "a/b", ".", "", "with space"])
@@ -461,7 +470,7 @@ def test_recover_running_on_start(tmp_path, ollama):
     q[0]["status"] = "running"
     ew.save_queue(s, COMMON_WS, q)
     worker = make_worker(s, ollama.url, Inserted())
-    # 복구 전 창은 running을 건드리지 않는다
+    # 시작 시 복구: running → pending
     assert ew.recover_running(s, [COMMON_WS]) == 1
     assert statuses(s) == ["pending", "pending"]
     asyncio.run(worker.run_window(IN_WINDOW))
@@ -593,3 +602,228 @@ def test_cli_enqueue_status_once(tmp_path, ollama, capsys, monkeypatch):
     # 기본 삽입(T-421 전): 추출 결과를 워크스페이스 폴더에 청크별 파일로 남긴다
     results = tmp_path / "rag" / COMMON_WS / ew.RESULTS_DIR
     assert sorted(p.stem for p in results.iterdir()) == sorted(ew.result_name(c["id"]) for c in q)
+
+
+# ── 수정 2회차(리뷰) ─────────────────────────────────
+
+
+def _corrupt(tmp_path: Path, ws: str) -> None:
+    d = tmp_path / "rag" / ws
+    d.mkdir(parents=True, exist_ok=True)
+    (d / ew.QUEUE_FILE).write_text("{깨짐", "utf-8")
+
+
+def test_broken_queue_only_stops_its_own_workspace(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    _corrupt(tmp_path, COMMON_WS)
+    enqueue_n(s, USER_WS, 2)
+    worker = make_worker(s, ollama.url, Inserted(), workspaces=(COMMON_WS, USER_WS))
+    assert ew.recover_running(s, [COMMON_WS, USER_WS]) == 0  # 깨진 쪽은 건너뛰고 죽지 않는다
+    results = asyncio.run(ew.run_forever(worker, clock=lambda: IN_WINDOW, interval_s=0, max_iterations=1))
+    assert results[0]["done"] == 2 and COMMON_WS in results[0]["errors"]
+    assert statuses(s, USER_WS) == ["done", "done"]
+    # 깨진 파일은 그대로(비우지 않음)
+    assert (tmp_path / "rag" / COMMON_WS / ew.QUEUE_FILE).read_text("utf-8") == "{깨짐"
+
+
+def test_cli_status_survives_broken_queue(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("LIGHTRAG_WORKING_DIR", str(tmp_path / "rag"))
+    monkeypatch.setenv("COMMON_GRAPH_PATH", str(COMMON_GRAPH))
+    monkeypatch.setenv("EXTRACT_WORKSPACES", f"{COMMON_WS},{USER_WS}")
+    _corrupt(tmp_path, COMMON_WS)
+    ew.enqueue(Settings.from_env(), USER_WS, "d", "글")
+    assert ew.main(["--status"]) == 0
+    out = capsys.readouterr().out
+    assert "읽지 못했어요" in out and f"{USER_WS}: pending 1" in out
+
+
+def test_worker_lock_refuses_second_worker(tmp_path, ollama, capsys, monkeypatch):
+    s = make_settings(tmp_path)
+    with ew.worker_lock(s):
+        with pytest.raises(ew.WorkerLocked):
+            with ew.worker_lock(s):
+                pass
+        worker = make_worker(s, ollama.url, Inserted())
+        with pytest.raises(ew.WorkerLocked):
+            asyncio.run(ew.run_forever(worker, clock=lambda: IN_WINDOW, max_iterations=1))
+        for k, v in {"LIGHTRAG_WORKING_DIR": str(tmp_path / "rag"), "COMMON_GRAPH_PATH": str(COMMON_GRAPH),
+                     "EXTRACT_OLLAMA_URL": ollama.url}.items():
+            monkeypatch.setenv(k, v)
+        assert ew.main(["--once"]) != 0
+        assert "이미" in capsys.readouterr().out
+    # 풀리면 다시 잡을 수 있다
+    with ew.worker_lock(s):
+        pass
+
+
+def test_enqueue_waits_for_queue_lock_and_loses_nothing(tmp_path):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "first", "첫 글")
+    done = threading.Event()
+
+    def other():
+        ew.enqueue(s, COMMON_WS, "second", "둘째 글")
+        done.set()
+
+    with ew.queue_lock(s, COMMON_WS):
+        t = threading.Thread(target=other)
+        t.start()
+        assert not done.wait(0.3)  # 잠금을 쥔 동안 기다린다
+        # 잠금 안에서 읽고-고치고-쓰기(워커가 청크 상태를 바꾸는 것과 같음)
+        q = ew._read_queue(s, COMMON_WS)
+        q[0]["status"] = "done"
+        ew._write_queue(s, COMMON_WS, q)
+    t.join(5)
+    assert done.is_set()
+    q = ew.load_queue(s, COMMON_WS)
+    assert [c["docId"] for c in q] == ["first", "second"]
+    assert q[0]["status"] == "done"  # 워커 변경도 남는다
+
+
+def test_concurrent_enqueue_during_window_loses_no_chunks(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 15, "먼저")
+    worker = make_worker(s, ollama.url, Inserted())
+
+    def adder():
+        for i in range(15):
+            ew.enqueue(s, COMMON_WS, f"later-{i}", f"나중 {i}: 스타포스 강화")
+
+    t = threading.Thread(target=adder)
+    t.start()
+    asyncio.run(worker.run_window(IN_WINDOW))
+    t.join(10)
+    q = ew.load_queue(s, COMMON_WS)
+    assert len(q) == 30 and len({c["id"] for c in q}) == 30
+    assert {c["docId"] for c in q} >= {f"later-{i}" for i in range(15)}
+
+
+def test_empty_ollama_url_means_worker_off_even_with_cloud(tmp_path):
+    s = make_settings(tmp_path, EXTRACT_FALLBACK="cloud")
+    enqueue_n(s, USER_WS, 1)
+    cloud = FakeCloud()
+    worker = make_worker(s, "", Inserted(), workspaces=(USER_WS,), cloud_extractor=cloud)
+    summary = asyncio.run(worker.run_window(IN_WINDOW))
+    assert summary["skipped"] and cloud.texts == []
+    assert statuses(s, USER_WS) == ["pending"]
+
+
+def test_pending_at_attempt_cap_is_given_up_after_crash_loop(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 1)
+    q = ew.load_queue(s, COMMON_WS)
+    q[0].update(status="running", attempts=2)  # 처리 중 프로세스가 죽기를 되풀이
+    ew.save_queue(s, COMMON_WS, q)
+    assert ew.recover_running(s, [COMMON_WS]) == 1
+    c = ew.load_queue(s, COMMON_WS)[0]
+    assert c["status"] == "pending" and c["attempts"] == 2  # 시도 수는 그대로
+    asyncio.run(make_worker(s, ollama.url, Inserted(), max_attempts=2).run_window(IN_WINDOW))
+    assert ollama.chat_calls == [] and statuses(s) == ["pending"]
+    assert ew.status_counts(s, COMMON_WS, max_attempts=2)["gaveUp"] == 1
+
+
+@pytest.mark.parametrize("field,value", [("id", "../../escape"), ("id", "a/b"), ("workspace", USER_WS)])
+def test_unsafe_chunk_is_failed_and_skipped(tmp_path, ollama, field, value):
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 2)
+    q = ew.load_queue(s, COMMON_WS)
+    q[0][field] = value
+    ew.save_queue(s, COMMON_WS, q)
+    ins = Inserted()
+    summary = asyncio.run(make_worker(s, ollama.url, ins).run_window(IN_WINDOW))
+    q = ew.load_queue(s, COMMON_WS)
+    assert [c["status"] for c in q] == ["failed", "done"]
+    assert summary["done"] == 1 and len(ollama.chat_calls) == 1
+    assert ins.ids() == [q[1]["id"]]
+    assert not (tmp_path / "escape").exists()
+
+
+def test_result_writer_rejects_bad_id_and_uses_given_workspace(tmp_path):
+    s = make_settings(tmp_path)
+    write = ew.make_result_writer(s)
+    with pytest.raises(ValueError):
+        asyncio.run(write({"id": "../x", "docId": "d", "workspace": COMMON_WS}, [], []))
+    good = ew.chunk_id("d", 0, "글")
+    asyncio.run(write({"id": good, "docId": "d", "workspace": COMMON_WS}, [], []))
+    assert (tmp_path / "rag" / COMMON_WS / ew.RESULTS_DIR / f"{good}.json").is_file()
+
+
+class CloudLLM:
+    """make_cloud_extractor에 넘길 가짜 LLM. status가 있으면 LLMError."""
+
+    def __init__(self, status: int = 0) -> None:
+        self.status = status
+        self.calls = 0
+
+    async def complete(self, system, user, json):
+        from app.llm import LLMError
+
+        self.calls += 1
+        if self.status:
+            raise LLMError(f"Gemini {self.status}: API key not valid", status=self.status)
+        return '{"entities": [{"name": "확률형 강화", "type": "추상구조", "description": "구름"}], "relationships": []}'
+
+
+def test_cloud_4xx_does_not_use_attempts_or_daily_usage(tmp_path, ollama):
+    s = make_settings(tmp_path, EXTRACT_FALLBACK="cloud", EXTRACT_CLOUD_DAILY_CAP="5")
+    enqueue_n(s, USER_WS, 2)
+    ollama.stop()
+    llm = CloudLLM(status=400)
+    graph = load_common_graph(COMMON_GRAPH)
+    worker = make_worker(s, ollama.url, Inserted(), workspaces=(USER_WS,),
+                         cloud_extractor=ew.make_cloud_extractor(llm, graph))
+    for _ in range(3):
+        summary = asyncio.run(worker.run_window(IN_WINDOW))
+        assert summary["stopped"]
+    q = ew.load_queue(s, USER_WS)
+    assert [c["status"] for c in q] == ["pending", "pending"] and [c["attempts"] for c in q] == [0, 0]
+    assert "설정" in q[0]["lastError"]
+    assert llm.calls == 3
+    assert ew.read_cloud_usage(s, IN_WINDOW) == 0
+    llm.status = 0  # 키를 고침
+    asyncio.run(worker.run_window(IN_WINDOW))
+    assert statuses(s, USER_WS) == ["done", "done"]
+    assert ew.read_cloud_usage(s, IN_WINDOW) == 2
+
+
+def test_cloud_5xx_uses_attempt_and_stops(tmp_path, ollama):
+    s = make_settings(tmp_path, EXTRACT_FALLBACK="cloud")
+    enqueue_n(s, USER_WS, 2)
+    ollama.stop()
+    graph = load_common_graph(COMMON_GRAPH)
+    worker = make_worker(s, ollama.url, Inserted(), workspaces=(USER_WS,),
+                         cloud_extractor=ew.make_cloud_extractor(CloudLLM(status=503), graph))
+    summary = asyncio.run(worker.run_window(IN_WINDOW))
+    q = ew.load_queue(s, USER_WS)
+    assert summary["stopped"] and [c["status"] for c in q] == ["failed", "pending"] and q[0]["attempts"] == 1
+
+
+def test_timeout_mid_chunk_marks_failed_and_stops_window(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 2)
+    ollama.delay_s = 1.0
+    graph = load_common_graph(COMMON_GRAPH)
+    worker = ew.ExtractWorker(s, [COMMON_WS], extractor=ew.make_ollama_extractor(ollama.url, "gemma4:12b", graph,
+                                                                                 timeout=0.2),
+                              insert=Inserted(), ollama_url=ollama.url)
+    summary = asyncio.run(worker.run_window(IN_WINDOW))
+    q = ew.load_queue(s, COMMON_WS)
+    assert summary["stopped"] == "연결 끊김"
+    assert [c["status"] for c in q] == ["failed", "pending"] and q[0]["attempts"] == 1
+    assert "Timeout" in q[0]["lastError"]
+
+
+def test_insert_connection_error_stops_window(tmp_path, ollama):
+    import httpx
+
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 2)
+
+    async def insert(chunk, entities, relationships):
+        raise httpx.ConnectError("임베딩 서버 연결 실패")
+
+    summary = asyncio.run(make_worker(s, ollama.url, insert).run_window(IN_WINDOW))
+    q = ew.load_queue(s, COMMON_WS)
+    assert summary["stopped"] == "연결 끊김"
+    assert [c["status"] for c in q] == ["failed", "pending"] and "삽입 중 연결" in q[0]["lastError"]
+    assert len(ollama.chat_calls) == 1
