@@ -23,3 +23,22 @@ jobs:
       - run: npm run test:unit
       - run: npm run test:e2e
       - run: npm run eval:fallback
+
+  # 서버(Python, FastAPI) 테스트. 위 `test` 잡 이름은 브랜치 보호 필수 체크라 바꾸지 않는다.
+  # 테스트가 저장소 파일(extension/data/common/*.json, tests/fixtures/*)을 읽으므로 저장소 전체를 체크아웃한다.
+  # 네트워크·API 키 없이 돈다(LLM·임베딩은 가짜 전송, tiktoken 대신 글자 토크나이저).
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            server/requirements.txt
+            server/requirements-dev.txt
+      # requirements-dev.txt가 이미 `-r requirements.txt`를 포함하지만,
+      # 명세대로 둘 다 적어 실행 의존성이 빠지지 않음을 한눈에 보이게 한다(중복 지정은 pip가 하나로 합친다).
+      - run: pip install -r server/requirements.txt -r server/requirements-dev.txt
+      - run: cd server && python -m pytest -q
