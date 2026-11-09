@@ -18,9 +18,14 @@
   <main>
     <!-- 0. 첫 실행 안내 (T-116) -->
     <section id="onboarding" class="onboarding" hidden>
-      <h2>처음 오셨네요. 두 가지만 골라 주세요</h2>
+      <h2>처음 오셨네요. 세 가지만 골라 주세요</h2>
       <div class="ob-step">
-        <h3>1. 언제 설명을 띄울까요?</h3>
+        <h3>1. 무엇으로 비유할까요?</h3>
+        <!-- 선택지는 options.js가 COMMON_INTERESTS로 그린다(관심사가 늘면 자동) -->
+        <div class="ob-choices" id="obInterest" role="radiogroup" aria-label="비유할 관심사"></div>
+      </div>
+      <div class="ob-step">
+        <h3>2. 언제 설명을 띄울까요?</h3>
         <div class="ob-choices">
           <label><input type="radio" name="obTrigger" value="modifier" checked><span>Alt 누르고 문장에 올리기 (추천)</span></label>
           <label><input type="radio" name="obTrigger" value="auto"><span>머무르면 자동</span></label>
@@ -28,7 +33,7 @@
         <p class="ob-warn" id="obAutoWarn" hidden>호출이 많아져 무료 한도를 빨리 써요.</p>
       </div>
       <div class="ob-step">
-        <h3>2. 더 나은 비유를 위해 피드백을 보내 주실래요?</h3>
+        <h3>3. 더 나은 비유를 위해 피드백을 보내 주실래요?</h3>
         <div class="row" role="group" aria-label="서버로 보내기 동의">
           <button type="button" class="ob-toggle" id="obShareYes" aria-pressed="false">보내기</button>
           <button type="button" class="ob-toggle" id="obShareNo" aria-pressed="false">내 기기에만</button>
