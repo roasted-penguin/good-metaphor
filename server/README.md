@@ -48,12 +48,17 @@ docker compose down               # 볼륨(인덱스)은 남아요. 지우려면
 
 ## 확장에서 부르기(CORS·권한, T-141)
 
-확장은 `chrome-extension://<확장 id>` 출처에서 `POST /v1/analogy`를 `content-type`·`X-Install-Token` 헤더로 불러요. 서버 CORS는 **기본이 닫힘**이라 아무 출처도 허용하지 않아요.
+확장은 서비스 워커에서 `POST /v1/analogy`를 `content-type`·`X-Install-Token` 헤더로 불러요.
+
+- **꼭 필요한 것은 확장의 서버 출처 권한이에요.** MV3 서비스 워커의 fetch는 그 출처 권한(host permission)이 있으면 CORS에 묶이지 않아요. 권한이 없으면 확장은 서버를 부르지 않고 이 기기에서 만들어요(`debug.server.reason = 'no-permission'`).
+- **CORS는 권장하는 덧댐이지 접근 제어가 아니에요.** 브라우저 밖(curl 등)이나 권한 있는 확장은 CORS와 상관없이 부를 수 있어요. 실제 관문은 설치 토큰(`X-Install-Token`) + 토큰별 요청 한도(`RATE_LIMIT_PER_MIN`)예요. 웹 페이지가 사용자 브라우저를 빌려 부르는 일을 막으려고 기본은 닫아 두고 확장 출처만 열어요.
+
+CORS 설정(기본은 닫힘, 아무 출처도 허용하지 않아요):
 
 - 운영: `ALLOWED_ORIGINS=chrome-extension://<확장 id 32자>`처럼 확장 출처를 쉼표로 적어요. 웹스토어 확장 id와 개발용 압축해제 확장 id가 다르면 둘 다 적어요.
 - 개발: `ALLOW_EXTENSION_ORIGINS=true`면 확장 id 형식(`^chrome-extension://[a-p]{32}$`) 전부를 허용해요. 운영에서는 켜지 않아요(아무 확장이나 이 서버를 부를 수 있어요).
 - 허용 메서드는 `POST`, 헤더는 `content-type`·`x-install-token`뿐이에요. 쿠키는 쓰지 않아요.
-- 확장 쪽: 서버 주소는 `config/admin.json` 또는 정책(`chrome.storage.managed`의 `analogyServer.url`·`timeoutMs`, `managed_schema.json`)으로 줘요. 사용자는 설정 화면 "AI 제공자" 아래 `서버 주소 허용`으로 그 출처의 선택 권한을 한 번 허용해요. 허용 전에는 서버를 부르지 않고 이 기기에서 만들어요(`debug.server.reason = 'no-permission'`).
+- 확장 쪽: 서버 주소는 `config/admin.json` 또는 정책(`chrome.storage.managed`의 `analogyServer.url`·`timeoutMs`, `managed_schema.json`)으로 줘요. 사용자는 설정 화면 "AI 제공자" 아래 `서버 주소 허용`으로 그 출처의 선택 권한을 한 번 허용해요.
 - 도메인이 정해지면(T-401) 확장 `manifest.json`의 `host_permissions`에 그 서버 주소를 고정으로 넣어 허용 단계를 없애요.
 
 로컬에서 확장과 함께 확인:
@@ -104,5 +109,5 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 | `EMBEDDING_MODEL` | `bge-m3` | Ollama 임베딩 모델 |
 | `EMBEDDING_DIM` | `1024` | 임베딩 차원(bge-m3 = 1024) |
 | `BIND_ADDR` | `127.0.0.1` | 도커 compose만. 포트 8000을 열 주소 |
-| `ALLOWED_ORIGINS` | 없음(허용 없음) | CORS 허용 출처, 쉼표 구분. 운영은 확장 출처 `chrome-extension://<id>`(T-141) |
+| `ALLOWED_ORIGINS` | 없음(허용 없음) | CORS 허용 출처, 쉼표 구분. 운영은 확장 출처 `chrome-extension://<id>`(T-141). 덧댐일 뿐 접근 제어는 설치 토큰 + 요청 한도 |
 | `ALLOW_EXTENSION_ORIGINS` | `false` | `true`면 모든 확장 id 형식 허용. 개발용, 운영에서는 끄기 |

@@ -51,7 +51,8 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
 
     app = FastAPI(title="analogy-api", version=__version__, lifespan=lifespan)
     app.state.settings = settings
-    # CORS(T-141): 기본은 닫힘. 확장(chrome-extension://)이 부르려면 ALLOWED_ORIGINS 에 그 확장 출처를 적거나,
+    # CORS(T-141): 기본은 닫힘. 덧댐일 뿐 접근 제어가 아니다 — 출처 권한이 있는 확장 서비스 워커 fetch 는 CORS 에
+    # 묶이지 않고, 실제 관문은 설치 토큰 + 요청 한도다. 운영은 ALLOWED_ORIGINS 에 확장 출처를 적고,
     # 개발 중에만 ALLOW_EXTENSION_ORIGINS=true(확장 id 형식 전부). 쿠키는 쓰지 않는다(설치 토큰은 헤더)
     if settings.allowed_origins or settings.allow_extension_origins:
         app.add_middleware(
