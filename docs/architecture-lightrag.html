@@ -607,6 +607,7 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
       <div><b>처리량 (예상)</b><span>청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩(메모리 16GB)으로 확인돼서 M2보다 메모리 대역폭이 두 배예요. 첫 실험에서 실측해요.</span></div>
       <div><b>맥이 오래 꺼져 있으면</b><span>관리자 플래그로 추출만 Gemini Flash-Lite로. 하루 청크 상한을 두고 사용자 워크스페이스에만 써요.</span></div>
     </div>
+    <p class="note">구현(T-414·T-161·T-162): 워커는 <code>server/app/extract_worker.py</code>이고, <code>EXTRACT_OLLAMA_URL</code>이 있을 때만 <code class="mono">analogy-api</code>가 뜰 때 백그라운드 태스크로 돌아요. 작업 디렉터리의 <code>worker.lock</code>으로 워커는 하나만 돌고, 이미 잡혀 있으면 경고만 남기고 워커 없이 떠요. 큐는 워크스페이스 폴더의 <code>extract-queue.json</code>(청크 상태 pending·running·done·failed, 원자적 쓰기, <code>extract-queue.lock</code> flock)이고, 삽입이 끝나야 done이라 맥이 꺼져도 청크를 잃지 않아요. 청크 id는 내용 기준이라 문서 앞을 고쳐도 바뀌지 않은 청크는 다시 넣지 않고, 같은 문서를 다시 넣으면 새 판본에 없는 done·running 청크는 <code>stale</code>로 표시해요. 빈 문서는 거절하고 기본 docId는 <code>file:&lt;절대 경로&gt;</code>예요. <code>seed --reset</code>은 큐를 보존해 done을 pending으로 되돌리고, 워커가 돌고 있으면 거절해요. 클라우드 대체(<code>EXTRACT_FALLBACK=cloud</code>)는 사용자 워크스페이스만, 하루 <code>EXTRACT_CLOUD_DAILY_CAP</code>(기본 50)까지, 타임아웃 <code>EXTRACT_CLOUD_TIMEOUT_S</code>(기본 120초)예요. 사용량 파일이 깨지면 그날은 클라우드를 쓰지 않아요. 공통 판정은 대소문자 무시로 <code>common_</code>·<code>common-</code> 접두어 또는 이름 <code>common</code>이에요. <code>/health</code>에는 <code>extract.enabled·running</code>만 보여요.</p>
   </section>
 
   <section id="network">

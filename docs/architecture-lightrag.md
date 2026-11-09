@@ -205,6 +205,7 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434
 - **맥이 오래 꺼져 있을 때**: 관리자 플래그로 추출만 클라우드(Gemini Flash-Lite)로 돌린다. 하루 청크 상한을 두고, 사용자 워크스페이스에만 쓴다.
 - **구현(T-414)**: `server/app/extract_worker.py`. 큐는 워크스페이스 폴더의 `extract-queue.json`(청크 상태 pending·running·done·failed, 원자적 쓰기), 삽입이 끝나야 done이라 맥이 꺼져도 청크를 잃지 않는다. 연결이 끊기면 그 청크를 실패로 두고 창을 멈춘다. `EXTRACT_FALLBACK=cloud`·`EXTRACT_CLOUD_DAILY_CAP`(기본 50). 실제 LightRAG 삽입은 T-421.
 - **서버에 붙임(T-161)**: `EXTRACT_OLLAMA_URL`이 있으면 `analogy-api` lifespan이 주기 루프를 백그라운드 태스크로 돌린다(`worker.lock`이 잡혀 있으면 경고만, 큐 입출력은 스레드로 호버를 막지 않음, `/health`에 `extract.enabled·running`만). `seed --reset`은 큐를 보존해 `done`을 `pending`으로 되돌리고, 워커가 돌고 있으면 거절한다.
+- **큐 정리(T-162)**: 청크 id는 내용 기준(`<sha1(docId) 10자>-<sha1(글) 16자>`)이라 문서 앞을 고쳐도 바뀌지 않은 청크는 다시 넣지 않는다. 같은 docId를 다시 넣으면 새 판본에 없는 `pending`·`failed`는 빼고 `done`·`running`은 `stale`로 남긴다(워커가 건너뜀, LightRAG 삭제는 T-421). 빈 문서는 거절하고, 기본 docId는 `file:<절대 경로>`. 사용량 파일이 깨지면 그날은 클라우드 대체를 쓰지 않는다(닫힘). 클라우드 추출 타임아웃 `EXTRACT_CLOUD_TIMEOUT_S`(기본 120초), 공통 판정은 대소문자 무시로 `common_`·`common-` 접두어 또는 이름 `common`.
 
 ## 네트워크와 보안
 
