@@ -104,7 +104,7 @@ EXTRACT_OLLAMA_URL=http://<맥 테일넷 주소>:11434 .venv/bin/python -m app.e
 
 - 큐는 워크스페이스 폴더의 `extract-queue.json`(임시 파일에 쓰고 이름 바꾸기, 경로는 시드와 같은 안전 검사). 청크는 1,200자·겹침 100자, 빈 줄 문단 기준. 같은 문서를 다시 넣으면 이미 있는 청크는 건너뛰어요.
 - 창마다 맥에 `GET /api/tags`(2초)로 묻고, 답하면 청크를 하나씩(동시 1) `/api/chat`(JSON 모드, `num_ctx` 16384, 600초)으로 추출해요. 목록 밖 추상구조는 버리고(`filter_extraction`, 규칙 9) 삽입 콜백이 끝나야 `done`이에요.
-- 처리 중 연결이 끊기면 그 청크를 `failed`로 두고 이번 창을 멈춰요. 다음 창에 다시 해요. 응답 파싱 실패는 그 청크만 `failed`. `EXTRACT_MAX_ATTEMPTS`번 실패하면 포기(`--status`의 "포기").
+- 처리 중 연결이 끊기면 그 청크를 `failed`로 두고 이번 창을 멈춰요. 다음 창에 다시 해요. 응답 파싱 실패는 그 청크만 `failed`. Ollama가 4xx(모델 이름이 틀림 등)로 답하면 설정 오류라 시도 수를 쓰지 않고 창만 멈춰요(`lastError`에 안내, 5xx는 연결 실패와 같음). `EXTRACT_MAX_ATTEMPTS`번 실패하면 포기(`--status`의 "포기").
 - 프로세스가 죽어 `running`으로 남은 청크는 워커를 시작할 때(`--once`, 주기 루프) `pending`으로 돌려요.
 - `EXTRACT_FALLBACK=cloud`면 맥이 답하지 않을 때만 사용자 워크스페이스(`common_`으로 시작하지 않는 것) 청크를 서버 LLM(Gemini, `GEMINI_API_KEY`)으로 추출해요. 하루(UTC) `EXTRACT_CLOUD_DAILY_CAP`개까지, 사용 수는 작업 디렉터리의 `extract-usage.json`. 공통 워크스페이스는 늘 맥만.
 - 실제 LightRAG 삽입은 T-421에서 이어요. 지금 `--once`는 결과를 `<워크스페이스>/extract-results/<청크 id>.json`에 남겨요. 주기 루프(`run_forever`, `EXTRACT_INTERVAL_S`)를 서버 프로세스에 붙이는 것도 그때예요(파일 저장소는 프로세스 하나만 써야 해요).

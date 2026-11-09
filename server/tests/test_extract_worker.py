@@ -48,6 +48,8 @@ class FakeOllama:
         self.port = port or _free_port()
         self.chat_calls: list[dict] = []
         self.die_on_call: int | None = None
+        # 0이 아니면 /api/chat이 이 상태 코드로 답한다(설정 오류 흉내, 예 404 모델 없음)
+        self.chat_status = 0
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._stopper: threading.Thread | None = None
@@ -111,6 +113,9 @@ class FakeOllama:
                     except OSError:
                         pass
                     fake.stop_in_background()
+                    return
+                if fake.chat_status:
+                    self._json(fake.chat_status, {"error": f"model '{body.get('model')}' not found"})
                     return
                 user = body["messages"][-1]["content"]
                 if "깨진응답" in user:
@@ -388,6 +393,48 @@ def test_attempts_cap_gives_up(tmp_path, ollama):
     assert len(ollama.chat_calls) == 2
     counts = ew.status_counts(s, COMMON_WS, max_attempts=2)
     assert counts["gaveUp"] == 1 and counts["failed"] == 1
+
+
+def test_ollama_4xx_is_config_error_and_does_not_use_attempts(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 2)
+    ollama.chat_status = 404  # 모델 이름이 틀림
+    worker = make_worker(s, ollama.url, Inserted(), max_attempts=2)
+    for _ in range(4):
+        summary = asyncio.run(worker.run_window(IN_WINDOW))
+        assert summary["stopped"]  # 창은 멈춘다
+    q = ew.load_queue(s, COMMON_WS)
+    assert [c["status"] for c in q] == ["pending", "pending"]
+    assert [c["attempts"] for c in q] == [0, 0]
+    assert "설정" in q[0]["lastError"] and "404" in q[0]["lastError"]
+    assert ew.status_counts(s, COMMON_WS, max_attempts=2)["gaveUp"] == 0
+    assert len(ollama.chat_calls) == 4  # 창마다 앞 청크 한 번만 시도
+
+    ollama.chat_status = 0  # 설정을 고침
+    asyncio.run(worker.run_window(IN_WINDOW))
+    q = ew.load_queue(s, COMMON_WS)
+    assert [c["status"] for c in q] == ["done", "done"]
+    assert [c["attempts"] for c in q] == [1, 1]
+
+
+def test_ollama_4xx_keeps_previous_failed_status(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "a", "깨진응답 문단")
+    worker = make_worker(s, ollama.url, Inserted())
+    asyncio.run(worker.run_window(IN_WINDOW))  # 파싱 실패로 attempts 1
+    ollama.chat_status = 400
+    asyncio.run(worker.run_window(IN_WINDOW))
+    c = ew.load_queue(s, COMMON_WS)[0]
+    assert c["status"] == "failed" and c["attempts"] == 1 and "400" in c["lastError"]
+
+
+def test_ollama_5xx_still_uses_attempt(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 1)
+    ollama.chat_status = 500
+    summary = asyncio.run(make_worker(s, ollama.url, Inserted()).run_window(IN_WINDOW))
+    c = ew.load_queue(s, COMMON_WS)[0]
+    assert summary["stopped"] and c["status"] == "failed" and c["attempts"] == 1
 
 
 def test_insert_error_marks_failed_not_done(tmp_path, ollama):

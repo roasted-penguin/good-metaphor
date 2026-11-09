@@ -9,7 +9,8 @@
   → 삽입 콜백 → done 표시. 삽입이 끝나야 done이므로 맥이 꺼져도 청크를 잃지 않는다.
   삽입 뒤 done 표시 전에 프로세스가 죽으면 그 청크는 다시 처리된다. 삽입 쪽은 청크 id로 같은 청크를
   덮어쓰게 한다(T-421, LightRAG doc_id = 청크 id).
-- 연결이 끊기면 그 청크를 failed로 두고 이번 창은 멈춘다(맥이 꺼진 것으로 보고 다음 창에 다시).
+- 연결이 끊기거나 5xx면 그 청크를 failed로 두고 이번 창은 멈춘다(맥이 꺼진 것으로 보고 다음 창에 다시).
+  4xx(모델 이름이 틀림 등)는 설정 오류라 청크를 이전 상태·시도 수로 되돌리고 창만 멈춘다.
   모델 응답 파싱 실패는 failed로 두고 다음 청크로 넘어간다.
 - 프로세스가 죽어 running으로 남은 청크는 시작할 때 pending으로 되돌린다(recover_running).
 - EXTRACT_FALLBACK=cloud: 맥 헬스체크가 실패했을 때만, 사용자 워크스페이스(common_ 아님) 청크만,
@@ -67,6 +68,10 @@ class QueueError(RuntimeError):
 
 class ExtractConnectionError(RuntimeError):
     """맥(또는 클라우드)에 닿지 못함. 이번 창을 멈춘다."""
+
+
+class ExtractConfigError(RuntimeError):
+    """맥 Ollama가 4xx로 답함(모델 이름이 틀림 등). 청크 탓이 아니라 시도 수를 쓰지 않고 창을 멈춘다."""
 
 
 class ExtractParseError(ValueError):
@@ -335,7 +340,9 @@ def make_ollama_extractor(ollama_url: str, model: str, graph: Mapping[str, Any],
                 res = await client.post(url, json=body)
         except (httpx.HTTPError, OSError) as e:
             raise ExtractConnectionError(f"맥 Ollama 연결이 끊겼어요({type(e).__name__}).") from e
-        if res.status_code >= 400:
+        if 400 <= res.status_code < 500:
+            raise ExtractConfigError(f"맥 Ollama 설정 오류({res.status_code}): EXTRACT_MODEL·주소를 확인해 주세요.")
+        if res.status_code >= 500:
             raise ExtractConnectionError(f"맥 Ollama가 {res.status_code}로 답했어요.")
         try:
             content = res.json()["message"]["content"]
@@ -478,6 +485,12 @@ class ExtractWorker:
             try:
                 entities, relationships = await extractor(chunk["text"])
                 entities, relationships = filter_extraction(entities, relationships, self.vocabulary)
+            except ExtractConfigError as e:
+                # 설정 오류: 청크는 이전 상태·시도 수 그대로 되돌리고 창을 멈춘다(상한에 닿아 포기되지 않게)
+                _update(self.settings, ws, cid, now, status=nxt.get("status") or "pending",
+                        attempts=int(nxt.get("attempts") or 0), lastError=_short(e))
+                log.error("추출 큐 %s: 맥 Ollama 설정 오류, 이번 창을 멈춰요(시도 수는 그대로): %s", ws, e)
+                return "설정 오류"
             except ExtractConnectionError as e:
                 self._fail(ws, cid, now, _short(e), summary)
                 log.warning("추출 큐 %s: 청크 %s 연결 실패, 이번 창을 멈춰요: %s", ws, cid, e)
