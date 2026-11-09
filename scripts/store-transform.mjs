@@ -47,11 +47,23 @@ const SERVER_URL_KEYS = [
   ['userStore.baseUrl', a => a.userStore?.baseUrl]
 ];
 
-/** 비어 있지 않은 서버 주소마다 한국어 오류 한 줄 */
+// 처리방침은 모델 파일(데이터)을 Hugging Face에서만 받는다고 적는다(T-102). 다른 모델 주소(사내 미러 등)로는 스토어 빌드를 만들지 않는다
+const DEFAULT_MODEL_HOST = 'https://huggingface.co/';
+function isDefaultModelHost(v) {
+  const s = String(v ?? '').trim();
+  return !s || s.replace(/\/+$/, '') + '/' === DEFAULT_MODEL_HOST;
+}
+
+/** 비어 있지 않은 서버 주소마다, 그리고 기본이 아닌 모델 주소에 한국어 오류 한 줄 */
 export function serverUrlErrors(admin) {
-  return SERVER_URL_KEYS
+  const errs = SERVER_URL_KEYS
     .filter(([, get]) => String(get(admin || {}) ?? '').trim())
     .map(([key]) => `admin.json ${key} 에 서버 주소가 있어요. 개인정보 처리방침(§1·§6)을 먼저 고친 뒤 이 검사를 바꿔 주세요.`);
+  const host = admin?.embedding?.remoteHost;
+  if (!isDefaultModelHost(host)) {
+    errs.push(`admin.json embedding.remoteHost(${String(host).trim()})는 스토어 빌드에서 쓸 수 없어요. 스토어 빌드는 기본 모델 주소(Hugging Face)만 허용해요. 비우거나 개인정보 처리방침을 먼저 고쳐 주세요.`);
+  }
+  return errs;
 }
 
 // 스토어 zip 에 꼭 있어야 하는 빌드 산출물(npm run build, 커밋돼 있다)

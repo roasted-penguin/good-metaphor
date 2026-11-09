@@ -36,3 +36,19 @@ export function modelSizeText(embedding) {
   if (mb >= 1000) return `약 ${Math.round(mb / 100) / 10}GB`;
   return `약 ${Math.max(10, Math.round(mb / 10) * 10)}MB`;
 }
+
+// 상태 → 설정 화면 문구 색(class). 대체 검색은 경고, 모델 오류는 오류
+export function statusKind(status) {
+  return status === 'ready' ? 'ok' : status === 'fallback' ? 'warn' : status === 'error' ? 'err' : '';
+}
+
+// admin embedding.remoteHost(모델 파일 주소) 검사. 비면 기본(Hugging Face). https만, 내 컴퓨터(localhost·127.0.0.1)는 http도
+export function remoteHostError(url) {
+  const s = String(url ?? '').trim();
+  if (!s) return '';
+  let u;
+  try { u = new URL(s); } catch { return '모델 주소(remoteHost)는 https 주소여야 해요.'; }
+  if (u.protocol === 'https:') return '';
+  if (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname)) return '';
+  return '모델 주소(remoteHost)는 https 주소여야 해요(내 컴퓨터 localhost만 http 허용).';
+}

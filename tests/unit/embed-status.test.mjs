@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadErrorReason, embedStatusText, modelSizeText } from '../../extension/lib/embed-status.js';
+import { loadErrorReason, embedStatusText, modelSizeText, remoteHostError } from '../../extension/lib/embed-status.js';
 
 // 모델 로드 실패 원인을 짧은 한국어로 (T-102). 원문은 뒤에 붙여 원인을 찾을 수 있게 둔다
 test('loadErrorReason: 네트워크 오류는 "모델을 받지 못했어요(네트워크)"', () => {
@@ -49,4 +49,22 @@ test('modelSizeText: admin embedding.sizeMB를 "약 NMB"로, 없으면 빈 문�
   assert.equal(modelSizeText({ sizeMB: 1300 }), '약 1.3GB');
   assert.equal(modelSizeText({ model: '__fallback__' }), '');
   assert.equal(modelSizeText(undefined), '');
+});
+
+test('remoteHostError: 모델 주소는 https만, localhost·127.0.0.1은 http 허용, 비면 기본', () => {
+  for (const ok of [undefined, '', 'https://huggingface.co/', 'https://mirror.example.com/models/', 'http://127.0.0.1:8768/', 'http://localhost:8080/']) {
+    assert.equal(remoteHostError(ok), '', String(ok));
+  }
+  for (const bad of ['http://mirror.example.com/', 'ftp://x/', 'not a url', 'http://127.0.0.1.evil.x/']) {
+    assert.match(remoteHostError(bad), /https/, bad);
+  }
+});
+
+test('embedStatusText: 오류 상태는 err로 보일 종류를 함께 고른다(statusKind)', async () => {
+  const { statusKind } = await import('../../extension/lib/embed-status.js');
+  assert.equal(statusKind('ready'), 'ok');
+  assert.equal(statusKind('loading'), '');
+  assert.equal(statusKind('idle'), '');
+  assert.equal(statusKind('fallback'), 'warn');
+  assert.equal(statusKind('error'), 'err');
 });

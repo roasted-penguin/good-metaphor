@@ -9,13 +9,28 @@ import path from 'node:path';
 import { chromium } from '@playwright/test';
 
 export async function launchRaw({ ext, args = [] }) {
-  const b = { proc: null, profile: null };
+  const b = { proc: null, profile: null, onExit: null };
   try { return await start(ext, args, b); }
-  catch (e) { b.proc?.kill('SIGKILL'); throw e; } // 준비 중에 실패하면 크롬을 남기지 않는다
+  catch (e) { await cleanup(b); throw e; } // 준비 중에 실패하면 크롬·프로필을 남기지 않는다
+}
+
+// 크롬을 끝내고(5초 안에 안 끝나면 강제) 프로필을 지운다. 여러 번 불러도 된다
+async function cleanup(b) {
+  const { proc } = b;
+  if (proc && proc.exitCode === null && proc.signalCode === null) {
+    await new Promise(r => {
+      const kill = setTimeout(() => { proc.kill('SIGKILL'); r(); }, 5000);
+      proc.once('exit', () => { clearTimeout(kill); r(); });
+      proc.kill('SIGTERM');
+    });
+  }
+  if (b.onExit) { process.off('exit', b.onExit); b.onExit = null; }
+  if (b.profile) { rmSync(b.profile, { recursive: true, force: true }); b.profile = null; }
 }
 
 async function start(ext, args, b) {
   const profile = mkdtempSync(path.join(tmpdir(), 'ah-raw-'));
+  b.profile = profile;
   const exe = process.env.CHROMIUM_PATH || chromium.executablePath();
   const headless = process.env.HEADED ? [] : ['--headless=new'];
   const proc = spawn(exe, [
@@ -23,6 +38,9 @@ async function start(ext, args, b) {
     `--disable-extensions-except=${ext}`, `--load-extension=${ext}`, ...args, 'about:blank'
   ], { stdio: 'ignore' });
   b.proc = proc;
+  // 테스트 프로세스가 어떻게 끝나든 크롬을 남기지 않는다
+  b.onExit = () => { try { proc.kill('SIGKILL'); } catch { /* 이미 끝남 */ } };
+  process.once('exit', b.onExit);
   const portFile = path.join(profile, 'DevToolsActivePort');
   const until = Date.now() + 30_000;
   while (!existsSync(portFile) || readFileSync(portFile, 'utf8').split('\n').length < 2) {
@@ -30,10 +48,15 @@ async function start(ext, args, b) {
     await new Promise(r => setTimeout(r, 100));
   }
   const [port, wsPath] = readFileSync(portFile, 'utf8').split('\n');
-  const ws = new WebSocket(`ws://127.0.0.1:${port}${wsPath}`);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   let seq = 0;
   const pending = new Map();
+  const ws = new WebSocket(`ws://127.0.0.1:${port}${wsPath}`);
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  // 연결이 끊기면 기다리던 호출을 모두 실패로(테스트가 끝없이 기다리지 않게)
+  ws.onclose = () => {
+    for (const { reject } of pending.values()) reject(new Error('CDP 연결이 끊겼어요'));
+    pending.clear();
+  };
   ws.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.id && pending.has(m.id)) {
@@ -43,6 +66,7 @@ async function start(ext, args, b) {
     }
   };
   const cdp = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
+    if (ws.readyState !== WebSocket.OPEN) return reject(new Error('CDP 연결이 닫혀 있어요'));
     const id = ++seq;
     pending.set(id, { resolve, reject });
     ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
@@ -53,8 +77,9 @@ async function start(ext, args, b) {
   // 서비스 워커 대상은 목록으로만 본다(붙지 않는다)
   const workers = async () => (await cdp('Target.getTargets')).targetInfos.filter(t => t.type === 'service_worker' && t.url.startsWith(`chrome-extension://${extId}/`));
   let sw;
+  const swUntil = Date.now() + 30_000;
   while (!(sw = (await workers())[0])) {
-    if (Date.now() > until) throw new Error('확장 서비스 워커가 안 떠요');
+    if (Date.now() > swUntil) throw new Error('확장 서비스 워커가 안 떠요');
     await new Promise(r => setTimeout(r, 100));
   }
 
@@ -66,7 +91,8 @@ async function start(ext, args, b) {
     await cdp('Page.enable', {}, sessionId);
     const nav = await cdp('Page.navigate', { url }, sessionId);
     if (nav.errorText) throw new Error(`${url}: ${nav.errorText}`);
-    const evaluate = async (expression, timeoutMs = 120_000) => {
+    // 기본 90초: 테스트 시간 제한(120초)보다 짧게 둬서 teardown이 돌 시간을 남긴다
+    const evaluate = async (expression, timeoutMs = 90_000) => {
       let timer;
       const r = await Promise.race([
         cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId),
@@ -90,12 +116,7 @@ async function start(ext, args, b) {
     await Promise.race([cdp('Browser.close').catch(() => {}), new Promise(r => { timer = setTimeout(r, 3000); })]);
     clearTimeout(timer);
     ws.close();
-    await new Promise(r => {
-      if (proc.exitCode !== null) return r();
-      const kill = setTimeout(() => { proc.kill('SIGKILL'); r(); }, 5000);
-      proc.once('exit', () => { clearTimeout(kill); r(); });
-    });
-    rmSync(profile, { recursive: true, force: true });
+    await cleanup(b);
   }
   return { extId, swTargetId: sw.targetId, workers, openPage, close };
 }

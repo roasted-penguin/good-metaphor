@@ -3,7 +3,7 @@ import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.j
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
 import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
 import { COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
-import { embedStatusText, modelSizeText } from './lib/embed-status.js';
+import { embedStatusText, modelSizeText, statusKind } from './lib/embed-status.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 const SF = globalThis.AnalogySiteFilter;
@@ -606,7 +606,7 @@ async function pollEmbed() {
   const st = await send('embed:status').catch(() => null);
   if (!st) return;
   const text = embedStatusText(st);
-  setStatus($('#embedStatus'), text, st.status === 'ready' ? 'ok' : st.status === 'loading' ? '' : st.status === 'idle' ? '' : 'warn');
+  setStatus($('#embedStatus'), text, statusKind(st.status));
   if (st.status !== 'loading') { clearInterval(pollTimer); pollTimer = null; }
 }
 $('#warmup').addEventListener('click', async () => {
@@ -616,7 +616,7 @@ $('#warmup').addEventListener('click', async () => {
     const r = await send('embed:warmup');
     // 대체 검색이면 "준비 완료"로 덮지 않고 원인을 그대로 보인다(T-102)
     if (r.status === 'ready') setStatus($('#embedStatus'), `준비 완료 · 벡터 ${r.vectors}개 · ${r.embedderId}`, 'ok');
-    else setStatus($('#embedStatus'), embedStatusText(r), 'warn');
+    else setStatus($('#embedStatus'), embedStatusText(r), statusKind(r.status));
   } catch (e) { setStatus($('#embedStatus'), e.message, 'err'); }
   clearInterval(pollTimer); pollTimer = null;
 });

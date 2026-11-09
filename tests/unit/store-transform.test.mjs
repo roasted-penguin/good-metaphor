@@ -82,6 +82,19 @@ test('serverUrlErrors: 서버 주소(analogyServer.url·commonStore.url·userSto
   }
 });
 
+test('serverUrlErrors: embedding.remoteHost는 기본(Hugging Face)만 허용, 다른 값이면 처리방침 오류 (T-102)', () => {
+  assert.deepEqual(serverUrlErrors({ embedding: { remoteHost: '' } }), []);
+  assert.deepEqual(serverUrlErrors({ embedding: { remoteHost: 'https://huggingface.co/' } }), []);
+  assert.deepEqual(serverUrlErrors({ embedding: { remoteHost: 'https://huggingface.co' } }), []);
+  for (const host of ['https://mirror.example.com/', 'http://127.0.0.1:8768/', 'https://huggingface.co.evil.x/']) {
+    const errs = serverUrlErrors({ embedding: { remoteHost: host } });
+    assert.equal(errs.length, 1, host);
+    assert.ok(errs[0].includes('embedding.remoteHost'), errs[0]);
+    assert.match(errs[0], /Hugging Face/);
+    assert.match(errs[0], /처리방침/);
+  }
+});
+
 test('trackedExtensionFiles: git ls-files extension 출력 → extension/ 아래 상대 경로, 빌드 산출물이 빠지면 오류', () => {
   const out = ['extension/manifest.json', 'extension/offscreen.js', 'extension/vendor/ort-wasm-simd-threaded.asyncify.wasm', 'extension/vendor/ort-wasm-simd-threaded.asyncify.mjs', ''].join('\n');
   assert.deepEqual(trackedExtensionFiles(out), ['manifest.json', 'offscreen.js', 'vendor/ort-wasm-simd-threaded.asyncify.wasm', 'vendor/ort-wasm-simd-threaded.asyncify.mjs']);
