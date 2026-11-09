@@ -33,6 +33,8 @@ DEFAULT_EXTRACT_MODEL = "gemma4:12b"
 DEFAULT_EXTRACT_INTERVAL_S = 300
 DEFAULT_EXTRACT_MAX_ATTEMPTS = 5
 DEFAULT_EXTRACT_CLOUD_DAILY_CAP = 50
+# 클라우드 추출(Gemini) 요청 타임아웃(초, T-162). 호버 GeminiLLM 기본값(30초)과 따로
+DEFAULT_EXTRACT_CLOUD_TIMEOUT_S = 120.0
 EXTRACT_FALLBACKS = ("none", "cloud")
 
 
@@ -150,6 +152,7 @@ class Settings:
     # none | cloud(맥이 꺼졌을 때 사용자 워크스페이스만 클라우드로, 하루 상한)
     extract_fallback: str = "none"
     extract_cloud_daily_cap: int = DEFAULT_EXTRACT_CLOUD_DAILY_CAP
+    extract_cloud_timeout_s: float = DEFAULT_EXTRACT_CLOUD_TIMEOUT_S
     # 워커가 도는 워크스페이스들. 비우면 (workspace,)
     extract_workspaces: tuple[str, ...] = ()
 
@@ -205,5 +208,6 @@ class Settings:
             extract_max_attempts=int(env.get("EXTRACT_MAX_ATTEMPTS") or DEFAULT_EXTRACT_MAX_ATTEMPTS),
             extract_fallback=(env.get("EXTRACT_FALLBACK") or "none").strip().lower(),
             extract_cloud_daily_cap=int(env.get("EXTRACT_CLOUD_DAILY_CAP") or DEFAULT_EXTRACT_CLOUD_DAILY_CAP),
+            extract_cloud_timeout_s=float(env.get("EXTRACT_CLOUD_TIMEOUT_S") or DEFAULT_EXTRACT_CLOUD_TIMEOUT_S),
             extract_workspaces=_parse_origins(env.get("EXTRACT_WORKSPACES")),
         )
