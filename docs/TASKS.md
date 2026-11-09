@@ -26,7 +26,7 @@
 | T-116 | 첫 실행 화면: 트리거 선택(D-1) + 피드백 서버 전송 동의(D-7) | 1 품질 | P1 | 완료 | |
 | T-117 | 뜻 먼저 보여 주기: 응답 스트리밍으로 체감 속도 개선 | 1 품질 | P0 | 완료 | |
 | T-101 | 실제 키로 네 제공자 호출 확인 + 스모크 스크립트 | 1 품질 | P0 | 완료 | |
-| T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 (오프라인 대체 경로) | 1 품질 | P2 | 진행 | 첫 로드 확인됨, 캐시·대체 경로 남음 |
+| T-102 | 실제 임베딩 모델을 확장 안에서 로드 확인 (오프라인 대체 경로) | 1 품질 | P2 | 리뷰 | 첫 로드 확인됨, 캐시·대체 경로 남음 |
 | T-103 | 검색 평가셋 확장(40문장+, 바꿔 말한 문장·영어·맞는 비유 없는 문장) | 1 품질 | P0 | 완료 | |
 | T-133 | 검색 품질 관문: 실제 모델 hit@1 ≥ 75%, hit@3 ≥ 90% (T-103에서 분리) | 1 품질 | P0 | 완료 | T-103, T-405 |
 | T-104 | 생성 품질 평가 (근거 준수·자연스러움) | 1 품질 | P1 | 완료 | T-101, T-103 |
@@ -560,6 +560,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-09 | T-102 | task/T-102-embed-fallback | | 임베딩 모델 로드 마무리: **실제 버그 수정** — Hugging Face가 막히면 대체 검색으로 조용히 바뀌어야 하는데 오프스크린 상태의 `error` 필드 때문에 background가 매번 오류를 던져 호버가 실패하던 것(`loadError`로). 설정 화면 "대체 검색 사용 중 · 모델 로드 실패: 모델을 받지 못했어요(네트워크)". e2e: HF 차단(DNS), `fallbackOnError: false`, 느린 네트워크 40초 지연(크롬 직접 실행 + CDP로 서비스 워커 생존 확인 — Playwright 붙으면 유휴 종료가 안 일어나서). 모델 용량 문구 약 270MB(`embedding.sizeMB`), `embedding.remoteHost`(https 미러, 스토어 빌드는 금지). Opus·medium 서브에이전트(수정 1회). 단위 630, 관련 e2e 통과(전체는 CI). |
 | 2026-11-09 | T-140 | task/T-140-seed-index | [#63](https://github.com/roasted-penguin/good-metaphor/pull/63) | 시드 인덱스 다듬기: 시드가 `seed-meta.json`(그래프+태그 버전, 임베딩 공급자·모델·차원)을 원자적으로 기록, 서버는 열기 전에 비교해 없음·깨짐·다름이면 503(`/health.index.reason`에 다시 시드 명령), `--reset`은 작업 디렉터리 바로 아래 워크스페이스만(이름 검증·심볼릭 링크 거절·오류 숨기지 않음), reset 없이 다른 설정 인덱스 위 시드는 거절. compose `rag_storage` 볼륨·`BIND_ADDR` 기본 127.0.0.1, initialize 실패 정리, Ollama 차원 확인, 자기 엣지는 LightRAG 정규화 이름으로. docker에서 시드 인덱스로 실제 200(Gemini, 2.3초). Opus·medium 서브에이전트(수정 1회: reset 경로 안전). 서버 390·단위 620. |
 | 2026-11-09 | T-139 | task/T-139-ci-server | [#62](https://github.com/roasted-penguin/good-metaphor/pull/62) | CI에 서버 잡 `server` 추가(Python 3.12, pip 캐시, `cd server && python -m pytest -q`, 네트워크·키 없이 339개). 기존 `test` 체크 이름 그대로. 일부러 깨뜨린 커밋으로 실패하는 것 확인 후 되돌림. Opus·medium 서브에이전트. |
 | 2026-11-09 | T-303 | task/T-303-store-prep | [#61](https://github.com/roasted-penguin/good-metaphor/pull/61) | 웹스토어 공개 준비: `docs/store/` 권한 사유서(manifest 전 항목)·개인정보 처리방침(코드와 문장별 대조, 한국어+영어 요약)·README(사람이 할 일)·스크린샷 5장(1280×800). `npm run build:store`: git 추적 파일만, local-dev → none, 데모 제공자 숨김, 이름에서 (PoC) 뺌, 로그인 없으면 `identity` 제거, 서버 주소가 채워져 있으면 빌드 실패(처리방침 "서버 없음"과 어긋나지 않게), `dist/good-metaphor-<ver>.zip`. 업로드·계정·처리방침 공개 URL·연락처는 사람 몫. Opus·medium 서브에이전트(수정 1회). 단위 620, 스토어 빌드 e2e 통과(전체는 CI). |
