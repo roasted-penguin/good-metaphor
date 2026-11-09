@@ -59,12 +59,14 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 - 다시 돌려도 같아요. LightRAG가 같은 이름의 엔티티·관계를 덮어써서 설명이 겹치지 않아요.
 - 시드는 덮어쓰기만 하고 지우지 않아요. 공통 그래프 `version`이 바뀌거나 노드·태그를 지우거나 이름을 바꾸면 `--reset`으로 작업 디렉터리(`LIGHTRAG_WORKING_DIR/WORKSPACE/`)를 지우고 다시 넣어요.
 - 시드가 끝나면 워크스페이스 폴더에 `seed-meta.json`(그래프 판본 `그래프+태그`, 임베딩 공급자·모델·차원, 시드 시각)을 남겨요(임시 파일에 쓰고 이름 바꾸기). 시드를 시작할 때 옛 기록을 지우므로 중간에 실패하면 기록이 없어요(T-140).
-- 서버는 인덱스를 열기 전에 `seed-meta.json`을 지금 설정(`WORKSPACE_VERSION`, `EMBEDDING_*`)과 비교해요. 없거나(옛 인덱스) 다르면 열지 않고 `/v1/analogy`가 503("검색 인덱스가 아직 준비되지 않았어요." + 이유와 다시 시드 명령), `/health`의 `index`가 `{"ready": false, "reason": ...}`예요.
+- 서버는 인덱스를 열기 전에 `seed-meta.json`을 지금 설정(`WORKSPACE_VERSION`, `EMBEDDING_*`)과 비교해요. 없거나(옛 인덱스) 다르면 열지 않고 `/v1/analogy`가 503("검색 인덱스가 아직 준비되지 않았어요."), `/health`의 `index`가 `{"ready": false, "reason": ...}`예요. 이유와 다시 시드 명령은 `index.reason`과 서버 로그에 있어요(경로는 로그에만).
+- `--reset` 없이 시드 기록이 없거나 지금 설정과 다른 인덱스 위에 넣으려 하면 시드가 아무것도 건드리지 않고 멈춰요(`--reset`을 쓰라고 알려 줘요). 그래프 판본을 모를 때도 멈춰요.
+- `WORKSPACE`는 영문·숫자·`_`·`-`만 돼요. `--reset`은 `LIGHTRAG_WORKING_DIR` 바로 아래 그 폴더만 지우고, 심볼릭 링크면 거절해요.
 - Ollama 응답 벡터 차원이 `EMBEDDING_DIM`과 다르면 시드가 한국어 오류로 멈춰요.
 - LLM은 부르지 않아요. LightRAG가 LLM을 부르려 하면 오류로 멈춰요(버그라는 뜻이에요).
 - 해시 임베딩은 네트워크 없이 도는 개발·테스트용이에요. 실제 검색 품질은 `ollama`로 넣은 인덱스로 봐요. 임베딩을 바꾸면 작업 디렉터리를 지우고 다시 넣어요(벡터 차원·모델이 섞이면 안 돼요).
 - `server/rag_storage/`는 커밋하지 않고 도커 이미지에도 넣지 않아요.
-- 서버는 `LIGHTRAG_WORKING_DIR/WORKSPACE/`에 인덱스 파일(`graph_chunk_entity_relation.graphml`, `vdb_entities.json`)이 있으면 첫 검색 때 LightRAG를 한 번 열어 써요. 없으면 `/v1/analogy`가 503("검색 인덱스가 아직 준비되지 않았어요." + 시드 명령)이고, 서버가 뜬 뒤 처음 시드하면 재시작 없이 잡아요. 다만 서버가 인덱스를 한 번 연 뒤에 다시 시드했다면 서버를 재시작해야 새 인덱스를 읽어요. 서버와 시드의 `EMBEDDING_*` 설정이 같아야 해요(다르면 위 503).
+- 서버는 `LIGHTRAG_WORKING_DIR/WORKSPACE/`에 인덱스 파일(`graph_chunk_entity_relation.graphml`, `vdb_entities.json`)이 있으면 첫 검색 때 LightRAG를 한 번 열어 써요. 없으면 `/v1/analogy`가 503("검색 인덱스가 아직 준비되지 않았어요.", 시드 명령은 `/health`의 `index.reason`)이고, 서버가 뜬 뒤 처음 시드하면 재시작 없이 잡아요. 다만 서버가 인덱스를 한 번 연 뒤에 다시 시드했다면 서버를 재시작해야 새 인덱스를 읽어요. 서버와 시드의 `EMBEDDING_*` 설정이 같아야 해요(다르면 위 503).
 
 ## 환경변수
 

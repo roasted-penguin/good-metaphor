@@ -302,10 +302,8 @@ def test_real_graph_has_no_self_relationships():
 # ── fix 1: 워크스페이스 경로 검증(--reset이 아무 경로나 지우지 않게) ─────────
 
 
-@pytest.mark.parametrize("bad", ["/", "/etc", "..", ".", "../..", "a/b", "", "공백 있음", "x/../y"])
+@pytest.mark.parametrize("bad", ["/", "/etc", "..", ".", "../..", "a/b", "공백 있음", "x/../y"])
 def test_bad_workspace_is_rejected_at_settings_load(tmp_path, bad):
-    if bad == "":
-        pytest.skip("빈 값은 기본 워크스페이스로 바뀐다")
     with pytest.raises(seedmeta.WorkspaceError, match="WORKSPACE"):
         make_settings(tmp_path / "rag", WORKSPACE=bad)
 
