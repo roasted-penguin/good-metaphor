@@ -1068,3 +1068,32 @@ def test_common_workspace_any_case_never_goes_to_cloud(tmp_path, ollama, ws):
 @pytest.mark.parametrize("ws", ["u_common", "commons", "commonx", USER_WS])
 def test_non_common_workspace_names(ws):
     assert not ew.is_common(ws)
+
+
+def test_reset_drops_stale_chunks_and_requeues_done(tmp_path):
+    chunks = [
+        {"id": "a", "status": "done"},
+        {"id": "b", "status": "done", "stale": True},
+        {"id": "c", "status": "running", "stale": True},
+        {"id": "d", "status": "pending", "stale": True},
+        {"id": "e", "status": "failed", "attempts": 3},
+    ]
+    out = ew.requeue_after_reset(chunks)
+    # 인덱스가 지워졌으니 낡은 청크는 상태와 상관없이 뺀다. 낡지 않은 done만 pending(시도 0)으로
+    assert [c["id"] for c in out] == ["a", "e"]
+    assert out[0]["status"] == "pending" and out[0]["attempts"] == 0
+    assert out[1]["status"] == "failed" and out[1]["attempts"] == 3
+
+
+def test_reset_guard_writes_queue_without_stale(tmp_path):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A, LONG_B))
+    q = ew.load_queue(s, COMMON_WS)
+    for c in q:
+        c["status"] = "done"
+    ew.save_queue(s, COMMON_WS, q)
+    ew.enqueue(s, COMMON_WS, "doc", _doc(LONG_A))  # B 청크는 stale
+    with ew.reset_queue_guard(s, COMMON_WS):
+        pass
+    q = ew.load_queue(s, COMMON_WS)
+    assert [c["text"] for c in q] == [LONG_A] and q[0]["status"] == "pending"

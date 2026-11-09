@@ -860,10 +860,13 @@ def requeue_after_reset(chunks: list[dict], now: datetime | None = None) -> list
     """seed --reset 뒤 되돌려 쓸 큐(T-161). 인덱스가 지워졌으니 done은 다시 추출·삽입하도록 pending(시도 0)으로.
 
     failed(상한 도달 포함)·pending은 그대로 둔다. running은 워커가 멈춘 뒤에만 리셋하므로 죽은 흔적이라
-    그대로 두면 다음 워커 시작의 복구가 되돌린다.
+    그대로 두면 다음 워커 시작의 복구가 되돌린다. 낡은 청크(stale, T-162)는 지울 인덱스 항목도 함께
+    없어졌으니 상태와 상관없이 뺀다.
     """
     out = []
     for c in chunks:
+        if c.get("stale"):
+            continue
         c = dict(c)
         if c.get("status") == "done":
             c.update(status="pending", attempts=0, lastError=None, via=None, updatedAt=_iso(now))
