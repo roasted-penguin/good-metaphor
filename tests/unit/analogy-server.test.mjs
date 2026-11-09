@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { callAnalogyServer, checkServerResult, shouldUseServer, serverSkipReason, getInstallToken, REJECTED_TEXT, serverOriginPattern, shouldCacheLocal } from '../../extension/lib/analogy-server.js';
+import { callAnalogyServer, checkServerResult, shouldUseServer, serverSkipReason, getInstallToken, REJECTED_TEXT, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown, parseRetryAfter, cacheEntryFor, readCacheEntry } from '../../extension/lib/analogy-server.js';
 
 // 서버 응답 모양(server/app/pipeline.py 반환값을 흉내)
 const serverResult = (over = {}) => ({
@@ -275,4 +275,123 @@ test('shouldCacheLocal(T-141): 서버 실패로 만든 로컬 결과는 캐시�
   for (const reason of ['network', 'timeout', 'http-500', 'http-503', 'http-429', 'bad-json', 'bad-shape', '모르는 이유']) {
     assert.equal(shouldCacheLocal({ used: false, reason }), false, reason);
   }
+});
+
+/* ───────── 서버 실패 뒤 쿨다운(T-159) ───────── */
+const NOW = 1_000_000;
+
+test('nextServerCooldown(T-159): 첫 실패는 1분, 연속 실패면 두 배씩, 10분에서 멈춘다', () => {
+  let st = null;
+  const seen = [];
+  for (let i = 0; i < 7; i++) {
+    st = nextServerCooldown(st, 'http-500', NOW, {});
+    seen.push(st.until - NOW);
+  }
+  assert.deepEqual(seen, [60_000, 120_000, 240_000, 480_000, 600_000, 600_000, 600_000]);
+  assert.equal(st.failures, 7);
+  assert.equal(st.reason, 'http-500');
+});
+
+test('nextServerCooldown(T-159): cooldownMs·cooldownMaxMs 설정을 따른다, now 는 주입', () => {
+  const cfg = { cooldownMs: 1000, cooldownMaxMs: 3000 };
+  const a = nextServerCooldown(null, 'timeout', 5, cfg);
+  assert.deepEqual(a, { until: 1005, reason: 'timeout', failures: 1 });
+  const b = nextServerCooldown(a, 'network', 10, cfg);
+  assert.deepEqual(b, { until: 2010, reason: 'network', failures: 2 });
+  const c = nextServerCooldown(b, 'bad-json', 20, cfg);
+  assert.deepEqual(c, { until: 3020, reason: 'bad-json', failures: 3 }, '4000 → 상한 3000');
+});
+
+test('nextServerCooldown(T-159): http-429 는 Retry-After 를 쓰고 상한은 같다, 없으면 두 배 규칙', () => {
+  assert.equal(nextServerCooldown(null, 'http-429', NOW, {}, 30_000).until - NOW, 30_000);
+  assert.equal(nextServerCooldown({ until: 0, failures: 3 }, 'http-429', NOW, {}, 5_000).until - NOW, 5_000, '연속 실패여도 Retry-After 그대로');
+  assert.equal(nextServerCooldown(null, 'http-429', NOW, {}, 3_600_000).until - NOW, 600_000, '상한');
+  assert.equal(nextServerCooldown(null, 'http-429', NOW, {}).until - NOW, 60_000, 'Retry-After 없음');
+  assert.equal(nextServerCooldown(null, 'http-500', NOW, {}, 5_000).until - NOW, 60_000, '429 가 아니면 Retry-After 무시');
+  assert.equal(nextServerCooldown(null, 'http-429', NOW, {}, 5_000).failures, 1, '429 도 실패 횟수를 센다');
+});
+
+test('nextServerCooldown(T-159): 설정 문제(http-4xx)도 같은 규칙', () => {
+  for (const reason of ['http-400', 'http-401', 'http-403', 'http-404']) {
+    assert.equal(nextServerCooldown(null, reason, NOW, {}).until - NOW, 60_000, reason);
+  }
+});
+
+test('nextServerCooldown(T-159): 성공(실패 이유 없음)이면 null — 쿨다운 해제, 실패 횟수 0', () => {
+  const st = nextServerCooldown(nextServerCooldown(null, 'http-500', NOW, {}), 'http-500', NOW, {});
+  assert.equal(nextServerCooldown(st, null, NOW, {}), null);
+  const fresh = nextServerCooldown(nextServerCooldown(st, null, NOW, {}), 'http-500', NOW, {});
+  assert.equal(fresh.failures, 1, '성공 뒤 실패는 다시 1분부터');
+  assert.equal(fresh.until - NOW, 60_000);
+});
+
+test('inServerCooldown(T-159): until 이 now 보다 뒤면 쿨다운 중', () => {
+  assert.equal(inServerCooldown(null, NOW), false);
+  assert.equal(inServerCooldown(undefined, NOW), false);
+  assert.equal(inServerCooldown({}, NOW), false);
+  assert.equal(inServerCooldown({ until: NOW + 1 }, NOW), true);
+  assert.equal(inServerCooldown({ until: NOW }, NOW), false, '끝나는 순간에는 다시 시도');
+  assert.equal(inServerCooldown({ until: NOW - 1 }, NOW), false);
+});
+
+test('serverSkipReason(T-159): 쿨다운 중이면 cooldown, 다른 건너뜀 이유가 먼저', () => {
+  const base = { admin, session: null, sentenceRecords: [], providerKind: 'gemini', hasPermission: true };
+  assert.equal(serverSkipReason({ ...base, inCooldown: true }), 'cooldown');
+  assert.equal(serverSkipReason({ ...base, inCooldown: false }), null);
+  assert.equal(serverSkipReason(base), null, '생략하면 쿨다운 아님(예전 호출 모양)');
+  assert.equal(serverSkipReason({ ...base, admin: {}, inCooldown: true }), 'off');
+  assert.equal(serverSkipReason({ ...base, session: { name: 'u' }, inCooldown: true }), 'session');
+  assert.equal(serverSkipReason({ ...base, hasPermission: false, inCooldown: true }), 'no-permission');
+  assert.equal(serverSkipReason({ ...base, providerKind: 'demo', inCooldown: true }), 'demo');
+});
+
+test('shouldCacheLocal(T-159): 쿨다운으로 건너뛴 로컬 결과는 의도적 건너뜀이라 캐시', () => {
+  assert.equal(shouldCacheLocal({ used: false, reason: 'cooldown', until: NOW }), true);
+});
+
+test('parseRetryAfter(T-159): 초·HTTP 날짜를 ms 로, 틀리면 null', () => {
+  assert.equal(parseRetryAfter('30', NOW), 30_000);
+  assert.equal(parseRetryAfter(' 2 ', NOW), 2_000);
+  assert.equal(parseRetryAfter(new Date(NOW + 90_000).toUTCString(), NOW), 90_000);
+  assert.equal(parseRetryAfter(new Date(NOW - 90_000).toUTCString(), NOW), null, '지난 날짜');
+  assert.equal(parseRetryAfter('0', NOW), null);
+  assert.equal(parseRetryAfter('-5', NOW), null);
+  assert.equal(parseRetryAfter('', NOW), null);
+  assert.equal(parseRetryAfter(null, NOW), null);
+  assert.equal(parseRetryAfter('곧', NOW), null);
+});
+
+test('callAnalogyServer(T-159): 429 에 Retry-After 가 있으면 retryAfterMs 를 함께 돌려준다', async () => {
+  const res = { ...jsonRes({ detail: 'x' }, 429), headers: new Headers({ 'retry-after': '12' }) };
+  const r = await callAnalogyServer({ url: 'https://a', token: 't', payload, timeoutMs: 1000, fetchImpl: async () => res });
+  assert.deepEqual(r, { ok: false, reason: 'http-429', retryAfterMs: 12_000 });
+  const noHeader = { ...jsonRes({ detail: 'x' }, 429), headers: new Headers() };
+  const r2 = await callAnalogyServer({ url: 'https://a', token: 't', payload, timeoutMs: 1000, fetchImpl: async () => noHeader });
+  assert.deepEqual(r2, { ok: false, reason: 'http-429' });
+  const other = { ...jsonRes({ detail: 'x' }, 503), headers: new Headers({ 'retry-after': '12' }) };
+  const r3 = await callAnalogyServer({ url: 'https://a', token: 't', payload, timeoutMs: 1000, fetchImpl: async () => other });
+  assert.deepEqual(r3, { ok: false, reason: 'http-503' }, '429 만 Retry-After 를 본다');
+});
+
+/* ───────── 쿨다운 결과의 캐시 만료(T-159 수정 1회차) ───────── */
+test('cacheEntryFor(T-159): cooldown 결과는 쿨다운 until 을 expiresAt 으로 붙이고, 다른 결과는 그대로(같은 객체)', () => {
+  const cd = { meaning: 'm', debug: { server: { used: false, reason: 'cooldown', until: NOW + 5000 } } };
+  assert.deepEqual(cacheEntryFor(cd), { ...cd, expiresAt: NOW + 5000 });
+  for (const r of [
+    { meaning: 'm', debug: {} },
+    { meaning: 'm', debug: { server: { used: false, reason: 'no-permission' } } },
+    { meaning: 'm', source: 'server', debug: { server: { used: true, ms: 3 } } },
+    { meaning: 'm', debug: { server: { used: false, reason: 'cooldown' } } } // until 없음 → 만료 없이
+  ]) assert.equal(cacheEntryFor(r), r);
+});
+
+test('readCacheEntry(T-159): expiresAt 이 지나면 null(놓침), 전이면 expiresAt 을 뺀 결과, 없으면 그대로', () => {
+  const plain = { meaning: 'm', debug: {} };
+  assert.equal(readCacheEntry(plain, NOW), plain, 'expiresAt 없는 항목은 예전처럼 그대로');
+  assert.equal(readCacheEntry(null, NOW), null);
+  assert.equal(readCacheEntry(undefined, NOW), null);
+  const live = { meaning: 'm', expiresAt: NOW + 1 };
+  assert.deepEqual(readCacheEntry(live, NOW), { meaning: 'm' });
+  assert.equal(readCacheEntry({ meaning: 'm', expiresAt: NOW }, NOW), null, '쿨다운이 끝나는 순간부터 놓침');
+  assert.equal(readCacheEntry({ meaning: 'm', expiresAt: NOW - 1 }, NOW), null);
 });

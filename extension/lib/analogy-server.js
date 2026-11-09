@@ -44,6 +44,7 @@ export function checkServerResult(result, localNodeIds = null) {
 
 // POST {url}/v1/analogy. 성공이면 { ok: true, result, ms }, 실패면 { ok: false, reason }.
 // reason: 'network' | 'timeout' | 'http-<status>' | 'bad-json' | 'bad-shape'
+// http-429 에 Retry-After 가 있으면 retryAfterMs 도 준다(T-159 쿨다운 길이)
 // localNodeIds: checkServerResult 로 넘기는 로컬 그래프 노드 id 집합(T-141)
 export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000, localNodeIds = null, fetchImpl = fetch }) {
   const endpoint = `${String(url).replace(/\/$/, '')}/v1/analogy`;
@@ -63,7 +64,14 @@ export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000,
     } catch {
       return { ok: false, reason: timedOut ? 'timeout' : 'network' };
     }
-    if (!res.ok) return { ok: false, reason: `http-${res.status}` };
+    if (!res.ok) {
+      const fail = { ok: false, reason: `http-${res.status}` };
+      if (res.status === 429) {
+        const ms = parseRetryAfter(res.headers?.get?.('retry-after'), Date.now());
+        if (ms) fail.retryAfterMs = ms;
+      }
+      return fail;
+    }
     let body;
     try {
       body = await res.json();
@@ -88,16 +96,55 @@ export async function callAnalogyServer({ url, token, payload, timeoutMs = 4000,
 // 'interest' 공통 관심사가 메이플이 아님(서버는 메이플 그래프만 안다, T-302)
 // 'feedback' 그 문장에 👎·pick 기록(서버가 내 피드백을 모름, ADR 0010) / 'demo' 데모 제공자
 // 'no-permission' 서버 출처 권한이 없음(T-141, 설정 화면에서 허용). 다른 이유가 먼저다
+// 'cooldown' 서버가 막 실패해 쉬는 중(T-159). 맨 마지막 — 실제로 서버를 부를 상황일 때만 이 이유가 된다
 // commonId: 병합 그래프의 공통 그래프 id(graph.sources.common.id). 생략하면 메이플(예전 호출 모양)
 // hasPermission: 서버 출처 권한(chrome.permissions.contains). 생략하면 있음(예전 호출 모양)
-export function serverSkipReason({ admin, session, sentenceRecords, providerKind, commonId = 'maplestory', hasPermission = true }) {
+// inCooldown: inServerCooldown(serverCooldown, now). 생략하면 쿨다운 아님
+export function serverSkipReason({ admin, session, sentenceRecords, providerKind, commonId = 'maplestory', hasPermission = true, inCooldown = false }) {
   if (!admin?.analogyServer?.url) return 'off';
   if (session) return 'session';
   if (commonId !== 'maplestory') return 'interest';
   if ((sentenceRecords || []).some(r => r?.vote === 'down' || r?.vote === 'pick')) return 'feedback';
   if (providerKind === 'demo') return 'demo';
   if (!hasPermission) return 'no-permission';
+  if (inCooldown) return 'cooldown';
   return null;
+}
+
+/* ───────── 서버 실패 뒤 쿨다운(T-159) ───────── */
+// 서버가 죽었거나 설정이 틀리면 호버마다 timeoutMs 를 기다리고 LLM 도 매번 부르게 된다(실패 결과는 캐시 안 함, T-141).
+// 실패 뒤 잠깐은 서버를 건너뛴다. 상태는 chrome.storage.session 'serverCooldown' = { until, reason, failures } (background.js)
+
+// 다음 쿨다운 상태. failReason 이 없으면(서버 성공) null = 해제, 실패 횟수 0.
+// 연속 실패면 cooldownMs(기본 1분) × 2^(실패 횟수-1), cooldownMaxMs(기본 10분)에서 멈춘다.
+// http-429 에 Retry-After(retryAfterMs)가 있으면 그 값(상한 같음). http-4xx(설정 문제)도 같은 규칙. now 는 주입(시험용)
+export function nextServerCooldown(prev, failReason, now, cfg = {}, retryAfterMs = null) {
+  if (!failReason) return null;
+  const base = cfg?.cooldownMs ?? 60_000;
+  const max = cfg?.cooldownMaxMs ?? 600_000;
+  const failures = (Number(prev?.failures) || 0) + 1;
+  const ms = failReason === 'http-429' && retryAfterMs > 0
+    ? retryAfterMs
+    : base * 2 ** (failures - 1);
+  return { until: now + Math.min(ms, max), reason: failReason, failures };
+}
+
+// 지금 쿨다운 중인지. until 이 지나는 순간부터 다시 서버를 시도한다
+export function inServerCooldown(state, now) {
+  return Number(state?.until) > now;
+}
+
+// Retry-After 헤더(초 또는 HTTP 날짜) → ms. 없거나 틀리거나 0 이하면 null
+export function parseRetryAfter(value, now) {
+  const v = String(value ?? '').trim();
+  if (!v) return null;
+  if (/^-?\d+(\.\d+)?$/.test(v)) {
+    const sec = Number(v);
+    return sec > 0 ? sec * 1000 : null;
+  }
+  const at = Date.parse(v);
+  if (Number.isNaN(at)) return null;
+  return at > now ? at - now : null;
 }
 
 // 서버 주소 → 권한 요청·확인용 출처 패턴(https://host:port/*). http(s)가 아니거나 틀린 주소면 null(T-141)
@@ -113,13 +160,30 @@ export function serverOriginPattern(url) {
 
 // 서버를 일부러 건너뛴 이유(T-141). 이때 만든 로컬 결과는 캐시한다.
 // 'no-permission' 은 권한 여부가 결과 캐시 키에 들어가 허용하면 저절로 갈린다. 'reported' 는 제보 목록이 키에 있다
-const INTENTIONAL_SKIPS = new Set(['off', 'session', 'interest', 'feedback', 'demo', 'no-permission', 'reported']);
+// 'cooldown'(T-159)은 쿨다운 동안만 캐시한다 — cacheEntryFor 가 쿨다운 until 을 expiresAt 으로 붙여, 쿨다운이 끝나면 놓침이 되어 서버를 다시 부른다
+const INTENTIONAL_SKIPS = new Set(['off', 'session', 'interest', 'feedback', 'demo', 'no-permission', 'reported', 'cooldown']);
 
 // 로컬 결과를 결과 캐시에 넣을지. 서버를 시도했다가 실패해서(network·timeout·http-*·bad-*) 만든 결과는
 // 넣지 않는다 — 서버가 살아나면 다음 호버에서 다시 서버를 부르게(T-141). serverInfo 가 없으면(서버 모드 꺼짐) 넣는다
 export function shouldCacheLocal(serverInfo) {
   if (!serverInfo || serverInfo.used) return true;
   return INTENTIONAL_SKIPS.has(serverInfo.reason);
+}
+
+// 결과 캐시 항목(T-159). 쿨다운으로 건너뛴 로컬 결과만 쿨다운 끝(until)을 expiresAt 으로 붙인다.
+// 다른 결과는 받은 객체 그대로(예전 캐시 모양)
+export function cacheEntryFor(result) {
+  const s = result?.debug?.server;
+  if (s?.reason !== 'cooldown' || !Number.isFinite(s.until)) return result;
+  return { ...result, expiresAt: s.until };
+}
+
+// 캐시 항목 → 결과. expiresAt 이 지났으면(그 순간 포함) null = 놓침, 아니면 expiresAt 을 뺀 결과. expiresAt 없으면 그대로
+export function readCacheEntry(entry, now) {
+  if (!entry) return null;
+  if (!('expiresAt' in entry)) return entry;
+  const { expiresAt, ...result } = entry;
+  return expiresAt > now ? result : null;
 }
 
 // 서버를 쓸지 판정한다

@@ -6,7 +6,7 @@ import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, comm
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
-import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPattern, shouldCacheLocal } from './lib/analogy-server.js';
+import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown, cacheEntryFor, readCacheEntry } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked, activeTerms } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
@@ -121,6 +121,12 @@ const cooldowns = {
   set: llmCooldowns => chrome.storage.session.set({ llmCooldowns })
 };
 
+// 서버 실패 뒤 쿨다운(T-159). 429 쿨다운처럼 브라우저를 닫기 전까지 유지된다. 설정 화면도 읽는다
+const serverCooldownStore = {
+  get: async () => (await chrome.storage.session.get('serverCooldown')).serverCooldown || null,
+  set: serverCooldown => serverCooldown ? chrome.storage.session.set({ serverCooldown }) : chrome.storage.session.remove('serverCooldown')
+};
+
 // 말풍선 피드백 층(ADR 0010, T-129). 사용자 크롬 프로필에만 저장한다(D-7)
 const feedbackStore = {
   get: async () => (await chrome.storage.local.get('feedback')).feedback || [],
@@ -161,12 +167,13 @@ function recordGrounding({ grounding, hidden, sentence, interest, blocklist }) {
 const RESULT_CACHE_MAX = 200;
 async function cacheGet(key) {
   const got = await chrome.storage.session.get('results');
-  return got.results?.[key] || null;
+  // 쿨다운 중 결과는 쿨다운이 끝나면 놓침(T-159). 지난 항목은 다음 cachePut 이 덮거나 오래된 순으로 밀려난다
+  return readCacheEntry(got.results?.[key], Date.now());
 }
 async function cachePut(key, value) {
   const got = await chrome.storage.session.get('results');
   const results = got.results || {};
-  results[key] = value;
+  results[key] = cacheEntryFor(value); // 쿨다운 결과만 expiresAt(T-159), 나머지는 그대로
   const keys = Object.keys(results);
   if (keys.length > RESULT_CACHE_MAX) for (const k of keys.slice(0, keys.length - RESULT_CACHE_MAX)) delete results[k];
   await chrome.storage.session.set({ results });
@@ -218,13 +225,18 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
 
   // 서버 모드(T-404): analogy-api 를 먼저 부르고, 실패하면 아래 로컬 파이프라인으로 간다.
   // 주소가 비었으면(서버 모드 꺼짐) source·debug.server 를 붙이지 않는다(지금 결과 그대로)
+  // 서버가 막 실패했으면 쿨다운 동안 건너뛴다(T-159). 주소가 없으면 읽지 않는다
+  const serverCooldown = admin.analogyServer?.url ? await serverCooldownStore.get() : null;
   const skip = serverSkipReason({
     admin, session, providerKind: provider.def.kind,
     commonId: graph.sources.common?.id ?? null, // 서버는 메이플만 안다(T-302)
     sentenceRecords: feedbackRecords.filter(r => r.sentenceHash === sentenceHash),
-    hasPermission: serverPerm.granted
+    hasPermission: serverPerm.granted,
+    inCooldown: inServerCooldown(serverCooldown, Date.now())
   });
-  let serverInfo = skip === 'off' ? null : { used: false, reason: skip };
+  let serverInfo = skip === 'off' ? null
+    : skip === 'cooldown' ? { used: false, reason: 'cooldown', until: serverCooldown.until }
+    : { used: false, reason: skip };
   // 금칙어 목록(T-114): 서버 결과 재검사·로컬 생성·정밀 모드 추상 구조에 같이 쓴다
   const blocklist = await loadBlocklist();
   if (!skip) {
@@ -238,6 +250,11 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       // 규칙 1(T-141): 서버 근거는 서버 후보뿐 아니라 지금 관심사의 로컬 공통 노드에도 있어야 한다
       localNodeIds: new Set(graph.nodes.filter(n => n.source === 'common').map(n => n.id))
     });
+    // 성공하면 쿨다운을 바로 풀고, 실패하면 연속 실패 수만큼 길게 쉰다(T-159). 기록 실패로 호버를 막지 않는다
+    try {
+      if (r.ok) { if (serverCooldown) await serverCooldownStore.set(null); }
+      else await serverCooldownStore.set(nextServerCooldown(serverCooldown, r.reason, Date.now(), admin.analogyServer, r.retryAfterMs));
+    } catch (e) { console.warn('[server] 쿨다운을 기록하지 못했어요', e); }
     // 서버는 내 제보를 모른다(ADR 0010). 근거가 제보로 빠진 노드면 서버 결과를 버리고 로컬로 간다(T-118)
     if (r.ok && reported.has(r.result.evidence?.nodeId)) {
       serverInfo = { used: false, reason: 'reported' };
@@ -353,7 +370,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     result.source = 'local';
     result.debug.server = serverInfo;
   }
-  // 서버를 시도했다가 실패해서 만든 로컬 결과는 캐시하지 않는다(T-141). 서버가 살아나면 다음 호버에 서버로
+  // 서버를 시도했다가 실패해서 만든 로컬 결과는 캐시하지 않는다(T-141). 서버가 살아나면 다음 호버에 서버로.
+  // 쿨다운으로 건너뛴 결과(T-159)는 쿨다운이 끝날 때까지만 캐시한다(INTENTIONAL_SKIPS, cachePut 의 expiresAt)
   if (shouldCacheLocal(serverInfo)) await cachePut(cacheKey, result);
   return result;
 }

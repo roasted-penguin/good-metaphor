@@ -104,6 +104,7 @@ function staticPage(req, res) {
 //   '서버정상' → 정상 결과(후보는 공통 그래프 실제 id), '서버후보밖' → 후보 밖 nodeId,
 //   '서버지연' → SERVER_DELAY_MS 뒤 정상 결과(확장의 timeoutMs 보다 길게)
 //   '서버금칙' → 비유에 금칙어가 섞인 결과(확장이 서버 결과도 금칙어 재검사하는지, T-114)
+//   '서버한도' → 429 + Retry-After: 1(초) (T-159, 확장이 그 시간만큼 서버를 쉬는지)
 //   '서버로컬밖' → 근거가 서버 후보 안이지만 확장 공통 그래프에 없는 노드(T-141, 규칙 1 로컬 확인)
 export const SERVER_DELAY_MS = 5000;
 export const GHOST_NODE = 'ghost-node-t141';
@@ -153,6 +154,10 @@ function mockAnalogyApi(req, res) {
     if (sentence.includes('서버후보밖')) return send(serverResult('not-a-candidate'));
     if (sentence.includes('서버로컬밖')) return send(serverResult(GHOST_NODE));
     if (sentence.includes('서버금칙')) return send({ ...serverResult('starforce'), analogy: `${SERVER_ANALOGY} ${BLOCKED_IN_ANALOGY}` });
+    if (sentence.includes('서버한도')) {
+      res.writeHead(429, { ...cors, 'content-type': 'application/json', 'retry-after': '1', 'access-control-expose-headers': 'Retry-After' });
+      return res.end(JSON.stringify({ detail: '요청이 너무 많아요.' }));
+    }
     if (sentence.includes('서버지연')) return void setTimeout(() => send(serverResult('starforce')), SERVER_DELAY_MS);
     res.writeHead(500, { ...cors, 'content-type': 'application/json' });
     res.end(JSON.stringify({ detail: 'mock error' }));
