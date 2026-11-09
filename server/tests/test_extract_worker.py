@@ -1054,7 +1054,7 @@ def test_gemini_default_timeout_unchanged_for_hover():
     assert GeminiLLM("dummy-not-a-key", "m", timeout=120)._client.timeout == httpx.Timeout(120.0)
 
 
-@pytest.mark.parametrize("ws", ["Common_x", "COMMON_maple", "common", "Common", COMMON_WS])
+@pytest.mark.parametrize("ws", ["Common_x", "COMMON_maple", "common", "Common", COMMON_WS, "common-maple", "COMMON-x"])
 def test_common_workspace_any_case_never_goes_to_cloud(tmp_path, ollama, ws):
     assert ew.is_common(ws)
     s = make_settings(tmp_path, EXTRACT_FALLBACK="cloud")
@@ -1097,3 +1097,25 @@ def test_reset_guard_writes_queue_without_stale(tmp_path):
         pass
     q = ew.load_queue(s, COMMON_WS)
     assert [c["text"] for c in q] == [LONG_A] and q[0]["status"] == "pending"
+
+
+@pytest.mark.parametrize("text", ["", "   ", "\n\n  \t\n"])
+def test_enqueue_refuses_empty_document_and_leaves_queue(tmp_path, text):
+    s = make_settings(tmp_path)
+    ew.enqueue(s, COMMON_WS, "doc", "기존 글")
+    before = (tmp_path / "rag" / COMMON_WS / ew.QUEUE_FILE).read_text("utf-8")
+    with pytest.raises(ValueError, match="빈 문서"):
+        ew.enqueue(s, COMMON_WS, "doc", text)
+    # 같은 docId의 기존 청크를 낡은 것으로 지우지 않는다
+    assert (tmp_path / "rag" / COMMON_WS / ew.QUEUE_FILE).read_text("utf-8") == before
+
+
+def test_cli_enqueue_empty_file_fails(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("LIGHTRAG_WORKING_DIR", str(tmp_path / "rag"))
+    monkeypatch.setenv("COMMON_GRAPH_PATH", str(COMMON_GRAPH))
+    monkeypatch.setenv("WORKSPACE", USER_WS)
+    f = tmp_path / "empty.txt"
+    f.write_text("  \n", "utf-8")
+    assert ew.main(["--enqueue", str(f)]) != 0
+    assert "빈 문서는 넣을 수 없어요" in capsys.readouterr().out
+    assert not (tmp_path / "rag" / USER_WS / ew.QUEUE_FILE).exists()

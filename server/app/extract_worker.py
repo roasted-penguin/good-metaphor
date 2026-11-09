@@ -19,7 +19,7 @@
   작업 디렉터리의 `worker.lock`을 기다리지 않고 잡은 프로세스 하나만(두 번째 워커는 거절).
 - 큐 파일이 깨진 워크스페이스는 그 워크스페이스만 건너뛰고 나머지는 계속한다.
 - EXTRACT_FALLBACK=cloud: 맥 헬스체크가 실패했을 때만, 사용자 워크스페이스(대소문자 무시로 common_으로
-  시작하지도 common 자체도 아님) 청크만, 하루(UTC) 상한까지 클라우드로 추출한다. 공통 워크스페이스는 늘 맥만
+  시작하지도(common- 포함) common 자체도 아님) 청크만, 하루(UTC) 상한까지 클라우드로 추출한다. 공통 워크스페이스는 늘 맥만
   (운영자 승인 흐름). 사용량 파일이 깨지면 그날은 상한에 닿은 것으로 본다(닫힘, T-162).
 
 규칙 8: 호버 경로와 따로 돈다. 규칙 10: 맥 주소는 테일넷 주소만 설정에 둔다(키는 없다, 로그에 주소만).
@@ -58,7 +58,6 @@ WORKER_LOCK_FILE = "worker.lock"
 USAGE_FILE = "extract-usage.json"
 # T-421 전 기본 삽입: 추출 결과를 워크스페이스 폴더 아래 청크별 파일로 남긴다
 RESULTS_DIR = "extract-results"
-COMMON_PREFIX = "common_"
 
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 100
@@ -79,6 +78,10 @@ Inserter = Callable[[dict, list, list], Awaitable[None]]
 
 class QueueError(RuntimeError):
     """큐 파일이 깨졌을 때. 조용히 비우지 않고 멈춘다(청크를 잃지 않게)."""
+
+
+class EmptyDocumentError(ValueError):
+    """넣을 청크가 없는 빈 문서(T-162). 같은 docId의 기존 청크를 낡은 것으로 지우지 않게 거절한다."""
 
 
 class ExtractConnectionError(RuntimeError):
@@ -311,6 +314,9 @@ def enqueue(settings: Settings, workspace: str, doc_id: str, text: str,
       `adelete_by_doc_id`). 낡았던 청크가 새 판본에 다시 있으면 표시를 지운다.
     """
     parts = chunk_text(text)
+    if not parts:
+        # 빈 문서로 다시 넣으면 그 문서의 청크가 전부 낡은 것이 되므로 큐를 건드리지 않고 거절한다
+        raise EmptyDocumentError("빈 문서는 넣을 수 없어요.")
 
     def add(chunks: list[dict]) -> tuple[bool, dict[str, int]]:
         new_ids: list[tuple[str, str]] = []
@@ -415,10 +421,10 @@ def status_counts(settings: Settings, workspace: str, max_attempts: int) -> dict
 
 
 def is_common(workspace: str) -> bool:
-    """공통 워크스페이스인지(T-162): 대소문자 무시로 `common_`으로 시작하거나 이름이 `common` 자체.
+    """공통 워크스페이스인지(T-162): 대소문자 무시로 `common_`·`common-`으로 시작하거나 이름이 `common` 자체.
     공통은 클라우드로 보내지 않으므로(운영자 승인 흐름) 애매하면 공통 쪽으로 본다."""
     name = workspace.casefold()
-    return name == COMMON_PREFIX.rstrip("_") or name.startswith(COMMON_PREFIX)
+    return name == "common" or name.startswith(("common_", "common-"))
 
 
 # ── 시간창 ───────────────────────────────────────────
@@ -911,7 +917,11 @@ def main(argv: list[str] | None = None) -> int:
         # 기본 docId는 정규화한 절대 경로(이름만 같은 다른 폴더 파일과 겹치지 않게, T-162)
         doc_id = args.doc_id or f"file:{path.resolve()}"
         total = len(set(chunk_text(text)))
-        r = enqueue(settings, ws, doc_id, text)
+        try:
+            r = enqueue(settings, ws, doc_id, text)
+        except EmptyDocumentError as e:
+            print(f"{ws}: {e}")
+            return 1
         print(f"{ws}: 청크 {total}개 중 {r['added']}개를 넣었어요(이미 있던 {total - r['added']}개는 건너뜀). "
               f"새 판본에 없는 청크 {r['removed']}개를 뺐고 {r['stale']}개는 낡음(stale)으로 표시했어요.")
         return 0
