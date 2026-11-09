@@ -77,8 +77,8 @@
 | T-302 | 두 번째 공통 관심사: 식당 그래프 + 로그인 없이 관심사 선택 | 3 확장 | P1 | 완료 | T-304 |
 | T-156 | 식당 관심사 1위 정답률 높이기: hit@1 10/21(48%)·hit@3 17/21(여유 한 문장). 넓은 태그(scarcity_value·efficiency_metric·expected_value)가 엉뚱한 노드를 끌어올림, 억지 태그 연결(fifo_storage·model_restaurant의 loss_risk, delivery_fee의 expected_value, price_board의 threshold_req) 재검토, 관심사별 감점 검토. 메이플 가드 회귀 0, 식당 가드 파일 만들기 | 3 확장 | P1 | 완료 | T-302 |
 | T-157 | 식당 교정 내보내기: `corrections:export`가 메이플로 고정돼 식당 👎·"더 맞는 개념"이 운영자 파일에 안 들어감. 내보내기에 관심사 표시, 승인 절차가 식당 평가셋으로 가게 | 3 확장 | P2 | 완료 | T-302, T-131 |
-| T-158 | 첫 실행 화면(T-116)에서 관심사(메이플/식당) 고르기 | 3 확장 | P2 | 리뷰 | T-302 |
-| T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 대기 | T-107, T-402 |
+| T-158 | 첫 실행 화면(T-116)에서 관심사(메이플/식당) 고르기 | 3 확장 | P2 | 완료 | T-302 |
+| T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 리뷰 | T-107, T-402 |
 | T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
 | T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 완료 | |
 | T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 대기 | T-402 |
@@ -560,6 +560,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-09 | T-303 | task/T-303-store-prep | [#61](https://github.com/roasted-penguin/good-metaphor/pull/61) | 웹스토어 공개 준비: `docs/store/` 권한 사유서(manifest 전 항목)·개인정보 처리방침(코드와 문장별 대조, 한국어+영어 요약)·README(사람이 할 일)·스크린샷 5장(1280×800). `npm run build:store`: git 추적 파일만, local-dev → none, 데모 제공자 숨김, 이름에서 (PoC) 뺌, 로그인 없으면 `identity` 제거, 서버 주소가 채워져 있으면 빌드 실패(처리방침 "서버 없음"과 어긋나지 않게), `dist/good-metaphor-<ver>.zip`. 업로드·계정·처리방침 공개 URL·연락처는 사람 몫. Opus·medium 서브에이전트(수정 1회). 단위 620, 스토어 빌드 e2e 통과(전체는 CI). |
 | 2026-11-09 | T-158 | task/T-158-onboarding-interest | [#60](https://github.com/roasted-penguin/good-metaphor/pull/60) | 첫 실행 안내 1단계 "무엇으로 비유할까요?"(메이플스토리(추천)/식당, `COMMON_INTERESTS`로 그림): 시작하기면 `settings.interest` 저장·사용 방식 칸도 같은 값, 넘기기면 그대로. Opus·medium 서브에이전트. 단위 607, 관련 e2e 통과(전체는 CI). |
 | 2026-11-09 | T-157 | task/T-157-restaurant-corrections | [#59](https://github.com/roasted-penguin/good-metaphor/pull/59) | 식당 교정 내보내기: 운영자용 교정 내보내기가 지금 고른 관심사 하나만(최상위 `interest`, 그 관심사 공통 노드 교정만, 파일 이름에 관심사, 없으면 메이플로 읽음). 검사 도구가 `interest`를 읽어 그 관심사의 평가셋·가드·홀드아웃·그래프로 검사, 모르는 관심사는 오류. 승인 절차에 관심사별 파일 표, 공유 tags.json을 바꾸면 두 관심사 가드 모두. Opus·medium 서브에이전트. 단위 607, e2e는 CI 기준(이 맥은 화면 잠듦으로 느려 전체 실행이 시간 초과). |
 | 2026-11-09 | T-156 | task/T-156-restaurant-hit1 | [#58](https://github.com/roasted-penguin/good-metaphor/pull/58) | 식당 1위 정답률: 노드 태그가 사실로 뒷받침되는지 점검해 근거 없는 4개 제거 → 식당 hit@1 10→12/21, hit@3 17/21 그대로, 회귀 없음, 메이플 그대로. 관심사별 감점(그래프 `tagPenalty`, 지금은 아무 그래프도 안 씀)·`eval --interest --guard/--holdout`·식당 가드 12문장·식당 홀드아웃 8문장. 감점 변형은 일반화 안 돼 기각. 남은 억지 태그 2개(delivery_fee·fifo_storage)는 맞는 공유 태그가 없어 그대로 — 새 태그는 규칙 9 결정 필요. Opus·medium 서브에이전트. 단위 601·e2e 102. |
