@@ -93,6 +93,26 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 - `server/rag_storage/`는 커밋하지 않고 도커 이미지에도 넣지 않아요.
 - 서버는 `LIGHTRAG_WORKING_DIR/WORKSPACE/`에 인덱스 파일(`graph_chunk_entity_relation.graphml`, `vdb_entities.json`)이 있으면 첫 검색 때 LightRAG를 한 번 열어 써요. 없으면 `/v1/analogy`가 503("검색 인덱스가 아직 준비되지 않았어요.", 시드 명령은 `/health`의 `index.reason`)이고, 서버가 뜬 뒤 처음 시드하면 재시작 없이 잡아요. 다만 서버가 인덱스를 한 번 연 뒤에 다시 시드했다면 서버를 재시작해야 새 인덱스를 읽어요. 서버와 시드의 `EMBEDDING_*` 설정이 같아야 해요(다르면 위 503).
 
+## 추출 큐 워커(T-414)
+
+```bash
+cd server
+.venv/bin/python -m app.extract_worker --enqueue 문서.txt [--workspace u_xxx] [--doc-id 출처]   # 청크로 나눠 큐에
+.venv/bin/python -m app.extract_worker --status    # 워크스페이스별 pending·running·done·failed(포기) 개수
+EXTRACT_OLLAMA_URL=http://<맥 테일넷 주소>:11434 .venv/bin/python -m app.extract_worker --once   # 창 한 번
+```
+
+- 큐는 워크스페이스 폴더의 `extract-queue.json`(임시 파일에 쓰고 이름 바꾸기, 경로는 시드와 같은 안전 검사). 청크는 1,200자·겹침 100자, 빈 줄 문단 기준. 같은 문서를 다시 넣으면 이미 있는 청크는 건너뛰어요.
+- 창마다 맥에 `GET /api/tags`(2초)로 묻고, 답하면 청크를 하나씩(동시 1) `/api/chat`(JSON 모드, `num_ctx` 16384, 600초)으로 추출해요. 목록 밖 추상구조는 버리고(`filter_extraction`, 규칙 9) 삽입 콜백이 끝나야 `done`이에요.
+- 처리 중 연결이 끊기면 그 청크를 `failed`로 두고 이번 창을 멈춰요. 다음 창에 다시 해요. 응답 파싱 실패는 그 청크만 `failed`. Ollama가 4xx(모델 이름이 틀림 등)로 답하거나 클라우드가 4xx(키 오류 등)로 답하면 설정 오류라 시도 수·하루 사용 수를 쓰지 않고 창만 멈춰요(`lastError`에 안내, 5xx는 연결 실패와 같음). `EXTRACT_MAX_ATTEMPTS`번 실패하면 포기(`--status`의 "포기").
+- 프로세스가 죽어 `running`으로 남은 청크는 워커를 시작할 때(`--once`, 주기 루프) `pending`으로 돌려요. 시도 수는 그대로라 처리 중 프로세스를 죽이는 청크도 상한에서 멈춰요(포기).
+- 잠금: 큐를 읽고-고치고-쓰는 동안 큐 파일 옆 `extract-queue.lock`(`fcntl.flock`)을 쥐어요. 그래서 서버 안 워커가 도는 중에 `--enqueue`·`--status`를 써도 청크를 잃지 않아요(잠깐 기다릴 수 있어요). `--once`와 주기 루프는 작업 디렉터리의 `worker.lock`도 기다리지 않고 잡아요. 다른 워커가 쥐고 있으면 "다른 추출 워커가 이미 돌고 있어요."로 거절해요(running 복구가 남의 처리 중 청크를 건드리지 않게).
+- 큐 파일이 깨진 워크스페이스는 그 워크스페이스만 건너뛰고(로그·`--status`에 안내) 나머지는 계속해요. 파일은 비우지 않아요.
+- 큐에서 청크 id 모양이 안전하지 않거나 워크스페이스가 맞지 않는 청크는 포기로 표시하고 건너뛰어요.
+- `EXTRACT_OLLAMA_URL`이 비어 있으면 워커 전체가 꺼져요(클라우드 대체 포함). `EXTRACT_FALLBACK=cloud`면 맥 주소가 있고 맥이 답하지 않을 때만 사용자 워크스페이스(`common_`으로 시작하지 않는 것) 청크를 서버 LLM(Gemini, `GEMINI_API_KEY`)으로 추출해요. 하루(UTC) `EXTRACT_CLOUD_DAILY_CAP`개까지, 사용 수는 작업 디렉터리의 `extract-usage.json`. 공통 워크스페이스는 늘 맥만.
+- 실제 LightRAG 삽입은 T-421에서 이어요. 지금 `--once`는 결과를 `<워크스페이스>/extract-results/<청크 id>.json`에 남겨요. 주기 루프(`run_forever`, `EXTRACT_INTERVAL_S`)를 서버 프로세스에 붙이는 것도 그때예요(파일 저장소는 프로세스 하나만 써야 해요).
+- 맥 포트는 테일넷에만(규칙 10, T-411). `EXTRACT_OLLAMA_URL`이 비면 맥 추출은 꺼져 있어요.
+
 ## 환경변수
 
 | 이름 | 기본값 | 설명 |
@@ -111,3 +131,11 @@ EMBEDDING_PROVIDER=ollama .venv/bin/python -m app.seed   # 맥의 Ollama bge-m3�
 | `BIND_ADDR` | `127.0.0.1` | 도커 compose만. 포트 8000을 열 주소 |
 | `ALLOWED_ORIGINS` | 없음(허용 없음) | CORS 허용 출처, 쉼표 구분. 운영은 확장 출처 `chrome-extension://<id>`(T-141). 덧댐일 뿐 접근 제어는 설치 토큰 + 요청 한도 |
 | `ALLOW_EXTENSION_ORIGINS` | `false` | `true`면 모든 확장 id 형식 허용. 개발용, 운영에서는 끄기 |
+| `EXTRACT_OLLAMA_URL` | 없음(꺼짐) | 추출 큐 워커가 부를 맥 Ollama 주소(테일넷, T-414) |
+| `EXTRACT_MODEL` | `gemma4:12b` | 맥 추출 모델 |
+| `EXTRACT_WINDOW` | 없음(늘 열림) | 추출 시간창(서버 시간대), 예 `12:10-13:00,23:00-07:00` |
+| `EXTRACT_INTERVAL_S` | `300` | 주기 루프 간격(초) |
+| `EXTRACT_MAX_ATTEMPTS` | `5` | 청크당 시도 상한 |
+| `EXTRACT_FALLBACK` | `none` | `cloud`면 맥이 꺼졌을 때 사용자 워크스페이스만 클라우드 추출 |
+| `EXTRACT_CLOUD_DAILY_CAP` | `50` | 클라우드 추출 하루(UTC) 청크 상한 |
+| `EXTRACT_WORKSPACES` | `WORKSPACE` | 워커가 도는 워크스페이스, 쉼표 구분 |

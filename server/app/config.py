@@ -28,6 +28,12 @@ DEFAULT_EMBEDDING_MODEL = "bge-m3"
 DEFAULT_EMBEDDING_DIM = 1024
 # CORS(T-141): 확장 출처 형식(chrome-extension:// + a~p 32자). ALLOW_EXTENSION_ORIGINS=true 일 때만 쓴다
 EXTENSION_ORIGIN_REGEX = r"^chrome-extension://[a-p]{32}$"
+# 추출 큐 워커(T-414). 맥 Ollama 주소가 비면 워커는 꺼져 있다(규칙 8·10: 테일넷 주소만 적는다)
+DEFAULT_EXTRACT_MODEL = "gemma4:12b"
+DEFAULT_EXTRACT_INTERVAL_S = 300
+DEFAULT_EXTRACT_MAX_ATTEMPTS = 5
+DEFAULT_EXTRACT_CLOUD_DAILY_CAP = 50
+EXTRACT_FALLBACKS = ("none", "cloud")
 
 
 def _parse_origins(raw: str | None) -> tuple[str, ...]:
@@ -134,12 +140,30 @@ class Settings:
     allowed_origins: tuple[str, ...] = ()
     # true 면 모든 확장 id 형식을 허용(개발용). 운영에서는 끈다
     allow_extension_origins: bool = False
+    # 추출 큐 워커(T-414)
+    extract_ollama_url: str = ""
+    extract_model: str = DEFAULT_EXTRACT_MODEL
+    # 비우면 늘 열림. 예 "12:10-13:00,23:00-07:00"(서버 시간대)
+    extract_window: str = ""
+    extract_interval_s: int = DEFAULT_EXTRACT_INTERVAL_S
+    extract_max_attempts: int = DEFAULT_EXTRACT_MAX_ATTEMPTS
+    # none | cloud(맥이 꺼졌을 때 사용자 워크스페이스만 클라우드로, 하루 상한)
+    extract_fallback: str = "none"
+    extract_cloud_daily_cap: int = DEFAULT_EXTRACT_CLOUD_DAILY_CAP
+    # 워커가 도는 워크스페이스들. 비우면 (workspace,)
+    extract_workspaces: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         # 워크스페이스 이름은 --reset이 지우는 폴더 이름이 된다. 설정을 읽을 때 바로 막는다(T-140)
         from .seedmeta import validate_workspace
 
         validate_workspace(self.workspace)
+        if self.extract_fallback not in EXTRACT_FALLBACKS:
+            raise ValueError(f"EXTRACT_FALLBACK은 none 또는 cloud만 돼요: {self.extract_fallback!r}")
+        if not self.extract_workspaces:
+            object.__setattr__(self, "extract_workspaces", (self.workspace,))
+        for ws in self.extract_workspaces:
+            validate_workspace(ws)
         if not self.blocklist_path:
             object.__setattr__(self, "blocklist_path", str(Path(self.common_graph_path).parent / BLOCKLIST_FILENAME))
         if not self.tags_path:
@@ -174,4 +198,12 @@ class Settings:
             tags_path=tags_path,
             allowed_origins=_parse_origins(env.get("ALLOWED_ORIGINS")),
             allow_extension_origins=_parse_bool(env.get("ALLOW_EXTENSION_ORIGINS")),
+            extract_ollama_url=(env.get("EXTRACT_OLLAMA_URL") or "").strip(),
+            extract_model=env.get("EXTRACT_MODEL") or DEFAULT_EXTRACT_MODEL,
+            extract_window=(env.get("EXTRACT_WINDOW") or "").strip(),
+            extract_interval_s=int(env.get("EXTRACT_INTERVAL_S") or DEFAULT_EXTRACT_INTERVAL_S),
+            extract_max_attempts=int(env.get("EXTRACT_MAX_ATTEMPTS") or DEFAULT_EXTRACT_MAX_ATTEMPTS),
+            extract_fallback=(env.get("EXTRACT_FALLBACK") or "none").strip().lower(),
+            extract_cloud_daily_cap=int(env.get("EXTRACT_CLOUD_DAILY_CAP") or DEFAULT_EXTRACT_CLOUD_DAILY_CAP),
+            extract_workspaces=_parse_origins(env.get("EXTRACT_WORKSPACES")),
         )

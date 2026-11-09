@@ -203,6 +203,7 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434
 - **운영 시간창**: EC2 워커가 5분마다 테일넷 너머 `GET /api/tags`로 맥을 확인하고, 응답하면 큐를 비운다. 맥에서는 launchd 에이전트가 점심(12:10~13:00)과 밤(23:00~07:00)에만 Ollama를 켜고 `caffeinate -i`로 잠들지 않게 한다. 노트북을 바로 써야 하면 Ollama를 끄면 되고, 워커는 현재 청크를 실패로 표시하고 다음 시간창에 다시 한다.
 - **처리량(인상치)**: 청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩이면 메모리 대역폭이 두 배라 더 빠르다. 첫 실험에서 실측.
 - **맥이 오래 꺼져 있을 때**: 관리자 플래그로 추출만 클라우드(Gemini Flash-Lite)로 돌린다. 하루 청크 상한을 두고, 사용자 워크스페이스에만 쓴다.
+- **구현(T-414)**: `server/app/extract_worker.py`. 큐는 워크스페이스 폴더의 `extract-queue.json`(청크 상태 pending·running·done·failed, 원자적 쓰기), 삽입이 끝나야 done이라 맥이 꺼져도 청크를 잃지 않는다. 연결이 끊기면 그 청크를 실패로 두고 창을 멈춘다. `EXTRACT_FALLBACK=cloud`·`EXTRACT_CLOUD_DAILY_CAP`(기본 50). 실제 LightRAG 삽입과 서버 프로세스 안 주기 루프 연결은 T-421.
 
 ## 네트워크와 보안
 
