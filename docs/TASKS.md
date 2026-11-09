@@ -78,10 +78,10 @@
 | T-156 | 식당 관심사 1위 정답률 높이기: hit@1 10/21(48%)·hit@3 17/21(여유 한 문장). 넓은 태그(scarcity_value·efficiency_metric·expected_value)가 엉뚱한 노드를 끌어올림, 억지 태그 연결(fifo_storage·model_restaurant의 loss_risk, delivery_fee의 expected_value, price_board의 threshold_req) 재검토, 관심사별 감점 검토. 메이플 가드 회귀 0, 식당 가드 파일 만들기 | 3 확장 | P1 | 완료 | T-302 |
 | T-157 | 식당 교정 내보내기: `corrections:export`가 메이플로 고정돼 식당 👎·"더 맞는 개념"이 운영자 파일에 안 들어감. 내보내기에 관심사 표시, 승인 절차가 식당 평가셋으로 가게 | 3 확장 | P2 | 완료 | T-302, T-131 |
 | T-158 | 첫 실행 화면(T-116)에서 관심사(메이플/식당) 고르기 | 3 확장 | P2 | 완료 | T-302 |
-| T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 리뷰 | T-107, T-402 |
+| T-303 | 크롬 웹스토어 공개 준비 | 3 확장 | P1 | 완료 | T-107, T-402 |
 | T-401 | [L0] EC2 준비: t4g.medium, Caddy, Tailscale, 키 보관 | L 서버 | P0 | 대기 | |
 | T-402 | [L0] `server/` analogy-api 골격: `/v1/analogy`, 결과 형식 호환, 캐시 | L 서버 | P0 | 완료 | |
-| T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 대기 | T-402 |
+| T-139 | CI에 서버 테스트 추가(`server/` pytest, 파이썬 3.12, 고정 버전 설치) | L 서버 | P1 | 진행 | T-402 |
 | T-403 | [L0] 시드 주입: maplestory.json → insert_custom_kg, 추상구조 엔티티 | L 서버 | P0 | 완료 | T-402 |
 | T-140 | 시드 인덱스 다듬기: 그래프 버전·임베딩 설정을 인덱스에 기록해 다르면 경고, docker에 rag_storage 볼륨, 열기 실패 때 저장소 정리, Ollama 응답 차원 확인 | L 서버 | P2 | 대기 | T-403 |
 | T-404 | [L0] 확장 서버 모드 + 서버 장애 시 로컬 대체 | L 서버 | P0 | 완료 | T-402 |
