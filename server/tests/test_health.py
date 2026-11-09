@@ -33,7 +33,8 @@ def test_health_returns_ok_and_version(monkeypatch):
     assert res.status_code == 200
     body = res.json()
     assert body["ok"] is True and body["version"] == __version__
-    assert set(body) == {"ok", "version", "blocklist", "index"}
+    assert set(body) == {"ok", "version", "blocklist", "index", "extract"}
+    assert body["extract"] == {"enabled": False, "running": False}
     assert isinstance(__version__, str) and __version__
 
 
