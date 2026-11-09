@@ -495,13 +495,17 @@ def make_result_writer(settings: Settings) -> Inserter:
     청크 id는 안전한 모양만(아니면 ValueError). 워커는 chunk["workspace"]를 지금 처리 중인 워크스페이스로 채워 넘긴다.
     """
 
-    async def write(chunk: dict, entities: list, relationships: list) -> None:
+    def write_sync(chunk: dict, entities: list, relationships: list) -> None:
         name = result_name(chunk["id"])
         d = _ws_dir(settings, chunk["workspace"]) / RESULTS_DIR
         d.mkdir(parents=True, exist_ok=True)
         seedmeta.atomic_write_json(d / f"{name}.json", {
             "id": chunk["id"], "docId": chunk["docId"], "workspace": chunk["workspace"],
             "entities": entities, "relationships": relationships})
+
+    async def write(chunk: dict, entities: list, relationships: list) -> None:
+        # 파일 쓰기는 이벤트 루프 밖 스레드에서(서버 안에서 돌 때 호버 응답을 막지 않게, T-161)
+        await asyncio.to_thread(write_sync, chunk, entities, relationships)
 
     return write
 
@@ -601,7 +605,7 @@ class ExtractWorker:
         return summary
 
     def _pick(self, ws: str, tried: set[str], now: datetime) -> dict | None:
-        """잠금 안에서 처리할 청크를 골라 running(시도 수 +1)으로 표시한다.
+        """(스레드에서 부른다) 잠금 안에서 처리할 청크를 골라 running(시도 수 +1)으로 표시한다.
 
         반환: None(없음) | {"kind": "bad", ...}(안전하지 않은 청크, 포기로 표시함) | {"kind": "ok", "chunk", "prev"}.
         """
@@ -630,9 +634,11 @@ class ExtractWorker:
         # 이번 창에서 이미 시도한 청크는 다시 집지 않는다(파싱 실패 청크를 한 창에서 되풀이하지 않게)
         tried: set[str] = set()
         while True:
-            if via == "cloud" and read_cloud_usage(self.settings, now) >= self.daily_cap:
+            # 큐 잠금·파일 입출력은 모두 asyncio.to_thread로: 다른 프로세스(--enqueue 등)가 큐 잠금을 쥐어도
+            # 이벤트 루프(서버의 /health·/v1/analogy)는 막히지 않는다(T-161)
+            if via == "cloud" and await asyncio.to_thread(read_cloud_usage, self.settings, now) >= self.daily_cap:
                 return "클라우드 하루 상한"
-            picked = self._pick(ws, tried, now)
+            picked = await asyncio.to_thread(self._pick, ws, tried, now)
             if picked is None:
                 return None
             if picked["kind"] == "bad":
@@ -643,43 +649,44 @@ class ExtractWorker:
             cid = chunk["id"]
             if via == "cloud":
                 # 호출 전에 센다(실패해도 비용이 드니까). 설정 오류(4xx)면 되돌린다
-                _add_cloud_usage(self.settings, now)
+                await asyncio.to_thread(_add_cloud_usage, self.settings, now)
             try:
                 entities, relationships = await extractor(chunk["text"])
                 entities, relationships = filter_extraction(entities, relationships, self.vocabulary)
             except ExtractConfigError as e:
                 # 설정 오류: 청크는 이전 상태·시도 수 그대로 되돌리고 창을 멈춘다(상한에 닿아 포기되지 않게)
-                _update(self.settings, ws, cid, now, status=prev["status"], attempts=prev["attempts"],
-                        lastError=_short(e))
+                await asyncio.to_thread(_update, self.settings, ws, cid, now, status=prev["status"],
+                                        attempts=prev["attempts"], lastError=_short(e))
                 if via == "cloud":
-                    _add_cloud_usage(self.settings, now, -1)
+                    await asyncio.to_thread(_add_cloud_usage, self.settings, now, -1)
                 log.error("추출 큐 %s: %s 설정 오류, 이번 창을 멈춰요(시도 수는 그대로): %s", ws, via, e)
                 return "설정 오류"
             except ExtractConnectionError as e:
-                self._fail(ws, cid, now, _short(e), summary)
+                await self._fail(ws, cid, now, _short(e), summary)
                 log.warning("추출 큐 %s: 청크 %s 연결 실패, 이번 창을 멈춰요: %s", ws, cid, e)
                 return "연결 끊김"
             except Exception as e:  # 파싱 실패 등: 그 청크만 실패
-                self._fail(ws, cid, now, _short(e), summary)
+                await self._fail(ws, cid, now, _short(e), summary)
                 log.warning("추출 큐 %s: 청크 %s 추출 실패: %s", ws, cid, e)
                 continue
             try:
                 await self.insert(chunk, entities, relationships)
             except (ExtractConnectionError, httpx.TransportError) as e:
-                self._fail(ws, cid, now, f"삽입 중 연결 실패: {_short(e)}", summary)
+                await self._fail(ws, cid, now, f"삽입 중 연결 실패: {_short(e)}", summary)
                 log.warning("추출 큐 %s: 청크 %s 삽입 중 연결 실패, 이번 창을 멈춰요: %s", ws, cid, e)
                 return "연결 끊김"
             except Exception as e:
-                self._fail(ws, cid, now, f"삽입 실패: {type(e).__name__}: {_short(e)}", summary)
+                await self._fail(ws, cid, now, f"삽입 실패: {type(e).__name__}: {_short(e)}", summary)
                 log.warning("추출 큐 %s: 청크 %s 삽입 실패: %s", ws, cid, e)
                 continue
-            _update(self.settings, ws, cid, now, status="done", lastError=None, via=via)
+            await asyncio.to_thread(_update, self.settings, ws, cid, now, status="done", lastError=None, via=via)
             summary["done"] += 1
             if via == "cloud":
                 summary["cloud"] += 1
 
-    def _fail(self, ws: str, cid: str, now: datetime, message: str, summary: dict) -> None:
-        _update(self.settings, ws, cid, now, status="failed", lastError=message[:ERROR_MAX_LEN])
+    async def _fail(self, ws: str, cid: str, now: datetime, message: str, summary: dict) -> None:
+        await asyncio.to_thread(_update, self.settings, ws, cid, now, status="failed",
+                                lastError=message[:ERROR_MAX_LEN])
         summary["failed"] += 1
 
 
@@ -690,15 +697,20 @@ def _default_clock() -> datetime:
 
 async def run_forever(worker: ExtractWorker, clock: Callable[[], datetime] = _default_clock,
                       sleep: Callable[[float], Awaitable[None]] = asyncio.sleep, interval_s: float | None = None,
-                      max_iterations: int | None = None) -> list[dict]:
+                      max_iterations: int | None = None, on_start: Callable[[], None] | None = None) -> list[dict]:
     """워커 잠금을 잡고(이미 잡혀 있으면 WorkerLocked), running을 복구한 뒤 interval_s마다 창을 연다.
 
     창 오류는 기록만 하고 다음 주기로. 큐 파일이 깨진 워크스페이스는 그 워크스페이스만 건너뛴다.
+    on_start는 잠금을 잡고 복구까지 끝낸 뒤 한 번 부른다(서버 /health의 extract.running, T-161).
+    취소되면(서버 종료) 잠금을 풀고 끝난다. 처리 중이던 running 청크는 다음 시작의 복구가 되돌린다.
     """
     interval = worker.settings.extract_interval_s if interval_s is None else interval_s
     results: list[dict] = []
+    # 잠금은 기다리지 않고 잡으므로 루프 안에서 바로. 복구는 큐 잠금을 기다릴 수 있어 스레드에서(T-161)
     with worker_lock(worker.settings):
-        recover_running(worker.settings, worker.workspaces)
+        await asyncio.to_thread(recover_running, worker.settings, worker.workspaces)
+        if on_start is not None:
+            on_start()
         i = 0
         while max_iterations is None or i < max_iterations:
             if i:
@@ -725,6 +737,54 @@ def _default_cloud(settings: Settings, graph: Mapping[str, Any]) -> Extractor | 
     from app.llm import GeminiLLM
 
     return make_cloud_extractor(GeminiLLM(settings.gemini_api_key, settings.keyword_model), graph)
+
+
+def build_default_worker(settings: Settings, workspaces: Iterable[str] | None = None) -> ExtractWorker:
+    """설정만으로 실제 워커: 맥 Ollama 추출 + 결과 파일 삽입(T-421 전) + (설정되면) 클라우드 대체."""
+    graph = settings.common_graph()
+    return ExtractWorker(
+        settings, list(settings.extract_workspaces if workspaces is None else workspaces),
+        extractor=make_ollama_extractor(settings.extract_ollama_url, settings.extract_model, graph),
+        insert=make_result_writer(settings),
+        cloud_extractor=_default_cloud(settings, graph),
+        vocabulary=build_extraction_config(graph)["vocabulary"],
+    )
+
+
+def requeue_after_reset(chunks: list[dict], now: datetime | None = None) -> list[dict]:
+    """seed --reset 뒤 되돌려 쓸 큐(T-161). 인덱스가 지워졌으니 done은 다시 추출·삽입하도록 pending(시도 0)으로.
+
+    failed(상한 도달 포함)·pending은 그대로 둔다. running은 워커가 멈춘 뒤에만 리셋하므로 죽은 흔적이라
+    그대로 두면 다음 워커 시작의 복구가 되돌린다.
+    """
+    out = []
+    for c in chunks:
+        c = dict(c)
+        if c.get("status") == "done":
+            c.update(status="pending", attempts=0, lastError=None, via=None, updatedAt=_iso(now))
+        out.append(c)
+    return out
+
+
+def read_queue_for_reset(settings: Settings, workspace: str) -> list[dict]:
+    """리셋 전에 큐를 큐 잠금 아래 읽는다. 깨졌으면 QueueError(부르는 쪽이 리셋을 거절한다)."""
+    with queue_lock(settings, workspace, shared=True):
+        return _read_queue(settings, workspace)
+
+
+def restore_queue_after_reset(settings: Settings, workspace: str, chunks: list[dict],
+                              now: datetime | None = None) -> None:
+    """리셋으로 새로 만든 워크스페이스 폴더에 큐를 되돌려 쓴다(done → pending).
+
+    그사이 --enqueue가 넣은 청크가 있으면 뒤에 붙인다(잃지 않게).
+    """
+    restored = requeue_after_reset(chunks, now)
+    if not restored:
+        return
+    with queue_lock(settings, workspace):
+        have = {c.get("id") for c in restored}
+        current = _read_queue(settings, workspace)
+        _write_queue(settings, workspace, restored + [c for c in current if c.get("id") not in have])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -766,14 +826,7 @@ def main(argv: list[str] | None = None) -> int:
     # --once
     if not settings.extract_ollama_url:
         print("EXTRACT_OLLAMA_URL이 비어 있어 맥 추출이 꺼져 있어요.")
-    graph = settings.common_graph()
-    worker = ExtractWorker(
-        settings, workspaces,
-        extractor=make_ollama_extractor(settings.extract_ollama_url, settings.extract_model, graph),
-        insert=make_result_writer(settings),
-        cloud_extractor=_default_cloud(settings, graph),
-        vocabulary=build_extraction_config(graph)["vocabulary"],
-    )
+    worker = build_default_worker(settings, workspaces)
     try:
         with worker_lock(settings):
             recover_running(settings, workspaces)

@@ -139,28 +139,61 @@ def test_worker_exception_does_not_kill_server(tmp_path, ollama, caplog):
         assert client.get("/health").status_code == 200
 
 
-def test_queue_lock_held_does_not_block_health_or_hover(tmp_path, ollama):
+@pytest.mark.parametrize("where", ["recover", "window"])
+def test_queue_lock_held_does_not_block_health_or_hover(tmp_path, ollama, where):
+    """다른 프로세스(--enqueue 등)가 큐 잠금을 쥔 동안 워커가 그 잠금을 기다려도 /health·/v1/analogy는 답한다.
+
+    recover: 서버 시작 때 running 복구가 잠금을 기다림. window: 창에서 청크를 고르다 잠금을 기다림.
+    """
     s = server_settings(tmp_path, ollama.url)
     enqueue_n(s, COMMON_WS, 1)
-    app = make_app(s, make_worker(s, ollama.url, Inserted()))
-    with TestClient(app) as client:
-        replies: dict[str, int] = {}
+    gate = threading.Event()
 
-        def hit():
+    async def gated_health() -> bool:
+        while not gate.is_set():
+            await asyncio.sleep(0.01)
+        return True
+
+    app = make_app(s, make_worker(s, ollama.url, Inserted(), health_fn=gated_health))
+    replies: dict[str, int] = {}
+    ready = threading.Event()
+    go = threading.Event()
+    release = threading.Event()
+
+    def serve():
+        # 이벤트 루프가 막히면 TestClient 시작부터 멈출 수 있어 다른 스레드에서 돌린다
+        with TestClient(app) as client:
+            ready.set()
+            go.wait(10)
             replies["health"] = client.get("/health").status_code
             replies["analogy"] = client.post("/v1/analogy", json={"sentence": SENTENCE}, headers=TOKEN).status_code
+            release.wait(10)
 
-        with ew.queue_lock(s, COMMON_WS):
-            # 워커는 지금 큐 잠금을 기다린다(이벤트 루프 밖 스레드에서)
-            time.sleep(0.2)
-            t = threading.Thread(target=hit, daemon=True)
-            t.start()
-            t.join(3)
-            answered = dict(replies)
-        t.join(5)
-        assert answered == {"health": 200, "analogy": 200}, answered
-        # 잠금이 풀리면 워커가 마저 처리한다
-        assert wait_until(lambda: all_done(s))
+    lock = ew.queue_lock(s, COMMON_WS)
+    if where == "recover":
+        lock.__enter__()
+        go.set()
+        t = threading.Thread(target=serve, daemon=True)
+        t.start()
+    else:
+        t = threading.Thread(target=serve, daemon=True)
+        t.start()
+        assert ready.wait(5) and wait_until(lambda: app.state.extract_running)
+        lock.__enter__()
+        gate.set()  # 이제 창이 청크를 고르러 큐 잠금을 기다린다
+        time.sleep(0.2)
+        go.set()
+    try:
+        assert wait_until(lambda: len(replies) == 2, timeout=3), replies
+        assert replies == {"health": 200, "analogy": 200}
+    finally:
+        lock.__exit__(None, None, None)
+        gate.set()
+    # 잠금이 풀리면 워커가 마저 처리한다
+    assert wait_until(lambda: all_done(s))
+    release.set()
+    t.join(10)
+    assert not t.is_alive()
 
 
 # ── seed --reset 때 큐 보존 ─────────────────────────────
