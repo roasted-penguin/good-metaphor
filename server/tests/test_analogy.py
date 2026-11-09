@@ -381,7 +381,8 @@ def test_real_parts_with_key_but_no_index_is_503(tmp_path):
     app = create_app(deps={"settings": settings, "llm": FakeLLM()})
     res = _post(TestClient(app), "강화 문장이에요.")
     assert res.status_code == 503
-    assert res.json() == {"error": "검색 인덱스가 아직 준비되지 않았어요."}
+    err = res.json()["error"]
+    assert err.startswith("검색 인덱스가 아직 준비되지 않았어요.") and "python -m app.seed" in err  # 할 일까지(T-140)
 
 
 # --- 후보(Candidate) ---
