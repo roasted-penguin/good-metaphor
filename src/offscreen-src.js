@@ -12,7 +12,8 @@ env.backends.onnx.wasm.wasmPaths = {
 };
 env.backends.onnx.wasm.numThreads = 1;
 
-const state = { status: 'idle', embedderId: null, progress: 0, file: '', error: null };
+// loadError: 모델 로드 실패 원문. 'error'라고 부르지 않는다 — background의 offscreen()은 응답의 error를 요청 실패로 보고 던진다(T-102)
+const state = { status: 'idle', embedderId: null, progress: 0, file: '', loadError: null };
 let extractor = null;
 let loading = null;
 let cfg = null;
@@ -23,9 +24,11 @@ async function load(config) {
   if (loading) return loading;
   loading = (async () => {
     if (config.model === '__fallback__') {
-      Object.assign(state, { status: 'fallback', embedderId: FALLBACK_ID, error: null });
+      Object.assign(state, { status: 'fallback', embedderId: FALLBACK_ID, loadError: null });
       return state;
     }
+    // 모델 파일(데이터)만 받는 주소. 기본은 Hugging Face, 관리자가 사내 미러를 둘 수 있다(e2e는 느린 가짜 서버)
+    if (config.remoteHost) env.remoteHost = config.remoteHost;
     state.status = 'loading';
     try {
       const files = new Map();
@@ -42,10 +45,10 @@ async function load(config) {
           }
         }
       });
-      Object.assign(state, { status: 'ready', embedderId: `${config.model}@${config.dtype || 'q8'}`, progress: 1, error: null });
+      Object.assign(state, { status: 'ready', embedderId: `${config.model}@${config.dtype || 'q8'}`, progress: 1, loadError: null });
     } catch (e) {
       console.error('[offscreen] 모델 로드 실패', e);
-      state.error = String(e?.message || e);
+      state.loadError = String(e?.message || e);
       if (config.fallbackOnError !== false) {
         Object.assign(state, { status: 'fallback', embedderId: FALLBACK_ID });
       } else {

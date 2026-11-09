@@ -34332,7 +34332,7 @@ env2.backends.onnx.wasm.wasmPaths = {
   wasm: chrome.runtime.getURL("vendor/ort-wasm-simd-threaded.asyncify.wasm")
 };
 env2.backends.onnx.wasm.numThreads = 1;
-var state = { status: "idle", embedderId: null, progress: 0, file: "", error: null };
+var state = { status: "idle", embedderId: null, progress: 0, file: "", loadError: null };
 var extractor = null;
 var loading = null;
 var cfg = null;
@@ -34342,9 +34342,10 @@ async function load(config) {
   if (loading) return loading;
   loading = (async () => {
     if (config.model === "__fallback__") {
-      Object.assign(state, { status: "fallback", embedderId: FALLBACK_ID, error: null });
+      Object.assign(state, { status: "fallback", embedderId: FALLBACK_ID, loadError: null });
       return state;
     }
+    if (config.remoteHost) env2.remoteHost = config.remoteHost;
     state.status = "loading";
     try {
       const files = /* @__PURE__ */ new Map();
@@ -34364,10 +34365,10 @@ async function load(config) {
           }
         }
       });
-      Object.assign(state, { status: "ready", embedderId: `${config.model}@${config.dtype || "q8"}`, progress: 1, error: null });
+      Object.assign(state, { status: "ready", embedderId: `${config.model}@${config.dtype || "q8"}`, progress: 1, loadError: null });
     } catch (e) {
       console.error("[offscreen] \uBAA8\uB378 \uB85C\uB4DC \uC2E4\uD328", e);
-      state.error = String(e?.message || e);
+      state.loadError = String(e?.message || e);
       if (config.fallbackOnError !== false) {
         Object.assign(state, { status: "fallback", embedderId: FALLBACK_ID });
       } else {

@@ -3,6 +3,7 @@ import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.j
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
 import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
 import { COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
+import { embedStatusText, modelSizeText } from './lib/embed-status.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 const SF = globalThis.AnalogySiteFilter;
@@ -604,13 +605,7 @@ let pollTimer = null;
 async function pollEmbed() {
   const st = await send('embed:status').catch(() => null);
   if (!st) return;
-  const text = {
-    idle: '아직 준비 전이에요.',
-    loading: `모델 받는 중… ${Math.round((st.progress || 0) * 100)}%`,
-    ready: `준비 완료 (${st.embedderId})`,
-    fallback: `대체 검색 사용 중 (${st.embedderId})${st.error ? ' · 모델 로드 실패: ' + st.error : ''}`,
-    error: '오류: ' + st.error
-  }[st.status] || st.status;
+  const text = embedStatusText(st);
   setStatus($('#embedStatus'), text, st.status === 'ready' ? 'ok' : st.status === 'loading' ? '' : st.status === 'idle' ? '' : 'warn');
   if (st.status !== 'loading') { clearInterval(pollTimer); pollTimer = null; }
 }
@@ -619,7 +614,9 @@ $('#warmup').addEventListener('click', async () => {
   if (!pollTimer) pollTimer = setInterval(pollEmbed, 700);
   try {
     const r = await send('embed:warmup');
-    setStatus($('#embedStatus'), `준비 완료 · 벡터 ${r.vectors}개 · ${r.embedderId}`, r.status === 'ready' ? 'ok' : 'warn');
+    // 대체 검색이면 "준비 완료"로 덮지 않고 원인을 그대로 보인다(T-102)
+    if (r.status === 'ready') setStatus($('#embedStatus'), `준비 완료 · 벡터 ${r.vectors}개 · ${r.embedderId}`, 'ok');
+    else setStatus($('#embedStatus'), embedStatusText(r), 'warn');
   } catch (e) { setStatus($('#embedStatus'), e.message, 'err'); }
   clearInterval(pollTimer); pollTimer = null;
 });
@@ -768,6 +765,9 @@ $('#fbShare').addEventListener('change', async () => {
   renderInterest(state.settings.interest);
   renderSites(state.settings.excludedHosts);
   initOnboarding();
+  // 검색 모델 용량은 admin embedding.sizeMB를 따른다(모델을 바꾸면 거기만 고친다)
+  const size = modelSizeText(state.admin.embedding);
+  if (size) $('#embedSize').textContent = size;
 
   const allowed = state.admin.allowedProviders || Object.keys(state.providers);
   $('#provider').innerHTML = allowed.filter(id => state.providers[id])

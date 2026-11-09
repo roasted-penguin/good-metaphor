@@ -38,9 +38,11 @@
     "baseUrl": ""
   },
 
+  "_embeddingComment": "검색 모델(T-102). sizeMB는 설정 화면의 '처음 한 번 약 NMB' 문구(모델을 바꾸면 함께 고친다). remoteHost를 넣으면 모델 파일(데이터)을 Hugging Face 대신 그 주소에서 받는다(사내 미러, 형식은 transformers.js env.remoteHost). fallbackOnError가 false면 로드 실패 때 대체 검색 없이 오류를 낸다.",
   "embedding": {
     "model": "Xenova/multilingual-e5-base",
     "dtype": "q8",
+    "sizeMB": 266,
     "queryPrefix": "query: ",
     "passagePrefix": "passage: ",
     "fallbackOnError": true
