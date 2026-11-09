@@ -6,11 +6,13 @@
 // - 지금 금칙어 목록(blocklist.json)으로 한 번 더 거른다(내보낸 뒤 목록이 늘었을 수 있다).
 // - 이미 평가 문장과 거의 같은(≥ 0.8) 평가·가드 후보, 지금 공통 예문(tags.json)과 ≥ 0.5인 평가·가드 후보는 뺀다.
 // - 예문 후보이기도 한 평가·가드 후보에는 alsoExampleCandidate: true. 한 문장은 한 곳에만 넣는다.
+// - 근거 검사 숨김 샘플(groundingSamples, T-146, 보내기 동의한 파일만)도 노드·금칙어로 거르고 이유별·오탐 표시 수를 출력한다.
 // 확장은 tools/ 파일을 못 읽어서 이 대조는 여기서만 한다. 결과는 사람이 읽고 고른다(.claude/commands/approve-corrections.md).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { filterEvalCopies, EXPORT_KIND } from '../extension/lib/corrections.js';
 import { activeTerms } from '../extension/lib/blocklist.js';
+import { filterGroundingSamples, summarizeGroundingSamples } from '../extension/lib/grounding-log.js';
 import { DEFAULT_INTEREST } from '../extension/lib/graph.js';
 import { commonGraphPath, loadInterestGraph } from './load-graph.mjs';
 import { interestEvalFiles } from './eval-lib.mjs';
@@ -54,7 +56,21 @@ export function dropUnknownNodes(exported, graph) {
     evalCandidates: keep(exported.evalCandidates, c => c.expectNodes || []),
     guardCandidates: keep(exported.guardCandidates, c => c.expectNodes || [])
   };
+  // 근거 검사 샘플(T-146)은 보내기 동의한 파일에만 있다. 없으면 만들지 않는다
+  if (Array.isArray(exported.groundingSamples)) out.groundingSamples = keep(exported.groundingSamples, c => [c.nodeId].filter(Boolean));
+  else delete out.groundingSamples;
   return { out, dropped };
+}
+
+// 근거 검사 숨김 샘플(T-146) 요약 줄: 전체·오탐 표시 수, 이유별 개수(이름순).
+// 운영자는 이 샘플로 T-143·T-145 규칙(숫자 읽기·usedFact 대조)을 고칠지 판단한다
+export function groundingSampleLines(samples) {
+  if (!Array.isArray(samples)) return ['근거 검사 샘플 없음(보내기 동의가 꺼져 있었어요)'];
+  const st = summarizeGroundingSamples(samples);
+  return [
+    `근거 검사 숨김 샘플 ${st.total}개 (오탐 표시 ${st.flagged}개)`,
+    ...Object.keys(st.reasons).sort().map(r => `  ${r} ${st.reasons[r]}`)
+  ];
 }
 
 // 지금 공통 태그 예문 전부(tags.json). 이미 예문인 문장을 평가·가드에 쓰지 않게 대조한다
@@ -83,7 +99,10 @@ function main(argv) {
   catch (e) { console.error(e.message); process.exit(2); }
   const { out: known, dropped } = dropUnknownNodes(exported, loadInterestGraph(interest));
   // 결과 파일에는 interest를 늘 적는다(예전 파일도 메이플로 표시)
-  const out = { ...filterEvalCopies(known, evalSentencesFromDisk(interest), { blockTerms: blockTermsFromDisk(), commonExamples: commonExamplesFromDisk() }), interest };
+  const blockTerms = blockTermsFromDisk();
+  const out = { ...filterEvalCopies(known, evalSentencesFromDisk(interest), { blockTerms, commonExamples: commonExamplesFromDisk() }), interest };
+  // 근거 검사 샘플도 지금 금칙어 목록으로 한 번 더 거른다(T-146)
+  if (Array.isArray(out.groundingSamples)) out.groundingSamples = filterGroundingSamples(out.groundingSamples, { blockTerms });
   console.log(`관심사: ${interest}${exported.interest ? '' : ' (interest 없는 예전 파일이라 메이플로 읽어요)'}`);
   if (dropped) console.log(`  주의: ${interest} 그래프에 없는 노드를 가리키는 후보 ${dropped}개를 뺐어요.`);
   const outFile = outIdx >= 0 ? argv[outIdx + 1] : file.replace(/\.json$/, '') + '.checked.json';
@@ -93,6 +112,7 @@ function main(argv) {
   for (const r of out.rejected) console.log(`  거름 ${r.tagId} ${r.reason} ${r.count}`);
   const both = [...out.evalCandidates, ...out.guardCandidates].filter(c => c.alsoExampleCandidate).length;
   if (both) console.log(`  주의: 예문 후보이기도 한 평가·가드 후보 ${both}개(alsoExampleCandidate). 한 문장은 예문이나 평가셋·가드 중 한 곳에만 넣어요.`);
+  for (const line of groundingSampleLines(out.groundingSamples)) console.log(line);
   console.log(`→ ${outFile}`);
 }
 

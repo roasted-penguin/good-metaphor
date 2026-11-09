@@ -176,8 +176,8 @@ export function localDay(ts) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// today 포함 지난 7일(today와 그 앞 6일)의 날짜 목록
-function last7Days(today) {
+// today 포함 지난 7일(today와 그 앞 6일)의 날짜 목록. 근거 검사 집계(T-146)도 같은 창을 쓴다
+export function last7Days(today) {
   const [y, m, d] = today.split('-').map(Number);
   return Array.from({ length: 7 }, (_, i) => localDay(new Date(y, m - 1, d - i, 12).getTime()));
 }

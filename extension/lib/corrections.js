@@ -9,6 +9,8 @@ import { findBlocked } from './blocklist.js';
 import { charJaccard } from './grounding.js';
 import { feedbackForGraph } from './feedback.js';
 import { DEFAULT_INTEREST } from './graph.js';
+import { groundingSamples } from './grounding-log.js';
+import { localDay } from './feedback.js';
 
 export const EXAMPLE_CAP = 5;       // 태그당 교정 예문 상한(손으로 적은 예문은 세지 않는다)
 export const EVAL_COPY_MIN = 0.5;   // 평가·검증·가드 문장과 이 이상 비슷하면 베끼기
@@ -182,8 +184,10 @@ function countRejected(list) {
  * 관심사 하나만 대상으로 만든다(T-157): graph는 그 관심사 공통 그래프, interest는 그 id(최상위 필드).
  * 기록은 먼저 그 그래프 노드만 가리키는 것으로 거른다(feedbackForGraph) — 다른 관심사 기록이 섞이거나,
  * 같은 문장의 다른 관심사 pick이 "가장 최근 하나"를 가로채지 않게.
+ * groundingSamples(T-146): 보내기 동의(share)가 켜졌을 때만 싣는다. 그 관심사·그 그래프 공통 노드·최근 7일 근거 검사 숨김 기록,
+ * 오탐 표시 우선 최대 50건, 가린 텍스트, 금칙어 거름. 동의가 꺼져 있으면 필드 자체가 없다.
  */
-export function buildCorrectionsExport(records, graph, { interest = DEFAULT_INTEREST, blockTerms = [], commonTagIds = new Set(), generatedAt, commonGraphVersion = null, tagsVersion = null } = {}) {
+export function buildCorrectionsExport(records, graph, { interest = DEFAULT_INTEREST, blockTerms = [], commonTagIds = new Set(), generatedAt, commonGraphVersion = null, tagsVersion = null, share = false, groundingLog = null, today } = {}) {
   records = feedbackForGraph(records, graph);
   const nodes = new Map((graph?.nodes || []).map(n => [n.id, n]));
   const isCommonTarget = c => { const n = nodes.get(c.nodeId); return n && !isUserNode(n) && commonTagIds.has(c.tagId); };
@@ -207,7 +211,7 @@ export function buildCorrectionsExport(records, graph, { interest = DEFAULT_INTE
     guardCandidates.push({ sentence, expectNodes: [p.nodeId], source: 'up' });
   }
   const exampleCandidates = accepted.map(({ tagId, text, nodeId, count }) => ({ tagId, text, nodeId, count }));
-  return {
+  const out = {
     kind: EXPORT_KIND,
     version: 1,
     interest,
@@ -219,6 +223,11 @@ export function buildCorrectionsExport(records, graph, { interest = DEFAULT_INTE
     evalCandidates: markAlsoExample(evalCandidates, exampleCandidates),
     guardCandidates: markAlsoExample(guardCandidates, exampleCandidates)
   };
+  if (share === true) {
+    const commonNodeIds = new Set((graph?.nodes || []).filter(n => !isUserNode(n)).map(n => n.id));
+    out.groundingSamples = groundingSamples(groundingLog || [], { interest, nodeIds: commonNodeIds, blockTerms, today: today || localDay(Date.now()) });
+  }
+  return out;
 }
 
 // 한 문장은 예문이나 평가 문장 중 한 곳에만 쓴다(같은 문장이 두 곳에 있으면 평가가 무의미해진다).

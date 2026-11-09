@@ -251,6 +251,13 @@
       <div class="row" style="margin-top:10px"><button id="fbExport">JSON으로 내보내기</button><button id="fbCorrections">운영자용 교정 내보내기</button><button id="fbClear">전부 지우기</button><span class="status" id="fbStatus"></span></div>
       <p class="hint" id="fbCorrectionsHint"></p>
       <p class="hint">운영자용 교정은 공통 그래프 개념을 고른 기록만 가려서 파일로 받아요. 서버로 보내지 않아요.</p>
+      <!-- 근거 검사 오탐률 (T-146) -->
+      <div class="fb-grounding">
+        <h3>근거 검사로 숨긴 비유</h3>
+        <p class="fb-stats" id="fbGroundingStats"></p>
+        <ul class="fb-list" id="fbGroundingList" hidden></ul>
+        <p class="hint">근거에 없는 내용이 섞였다고 보고 숨긴 비유예요. 괜찮은 비유였는데 숨겨졌다면 표시해 주세요. 문장은 가려서 이 기기에만 두고, 보내기를 켜면 운영자용 교정 파일에만 담아요.</p>
+      </div>
       <div class="fb-share">
         <label class="row"><input type="checkbox" id="fbShare"> 공통 그래프 개선에 보내기</label>
         <div class="fb-preview" id="fbSharePreview" hidden></div>
