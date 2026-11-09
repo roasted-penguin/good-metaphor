@@ -7,6 +7,8 @@
 import { maskSentence } from './feedback.js';
 import { findBlocked } from './blocklist.js';
 import { charJaccard } from './grounding.js';
+import { feedbackForGraph } from './feedback.js';
+import { DEFAULT_INTEREST } from './graph.js';
 
 export const EXAMPLE_CAP = 5;       // 태그당 교정 예문 상한(손으로 적은 예문은 세지 않는다)
 export const EVAL_COPY_MIN = 0.5;   // 평가·검증·가드 문장과 이 이상 비슷하면 베끼기
@@ -177,8 +179,12 @@ function countRejected(list) {
  * 운영자 승인 큐 JSON(설정 "운영자용 교정 내보내기"). 서버로 보내지 않고 로컬 파일로만 받는다.
  * 공통 노드 + 공통 태그 대상만(사용자 노드는 이미 내 그래프에 반영). 문장은 모두 가린 것, rejected는 이유·개수만.
  * 평가 문장 베끼기(copies-eval)는 여기서 보지 않는다 — 확장은 tools/의 평가셋을 못 읽는다. 운영자가 tools/check-corrections.mjs로 거른다.
+ * 관심사 하나만 대상으로 만든다(T-157): graph는 그 관심사 공통 그래프, interest는 그 id(최상위 필드).
+ * 기록은 먼저 그 그래프 노드만 가리키는 것으로 거른다(feedbackForGraph) — 다른 관심사 기록이 섞이거나,
+ * 같은 문장의 다른 관심사 pick이 "가장 최근 하나"를 가로채지 않게.
  */
-export function buildCorrectionsExport(records, graph, { blockTerms = [], commonTagIds = new Set(), generatedAt, commonGraphVersion = null, tagsVersion = null } = {}) {
+export function buildCorrectionsExport(records, graph, { interest = DEFAULT_INTEREST, blockTerms = [], commonTagIds = new Set(), generatedAt, commonGraphVersion = null, tagsVersion = null } = {}) {
+  records = feedbackForGraph(records, graph);
   const nodes = new Map((graph?.nodes || []).map(n => [n.id, n]));
   const isCommonTarget = c => { const n = nodes.get(c.nodeId); return n && !isUserNode(n) && commonTagIds.has(c.tagId); };
   const corrections = collectCorrections(records, graph).filter(isCommonTarget);
@@ -204,6 +210,7 @@ export function buildCorrectionsExport(records, graph, { blockTerms = [], common
   return {
     kind: EXPORT_KIND,
     version: 1,
+    interest,
     generatedAt: generatedAt || new Date().toISOString(),
     commonGraphVersion,
     tagsVersion,

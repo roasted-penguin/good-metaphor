@@ -2,7 +2,7 @@
 import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './lib/config.js';
 import { complete, PROVIDERS } from './lib/providers.js';
 import { buildChain, completeWithFallback } from './lib/fallback.js';
-import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
+import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
 import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
@@ -578,10 +578,13 @@ const handlers = {
   // 운영자용 교정 내보내기(T-131). 공통 노드·공통 태그 대상만, 가린 문장만. 서버로 보내지 않는다(설정 화면이 로컬 파일로 받는다)
   async 'corrections:export'() {
     // 공통 그래프로 노드·기존 예문을 찾는다(내 관심사만 쓰는 useCommon false여도 공통 노드 교정을 내보낸다).
-    // 고른 관심사와 무관하게 메이플만(T-302): 승인 절차(/approve-corrections)의 평가셋·회귀 가드가 메이플 것이라
-    // 식당 노드 교정이 섞이면 안 된다. 식당 교정 내보내기는 따로 정한다
-    const [records, common, blockTerms] = await Promise.all([feedbackStore.get(), loadCommonGraph(DEFAULT_INTEREST), loadBlocklist()]);
+    // 지금 고른 관심사(settings.interest) 하나만(T-157). 파일 최상위 interest로 승인 절차가 그 관심사 평가셋·가드로 간다.
+    // 다른 관심사 기록은 buildCorrectionsExport가 걸러 한 파일에 섞이지 않는다. 모르는 값이면 로더처럼 메이플
+    const [records, settings, blockTerms] = await Promise.all([feedbackStore.get(), getSettings(), loadBlocklist()]);
+    const interest = commonInterest(settings.interest)?.id || DEFAULT_INTEREST;
+    const common = await loadCommonGraph(interest);
     return buildCorrectionsExport(records, common, {
+      interest,
       blockTerms,
       commonTagIds: new Set(common.tags.map(t => t.id)),
       commonGraphVersion: common.version ?? null,

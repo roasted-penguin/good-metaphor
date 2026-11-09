@@ -333,3 +333,78 @@ test('운영자 도구: 지금 tags.json의 공통 예문을 읽는다', async (
   assert.equal(all.length, tf.tags.flatMap(t => t.examples || []).length);
   assert.ok(all.includes(tf.tags[0].examples[0]));
 });
+
+/* ───── 관심사별 내보내기 (T-157) ───── */
+
+// 두 관심사 공통 그래프 흉내: 메이플(meso·cube)과 식당(lunch_peak). 태그는 공유
+const mapleG = { id: 'maplestory', tags: graph.tags.filter(t => t.source === 'common'), nodes: graph.nodes.filter(n => !String(n.id).startsWith('u:')) };
+const restG = { id: 'restaurant', tags: mapleG.tags, nodes: [{ id: 'lunch_peak', label: '점심 피크', tags: ['daily_accumulation'] }] };
+const S4 = '퇴근길 저녁 시간에는 통신망에 접속이 몰려서 속도가 점점 느려진다.';
+
+test('buildCorrectionsExport(T-157): 최상위 interest, 기본은 maplestory(예전 모양 + interest만)', () => {
+  const ex = buildCorrectionsExport([pick(S1, 'meso')], mapleG, meta);
+  assert.equal(ex.interest, 'maplestory');
+  assert.deepEqual(Object.keys(ex), ['kind', 'version', 'interest', 'generatedAt', 'commonGraphVersion', 'tagsVersion', 'exampleCandidates', 'rejected', 'evalCandidates', 'guardCandidates']);
+  assert.equal(buildCorrectionsExport([], restG, { ...meta, interest: 'restaurant' }).interest, 'restaurant');
+});
+
+test('buildCorrectionsExport(T-157): 그 관심사 공통 노드 교정만, 다른 관심사 기록은 섞이지 않는다', () => {
+  const recs = [
+    pick(S1, 'meso'),
+    pick(S4, 'lunch_peak', { nodeId: 'cube' }), // 식당 노드를 골랐지만 원래 노드가 메이플 → 섞인 기록은 어느 쪽에도 안 넣는다
+    pick(S2, 'lunch_peak'),
+    rec({ sentence: S3, vote: 'up', nodeId: 'cube' }),
+    rec({ sentence: S3 + ' 다시', vote: 'up', nodeId: 'lunch_peak' })
+  ];
+  const r = buildCorrectionsExport(recs, restG, { ...meta, interest: 'restaurant' });
+  assert.deepEqual(r.exampleCandidates.map(c => c.nodeId), ['lunch_peak']);
+  assert.deepEqual(r.evalCandidates.map(c => c.sentence), [S2]);
+  assert.deepEqual(r.guardCandidates.map(c => c.expectNodes[0]), ['lunch_peak']);
+  const m = buildCorrectionsExport(recs, mapleG, meta);
+  assert.deepEqual(m.exampleCandidates.map(c => c.nodeId), ['meso']);
+  assert.deepEqual(m.guardCandidates.map(c => c.expectNodes[0]), ['cube']);
+  for (const bad of ['lunch_peak', S2]) assert.ok(!JSON.stringify(m).includes(bad), bad);
+});
+
+test('buildCorrectionsExport(T-157): 같은 문장을 메이플에서 고른 뒤 식당에서 다시 골라도 메이플 내보내기에 남는다', () => {
+  const recs = [pick(S1, 'meso', { ts: 1 }), pick(S1, 'lunch_peak', { ts: 2 })];
+  assert.deepEqual(buildCorrectionsExport(recs, mapleG, meta).exampleCandidates.map(c => c.nodeId), ['meso']);
+  assert.deepEqual(buildCorrectionsExport(recs, restG, { ...meta, interest: 'restaurant' }).exampleCandidates.map(c => c.nodeId), ['lunch_peak']);
+});
+
+test('운영자 도구(T-157): interest 없는 파일은 메이플, 모르는 관심사는 오류', async () => {
+  const { interestOf } = await import('../../tools/check-corrections.mjs');
+  assert.equal(interestOf({ kind: 'good-metaphor-corrections', version: 1 }), 'maplestory');
+  assert.equal(interestOf({ interest: 'restaurant' }), 'restaurant');
+  assert.throws(() => interestOf({ interest: 'cooking' }), /알 수 없는 관심사/);
+});
+
+test('운영자 도구(T-157): 식당 파일은 식당 평가셋·가드·홀드아웃 문장으로 대조하고 메이플 문장은 쓰지 않는다', async () => {
+  const { evalSentencesFromDisk } = await import('../../tools/check-corrections.mjs');
+  const { readFileSync } = await import('node:fs');
+  const read = f => JSON.parse(readFileSync(new URL(`../../tools/${f}`, import.meta.url), 'utf8'));
+  const rest = evalSentencesFromDisk('restaurant');
+  for (const s of [read('eval-set-restaurant.json')[0].sentence, read('eval-unseen-restaurant.json')[0].sentence, read('eval-guard-restaurant.json').at(-1)]) assert.ok(rest.includes(s), s);
+  assert.ok(!rest.includes(read('eval-set.json')[0].sentence));
+  assert.ok(!rest.includes(read('eval-guard.json')[0]));
+  // 인자 없으면 예전처럼 메이플
+  assert.deepEqual(evalSentencesFromDisk(), evalSentencesFromDisk('maplestory'));
+  assert.throws(() => evalSentencesFromDisk('cooking'), /알 수 없는 관심사/);
+});
+
+test('운영자 도구(T-157): 그 관심사 그래프에 없는 노드 후보는 빼고 개수를 센다', async () => {
+  const { dropUnknownNodes } = await import('../../tools/check-corrections.mjs');
+  const ex = {
+    kind: 'good-metaphor-corrections', version: 1, interest: 'restaurant', rejected: [],
+    exampleCandidates: [{ tagId: 'daily_accumulation', text: S2, nodeId: 'lunch_peak', count: 1 }, { tagId: 'inflation', text: S1, nodeId: 'meso', count: 1 }],
+    evalCandidates: [{ sentence: S2, expectNodes: ['lunch_peak'] }, { sentence: S1, expectNodes: ['meso'] }],
+    guardCandidates: [{ sentence: S3, expectNodes: ['cube'] }]
+  };
+  const { out, dropped } = dropUnknownNodes(ex, restG);
+  assert.equal(dropped, 3);
+  assert.deepEqual(out.exampleCandidates.map(c => c.nodeId), ['lunch_peak']);
+  assert.deepEqual(out.evalCandidates.map(c => c.sentence), [S2]);
+  assert.deepEqual(out.guardCandidates, []);
+  assert.equal(out.interest, 'restaurant');
+  assert.equal(ex.exampleCandidates.length, 2); // 원본은 그대로
+});
