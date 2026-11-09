@@ -89,7 +89,7 @@
 | T-159 | 서버 실패 뒤 잠깐 쉬기: 서버가 죽었거나 설정이 틀리면 호버마다 `timeoutMs`(4초)를 기다린 뒤 로컬로 가고 결과도 캐시 안 해서 매번 LLM을 부름. 실패 뒤 짧은 쿨다운(예: 1~5분) 동안은 서버를 건너뛰기(fallback.js 429 쿨다운처럼) | L 서버 | P2 | 완료 | T-141 |
 | T-160 | 서버 429에 `Retry-After` 헤더(T-159 후속): 확장 쿨다운·평가 도구가 정확히 쉬게 | L 서버 | P2 | 완료 | T-159 |
 | T-161 | 추출 워커를 서버에 붙이기: lifespan 주기 루프(`EXTRACT_OLLAMA_URL` 있을 때만), 큐 잠금은 스레드로, `seed --reset` 때 처리 전 큐 보존(T-421 넘김 (2)·(3) 중 가짜로 되는 부분) | L 서버 | P2 | 완료 | T-414 |
-| T-162 | 추출 큐 정리(T-421 넘김 (4)·(5)): 내용 기준 청크 id·다시 넣을 때 낡은 청크 정리, 기본 docId 절대 경로, 사용량 파일 깨지면 닫힘, 클라우드 추출 타임아웃, 공통 판정 대소문자 무시 | L 서버 | P2 | 진행 | T-161 |
+| T-162 | 추출 큐 정리(T-421 넘김 (4)·(5)): 내용 기준 청크 id·다시 넣을 때 낡은 청크 정리, 기본 docId 절대 경로, 사용량 파일 깨지면 닫힘, 클라우드 추출 타임아웃, 공통 판정 대소문자 무시 | L 서버 | P2 | 리뷰 | T-161 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가 (관문 측정은 T-142로 분리) | L 서버 | P0 | 완료 | T-403 |
 | T-142 | [L0] 관문 측정: bge-m3 서버로 `npm run eval -- --server` → 서버 hit@1 ≥ 브라우저면 ADR 0006 채택 (T-405에서 분리) | L 서버 | P0 | 대기 | T-405, T-401 |
 | T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 대기 | T-401 |
@@ -565,6 +565,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-10 | T-162 | task/T-162-extract-queue-tidy | (PR 생성 후) | 추출 큐 정리(T-421 넘김 (4)·(5)): 청크 id를 내용 기준(`docId 해시-텍스트 해시`, 옛 형식 큐도 읽힘), 같은 docId 다시 넣기 → 새 집합에 없는 pending·failed는 빼고 done·running은 `stale`(워커가 건너뜀, LightRAG 삭제는 T-421, 리셋 때 제거), 빈 문서 거절, 기본 docId `file:<절대 경로>`, 사용량 파일 깨지면 그날 클라우드 안 씀(덮어쓰지 않음), 클라우드 추출 타임아웃 `EXTRACT_CLOUD_TIMEOUT_S` 120초(호버 30초 그대로), 공통 판정 `common_`·`common-`·`common` 대소문자 무시. Opus·medium 서브에이전트(수정 2회). 서버 503·단위 670. |
 | 2026-11-10 | T-161 | task/T-161-extract-loop | [#72](https://github.com/roasted-penguin/good-metaphor/pull/72) | 추출 워커를 서버에 붙임: `EXTRACT_OLLAMA_URL`이 있으면 lifespan이 `run_forever`를 백그라운드로(`worker.lock`을 못 잡으면 경고만 하고 서버는 뜸, 워커 예외로 서버 안 죽음), 큐 잠금·파일 입출력은 `asyncio.to_thread`(호버가 막히지 않음을 테스트), 종료 시 진행 중 스레드를 최대 10초 기다린 뒤 잠금 해제(compose `stop_grace_period` 20초). `/health.extract`는 `enabled`·`running`만(주소 없음). `seed --reset`은 큐 잠금을 쥔 채 큐·잠금 파일만 남기고 지운 뒤(`seed-meta.json` 먼저) 제자리에서 done→pending, 워커 실행 중·깨진 큐면 거절. Opus·medium 서브에이전트(수정 2회). 서버 465·단위 670. |
 | 2026-11-10 | T-160 | task/T-160-server-retry-after | [#71](https://github.com/roasted-penguin/good-metaphor/pull/71) | 서버 429에 `Retry-After`(정수 초): `RateLimiter.retry_after`(읽기만, 막히지 않으면 0, 올림·최소 1), CORS `expose_headers`. 확장 쿨다운(T-159)·평가 도구(T-405)가 이미 읽음. Opus·medium 서브에이전트. 서버 448·단위 670. |
 | 2026-11-10 | T-414 | task/T-414-extract-worker | [#70](https://github.com/roasted-penguin/good-metaphor/pull/70) | 추출 큐 워커(`server/app/extract_worker.py`, 맥·EC2 없이 가짜 Ollama로): 워크스페이스 `extract-queue.json`(원자적 쓰기·`safe_workspace_dir`·flock 잠금, 워커는 `worker.lock` 하나만), `GET /api/tags` 헬스체크 후 청크 하나씩, 연결 끊김·5xx·타임아웃이면 그 청크 실패 표시하고 창 중단·다음 창 재시도(상한 5), 4xx(설정 오류)는 시도를 쓰지 않음, `EXTRACT_WINDOW` 시간창, 시작 시 running 복구, 손상 큐는 그 워크스페이스만 건너뜀. `EXTRACT_FALLBACK=cloud`면 맥이 꺼졌을 때 사용자 워크스페이스만 하루 상한(`EXTRACT_CLOUD_DAILY_CAP` 50)까지, 공통은 늘 맥. `EXTRACT_OLLAMA_URL` 비면 전부 꺼짐. CLI `--once`·`--enqueue`·`--status`. LightRAG 삽입은 콜백(지금은 결과 파일), 실제 연결·남은 사항은 T-421에. 실제 소켓 가짜 Ollama를 켰다 끄며 재시도·재개 확인. Opus·medium 서브에이전트(수정 2회). 서버 444·단위 670. |
