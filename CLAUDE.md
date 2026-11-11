@@ -124,6 +124,7 @@ scripts/                     build, prepare-e2e
 - Gemini 3.x는 `thinkingConfig`를 받지 않는 모델이 있어 400이면 빼고 재시도한다.
 - 콘텐츠 스크립트는 ES 모듈을 못 쓴다. 콘텐츠와 background가 같이 쓰는 순수 함수는 export 없는 클래식 스크립트로 `globalThis`에 달고(`lib/site-filter.js`·`place.js`·`shadow.js`), manifest `content_scripts`에서 `content.js` 앞에 둔다. 단위 테스트는 부수효과 import.
 - 닫힌(closed) Shadow DOM은 지원하지 않는다. 열린 Shadow DOM 경로는 크롬 128+(`caretPositionFromPoint`의 `shadowRoots`)에서만 동작한다(`minimum_chrome_version`은 116, 낮으면 예전처럼). 하이라이트 색은 `content.css`와 `content.js` `HL_RULE` 두 곳에 있다.
+- 이 맥에는 Privacy-i가 있어, Google Chrome에 개발자 모드로 로드한 `extension/` 파일을 읽을 때마다 "HTTP 전송" 검사가 뜬다(스토어 설치·Playwright 크롬은 안 걸림). 평소 사용은 스토어 판, 우회(폴더 옮기기)는 하지 않는다(`docs/store/README.md`, T-164).
 - e2e 전용 코드(훅 콘텐츠 스크립트 `tests/e2e/hook-content.js`)는 `scripts/prepare-e2e.mjs`가 `.tmp/ext-e2e` 사본에만 넣는다. `extension/`에 테스트 코드를 넣지 않는다.
 
 ## API 키를 두는 곳
