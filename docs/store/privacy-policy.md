@@ -1,7 +1,7 @@
 # 좋은비유네용 개인정보 처리방침
 
-시행일: [시행일]
-연락처: [연락처]
+시행일: 2026-11-11
+연락처: GitHub 이슈 https://github.com/roasted-penguin/good-metaphor/issues
 
 좋은비유네용(이하 "확장")은 웹페이지의 문장을 사용자의 관심사에 빗대 풀어 주는 크롬 확장이에요. 이 문서는 확장이 어떤 정보를 어디로 보내고 무엇을 기기에 저장하는지 설명해요. 확장을 만든 사람은 자체 서버를 운영하지 않으며, 사용자 정보를 받아 보거나 저장하지 않아요.
 
@@ -96,4 +96,4 @@ Good Metaphor ("좋은비유네용") explains a sentence on a web page with an a
 - **Stored on the device only** (`chrome.storage`, plus the model files in the browser cache storage): settings including API keys, up to 500 feedback records (with the original sentence), up to 300 records of analogies hidden by the grounding check (masked sentence and analogy, reason, concept), daily usage and check counts, a vector cache, and a session-only result cache. Feedback and the grounding-check records can be cleared from Settings → "내 피드백" → "전부 지우기". The hidden-analogy samples go into the operator export file only when the user has opted into feedback sharing.
 - **Feedback sharing consent:** the user can opt in, but there is no server yet, so nothing is transmitted; only the choice is stored. It can be withdrawn at any time in Settings.
 - **No** analytics, ads, tracking, data sale, developer-operated servers, or remote code.
-- Contact: [연락처]
+- Contact: GitHub Issues https://github.com/roasted-penguin/good-metaphor/issues
