@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.21-3",
+  "version": "2026.11.22-1",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -311,6 +311,17 @@
       "tags": ["role_division"],
       "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/458", "https://maplestory.nexon.com/News/Update/766", "https://maplestory.nexon.com/News/Notice/Notice/134898"],
       "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "quick_pass", "label": "퀵패스",
+      "facts": [
+        "퀵패스는 메이플포인트를 내고 에픽 던전 같은 반복 콘텐츠를 직접 하지 않고 즉시 완료해 기본 보상을 받는 기능이다.",
+        "아케인리버와 그란디스 일일 퀘스트, 아케인리버 주간 컨텐츠에도 메이플포인트로 쓰는 퀵패스가 있다.",
+        "에픽 던전 하이마운틴의 퀵패스는 그 던전을 한 번 이상 직접 깬 캐릭터만 쓸 수 있다."
+      ],
+      "tags": ["efficiency_metric"],
+      "sources": ["https://maplestory.nexon.com/News/Update/746", "https://maplestory.nexon.com/News/Update/806"],
+      "verifiedAt": "2026-11-22"
     }
   ],
   "edges": [
@@ -338,6 +349,7 @@
     { "from": "equipment_transfer", "to": "starforce", "rel": "쌓은 강화를 새 장비로 옮김" },
     { "from": "set_effect", "to": "boss_entry", "rel": "보스에 맞는 스펙을 맞추는 데 씀" },
     { "from": "boss_reward_split", "to": "party", "rel": "파티원끼리 보상을 나눔" },
-    { "from": "boss_reward_split", "to": "weekly_boss", "rel": "결정석 가격을 인원에 따라 정함" }
+    { "from": "boss_reward_split", "to": "weekly_boss", "rel": "결정석 가격을 인원에 따라 정함" },
+    { "from": "quick_pass", "to": "arcane_symbol", "rel": "일일 퀘스트를 메이플포인트로 대신함" }
   ]
 }
