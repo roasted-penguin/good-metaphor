@@ -66,7 +66,7 @@ def test_vocabulary_follows_graph_not_hardcoded():
 
 def test_glossary_one_line_per_node_with_first_fact(graph):
     lines = glossary(graph)
-    assert len(lines) == len(graph["nodes"]) == 18
+    assert len(lines) == len(graph["nodes"]) == 29
     for line, node in zip(lines, graph["nodes"]):
         aliases = node.get("aliases") or []
         label = f"{node['label']}({', '.join(aliases)})" if aliases else node["label"]

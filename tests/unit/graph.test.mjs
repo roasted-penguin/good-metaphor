@@ -180,13 +180,21 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
     meso: ['쌀먹'], auction: ['쌀먹'], boss_entry: ['데카', '풀데카', '최소컷'], arcane_force: ['최소컷'],
     cube: ['잡옵'], weekly_boss: ['메요일'],
     // 기사·버스는 뉴스·교통 글에 흔한 일상어라 뺐다(최종 리뷰, 부정 평가 문장은 T-149)
-    party: []
+    party: [],
+    // T-167 추가 노드의 은어(naming-meme.md A 표)
+    item_binding: ['교불', '장교불', '가횟', '플가'], balance_patch: ['너프'], challengers_world: ['챌섭'],
+    meso_market: ['메포', '메소마켓'], set_effect: ['셋옵']
   };
   for (const [id, aliases] of Object.entries(expected)) assert.deepEqual(byId[id], aliases, id);
   // 펑·세금은 일상어와 겹쳐 약한 별칭으로 옮겼다(T-149). 메이플 단서가 함께 있을 때만 가산
   const weak = Object.fromEntries(common.nodes.filter(n => n.weakAliases).map(n => [n.id, n.weakAliases]));
-  assert.deepEqual(weak, { starforce: ['펑'], arcane_symbol: ['세금'] });
-  assert.equal(common.version, '2026.11.21-1'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침
+  // T-167: 새 노드의 일상어 겹침 은어도 약한 별칭으로 넣었다
+  assert.deepEqual(weak, {
+    starforce: ['펑'], arcane_symbol: ['세금'],
+    world_trade_group: ['관세'], item_binding: ['가위'], balance_patch: ['하향', '상향'],
+    challengers_world: ['리프'], equipment_transfer: ['전승'], boss_reward_split: ['분배']
+  });
+  assert.equal(common.version, '2026.11.21-3'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {
