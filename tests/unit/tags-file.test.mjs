@@ -44,9 +44,10 @@ test('nodeText 스냅숏: 분리 전과 바이트 단위로 같다 (벡터 캐�
   // T-153: sol_erda에서 scarcity_value 태그를 빼 sol_erda·전체 해시가 바뀐다
   // T-151: starforce_event·union_link 사실 문장을 고쳐 전체 해시가 바뀐다
   // T-167: weekly_boss 사실(결정석 NPC)을 고치고 노드 11개를 더해 전체 해시가 바뀐다
+  // T-169: shared_bonus 예문 2개 추가로 union_link·전체 해시가 바뀐다
   assert.equal(sha1(text('starforce')), '5303d3c5de5c878933c1db407d87d32f8a07d9ba');
   assert.equal(sha1(text('sol_erda')), '7d32aa20155a45a6f7e367d6412601fdb8222384');
-  assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), 'b64b81ecd57a4dd087e188de97eb51d96d6e5899');
+  assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), '6dd049aad6ec21246d83e12b1cbf3f7fed0b00bf');
   assert.equal(g.tags.length, 18);
 });
 
