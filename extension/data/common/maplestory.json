@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.21-2",
+  "version": "2026.11.21-3",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -191,6 +191,126 @@
       "tags": ["daily_accumulation"],
       "sources": ["https://maplestory.nexon.com/News/Update/806", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/405"],
       "verifiedAt": "2026-10-11"
+    },
+    {
+      "id": "world_trade_group", "label": "월드 거래 그룹과 관세", "weakAliases": ["관세"],
+      "facts": [
+        "메이플 옥션에서는 같은 거래 그룹에 속한 월드끼리만 아이템을 사고팔 수 있고, 그룹이 다른 월드와는 거래되지 않는다.",
+        "다른 월드에 올라온 아이템을 사면 아이템 가격에 비례한 메이플포인트를 수수료로 더 낸다.",
+        "월드 그룹 단위로 옥션이 통합되면서 같은 그룹 안의 다른 월드끼리 장비와 캐시 아이템을 거래할 수 있게 되었다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/394", "https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "trade_fee", "label": "거래 수수료와 등록 보증금",
+      "facts": [
+        "플레이어끼리 메소를 주고받거나 경매장에서 아이템을 팔면, 거래 금액에서 수수료를 뗀 만큼만 받는다.",
+        "경매장에 물건을 올릴 때 보증금을 내며, 팔리면 돌려받지만 등록을 취소하거나 기간 안에 팔지 못하면 돌려받지 못한다.",
+        "MVP 등급이나 프리미엄 PC방 같은 조건을 갖추면 판매 수수료가 낮아진다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/393", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/394", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/444"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "meso_market", "label": "메소 마켓과 메이플포인트", "aliases": ["메포", "메소마켓"],
+      "facts": [
+        "메소 마켓에서는 메소를 써서 메이플포인트를 얻을 수 있고, 메이플포인트로는 캐시 아이템을 살 수 있다.",
+        "메소 마켓은 월드를 묶은 그룹으로 나뉘어 같은 그룹 안에서만 거래된다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/397", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/424"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "item_binding", "label": "교환 불가와 카르마의 가위", "aliases": ["교불", "장교불", "가횟", "플가"], "weakAliases": ["가위"],
+      "facts": [
+        "장비마다 거래 조건이 정해져 있어, 자유롭게 거래되는 것, 착용하는 순간 교환 불가로 바뀌는 것, 처음부터 교환 불가인 것이 있다.",
+        "카르마의 가위를 쓰면 교환 불가 장비를 한 번 거래할 수 있게 바꿀 수 있지만, 가위를 쓸 수 있는 횟수가 정해진 장비는 그 횟수를 다 쓰면 더는 거래할 수 없다.",
+        "메이플포인트로 산 캐시 아이템은 다른 사람과 교환할 수 없다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/410", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/411", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/421", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/424"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "balance_patch", "label": "밸런스 조정", "aliases": ["너프"], "weakAliases": ["하향", "상향"],
+      "facts": [
+        "운영진은 업데이트 때 직업 스킬의 효과를 올리거나 내려 직업 사이의 균형을 맞추고, 조정 이유를 개발자 의견으로 함께 밝히기도 한다.",
+        "보스 체력이나 레벨업에 필요한 경험치처럼 콘텐츠의 기준도 업데이트로 낮아질 수 있다.",
+        "레벨업 필요 경험치가 줄었을 때, 이미 새 기준보다 많은 경험치를 가진 캐릭터는 보유 경험치가 새 기준에 맞춰 조정됐다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/News/Update/692", "https://maplestory.nexon.com/News/Update/806", "https://maplestory.nexon.com/News/Update/799"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "mvp_membership", "label": "MVP 등급",
+      "facts": [
+        "MVP 등급은 메이플ID에서 최근 일정 기간 동안 쓴 캐시 금액의 합으로 주 단위로 정해진다.",
+        "등급이 높을수록 매주 받는 보상과 상시 혜택이 커지고, 최근 구매 금액이 기준에 못 미치면 등급이 내려간다.",
+        "최고 등급 기준을 넘겨 쓴 금액은 정해진 한도까지 이월되어, 다음 등급 갱신 때 모자란 만큼 자동으로 쓰인다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/425"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "burning_field", "label": "버닝 필드",
+      "facts": [
+        "인적이 드문 사냥터는 버닝 필드가 되어 사냥할 때 추가 경험치를 준다.",
+        "발길이 닿지 않은 시간이 길수록 버닝 단계가 높아지고 추가 경험치도 커진다.",
+        "버닝 필드에서 사냥이 계속되면 단계가 점점 내려가 결국 일반 사냥터로 돌아간다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/456", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/450"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "challengers_world", "label": "챌린저스 월드와 월드 리프", "aliases": ["챌섭"], "weakAliases": ["리프"],
+      "facts": [
+        "챌린저스 월드는 정해진 육성 기간에만 열리는 특별 월드로, 그 월드 캐릭터에게만 붙는 전용 성장 혜택이 있다.",
+        "정해진 리프 기간에 캐릭터를 다른 월드로 옮길 수 있지만 옮길 수 있는 캐릭터 수가 정해져 있고, 월드 전용 성장 혜택은 따라가지 않는다.",
+        "리프 기간이 끝나면 챌린저스 월드에 남은 캐릭터와 아이템은 모두 삭제된다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805", "https://maplestory.nexon.com/News/Update/773"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "equipment_transfer", "label": "장비 전승", "weakAliases": ["전승"],
+      "facts": [
+        "장비 전승은 쓰던 하위 장비에 쌓은 스타포스와 잠재능력을 상위 장비로 옮기는 기능이다.",
+        "옮길 때 강화 수치는 낮아진 채로 넘어가고, 능력을 뽑아낸 원래 장비는 사라져 되돌릴 수 없다.",
+        "하위 장비에서 미리 강화해 옮기면 상위 장비를 직접 강화하는 비용을 아낄 수 있다."
+      ],
+      "tags": ["escalating_cost"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/414"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "set_effect", "label": "세트 효과", "aliases": ["셋옵"],
+      "facts": [
+        "같은 세트에 속한 장비를 여러 개 함께 착용하면 장비 각각의 능력치와 별도로 세트 효과가 붙는다.",
+        "착용한 세트 장비 수가 늘어날수록 효과가 단계적으로 더해지고, 서로 다른 세트의 효과도 함께 적용된다.",
+        "럭키 아이템은 일정 수 이상 착용한 다른 세트와 함께 끼면 그 세트의 일부로 인정된다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/415"],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "boss_reward_split", "label": "보스 보상 분배", "weakAliases": ["분배"],
+      "facts": [
+        "보스 결정석을 팔 때 받는 가격은 처치한 보스와 함께 입장한 파티원 수에 따라 다르게 정해진다.",
+        "운영진은 같은 보스를 잡았다면 보상의 총량은 같아야 한다는 방침을 밝힌 적이 있다.",
+        "파티 습득 권한을 분배로 두면 보스 보상은 참여한 파티원에게 무작위 숫자를 주고, 가장 높은 숫자를 받은 사람이 가져간다."
+      ],
+      "tags": ["role_division"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/458", "https://maplestory.nexon.com/News/Update/766", "https://maplestory.nexon.com/News/Notice/Notice/134898"],
+      "verifiedAt": "2026-11-21"
     }
   ],
   "edges": [
@@ -205,6 +325,19 @@
     { "from": "exp_coupon", "to": "hunting", "rel": "사냥 효율을 높임" },
     { "from": "party", "to": "weekly_boss", "rel": "함께 보스를 잡음" },
     { "from": "sixth_job", "to": "sol_erda", "rel": "강화 재료로 씀" },
-    { "from": "boss_entry", "to": "weekly_boss", "rel": "입장 조건을 정함" }
+    { "from": "boss_entry", "to": "weekly_boss", "rel": "입장 조건을 정함" },
+    { "from": "world_trade_group", "to": "auction", "rel": "거래할 수 있는 월드 범위를 정함" },
+    { "from": "trade_fee", "to": "auction", "rel": "거래 대금에서 수수료를 뗌" },
+    { "from": "meso_market", "to": "meso", "rel": "메소를 메이플포인트로 바꿈" },
+    { "from": "item_binding", "to": "auction", "rel": "경매장에 올릴 수 있는지 정함" },
+    { "from": "balance_patch", "to": "level_exp", "rel": "필요 경험치 기준을 바꿈" },
+    { "from": "mvp_membership", "to": "trade_fee", "rel": "높은 등급은 판매 수수료를 깎아 줌" },
+    { "from": "burning_field", "to": "hunting", "rel": "덜 붐비는 사냥터로 유도함" },
+    { "from": "challengers_world", "to": "level_exp", "rel": "정해진 기간 동안 성장 속도를 높임" },
+    { "from": "challengers_world", "to": "world_trade_group", "rel": "리프하면 일반 월드로 옮겨 감" },
+    { "from": "equipment_transfer", "to": "starforce", "rel": "쌓은 강화를 새 장비로 옮김" },
+    { "from": "set_effect", "to": "boss_entry", "rel": "보스에 맞는 스펙을 맞추는 데 씀" },
+    { "from": "boss_reward_split", "to": "party", "rel": "파티원끼리 보상을 나눔" },
+    { "from": "boss_reward_split", "to": "weekly_boss", "rel": "결정석 가격을 인원에 따라 정함" }
   ]
 }
