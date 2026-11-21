@@ -34290,7 +34290,8 @@ var stdout_write = apis.IS_PROCESS_AVAILABLE ? (x) => process.stdout.write(x) : 
 var CONCRETE_DTYPES = Object.keys(DEFAULT_DTYPE_SUFFIX_MAPPING);
 
 // extension/lib/fallback-embed.js
-var DIM = 512;
+var FALLBACK_DIM = 4096;
+var LEAD_WEIGHT = 0.6;
 function fnv1a(str) {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {
@@ -34299,23 +34300,30 @@ function fnv1a(str) {
   }
   return h >>> 0;
 }
-function hashEmbed(text) {
-  const v = new Float32Array(DIM);
-  const s = " " + String(text).toLowerCase().replace(/\s+/g, " ").replace(/^(query|passage):\s*/, "") + " ";
+function ngramWeights(text) {
+  const s = " " + String(text).toLowerCase().replace(/\s+/g, " ").replace(/^\s*(query|passage):\s*/, "").trim() + " ";
+  const w = /* @__PURE__ */ new Map();
   for (const n of [2, 3]) {
     for (let i = 0; i + n <= s.length; i++) {
       const g = s.slice(i, i + n);
       if (!g.trim()) continue;
-      const h = fnv1a(g);
-      v[h % DIM] += h & 65536 ? 1 : -1;
+      w.set(g, (w.get(g) || 0) + (g[0] === " " ? LEAD_WEIGHT : 1));
     }
+  }
+  return w;
+}
+function hashEmbed(text) {
+  const v = new Float32Array(FALLBACK_DIM);
+  for (const [g, c] of ngramWeights(text)) {
+    const h = fnv1a(g);
+    v[h % FALLBACK_DIM] += h & 65536 ? c : -c;
   }
   let norm = 0;
   for (const x of v) norm += x * x;
   norm = Math.sqrt(norm) || 1;
   return Array.from(v, (x) => x / norm);
 }
-var FALLBACK_ID = "fallback:hash-ngram-512";
+var FALLBACK_ID = "fallback:hash-ngram-4096-v2";
 
 // extension/lib/embed-each.js
 async function embedEach(inputs, run) {
