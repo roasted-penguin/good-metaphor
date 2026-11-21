@@ -46,7 +46,7 @@ test('maplestory.json도 noMatchText를 갖는다(지금 말풍선 문구 그대
   assert.equal(rawMaple.noMatchText, '메이플스토리에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.');
 });
 
-test('식당 그래프는 검증을 통과하고 태그는 공통 18개 그대로(새 태그 없음, 규칙 9·T-304)', () => {
+test('식당 그래프는 검증을 통과하고 태그는 공통 tags.json 그대로(관심사 전용 태그 없음, 규칙 9·T-304)', () => {
   assert.deepEqual(validateGraph(restaurant), []);
   assert.deepEqual(restaurant.tags.map(t => t.id), tagsFile.tags.map(t => t.id));
   assert.equal(restaurant.tagsVersion, tagsFile.version);

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-1",
+  "version": "2026.11.22-3",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -273,7 +273,7 @@
         "변동비는 얼마나 만들고 파느냐에 따라 함께 늘고 줄어드는 비용이다."
       ],
       "tags": [
-        "efficiency_metric"
+        "fixed_cost_leverage"
       ],
       "sources": [
         "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=고정비",
@@ -431,6 +431,40 @@
         "https://www.korea.kr/news/policyNewsView.do?newsId=148936890"
       ],
       "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "required_items",
+      "label": "필수품목 지정",
+      "facts": [
+        "필수품목은 가맹본부가 가맹점에 본부나 본부가 정한 거래상대방에게서만 사도록 정한 물품으로, 사업에 꼭 필요하고 상품의 동일성을 지키는 데 필요해야 하며 정보공개서와 계약서에 미리 알려야 한다.",
+        "가맹점이 필수품목 거래로 본부에 내는 값 가운데 적정한 도매가격을 넘는 부분을 차액가맹금이라고 하고, 본부가 이런 거래조건을 가맹점에 불리하게 바꾸려면 가맹점과 협의해야 한다.",
+        "가맹점주들은 필수품목의 비싼 가격과 필요 없는 품목 지정을 주요 문제로 꼽는다."
+      ],
+      "tags": [
+        "vendor_lock_in"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=647&ccfNo=3&cciNo=2&cnpClsNo=2",
+        "https://www.ftc.go.kr/www/selectBbsNttView.do?bordCd=3&key=12&nttSn=46828&searchCtgry=01%2C02"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "franchise_fee",
+      "label": "가맹금(가입비·로열티)",
+      "facts": [
+        "가맹금은 가맹점이 본부의 상표와 간판을 쓰고 영업 지원과 교육을 받는 대가로 본부에 내는 돈이다.",
+        "가맹금에는 영업권을 얻으려고 내는 가입비나 교육비 같은 돈과, 정액이나 매출·이익의 일정 비율로 내는 로열티가 있다.",
+        "본부가 물품을 적정한 도매가격보다 비싸게 공급해 더 받는 몫도 이름과 상관없이 가맹금에 든다."
+      ],
+      "tags": [
+        "vendor_lock_in"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=647&ccfNo=1&cciNo=1&cnpClsNo=1",
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=647&ccfNo=2&cciNo=2&cnpClsNo=1"
+      ],
+      "verifiedAt": "2026-11-22"
     }
   ],
   "edges": [
@@ -503,6 +537,21 @@
       "from": "market_saturation",
       "to": "open_prep",
       "rel": "문을 열기 전에 따져 볼 일"
+    },
+    {
+      "from": "franchise_fee",
+      "to": "required_items",
+      "rel": "물품 차액으로도 가맹금을 걷음"
+    },
+    {
+      "from": "required_items",
+      "to": "ingredient_cost",
+      "rel": "재료를 고를 수 없어 원가 부담이 커짐"
+    },
+    {
+      "from": "franchise_disclosure",
+      "to": "franchise_fee",
+      "rel": "받기 전에 공개해야 가맹금을 받을 수 있음"
     }
   ]
 }

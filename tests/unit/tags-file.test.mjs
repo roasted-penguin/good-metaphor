@@ -17,7 +17,9 @@ const PROV = { sources: ['https://maplestory.nexon.com/News/Update/799'], verifi
 const TAG_ORDER = [
   'prob_upgrade', 'escalating_cost', 'loss_risk', 'threshold_req', 'progression_gate', 'market_price',
   'inflation', 'scarcity_value', 'periodic_cap', 'daily_accumulation', 'diminishing_returns', 'temporary_multiplier',
-  'cooldown', 'random_reroll', 'expected_value', 'shared_bonus', 'role_division', 'efficiency_metric'
+  'cooldown', 'random_reroll', 'expected_value', 'shared_bonus', 'role_division', 'efficiency_metric',
+  // T-171: 새 태그는 맨 뒤에만 붙인다(ADR 0012)
+  'fixed_cost_leverage', 'vendor_lock_in'
 ];
 const sha1 = s => createHash('sha1').update(s).digest('hex');
 
@@ -28,7 +30,7 @@ test('관심사 그래프 파일에는 tags가 없고, tags.json은 { version, t
   assert.deepEqual(validateTagsFile(tagsFile), []);
 });
 
-test('해석된 공통 그래프의 태그는 분리 전과 같은 18개, 같은 순서', () => {
+test('해석된 공통 그래프의 태그는 분리 전 18개 순서 그대로 + 맨 뒤에 붙인 새 태그(T-171)', () => {
   const g = loadCommonGraphFromDisk();
   assert.deepEqual(g.tags.map(t => t.id), TAG_ORDER);
   assert.deepEqual(validateGraph(g), []);
@@ -48,6 +50,7 @@ test('nodeText 스냅숏: 분리 전과 바이트 단위로 같다 (벡터 캐�
   assert.equal(sha1(text('starforce')), '5303d3c5de5c878933c1db407d87d32f8a07d9ba');
   assert.equal(sha1(text('sol_erda')), '7d32aa20155a45a6f7e367d6412601fdb8222384');
   assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), '6dd049aad6ec21246d83e12b1cbf3f7fed0b00bf');
+  // mergeGraphs는 노드가 쓰는 태그만 남긴다. 메이플 노드는 T-171 새 태그를 쓰지 않아 18개 그대로
   assert.equal(g.tags.length, 18);
 });
 
