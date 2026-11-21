@@ -30,8 +30,8 @@ test('데모 응답은 1위 후보를 근거로 쓴다', () => {
   assert.match(a.analogy, /^메이플로 치면 스타포스 강화와/);
 });
 
-test('대체 임베더는 정규화된 512차원', () => {
+test('대체 임베더는 정규화된 4096차원 (T-175)', () => {
   const v = hashEmbed('변동금리');
-  assert.equal(v.length, 512);
+  assert.equal(v.length, 4096);
   assert.ok(Math.abs(Math.hypot(...v) - 1) < 1e-6);
 });

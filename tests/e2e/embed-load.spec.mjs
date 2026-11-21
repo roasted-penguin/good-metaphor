@@ -11,7 +11,7 @@ import { launchRaw } from './raw-cdp.mjs';
 
 const EXT = path.resolve('.tmp/ext-e2e');
 const REAL = JSON.parse(readFileSync('extension/config/admin.json', 'utf8')).embedding;
-const FALLBACK = 'fallback:hash-ngram-512';
+const FALLBACK = 'fallback:hash-ngram-4096-v2';
 // 가짜 모델 서버(느린 네트워크). 응답을 서비스 워커 유휴 종료(30초)보다 오래 붙잡는다
 const SLOW_PORT = 8768;
 const SLOW_MS = 40_000;

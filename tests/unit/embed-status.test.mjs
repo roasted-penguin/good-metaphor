@@ -28,10 +28,10 @@ test('loadErrorReason: 원문은 뒤에 붙이고 길면 자른다, 빈 값은 �
 });
 
 test('embedStatusText: 대체 검색이면 "대체 검색 사용 중 · 모델 로드 실패: <한국어 원인>"', () => {
-  const t = embedStatusText({ status: 'fallback', embedderId: 'fallback:hash-ngram-512', loadError: 'Failed to fetch' });
-  assert.equal(t, '대체 검색 사용 중 (fallback:hash-ngram-512) · 모델 로드 실패: 모델을 받지 못했어요(네트워크) · Failed to fetch');
+  const t = embedStatusText({ status: 'fallback', embedderId: 'fallback:hash-ngram-4096-v2', loadError: 'Failed to fetch' });
+  assert.equal(t, '대체 검색 사용 중 (fallback:hash-ngram-4096-v2) · 모델 로드 실패: 모델을 받지 못했어요(네트워크) · Failed to fetch');
   // 원인이 없으면(관리자가 일부러 대체 임베더를 고름) 원인 칸 없이
-  assert.equal(embedStatusText({ status: 'fallback', embedderId: 'fallback:hash-ngram-512' }), '대체 검색 사용 중 (fallback:hash-ngram-512)');
+  assert.equal(embedStatusText({ status: 'fallback', embedderId: 'fallback:hash-ngram-4096-v2' }), '대체 검색 사용 중 (fallback:hash-ngram-4096-v2)');
 });
 
 test('embedStatusText: 나머지 상태', () => {
