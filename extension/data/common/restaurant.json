@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-1",
+  "version": "2026.11.22-2",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -273,7 +273,7 @@
         "변동비는 얼마나 만들고 파느냐에 따라 함께 늘고 줄어드는 비용이다."
       ],
       "tags": [
-        "efficiency_metric"
+        "fixed_cost_leverage"
       ],
       "sources": [
         "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=고정비",

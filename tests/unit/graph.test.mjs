@@ -124,10 +124,10 @@ test('공통 그래프 태그마다 예문 2개 이상, 평가셋·검증셋·�
   }
 });
 
-test('태그는 통제 어휘 18개 그대로 (규칙 9)', () => {
+test('태그는 통제 어휘 목록 그대로 (규칙 9, T-171에서 맨 뒤에 추가)', () => {
   assert.deepEqual(common.tags.map(t => t.id).sort(), [
     'cooldown', 'daily_accumulation', 'diminishing_returns', 'efficiency_metric', 'escalating_cost', 'expected_value',
-    'inflation', 'loss_risk', 'market_price', 'periodic_cap', 'prob_upgrade', 'progression_gate', 'random_reroll',
+    'fixed_cost_leverage', 'inflation', 'loss_risk', 'market_price', 'periodic_cap', 'prob_upgrade', 'progression_gate', 'random_reroll',
     'role_division', 'scarcity_value', 'shared_bonus', 'temporary_multiplier', 'threshold_req'
   ]);
 });
