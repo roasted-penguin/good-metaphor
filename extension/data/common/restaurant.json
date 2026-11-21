@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.09-3",
+  "version": "2026.11.21-1",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -264,6 +264,173 @@
         "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=840&ccfNo=1&cciNo=3&cnpClsNo=2"
       ],
       "verifiedAt": "2026-11-09"
+    },
+    {
+      "id": "fixed_variable_cost",
+      "label": "고정비와 변동비",
+      "facts": [
+        "고정비는 얼마나 만들고 팔든 관계없이 일정하게 나가는 비용으로, 임대료나 설비의 감가상각비 같은 것이 여기에 든다.",
+        "변동비는 얼마나 만들고 파느냐에 따라 함께 늘고 줄어드는 비용이다."
+      ],
+      "tags": [
+        "efficiency_metric"
+      ],
+      "sources": [
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=고정비",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=변동비"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "break_even",
+      "label": "손익분기점",
+      "facts": [
+        "손익분기점은 한 기간의 매출이 그 기간에 든 비용 전체와 똑같아지는 지점이다.",
+        "들인 비용을 되찾는 데 필요한 매출을 뜻하며, 매출이 이 지점을 넘어야 비로소 이익이 생긴다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=손익분기점"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "cash_flow_gap",
+      "label": "흑자도산",
+      "facts": [
+        "흑자도산은 장부상으로는 이익을 내면서도 돈이 제때 돌지 않아 사업이 무너지는 일이다.",
+        "물건을 외상으로 넘긴 뒤 대금을 제때 받지 못하면, 팔고도 손에 쥔 현금이 모자라 경영이 어려워진다.",
+        "그래서 받을 돈을 미리 현금으로 바꿔 주는 제도로 돈이 도는 공백을 메우기도 한다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=흑자도산",
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148900446"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "avg_spend",
+      "label": "객단가",
+      "facts": [
+        "객단가는 일정 기간의 판매 금액을 그 기간의 손님 수로 나눈 값이다.",
+        "손님 한 사람이 평균으로 쓰고 가는 돈을 뜻한다."
+      ],
+      "tags": [
+        "efficiency_metric"
+      ],
+      "sources": [
+        "https://opendict.korean.go.kr/search/searchResult?query=객단가"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "franchise_disclosure",
+      "label": "정보공개서",
+      "facts": [
+        "정보공개서는 가맹본부의 사업 현황, 가맹점이 부담할 돈, 영업 조건, 계약 해지와 갱신 같은 내용을 담은 문서다.",
+        "본부와 창업 희망자 사이의 정보 차이로 생기는 피해를 막으려고 공정거래위원회에 등록하게 한다.",
+        "본부는 계약을 맺거나 가맹금을 받기 전에 등록한 정보공개서를 창업 희망자에게 줘야 한다."
+      ],
+      "tags": [
+        "progression_gate"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=647&ccfNo=2&cciNo=1&cnpClsNo=1",
+        "https://www.ftc.go.kr/www/contents.do?key=347",
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148775110"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "lease_renewal",
+      "label": "상가 계약갱신요구권과 임대료 인상 상한",
+      "facts": [
+        "상가 세입자는 계약이 끝나기 전 정해진 기간에 갱신을 요구할 수 있고, 건물주는 정당한 사유 없이 거절하지 못하지만 이 권리는 최초 계약부터 법이 정한 전체 기간 안에서만 쓸 수 있다.",
+        "처음에 들인 시설비를 회수하기도 전에 가게를 옮겨야 하는 손실을 막으려고 최소한의 영업 기간을 보장하는 것이다.",
+        "임대료를 올릴 때도 한 번에 올릴 수 있는 비율과 다시 올릴 수 있는 간격에 상한이 있다."
+      ],
+      "tags": [
+        "periodic_cap"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=627&ccfNo=3&cciNo=4&cnpClsNo=3",
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=627&ccfNo=3&cciNo=1&cnpClsNo=2"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "vat_type",
+      "label": "간이과세와 일반과세",
+      "facts": [
+        "부가가치세를 내는 사업자는 규모에 따라 일반과세자와 간이과세자로 나뉜다.",
+        "간이과세자는 직전 연도 매출이 기준 금액에 못 미치는 개인사업자로, 간편한 절차로 신고하고 납부한다.",
+        "과세 유형은 한번 정하면 그대로 가지 않고 매출 규모로 다시 판정해, 기준에 따라 일반과세자와 간이과세자 사이를 오간다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=839&ccfNo=6&cciNo=1&cnpClsNo=1",
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148930428"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "weekly_holiday_pay",
+      "label": "주휴수당 문턱",
+      "facts": [
+        "한 주 동안 정해진 근로일을 모두 나온 근로자에게는 한 주에 한 번 이상 유급휴일을 줘야 한다.",
+        "다만 몇 주를 평균한 한 주의 소정근로시간이 법이 정한 시간에 못 미치는 근로자에게는 주휴일 규정이 적용되지 않는다.",
+        "소정근로시간은 근로계약서 등으로 근로자와 사용자가 미리 정한 근로시간이다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://www.moel.go.kr/minwon/fastcounsel/fastcounselView.do?inetDcssMngId=202302011542216101000",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=주휴"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "minimum_wage",
+      "label": "최저임금",
+      "facts": [
+        "사용자는 최저임금을 적용받는 근로자에게 최저임금액 이상의 임금을 줘야 한다.",
+        "최저임금은 해마다 고용노동부 장관의 요청으로 최저임금위원회가 심의해 안을 내고, 장관이 결정해 고시한다.",
+        "고시된 최저임금은 다음 해 첫날부터 효력이 생긴다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=4&cciNo=1&cnpClsNo=1",
+        "https://www.minimumwage.go.kr/minWage/process/main.do"
+      ],
+      "verifiedAt": "2026-11-21"
+    },
+    {
+      "id": "market_saturation",
+      "label": "업종 과밀",
+      "facts": [
+        "같은 업종 가게가 적정한 수를 넘어 한 동네에 지나치게 몰려 있는 상태를 업종 과밀이라고 한다.",
+        "과밀은 인구나 건물, 산업 따위가 한곳에 지나치게 집중된 것을 뜻한다.",
+        "그래서 정부는 창업 전에 입지와 업종 정보를 데이터로 보여 주는 상권분석 서비스로 과밀 창업을 막으려 한다."
+      ],
+      "tags": [
+        "diminishing_returns"
+      ],
+      "sources": [
+        "https://golmok.seoul.go.kr/fixedAreaAnalysis.do",
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=과밀",
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148936890"
+      ],
+      "verifiedAt": "2026-11-21"
     }
   ],
   "edges": [
@@ -286,6 +453,56 @@
       "from": "delivery_fee",
       "to": "price_board",
       "rel": "메뉴 가격을 올리게 함"
+    },
+    {
+      "from": "fixed_variable_cost",
+      "to": "break_even",
+      "rel": "비용 전체가 넘어야 할 매출을 정함"
+    },
+    {
+      "from": "avg_spend",
+      "to": "break_even",
+      "rel": "손님 수와 함께 필요한 매출을 채움"
+    },
+    {
+      "from": "cash_flow_gap",
+      "to": "break_even",
+      "rel": "분기점을 넘어 이익이 나도 현금이 모자라면 무너짐"
+    },
+    {
+      "from": "franchise_disclosure",
+      "to": "open_prep",
+      "rel": "가맹 창업이면 문을 열기 전에 받아 봄"
+    },
+    {
+      "from": "lease_renewal",
+      "to": "key_money",
+      "rel": "같은 상가 세입자 보호 규칙"
+    },
+    {
+      "from": "lease_renewal",
+      "to": "fixed_variable_cost",
+      "rel": "고정비인 임대료가 오르는 폭을 묶음"
+    },
+    {
+      "from": "vat_type",
+      "to": "price_board",
+      "rel": "부가세를 포함한 최종 가격을 적게 함"
+    },
+    {
+      "from": "weekly_holiday_pay",
+      "to": "minimum_wage",
+      "rel": "함께 인건비의 바닥을 정함"
+    },
+    {
+      "from": "minimum_wage",
+      "to": "ingredient_cost",
+      "rel": "인건비를 올려 남는 돈을 줄임"
+    },
+    {
+      "from": "market_saturation",
+      "to": "open_prep",
+      "rel": "문을 열기 전에 따져 볼 일"
     }
   ]
 }
