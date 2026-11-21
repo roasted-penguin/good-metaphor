@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-2",
+  "version": "2026.11.22-3",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -74,9 +74,9 @@
     {
       "id": "weekly_boss", "label": "주간 보스와 결정석", "aliases": ["메요일"],
       "facts": [
+        "한 주에 팔 수 있는 결정석 개수에는 상한이 있다.",
         "강한 보스 중 상당수는 일주일에 한 번만 보상을 받을 수 있다.",
-        "보스를 잡으면 나오는 결정석(강렬한 힘의 결정)을 NPC에게 팔아 메소를 번다.",
-        "한 주에 팔 수 있는 결정석 개수에는 상한이 있다."
+        "보스를 잡으면 나오는 결정석(강렬한 힘의 결정)을 NPC에게 팔아 메소를 번다."
       ],
       "tags": ["periodic_cap", "cooldown", "efficiency_metric"],
       "sources": ["https://maplestory.nexon.com/News/Update/806", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/458"],
