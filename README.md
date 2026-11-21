@@ -66,6 +66,7 @@ npm run build                    # src/offscreen-src.js → extension/offscreen.
 npm test                         # 단위 + e2e (가짜 LLM, 대체 임베더로 네트워크 없이)
 npm run eval                     # 실제 임베딩 모델로 검색 품질 평가 (-- -v 로 틀린 문장 보기)
 npm run eval:fallback            # 모델 없이 같은 평가
+npm run eval:fallback -- --baseline  # 대체 임베더 기준선과 문장별 비교 (CI도 돈다)
 ```
 
 이어서 작업하려면 `CLAUDE.md`(프로젝트 맥락·규칙)와 `docs/TASKS.md`(할 일)를 먼저 보세요. Claude Code에서는 `/next-task`로 다음 작업을 이어 갈 수 있습니다. 작업마다 `task/<ID>-<슬러그>` 브랜치를 만들고, 끝나면 push 후 `dev`로 PR을 엽니다(`/ship`).
