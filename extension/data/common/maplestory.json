@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-1",
+  "version": "2026.11.22-2",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -126,11 +126,12 @@
       "id": "hunting", "label": "사냥 효율과 재획", "aliases": ["재획"],
       "facts": [
         "사냥터마다 시간당 얻는 경험치와 메소가 다르다.",
-        "재물 획득의 비약을 먹고 정해진 시간 동안 사냥하는 것을 흔히 '재획'이라고 부른다."
+        "재물 획득의 비약을 먹고 정해진 시간 동안 사냥하는 것을 흔히 '재획'이라고 부른다.",
+        "사냥터에 나타나는 룬을 발동하면 정해진 시간 동안 경험치를 더 받는다."
       ],
       "tags": ["efficiency_metric", "temporary_multiplier"],
       "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/418", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/450"],
-      "verifiedAt": "2026-11-08"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "exp_coupon", "label": "경험치 쿠폰",
