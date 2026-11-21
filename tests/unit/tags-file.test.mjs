@@ -19,7 +19,7 @@ const TAG_ORDER = [
   'inflation', 'scarcity_value', 'periodic_cap', 'daily_accumulation', 'diminishing_returns', 'temporary_multiplier',
   'cooldown', 'random_reroll', 'expected_value', 'shared_bonus', 'role_division', 'efficiency_metric',
   // T-171: 새 태그는 맨 뒤에만 붙인다(ADR 0012)
-  'fixed_cost_leverage'
+  'fixed_cost_leverage', 'vendor_lock_in'
 ];
 const sha1 = s => createHash('sha1').update(s).digest('hex');
 
