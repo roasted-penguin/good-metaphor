@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.21-1",
+  "version": "2026.11.22-1",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -48,7 +48,7 @@
       "id": "kitchen_division",
       "label": "주방 분업",
       "facts": [
-        "주방 일은 재료를 씻고 다듬는 일, 조리하는 일, 맛을 점검하고 뒷정리하는 일로 나뉜다.",
+        "분업은 일을 나누어서 하는 것으로, 주방 일은 재료를 씻고 다듬는 일, 조리하는 일, 맛을 점검하고 뒷정리하는 일로 나뉜다.",
         "주방장은 조리사들의 조리와 재료 손질을 지시하고 감독하며 교육을 맡는다.",
         "한 사람이 모든 일을 하지 않고 여럿이 일을 나누어 맡아 함께 음식을 완성한다."
       ],
@@ -59,7 +59,7 @@
         "https://www.career.go.kr/cnet/app/base/job/jobView.m?SEQ=173",
         "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=분업"
       ],
-      "verifiedAt": "2026-11-09"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "happy_hour",
