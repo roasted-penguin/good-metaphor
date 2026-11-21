@@ -4,7 +4,7 @@
   "tagsVersion": "2026.11.22-4",
   "graphs": {
     "maplestory": "2026.11.22-3",
-    "restaurant": "2026.11.22-4"
+    "restaurant": "2026.11.22-5"
   },
   "summary": {
     "maplestory/eval": {
@@ -162,7 +162,7 @@
       {"sentence":"보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.","kind":"hit","top3":["kitchen_division","franchise_disclosure","open_prep"],"hit1":true,"hit3":true},
       {"sentence":"경매장에서 아이템이 팔리면 판매 대금에서 수수료가 빠진다.","kind":"hit","top3":["loyalty_points","key_money","break_even"],"hit1":false,"hit3":false},
       {"sentence":"주간 보스 결정석은 한 주에 팔 수 있는 개수가 정해져 있다.","kind":"hit","top3":["lease_renewal","lunch_peak","limited_menu"],"hit1":false,"hit3":true},
-      {"sentence":"Airlines overbook flights because some passengers never show up and their seats would fly empty.","kind":"hit","top3":["avg_spend","loyalty_points","key_money"],"hit1":false,"hit3":false},
+      {"sentence":"Airlines overbook flights because some passengers never show up and their seats would fly empty.","kind":"hit","top3":["avg_spend","loyalty_points","required_items"],"hit1":false,"hit3":false},
       {"sentence":"Gyms get packed right after office hours, so members queue for every machine.","kind":"hit","top3":["fixed_variable_cost","franchise_fee","required_items"],"hit1":false,"hit3":false}
     ],
     "restaurant/holdout": [

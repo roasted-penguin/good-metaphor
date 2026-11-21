@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-4",
+  "version": "2026.11.22-5",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -201,18 +201,20 @@
       "id": "key_money",
       "label": "권리금",
       "facts": [
+        "권리금은 앞 세입자가 가게에 쌓아 온 거래처, 신용, 영업 노하우 같은 눈에 보이지 않는 가치를 새 세입자가 이어받으며 치르는 돈이다.",
         "권리금은 가게의 시설, 거래처, 신용, 영업 노하우, 위치의 이점 같은 가치를 넘겨받는 대가로 보증금과 월세와 따로 주는 돈이다.",
-        "권리금은 새로 들어올 세입자가 지금 세입자에게 주는 돈이고, 건물주에게 돌려받는 돈이 아니다.",
-        "임대 기간이 끝나갈 때 건물주는 세입자가 새 세입자에게서 권리금을 받는 것을 방해하면 안 된다."
+        "임대 기간이 끝나갈 때 세입자는 자기가 주선한 새 세입자에게서 권리금을 받을 수 있고, 건물주는 이를 방해하면 안 된다."
       ],
       "tags": [
         "shared_bonus"
       ],
       "sources": [
         "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=627&ccfNo=4&cciNo=3&cnpClsNo=3",
-        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=권리금"
+        "https://stdict.korean.go.kr/search/searchResult.do?searchKeyword=권리금",
+        "https://www.law.go.kr/LSW//precInfoP.do?precSeq=235337",
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148784565"
       ],
-      "verifiedAt": "2026-11-09"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "hygiene_grade",
