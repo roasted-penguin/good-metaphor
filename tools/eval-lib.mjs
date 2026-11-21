@@ -140,3 +140,95 @@ export function pickSets(argv, { evalSet, validation, holdout, interestSet }, in
     { name: '검증셋', cases: validation, guarded: true }
   ];
 }
+
+// --- 대체 임베더 기준선(T-179): 문장별 1위를 파일(tools/eval-fallback-baseline.json)에 두고 문장 단위로 비교한다 ---
+// 대체 임베더는 순수 JS라 Node와 크롬 결과가 같고 결정적이다. 그래서 CI에서 싸게 돌릴 수 있다.
+
+const idOf = x => (typeof x === 'string' ? x : x.id);
+
+/**
+ * 문장 하나의 기준선 줄. kind: hit(일반) · noMatch(비유 없음, 맞고 틀림 없음) · negative(음성, hit1 = 1위가 금지 노드 아님)
+ * @param {object} c 평가 문장
+ * @param {(string|{id})[]} ranked 순위(앞이 1위)
+ */
+export function baselineRow(c, ranked) {
+  const top3 = ranked.slice(0, 3).map(idOf);
+  if (c.forbidNodes?.length) return { sentence: c.sentence, kind: 'negative', top3, hit1: !c.forbidNodes.includes(top3[0]) };
+  if (!c.expectNodes?.length) return { sentence: c.sentence, kind: 'noMatch', top3 };
+  return { sentence: c.sentence, kind: 'hit', top3, hit1: c.expectNodes.includes(top3[0]), hit3: top3.some(id => c.expectNodes.includes(id)) };
+}
+
+// 셋 하나의 기준선 줄들. 문장이 비교 열쇠라 같은 문장이 두 번 있으면 던진다
+export function baselineRows(cases, rank) {
+  const seen = new Set();
+  return cases.map((c, i) => {
+    if (seen.has(c.sentence)) throw new Error(`같은 문장이 두 번 있어요: ${c.sentence}`);
+    seen.add(c.sentence);
+    return baselineRow(c, rank(c, i));
+  });
+}
+
+/**
+ * 기준선({셋: 줄[]})과 지금 결과를 셋별로 비교한다.
+ * newlyWrong: 기준선에서 1위 맞음(음성은 통과) → 지금 틀림 (실패 대상)
+ * newlyRight: 반대. top1Changed: 1위 노드가 바뀐 모든 문장(정보). top3Lost/top3Gained: hit@3 잃음/얻음.
+ * added/removed: 셋 파일에 더해지거나 빠진 문장(실패 아님). missingSet: 기준선에만 있는 셋
+ */
+export function compareBaseline(baseSets, curSets) {
+  const out = {};
+  for (const name of new Set([...Object.keys(baseSets), ...Object.keys(curSets)])) {
+    const d = { newlyWrong: [], newlyRight: [], top1Changed: [], top3Lost: [], top3Gained: [], added: [], removed: [] };
+    out[name] = d;
+    const base = new Map((baseSets[name] || []).map(r => [r.sentence, r]));
+    const cur = curSets[name];
+    if (!cur) { d.missingSet = true; d.removed = [...base.keys()]; continue; }
+    const curKeys = new Set(cur.map(r => r.sentence));
+    for (const r of cur) {
+      const b = base.get(r.sentence);
+      if (!b) { d.added.push(r.sentence); continue; }
+      const ch = { sentence: r.sentence, before: b.top3[0], after: r.top3[0] };
+      if (b.top3[0] !== r.top3[0]) d.top1Changed.push(ch);
+      if (b.kind !== r.kind || r.kind === 'noMatch') continue; // 기대 노드 종류가 바뀌면 맞고 틀림 비교는 뜻이 없다
+      if (b.hit1 && !r.hit1) d.newlyWrong.push(ch);
+      if (!b.hit1 && r.hit1) d.newlyRight.push(ch);
+      if (r.kind === 'hit') {
+        if (b.hit3 && !r.hit3) d.top3Lost.push(ch);
+        if (!b.hit3 && r.hit3) d.top3Gained.push(ch);
+      }
+    }
+    for (const s of base.keys()) if (!curKeys.has(s)) d.removed.push(s);
+  }
+  return out;
+}
+
+// 실패 기준: 기준선에서 맞던 문장이 1위에서 틀린 수 (여러 셋 합계)
+export function baselineFailCount(cmp) {
+  return Object.values(cmp).reduce((n, d) => n + d.newlyWrong.length, 0);
+}
+
+// 임베더 id·그래프·태그 판본이 기준선과 다르면 경고 문구 (실패 아님)
+export function baselineMetaWarnings(base, cur) {
+  const w = [];
+  if (base.embedderId !== cur.embedderId) w.push(`임베더 id가 달라요: 기준선 ${base.embedderId} → 지금 ${cur.embedderId}`);
+  if (base.tagsVersion !== cur.tagsVersion) w.push(`태그 판본이 달라요: 기준선 ${base.tagsVersion} → 지금 ${cur.tagsVersion}`);
+  for (const id of new Set([...Object.keys(base.graphs || {}), ...Object.keys(cur.graphs || {})])) {
+    if (base.graphs?.[id] !== cur.graphs?.[id]) w.push(`${id} 그래프 판본이 달라요: 기준선 ${base.graphs?.[id]} → 지금 ${cur.graphs?.[id]}`);
+  }
+  return w;
+}
+
+// 셋별 바뀐 문장 줄
+export function baselineReportLines(cmp) {
+  const lines = [];
+  const labels = [['newlyWrong', '✗ 새로 틀림'], ['newlyRight', '✓ 새로 맞음'], ['top3Lost', '↓ 상위 3 잃음'], ['top3Gained', '↑ 상위 3 얻음'], ['top1Changed', '· 1위 바뀜']];
+  for (const [name, d] of Object.entries(cmp)) {
+    if (d.missingSet) { lines.push(`[${name}] 지금 결과에 이 셋이 없어요(문장 ${d.removed.length}개)`); continue; }
+    const any = labels.some(([k]) => d[k].length) || d.added.length || d.removed.length;
+    if (!any) { lines.push(`[${name}] 바뀐 것 없음`); continue; }
+    lines.push(`[${name}]`);
+    for (const [k, label] of labels) for (const x of d[k]) lines.push(`  ${label}: ${x.sentence} (1위 ${x.before} → ${x.after})`);
+    for (const s of d.added) lines.push(`  + 기준선에 없는 문장: ${s}`);
+    for (const s of d.removed) lines.push(`  - 셋에서 빠진 문장: ${s}`);
+  }
+  return lines;
+}

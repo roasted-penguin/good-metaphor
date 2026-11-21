@@ -41,6 +41,7 @@ npm run test:e2e                 # 확장을 실제 크롬에 로드. CHROMIUM_P
 npm run eval                     # 실제 확장(크롬) 안에서 임베딩해 검색 품질(hit@1/@3). -- -v 틀린 문장, -- --node 빠르지만 실제와 다를 수 있음
 npm run check:embed              # 실제 모델 로드 시간·호버 시간, 시험해 보기 1위가 평가와 같은지(59문장)
 npm run eval:fallback            # 모델 없이 같은 평가
+npm run eval:fallback -- --baseline  # 대체 임베더 기준선(tools/eval-fallback-baseline.json, 5개 셋 문장별 1위)과 비교: 새로 틀림·맞음·1위 바뀜·상위 3. 맞던 문장이 1위에서 틀리면 실패(CI `test` 잡). 받아들이면 `--write-baseline`으로 다시 써 같은 PR에 커밋 (T-179)
 npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장이 하나라도 틀리면 실패. 검색을 바꾸는 PR은 항상 돌린다
 npm run eval -- --holdout         # 평가셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점. 출력 끝에 여유(1·2위 점수 차) < --margin(기본 0.005) 문장 목록, -v면 문장별 여유. --margin-guard면 가드 문장의 작은 여유도 실패(T-150)
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)

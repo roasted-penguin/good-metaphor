@@ -21,8 +21,10 @@ jobs:
       - name: 빌드 산출물이 커밋과 같은지 확인
         run: git diff --exit-code -- extension/offscreen.js extension/vendor
       - run: npm run test:unit
+      # 대체 임베더 기준선(T-179): 순수 JS라 결정적이고 1초 안팎. 맞던 문장이 1위에서 틀리면 실패.
+      # 받아들일 손실이면 `npm run eval:fallback -- --write-baseline`으로 기준선을 다시 써서 같은 PR에 커밋한다
+      - run: npm run eval:fallback -- --baseline
       - run: npm run test:e2e
-      - run: npm run eval:fallback
 
   # 서버(Python, FastAPI) 테스트. 위 `test` 잡 이름은 브랜치 보호 필수 체크라 바꾸지 않는다.
   # 테스트가 저장소 파일(extension/data/common/*.json, tests/fixtures/*)을 읽으므로 저장소 전체를 체크아웃한다.

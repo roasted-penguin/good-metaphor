@@ -4,6 +4,9 @@
 //   npm run eval                       # 실제 모델을 실제 확장(크롬, wasm) 안에서 임베딩해 잰다. -- -v 로 틀린 문장 출력
 //   npm run eval -- --node             # Node(onnxruntime-node)로 빠르게. q8 계산이 브라우저와 달라 수치가 실제와 다를 수 있다(T-128)
 //   npm run eval:fallback              # 글자 n-gram 대체 임베더
+//   npm run eval:fallback -- --baseline        # 모든 셋(메이플 평가·검증·홀드아웃, 식당 평가·홀드아웃)을 기준선
+//                                      # (tools/eval-fallback-baseline.json)과 문장별 비교. 맞던 문장이 1위에서 틀리면 종료 코드 1 (T-179)
+//   npm run eval:fallback -- --write-baseline  # 기준선 다시 쓰기
 //   npm run eval -- --rewrite gemini   # 질의를 LLM으로 추상 구조로 바꿔 함께 비교 (T-113 (4)). <ID>_API_KEY 필요,
 //                                      # 결과는 .tmp/rewrite-<제공자>-<모델>.json 에 캐시(다시 돌려도 호출 안 함)
 //   npm run eval -- --server <url>     # 같은 문장을 analogy-api(POST /v1/analogy)의 debug.candidates 순위로도 채점하고 관문 한 줄 (T-405)
@@ -36,6 +39,12 @@ if (retrievalAt > 0) {
   const over = JSON.parse(process.argv[retrievalAt + 1]);
   admin.retrieval = { ...admin.retrieval, ...over };
   console.log(`retrieval 덮어쓰기: ${JSON.stringify(over)}`);
+}
+// --baseline / --write-baseline (T-179): 대체 임베더 기준선 비교·다시 쓰기. 모든 셋을 한 번에 보고 끝낸다
+if (process.argv.includes('--baseline') || process.argv.includes('--write-baseline')) {
+  if (!process.argv.includes('--fallback')) throw new Error('--baseline·--write-baseline은 대체 임베더 전용이에요: npm run eval:fallback -- --baseline');
+  const { runFallbackBaseline } = await import('./fallback-baseline.mjs');
+  process.exit(runFallbackBaseline(process.argv, admin, { retrievalOverridden: retrievalAt > 0 }));
 }
 // --interest <id>: 공통 관심사(T-302). 기본은 메이플
 const interest = commonInterest(interestFromArgv(process.argv));
