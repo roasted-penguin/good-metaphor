@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-3",
+  "version": "2026.11.22-4",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -235,7 +235,7 @@
       "id": "open_prep",
       "label": "영업 신고와 위생교육",
       "facts": [
-        "식당을 열려는 사람은 미리 식품위생교육을 받아야 한다.",
+        "식당 영업을 하려는 사람은 영업을 시작하기 전에 미리 식품위생교육을 받아야 한다.",
         "필요한 시설을 먼저 갖춘 뒤 서류를 내고 영업신고증을 받아야 한다.",
         "영업을 시작한 뒤에도 영업자는 해마다 위생교육을 받아야 한다."
       ],
@@ -244,9 +244,10 @@
       ],
       "sources": [
         "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=839&ccfNo=5&cciNo=1&cnpClsNo=1",
-        "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=839&ccfNo=4&cciNo=1&cnpClsNo=2"
+        "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=839&ccfNo=4&cciNo=1&cnpClsNo=2",
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=839&ccfNo=4&cciNo=1&cnpClsNo=2"
       ],
-      "verifiedAt": "2026-11-09"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "model_restaurant",
