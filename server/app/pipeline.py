@@ -3,6 +3,7 @@
 규칙 1: LLM이 고른 nodeId가 후보에 없으면 비유를 숨긴다(문구는 확장 background.js와 같다).
 그 뒤 근거 검사(T-123): usedFact·숫자가 고른 노드 facts 밖이면 비유를 숨긴다(app/grounding.py).
 마지막으로 금칙어 검사(T-114, 규칙 11): meaning·analogy·mapping에 승인된 금칙어가 있으면 숨긴다(app/blocklist.py).
+끝맺음 검사(T-122)는 debug.ending에 표시만 한다(확장과 달리 다시 부르지 않음).
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from typing import Any
 from .blocklist import BLOCKED_REJECTED_TEXT, active_terms, find_blocked
 from .grounding import GROUNDING_REJECTED_TEXT, check_grounding
 from .llm import LLM, LLMError
-from .prompts import build_analogy_prompt, build_keyword_prompt, parse_json_object, parse_keywords
+from .prompts import build_analogy_prompt, build_keyword_prompt, ending_issues, parse_json_object, parse_keywords
 from .retriever import Retriever, RetrieverError, RetrieverUnavailable
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,11 @@ class AnalogyPipeline:
             log.warning("비유 응답을 해석하지 못함: %r", raw[:120])
             raise PipelineError(502, "AI 응답을 해석하지 못했어요. 잠시 뒤 다시 시도해 주세요.")
 
+        # 끝맺음 검사(T-122): 표시만 한다. 확장은 다시 한 번 부르지만, 서버는 확장의 서버 마감(analogyServer.timeoutMs,
+        # 4초)을 넘기면 확장이 로컬로 처음부터 다시 하므로 호출을 늘리지 않는다
+        issues = ending_issues(answer)
+        ending = {"ok": not issues, "retried": False, "issues": issues}
+
         # 4) 근거 검증(규칙 1): 후보에 없는 노드를 댔으면 비유를 버린다
         chosen = next((c for c in candidates if c.id == answer.get("nodeId")), None)
         analogy = answer.get("analogy") or ""
@@ -166,6 +172,7 @@ class AnalogyPipeline:
                 "llmRetries": 0,
                 "user": None,
                 "keywords": {"hl": hl, "ll": ll},
+                "ending": ending,
                 **({"grounding": grounding} if grounding is not None else {}),
                 **({"blocked": blocked} if blocked is not None else {}),
                 "ms": int((time.monotonic() - t0) * 1000),

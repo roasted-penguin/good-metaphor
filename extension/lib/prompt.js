@@ -4,6 +4,8 @@ export function buildAbstractPrompt({ sentence, word, pageTitle }) {
   const system = [
     '너는 문장의 핵심 개념을 분야와 무관한 추상 구조로 바꿔 적는 도우미다.',
     '고유명사나 전문용어를 쓰지 말고, "무엇이 무엇에 따라 어떻게 변하는가" 같은 구조로 1~2문장 한국어로 적는다.',
+    '원문에 나온 전문용어·외래어(예: 레버리지, 인플레이션, rate limit)는 그대로 옮기지 말고 그 뜻을 쉬운 우리말로 풀어 쓴다.',
+    '예: "인플레이션이 심해지면 같은 돈으로 살 수 있는 물건이 줄어든다" → "전체 가격이 오르면 같은 양의 돈이 가진 가치가 줄어든다"',
     '설명이나 머리말 없이 그 문장만 출력한다.'
   ].join('\n');
   const user = `페이지: ${pageTitle || '(제목 없음)'}\n문장: ${sentence}\n${word ? `커서가 가리킨 단어: ${word}\n` : ''}`;
@@ -26,11 +28,12 @@ export function buildAnalogyPrompt({ sentence, context, word, pageTitle, domain,
     '3. 구조가 맞는 후보가 없으면 analogy를 빈 문자열로 두고 nodeId를 null로 둔다. 억지 비유는 틀린 설명보다 나쁘다.',
     `4. analogy는 "${analogyPrefix}" 문구로 시작하는 1~2문장, 120자 안쪽. 원문과 ${domain}의 어떤 부분이 대응하는지 드러나게 쓴다.`,
     '5. meaning은 원문 문장의 뜻을 중학생도 알 쉬운 말로 1문장. 원문이 영어여도 한국어로 쓴다.',
-    '6. 존댓말(~요)을 쓴다. JSON 객체만 출력한다. 필드는 meaning, analogy, nodeId, tagId, usedFact, mapping 순서로 쓴다.',
+    '6. meaning과 analogy의 모든 문장은 해요체(~요)로 끝낸다. ~습니다·~ㅂ니다(합쇼체)나 ~다(해라체)는 어떤 경우에도 쓰지 않는다. JSON 객체만 출력한다. 필드는 meaning, analogy, nodeId, tagId, usedFact, mapping 순서로 쓴다.',
     `7. analogy에 쓴 ${domain} 쪽 사실은 고른 후보의 facts 문장 하나를 usedFact에 글자 그대로 옮긴다. 비유가 없으면 usedFact는 빈 문자열이다.`,
     '8. 커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.',
     '출력 형식: {"meaning": string, "analogy": string, "nodeId": string|null, "tagId": string|null, "usedFact": string, "mapping": string}',
-    'mapping은 "원문 개념 ↔ 관심사 개념" 형태의 짧은 대응 한 줄이다.'
+    'mapping은 "원문 개념 ↔ 관심사 개념" 형태의 짧은 대응 한 줄이다.',
+    '끝맺음 예: "보상이 줄어들어요."(O) / "보상이 줄어듭니다."(X) / "보상이 줄어든다."(X)'
   ].join('\n');
 
   const cand = candidates.map((c, i) => [
@@ -105,6 +108,60 @@ export function buildDraftPrompt({ name, tags }) {
     ...(tags || []).map(t => `- ${t.id} | ${t.label} — ${t.desc || ''}`)
   ].join('\n');
   return { system, user };
+}
+
+// ── 끝맺음 검사(T-122) ──
+// 규칙 5(UI 문구는 ~요). 모델이 합쇼체(~습니다)나 해라체(~다)로 끝내면 잡는다.
+// 명사로 끝난 조각("…스타포스 강화.")은 잡지 않는다(오탐보다 놓치는 쪽이 낫다).
+const TRAIL = /[\s.!?。…~"'”’)\]」』>*]+$/u;
+const hasJong = (ch, jong) => {
+  const code = (ch || '').charCodeAt(0) - 0xac00;
+  return code >= 0 && code <= 11171 && code % 28 === jong;
+};
+const JONG_B = 17; // ㅂ 받침(습·합·입·됩…)
+
+// 한 문장 끝의 문체: 'formal'(합쇼체) | 'plain'(해라체) | null(해요체·그 밖)
+function sentenceEnding(sentence) {
+  const s = sentence.replace(TRAIL, '');
+  if (!s) return null;
+  if (/[요죠]$/.test(s)) return null;
+  if (/니[다까]$/.test(s) && hasJong(s.at(-3), JONG_B)) return 'formal';
+  if (/시오$/.test(s)) return 'formal';
+  if (/[다냐]$/.test(s)) return 'plain';
+  return null;
+}
+
+// 글 전체에서 어긴 문체 하나(합쇼체 우선). 다 해요체면 null. 숫자 소수점("3.5")에서는 끊지 않는다
+export function impoliteEnding(text) {
+  if (!text) return null;
+  const styles = String(text).split(/(?<=[.!?。])\s+|\n+/).map(sentenceEnding).filter(Boolean);
+  return styles.includes('formal') ? 'formal' : styles[0] || null;
+}
+
+// 말풍선에 보이는 문장 필드(meaning·analogy)만 본다. mapping 은 "A ↔ B" 조각이라 보지 않는다
+export function endingIssues(answer) {
+  if (!answer) return [];
+  return ['meaning', 'analogy']
+    .map(field => ({ field, style: impoliteEnding(answer[field]) }))
+    .filter(x => x.style);
+}
+
+// 다시 부를 때 user 끝에 붙이는 짧은 교정 문구. 직전 답을 함께 줘서 내용은 두고 끝맺음만 고치게 한다
+export function endingRetryNote(issues, prev) {
+  const fields = issues.map(i => i.field).join('·');
+  return [
+    '',
+    `[고쳐 주세요] 직전 답의 ${fields}이(가) ~습니다·~다로 끝났어요. 내용은 그대로 두고 meaning과 analogy의 모든 문장을 해요체(~요)로 끝내 같은 JSON 형식으로만 다시 출력해요.`,
+    `직전 답: ${JSON.stringify(prev)}`
+  ].join('\n');
+}
+
+// 추상화 결과에 원문 전문용어가 그대로 남았는지(스모크용). 대소문자·띄어쓰기·하이픈 무시
+export function leakedTerms(text, terms) {
+  const norm = s => String(s || '').toLowerCase().replace(/[\s\-_]+/g, '');
+  const t = norm(text);
+  if (!t) return [];
+  return (terms || []).filter(term => t.includes(norm(term)));
 }
 
 // LLM 없이 검색 결과만으로 만드는 데모 응답

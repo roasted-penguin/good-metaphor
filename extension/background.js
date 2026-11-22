@@ -330,7 +330,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   const tags = topTags(q, graph, vecs, 5);
 
   // 비유 프롬프트 → LLM → 파싱 → 규칙 1 nodeId 검증 → 근거 검사(T-123) → 금칙어 검사(T-114)는 lib/pipeline.js(T-104)
-  const { answer, grounding, groundingHidden, evidence, blocked } = await runAnalogy({
+  const { answer, grounding, groundingHidden, evidence, blocked, ending } = await runAnalogy({
     sentence, word, context, pageTitle, graph, candidates, ask,
     providerKind: provider.def.kind, onStage, onPartial, blocklist
   });
@@ -365,6 +365,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
     }
   };
   if (grounding) result.debug.grounding = grounding;
+  // 끝맺음 검사(T-122): { ok, retried, issues }. ok=false면 다시 불러도 ~습니다·~다로 끝난 답이다
+  if (ending) result.debug.ending = ending;
   if (blocked) result.debug.blocked = blocked; // 필드 이름만, 금칙어 자체는 없다
   if (serverInfo) {
     result.source = 'local';

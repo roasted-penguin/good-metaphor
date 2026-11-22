@@ -21,11 +21,12 @@ _ANALOGY_SYSTEM_LINES = [
     "3. 구조가 맞는 후보가 없으면 analogy를 빈 문자열로 두고 nodeId를 null로 둔다. 억지 비유는 틀린 설명보다 나쁘다.",
     f'4. analogy는 "{_PREFIX}" 문구로 시작하는 1~2문장, 120자 안쪽. 원문과 {_DOMAIN}의 어떤 부분이 대응하는지 드러나게 쓴다.',
     "5. meaning은 원문 문장의 뜻을 중학생도 알 쉬운 말로 1문장. 원문이 영어여도 한국어로 쓴다.",
-    "6. 존댓말(~요)을 쓴다. JSON 객체만 출력한다. 필드는 meaning, analogy, nodeId, tagId, usedFact, mapping 순서로 쓴다.",
+    "6. meaning과 analogy의 모든 문장은 해요체(~요)로 끝낸다. ~습니다·~ㅂ니다(합쇼체)나 ~다(해라체)는 어떤 경우에도 쓰지 않는다. JSON 객체만 출력한다. 필드는 meaning, analogy, nodeId, tagId, usedFact, mapping 순서로 쓴다.",
     f"7. analogy에 쓴 {_DOMAIN} 쪽 사실은 고른 후보의 facts 문장 하나를 usedFact에 글자 그대로 옮긴다. 비유가 없으면 usedFact는 빈 문자열이다.",
     "8. 커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.",
     '출력 형식: {"meaning": string, "analogy": string, "nodeId": string|null, "tagId": string|null, "usedFact": string, "mapping": string}',
     'mapping은 "원문 개념 ↔ 관심사 개념" 형태의 짧은 대응 한 줄이다.',
+    '끝맺음 예: "보상이 줄어들어요."(O) / "보상이 줄어듭니다."(X) / "보상이 줄어든다."(X)',
 ]
 
 
@@ -99,6 +100,53 @@ def build_analogy_prompt(sentence: str, context: str | None, word: str | None, p
     # prompt.js처럼 빈 줄은 모두 뺀다.
     user = "\n".join(s for s in user_lines if s != "")
     return system, user
+
+
+# --- 끝맺음 검사(T-122). 확장 prompt.js impoliteEnding·endingIssues와 같은 규칙 ---
+
+_TRAIL = re.compile(r"[\s.!?。…~\"'”’)\]」』>*]+$")
+_SPLIT = re.compile(r"(?<=[.!?。])\s+|\n+")
+_JONG_B = 17  # ㅂ 받침(습·합·입·됩…)
+
+
+def _has_jong(ch: str, jong: int) -> bool:
+    code = ord(ch) - 0xAC00 if ch else -1
+    return 0 <= code <= 11171 and code % 28 == jong
+
+
+def _sentence_ending(sentence: str) -> str | None:
+    s = _TRAIL.sub("", sentence)
+    if not s or s[-1] in "요죠":
+        return None
+    if len(s) >= 3 and s[-2:] in ("니다", "니까") and _has_jong(s[-3], _JONG_B):
+        return "formal"
+    if s.endswith("시오"):
+        return "formal"
+    if s[-1] in "다냐":
+        return "plain"
+    return None
+
+
+def impolite_ending(text: str | None) -> str | None:
+    """합쇼체면 "formal", 해라체면 "plain", 다 해요체(또는 명사 조각)면 None. 여러 문장이면 합쇼체 우선."""
+    if not text:
+        return None
+    styles = [st for st in (_sentence_ending(x) for x in _SPLIT.split(str(text))) if st]
+    if "formal" in styles:
+        return "formal"
+    return styles[0] if styles else None
+
+
+def ending_issues(answer: Mapping[str, Any] | None) -> list[dict[str, str]]:
+    """말풍선에 보이는 meaning·analogy 중 해요체가 아닌 필드. mapping은 조각이라 보지 않는다."""
+    if not answer:
+        return []
+    out = []
+    for field in ("meaning", "analogy"):
+        style = impolite_ending(answer.get(field))
+        if style:
+            out.append({"field": field, "style": style})
+    return out
 
 
 # --- 질의 키워드(LightRAG hl/ll) 프롬프트. 확장에는 없는 서버 전용 내부 프롬프트 ---
