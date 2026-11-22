@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-3",
+  "version": "2026.11.22-4",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -211,7 +211,7 @@
         "경매장에 물건을 올릴 때 보증금을 내며, 팔리면 돌려받지만 등록을 취소하거나 기간 안에 팔지 못하면 돌려받지 못한다.",
         "MVP 등급이나 프리미엄 PC방 같은 조건을 갖추면 판매 수수료가 낮아진다."
       ],
-      "tags": ["market_price"],
+      "tags": ["brokerage_fee"],
       "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/393", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/394", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/444"],
       "verifiedAt": "2026-11-21"
     },

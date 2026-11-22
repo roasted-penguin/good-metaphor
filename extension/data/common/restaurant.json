@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-5",
+  "version": "2026.11.22-6",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -137,7 +137,7 @@
         "수수료 부담이 커지면 식당은 메뉴 가격을 올리기도 한다."
       ],
       "tags": [
-        "expected_value"
+        "brokerage_fee"
       ],
       "sources": [
         "https://www.korea.kr/news/policyNewsView.do?newsId=156722071",

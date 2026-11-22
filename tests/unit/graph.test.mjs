@@ -124,9 +124,9 @@ test('공통 그래프 태그마다 예문 2개 이상, 평가셋·검증셋·�
   }
 });
 
-test('태그는 통제 어휘 목록 그대로 (규칙 9, T-171에서 맨 뒤에 추가)', () => {
+test('태그는 통제 어휘 목록 그대로 (규칙 9, T-171·T-176에서 맨 뒤에 추가)', () => {
   assert.deepEqual(common.tags.map(t => t.id).sort(), [
-    'cooldown', 'daily_accumulation', 'diminishing_returns', 'efficiency_metric', 'escalating_cost', 'expected_value',
+    'brokerage_fee', 'cooldown', 'daily_accumulation', 'diminishing_returns', 'efficiency_metric', 'escalating_cost', 'expected_value',
     'fixed_cost_leverage', 'inflation', 'loss_risk', 'market_price', 'periodic_cap', 'prob_upgrade', 'progression_gate', 'random_reroll',
     'role_division', 'scarcity_value', 'shared_bonus', 'temporary_multiplier', 'threshold_req', 'vendor_lock_in'
   ]);
@@ -194,7 +194,7 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
     world_trade_group: ['관세'], item_binding: ['가위'], balance_patch: ['하향', '상향'],
     challengers_world: ['리프'], equipment_transfer: ['전승'], boss_reward_split: ['분배']
   });
-  assert.equal(common.version, '2026.11.22-3'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가, T-172 quick_pass, T-174 사냥 룬 사실, T-177 주간 보스 사실 순서
+  assert.equal(common.version, '2026.11.22-4'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가, T-172 quick_pass, T-174 사냥 룬 사실, T-177 주간 보스 사실 순서, T-176 trade_fee 태그
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {

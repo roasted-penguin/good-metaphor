@@ -1,10 +1,10 @@
 {
   "note": "대체 임베더(fallback-embed.js) 기준선(T-179). 혼합 기본값 문장별 1위·상위 3개. 다시 쓰기: npm run eval:fallback -- --write-baseline",
   "embedderId": "fallback:hash-ngram-4096-v2",
-  "tagsVersion": "2026.11.22-4",
+  "tagsVersion": "2026.11.22-5",
   "graphs": {
-    "maplestory": "2026.11.22-3",
-    "restaurant": "2026.11.22-5"
+    "maplestory": "2026.11.22-4",
+    "restaurant": "2026.11.22-6"
   },
   "summary": {
     "maplestory/eval": {
@@ -25,13 +25,13 @@
     },
     "restaurant/eval": {
       "n": 21,
-      "hit1": 10,
-      "hit3": 13
+      "hit1": 11,
+      "hit3": 14
     },
     "restaurant/holdout": {
       "n": 8,
-      "hit1": 3,
-      "hit3": 5
+      "hit1": 5,
+      "hit3": 6
     }
   },
   "sets": {
@@ -65,8 +65,8 @@
       {"sentence":"Buying more raffle tickets raises your odds, but on average you get back less than you paid.","kind":"hit","top3":["starforce","starforce_event","cube"],"hit1":true,"hit3":true},
       {"sentence":"Players keep rerolling their character's starting traits, paying gems each time, until they get the combo they want.","kind":"hit","top3":["starforce_event","starforce","cube"],"hit1":false,"hit3":true},
       {"sentence":"The gym lets each member bring at most three guests a month.","kind":"hit","top3":["meso","meso_inflation","auction"],"hit1":false,"hit3":false},
-      {"sentence":"Learning to code takes steady practice every day; cramming on weekends doesn't work.","kind":"hit","top3":["starforce","meso","starforce_event"],"hit1":false,"hit3":false},
-      {"sentence":"In surgery, one doctor operates, another handles anesthesia, and nurses keep the instruments ready.","kind":"hit","top3":["meso","auction","meso_inflation"],"hit1":false,"hit3":false},
+      {"sentence":"Learning to code takes steady practice every day; cramming on weekends doesn't work.","kind":"hit","top3":["trade_fee","starforce","meso"],"hit1":false,"hit3":false},
+      {"sentence":"In surgery, one doctor operates, another handles anesthesia, and nurses keep the instruments ready.","kind":"hit","top3":["trade_fee","meso","auction"],"hit1":false,"hit3":false},
       {"sentence":"Farmers pick which crop to plant by comparing how much profit each acre brings in per season.","kind":"hit","top3":["weekly_boss","quick_pass","hunting"],"hit1":true,"hit3":true},
       {"sentence":"After years of loose monetary policy, the same paycheck buys far fewer groceries.","kind":"hit","top3":["auction","meso","meso_inflation"],"hit1":false,"hit3":true},
       {"sentence":"Vintage watches that are no longer produced sell for many times their original price.","kind":"hit","top3":["meso","auction","meso_inflation"],"hit1":false,"hit3":true},
@@ -126,7 +126,7 @@
       {"sentence":"Collectors pay a fortune for stamps printed with an error, since only a handful of them exist.","kind":"hit","top3":["auction","union_link","weekly_boss"],"hit1":true,"hit3":true},
       {"sentence":"When the government prints money to cover its deficit, rent and groceries eat a bigger share of every paycheck.","kind":"hit","top3":["auction","meso","meso_inflation"],"hit1":false,"hit3":true},
       {"sentence":"The airline ran a 48-hour fare sale, so travelers booked the whole year's trips during that window.","kind":"hit","top3":["auction","starforce_event","meso"],"hit1":false,"hit3":true},
-      {"sentence":"On a film set, the director guides the actors, the camera operator frames each shot, and the editor cuts the footage.","kind":"hit","top3":["meso","meso_inflation","starforce_event"],"hit1":false,"hit3":false},
+      {"sentence":"On a film set, the director guides the actors, the camera operator frames each shot, and the editor cuts the footage.","kind":"hit","top3":["meso","trade_fee","meso_inflation"],"hit1":false,"hit3":false},
       {"sentence":"큐브 열 개 돌렸는데 잡옵만 떴다.","kind":"hit","top3":["cube","boss_entry","arcane_force"],"hit1":true,"hit3":true},
       {"sentence":"극딜 타이밍 맞추려고 쿨 돌 때까지 기다렸다.","kind":"hit","top3":["skill_cooldown","cube","starforce"],"hit1":true,"hit3":true},
       {"sentence":"시중에 풀린 현금이 몇 년 새 두 배로 늘자 커피 한 잔 값이 눈에 띄게 올랐다.","kind":"hit","top3":["arcane_symbol","weekly_boss","level_exp"],"hit1":false,"hit3":false},
@@ -134,7 +134,7 @@
       {"sentence":"더 높은 이자를 준다는 말에 예금을 빼서 맡겼다가 그 회사가 망해 한 푼도 돌려받지 못했다.","kind":"hit","top3":["arcane_symbol","starforce","weekly_boss"],"hit1":false,"hit3":true},
       {"sentence":"중고폰 매입 업체는 불량품이 섞여 있을 확률까지 셈해서 매입가를 정한다.","kind":"hit","top3":["cube","starforce","boss_entry"],"hit1":true,"hit3":true},
       {"sentence":"A pharmacist won't refill the same prescription until thirty days have passed since the last pickup.","kind":"hit","top3":["auction","meso","meso_inflation"],"hit1":false,"hit3":false},
-      {"sentence":"At a busy pizza shop, one worker takes orders, another stretches the dough, and a third drives the deliveries.","kind":"hit","top3":["auction","meso","meso_inflation"],"hit1":false,"hit3":false},
+      {"sentence":"At a busy pizza shop, one worker takes orders, another stretches the dough, and a third drives the deliveries.","kind":"hit","top3":["trade_fee","auction","meso"],"hit1":false,"hit3":false},
       {"sentence":"Applicants need a credit score above 700 to even be considered for this mortgage.","kind":"hit","top3":["skill_cooldown","weekly_boss","starforce_event"],"hit1":false,"hit3":false},
       {"sentence":"직원을 계속 늘려도 공장 생산량은 처음만큼 늘지 않는다.","kind":"hit","top3":["level_exp","boss_entry","sixth_job"],"hit1":true,"hit3":true},
       {"sentence":"주유소가 오늘 하루만 리터당 할인을 크게 해 줘서 차들이 길게 줄을 섰다.","kind":"hit","top3":["level_exp","arcane_force","sixth_job"],"hit1":false,"hit3":false},
@@ -148,7 +148,7 @@
       {"sentence":"영화관은 관객이 적은 평일 아침 상영을 조조할인으로 싸게 판다.","kind":"hit","top3":["limited_menu","market_saturation","loyalty_points"],"hit1":false,"hit3":false},
       {"sentence":"콘서트 굿즈는 준비한 물량이 바닥나면 그날 판매가 끝난다.","kind":"hit","top3":["limited_menu","break_even","model_restaurant"],"hit1":true,"hit3":true},
       {"sentence":"항공 마일리지는 탈 때마다 쌓이고 제휴사에서도 쓸 수 있지만 기한을 넘기면 없어진다.","kind":"hit","top3":["loyalty_points","hygiene_grade","cash_flow_gap"],"hit1":true,"hit3":true},
-      {"sentence":"오픈마켓은 판매자가 물건을 팔 때마다 판매 금액의 일부를 떼어 간다.","kind":"hit","top3":["cash_flow_gap","no_show","kitchen_division"],"hit1":false,"hit3":false},
+      {"sentence":"오픈마켓은 판매자가 물건을 팔 때마다 판매 금액의 일부를 떼어 간다.","kind":"hit","top3":["delivery_fee","cash_flow_gap","no_show"],"hit1":true,"hit3":true},
       {"sentence":"진료 예약을 하고 나타나지 않으면 병원은 그 시간을 다른 환자에게 줄 수 없어 손해를 본다.","kind":"hit","top3":["market_saturation","no_show","hygiene_grade"],"hit1":false,"hit3":true},
       {"sentence":"편의점 직원은 유통기한이 가까운 우유를 진열대 앞줄로 꺼내 놓는다.","kind":"hit","top3":["market_saturation","hygiene_grade","key_money"],"hit1":false,"hit3":false},
       {"sentence":"어린이집은 평가에서 기준 점수를 넘겨야 인증을 받고, 인증 뒤에도 관리 점검을 받는다.","kind":"hit","top3":["key_money","loyalty_points","hygiene_grade"],"hit1":false,"hit3":true},
@@ -168,12 +168,12 @@
     "restaurant/holdout": [
       {"sentence":"썬데이 메이플에는 그날 하루만 경험치와 아이템 드롭 혜택이 커진다.","kind":"hit","top3":["happy_hour","limited_menu","hygiene_inspection"],"hit1":true,"hit3":true},
       {"sentence":"파티 퀘스트에서 한 명은 몬스터를 모으고 다른 사람들은 모인 몬스터를 한꺼번에 처치한다.","kind":"hit","top3":["kitchen_division","loyalty_points","key_money"],"hit1":true,"hit3":true},
-      {"sentence":"The museum shop printed only a small batch of posters, and once they are gone there will be no reprint.","kind":"hit","top3":["delivery_fee","limited_menu","fixed_variable_cost"],"hit1":false,"hit3":true},
+      {"sentence":"The museum shop printed only a small batch of posters, and once they are gone there will be no reprint.","kind":"hit","top3":["limited_menu","fixed_variable_cost","ingredient_cost"],"hit1":true,"hit3":true},
       {"sentence":"도서관 책을 거듭 늦게 반납할수록 대출 정지 기간이 길어진다.","kind":"hit","top3":["hygiene_inspection","lunch_peak","market_saturation"],"hit1":true,"hit3":true},
       {"sentence":"물류 창고는 오래 쌓인 상자부터 내보내고 날짜가 지난 물건은 골라서 버린다.","kind":"hit","top3":["hygiene_inspection","market_saturation","loyalty_points"],"hit1":false,"hit3":false},
       {"sentence":"미용실은 커트와 염색 요금을 손님이 볼 수 있게 가게 안에 붙여 둔다.","kind":"hit","top3":["no_show","lunch_peak","lease_renewal"],"hit1":false,"hit3":false},
       {"sentence":"임대료가 오르자 동네 학원들이 줄줄이 수강료를 인상했다.","kind":"hit","top3":["happy_hour","market_saturation","ingredient_cost"],"hit1":false,"hit3":true},
-      {"sentence":"숙소 예약 사이트는 방이 팔릴 때마다 숙박비의 일정 비율을 호텔에서 수수료로 가져간다.","kind":"hit","top3":["limited_menu","loyalty_points","key_money"],"hit1":false,"hit3":false}
+      {"sentence":"숙소 예약 사이트는 방이 팔릴 때마다 숙박비의 일정 비율을 호텔에서 수수료로 가져간다.","kind":"hit","top3":["delivery_fee","limited_menu","loyalty_points"],"hit1":true,"hit3":true}
     ]
   }
 }

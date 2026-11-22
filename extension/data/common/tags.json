@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.22-4",
+  "version": "2026.11.22-5",
   "note": "추상 태그(통제 어휘, 규칙 9)의 원본. 관심사 그래프(maplestory.json 등)는 노드 tags에 이 id만 적는다. 순서를 바꾸면 임베딩 텍스트와 검색 순위가 바뀐다(T-304, ADR 0012).",
   "tags": [
     { "id": "prob_upgrade", "label": "확률형 강화", "desc": "비용을 내고 시도하면 성공과 실패가 확률로 갈리고, 성공이 쌓일수록 좋아지는 구조",
@@ -41,6 +41,8 @@
     { "id": "fixed_cost_leverage", "label": "고정비 레버리지", "desc": "얼마나 팔든 일정하게 나가는 비용이 있어, 많이 팔수록 하나당 비용이 줄고 적게 팔면 손해가 커지는 구조",
       "examples": ["소프트웨어는 한 번 개발해 두면 쓰는 사람이 늘수록 한 명당 드는 개발비가 작아진다.", "공장은 설비 비용이 그대로 나가서 가동률이 떨어지면 제품 하나에 붙는 비용이 크게 오른다.", "A printing press costs the same to set up, so a larger print run makes each copy cheaper."] },
     { "id": "vendor_lock_in", "label": "공급자 종속", "desc": "한 공급자나 운영자에게 묶여 다른 곳으로 바꾸기 어렵고, 그쪽이 조건과 가격을 정하는 구조",
-      "examples": ["회사 데이터를 한 클라우드에 다 올려 두면 옮기는 비용이 커서 요금이 올라도 계속 쓰게 된다.", "하청 업체는 원청이 정한 곳에서만 부품을 사야 해서 값이 비싸도 다른 곳을 고를 수 없다.", "Printer makers block third-party cartridges, so owners must keep buying the brand's pricey ink."] }
+      "examples": ["회사 데이터를 한 클라우드에 다 올려 두면 옮기는 비용이 커서 요금이 올라도 계속 쓰게 된다.", "하청 업체는 원청이 정한 곳에서만 부품을 사야 해서 값이 비싸도 다른 곳을 고를 수 없다.", "Printer makers block third-party cartridges, so owners must keep buying the brand's pricey ink."] },
+    { "id": "brokerage_fee", "label": "거래 중개 수수료", "desc": "거래를 이어 주는 중개자나 플랫폼이 거래가 성사될 때마다 거래 금액의 일정 몫을 수수료로 떼어 가는 구조",
+      "examples": ["집을 사고팔면 계약을 이어 준 부동산 중개사무소가 거래 금액에 따라 중개 보수를 받는다.", "손님이 카드로 결제할 때마다 카드사는 가게 매출에서 일정 비율을 가맹점 수수료로 뗀다.", "App stores take a cut of every purchase made inside the apps they host."] }
   ]
 }
