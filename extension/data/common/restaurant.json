@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-7",
+  "version": "2026.11.22-8",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -704,6 +704,138 @@
         "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=근로기준법&joLnkStr=제11조&mode=11"
       ],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "franchise_territory",
+      "label": "가맹점 영업지역 보호",
+      "facts": [
+        "가맹본부는 계약할 때 가맹점의 영업지역을 정해 계약서에 적고, 계약 기간에는 그 지역 안에 같은 업종의 직영점이나 다른 가맹점을 내지 못한다.",
+        "본부의 계열회사가 여는 같은 업종 가게도 그 영업지역 안에는 낼 수 없다.",
+        "상권이 크게 바뀌어 영업지역을 바꿔야 할 때도 계약을 갱신하면서 가맹점과 합의해야 한다."
+      ],
+      "tags": [
+        "diminishing_returns"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제12조의4&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "remodel_cost_share",
+      "label": "점포환경개선 비용 분담",
+      "facts": [
+        "가맹본부가 권하거나 요구해서 가맹점 인테리어를 새로 고치면 그 공사비 일부를 본부가 함께 내야 한다.",
+        "본부는 정당한 이유 없이 가맹점에 가게를 새로 고치라고 강요할 수 없다.",
+        "가맹점이 스스로 원해서 고쳤거나 가맹점 잘못으로 생긴 위생·안전 문제 때문에 고친 경우에는 본부가 비용을 나눠 내지 않는다."
+      ],
+      "tags": [
+        "vendor_lock_in"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제12조의2&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "card_fee",
+      "label": "카드 가맹점수수료와 우대수수료",
+      "facts": [
+        "손님이 카드로 결제할 때마다 카드사는 정해진 수수료율만큼 가맹점수수료를 가게에서 떼어 간다.",
+        "규모가 작은 영세·중소 가맹점에는 금융위원회가 정한 낮은 우대수수료율을 적용해야 한다.",
+        "가게는 카드로 계산한다는 이유로 결제를 거절하거나 카드 손님을 불리하게 대우할 수 없다."
+      ],
+      "tags": [
+        "brokerage_fee",
+        "threshold_req"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=여신전문금융업법&joLnkStr=제18조의3&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "card_sales_credit",
+      "label": "신용카드매출세액공제",
+      "facts": [
+        "가게가 카드나 현금영수증으로 판 금액의 일정 비율만큼 부가세를 깎아 주지만, 한 해에 깎아 주는 금액에는 상한이 있다.",
+        "직전 해 매출이 기준을 넘는 개인사업자와 법인은 이 공제를 받지 못한다.",
+        "공제받는 금액은 원래 낼 부가세를 넘을 수 없다."
+      ],
+      "tags": [
+        "periodic_cap",
+        "threshold_req"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=부가가치세법&joLnkStr=제46조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "youth_alcohol",
+      "label": "청소년 주류 제공 금지",
+      "facts": [
+        "음식점은 나이가 기준에 못 미치는 청소년에게 술을 내줄 수 없고, 어기면 영업정지 같은 처분을 받는다.",
+        "청소년이 신분증을 위조하거나 남의 것을 써서 속였거나 폭행·협박 때문에 나이를 확인하지 못한 사정이 인정되면 처분을 면제받을 수 있다.",
+        "청소년 고용이 금지된 업소에 청소년을 고용하는 것도 금지된다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제44조&mode=11",
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제75조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "yellow_umbrella",
+      "label": "소상공인 공제(노란우산)",
+      "facts": [
+        "사장이 공제부금을 내 쌓아 두면, 폐업이나 재난 같은 일이 생겼을 때 공제금을 받아 생활을 버티고 다시 일어설 밑천으로 쓴다.",
+        "공제금을 받을 권리는 남에게 넘기거나 압류하거나 담보로 잡힐 수 없다.",
+        "공제자금은 가입자가 낸 부금과 그 운용 수익으로 모으고, 다른 돈과 따로 관리한다."
+      ],
+      "tags": [
+        "daily_accumulation",
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=중소기업협동조합법&joLnkStr=제115조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "lost_item_liability",
+      "label": "손님 물건 보관 책임",
+      "facts": [
+        "손님이 맡긴 물건이 없어지거나 망가지면, 가게는 보관에 주의를 다했다고 증명하지 못하는 한 물어 줘야 한다.",
+        "책임지지 않는다고 써 붙여 두어도 가게나 직원의 잘못으로 손님 물건이 망가졌다면 책임을 피하지 못한다.",
+        "돈이나 귀중품은 손님이 종류와 값을 알리고 맡긴 경우에만 가게가 책임진다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=1&cciNo=2&cnpClsNo=1"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "origin_label",
+      "label": "원산지 표시",
+      "facts": [
+        "음식점은 고기, 쌀, 배추김치 재료, 정해진 수산물처럼 법이 정한 재료를 쓰면 그 원산지를 손님이 알 수 있게 밝혀야 한다.",
+        "배달로 파는 음식과 손님에게 내려고 수족관에 둔 살아 있는 수산물도 원산지를 밝혀야 한다.",
+        "원산지를 거짓으로 적거나 헷갈리게 적는 것은 금지되고, 표시하지 않으면 과태료를 낸다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=2&cciNo=2&cnpClsNo=1"
+      ],
+      "verifiedAt": "2026-11-22"
     }
   ],
   "edges": [
@@ -841,6 +973,51 @@
       "from": "small_workplace",
       "to": "weekly_hour_cap",
       "rel": "직원 수에 따라 함께 따질 노동 규칙"
+    },
+    {
+      "from": "franchise_territory",
+      "to": "market_saturation",
+      "rel": "같은 브랜드 가게가 한 동네에 몰리는 것을 막음"
+    },
+    {
+      "from": "remodel_cost_share",
+      "to": "required_items",
+      "rel": "같은 가맹본부의 거래 조건 규칙"
+    },
+    {
+      "from": "card_fee",
+      "to": "delivery_fee",
+      "rel": "함께 매출에서 떼이는 수수료"
+    },
+    {
+      "from": "card_sales_credit",
+      "to": "vat_type",
+      "rel": "낼 부가세를 줄여 줌"
+    },
+    {
+      "from": "card_sales_credit",
+      "to": "card_fee",
+      "rel": "같은 카드 매출에 붙는 세금 혜택"
+    },
+    {
+      "from": "youth_alcohol",
+      "to": "restaurant_category",
+      "rel": "술을 파는 업종이 지킬 일"
+    },
+    {
+      "from": "youth_alcohol",
+      "to": "hygiene_inspection",
+      "rel": "어기면 영업정지 처분을 받음"
+    },
+    {
+      "from": "yellow_umbrella",
+      "to": "cash_flow_gap",
+      "rel": "폐업 위기에 버틸 돈을 마련함"
+    },
+    {
+      "from": "origin_label",
+      "to": "price_board",
+      "rel": "함께 손님에게 밝혀야 할 메뉴 정보"
     }
   ]
 }

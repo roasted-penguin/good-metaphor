@@ -6,5 +6,13 @@
   {"sentence": "휴대폰 데이터는 한 달 정해진 양을 다 쓰면 다음 달이 될 때까지 더 쓸 수 없다.", "expectNodes": ["weekly_hour_cap"], "expectTag": "periodic_cap", "since": "T-192", "why": "기간마다 쓸 수 있는 양에 상한이 있고 다음 기간에 다시 찬다 = 주당 근로시간 한도"},
   {"sentence": "회사는 근속 연수가 쌓일수록 안식 휴가 일수를 조금씩 늘려 준다.", "expectNodes": ["annual_leave"], "expectTag": "daily_accumulation", "since": "T-192", "why": "꾸준히 다닐수록 쉬는 날이 쌓이고 늘어난다 = 연차 유급휴가"},
   {"sentence": "군인연금은 복무한 햇수가 길수록 전역 뒤 받는 금액이 커진다.", "expectNodes": ["retirement_pay"], "expectTag": "daily_accumulation", "since": "T-192", "why": "일한 햇수에 비례해 그만둘 때 받는 돈이 쌓인다 = 퇴직금"},
-  {"sentence": "직원 수가 일정 규모를 넘는 회사만 장애인 의무고용 대상이 된다.", "expectNodes": ["small_workplace"], "expectTag": "threshold_req", "since": "T-192", "why": "직원 수 기준을 넘느냐에 따라 지킬 규정이 달라진다 = 작은 사업장의 노동법 적용"}
+  {"sentence": "직원 수가 일정 규모를 넘는 회사만 장애인 의무고용 대상이 된다.", "expectNodes": ["small_workplace"], "expectTag": "threshold_req", "since": "T-192", "why": "직원 수 기준을 넘느냐에 따라 지킬 규정이 달라진다 = 작은 사업장의 노동법 적용"},
+  {"sentence": "통신사 대리점은 계약서에 정한 구역 안에 같은 통신사의 다른 대리점이 새로 들어오지 못하게 보장받는다.", "expectNodes": ["franchise_territory"], "expectTag": "diminishing_returns", "since": "T-192", "why": "정한 구역 안에 같은 공급자의 다른 매장을 못 낸다 = 가맹점 영업지역 보호"},
+  {"sentence": "아파트 관리사무소가 요구해 베란다 공사를 하면 공사비 일부를 관리비로 보태 준다.", "expectNodes": ["remodel_cost_share"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "요구한 쪽이 공사비 일부를 함께 낸다 = 점포환경개선 비용 분담"},
+  {"sentence": "간편결제 회사는 결제가 일어날 때마다 결제 금액의 일정 비율을 가맹점에서 받고, 작은 가게에는 낮은 요율을 매긴다.", "expectNodes": ["card_fee"], "expectTag": "brokerage_fee", "since": "T-192", "why": "결제마다 일정 비율을 떼 가고 작은 곳은 우대한다 = 카드 가맹점수수료"},
+  {"sentence": "기부금은 낸 만큼 세금을 깎아 주지만 한 해에 깎아 주는 금액에는 한도가 있다.", "expectNodes": ["card_sales_credit"], "expectTag": "periodic_cap", "since": "T-192", "why": "비율만큼 깎아 주되 해마다 상한이 있다 = 신용카드매출세액공제"},
+  {"sentence": "편의점은 미성년자에게 담배를 팔면 영업정지를 받지만, 위조 신분증에 속은 경우에는 처분을 면할 수 있다.", "expectNodes": ["youth_alcohol"], "expectTag": "threshold_req", "since": "T-192", "why": "나이 기준 밑의 손님에게 팔 수 없고 속은 경우는 면책 = 청소년 주류 제공 금지"},
+  {"sentence": "프리랜서는 일이 끊길 때를 대비해 매달 조금씩 비상금을 모아 둔다.", "expectNodes": ["yellow_umbrella"], "expectTag": "daily_accumulation", "since": "T-192", "why": "꾸준히 쌓아 두었다가 위기 때 꺼내 쓴다 = 소상공인 공제"},
+  {"sentence": "호텔 프런트에 맡긴 짐이 없어지면 호텔이 물어 줘야 하지만, 귀중품은 미리 알리고 맡겨야 보상받는다.", "expectNodes": ["lost_item_liability"], "expectTag": "loss_risk", "since": "T-192", "why": "맡은 물건이 없어지면 배상하고 귀중품은 알려야 한다 = 손님 물건 보관 책임"},
+  {"sentence": "마트는 수입 소고기와 국산 소고기를 구분해 어느 나라에서 왔는지 진열대에 적어 둔다.", "expectNodes": ["origin_label"], "expectTag": "threshold_req", "since": "T-192", "why": "재료가 어디서 왔는지 손님에게 밝힌다 = 원산지 표시"}
 ]
