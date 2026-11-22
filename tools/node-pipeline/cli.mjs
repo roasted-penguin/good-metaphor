@@ -73,14 +73,26 @@ async function cmdIndex() {
 // maxCalls(T-197): 상한을 넘는 새 호출은 BudgetError(캐시 적중은 상한과 무관)
 function cachedComplete(p, { json = true, maxCalls = Infinity } = {}) {
   const dir = join(WORK, 'cache');
-  let calls = 0, hits = 0;
+  let calls = 0, hits = 0, lastCall = 0;
   const fn = async (system, user) => {
     const key = createHash('sha256').update([p.id, p.model, system, user].join('\u0000')).digest('hex').slice(0, 32);
     const file = join(dir, `llm-${key}.json`);
     if (existsSync(file)) { hits++; return readJson(file).answer; }
     if (calls >= maxCalls) throw new BudgetError();
     calls++;
-    const answer = await providerComplete(p, system, user, { json, timeoutMs: 90_000 });
+    // 분당 한도(T-207): --gap-ms만큼 호출 사이를 띄우고, 429면 --retry-429번까지 기다렸다 다시(하루 한도면 결국 429로 멈춤)
+    const gap = Number(arg('gap-ms', 0));
+    if (gap && lastCall) await new Promise(r => setTimeout(r, Math.max(0, gap - (Date.now() - lastCall))));
+    let answer;
+    for (let tries = Number(arg('retry-429', 0)); ; tries--) {
+      lastCall = Date.now();
+      try { answer = await providerComplete(p, system, user, { json, timeoutMs: 90_000 }); break; }
+      catch (e) {
+        if (e.status !== 429 || tries <= 0) throw e;
+        log('429: 60초 기다렸다 다시 불러요');
+        await new Promise(r => setTimeout(r, 60_000));
+      }
+    }
     writeJson(file, { provider: p.id, model: p.model, at: new Date().toISOString(), answer });
     return answer;
   };

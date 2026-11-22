@@ -27,7 +27,11 @@ const LAW_SUB = /^제\d+절/;
 export const MAPLE_GUIDE_KEYWORDS = [
   '강화', '잠재능력', '큐브', '스타포스', '심볼', '보스', '길드', '경매장', '메소', '파티', '유니온', '링크',
   '전직', '스킬', '퀘스트', '사냥', '경험치', '펫', '코디', '이벤트', '월드', '거래', '교환', '제작',
-  '전문기술', '몬스터파크', '무릉도장', '에픽 던전', '어빌리티', '하이퍼', '헥사', '솔 에르다', '세트', '익스트림'
+  '전문기술', '몬스터파크', '무릉도장', '에픽 던전', '어빌리티', '하이퍼', '헥사', '솔 에르다', '세트', '익스트림',
+  // T-207: 가이드 전체로 넓히기(장비·성장·편의·커뮤니티·꾸미기 영역)
+  '장비', '주문서', '추가옵션', '소울', '엠블렘', '보조무기', '캐릭터', '버닝', '챌린저스', '옥션', '창고', '마일리지',
+  '코인샵', '농장', '몬스터 라이프', '명성', '칭호', '훈장', '라이딩', '데미지 스킨', '룬', '엘리트', '지하수로', '플래그',
+  '노블레스', '보안', '제재', '월드 리프', '성장', '편의', '커뮤니티', '미니룸', '마이스터', '가디언', '테라', '카르마'
 ];
 
 export const INTERESTS = {
@@ -44,7 +48,9 @@ export const INTERESTS = {
       })),
       { kind: 'guide', url: `${MAPLE}/Guide/N23GameInformation`, linkPattern: /^https:\/\/maplestory\.nexon\.com\/guide\/n23gameinformation\/articles\/\d+$/i, paged: false },
       { kind: 'update', url: `${MAPLE}/News/Update?page={page}`, linkPattern: /^https:\/\/maplestory\.nexon\.com\/news\/update\/\d+$/i, stripQuery: true },
-      { kind: 'notice', url: `${MAPLE}/News/Notice?page={page}`, linkPattern: /^https:\/\/maplestory\.nexon\.com\/news\/notice\/\d+$/i, stripQuery: true }
+      // 공지(T-207): 공지 분류만, 점검·오류·이벤트·결과 발표는 빼고 운영정책·월드 리프·보안 같은 제도 글만
+      { kind: 'notice', url: `${MAPLE}/News/Notice/Notice?page={page}`, linkPattern: /^https:\/\/maplestory\.nexon\.com\/news\/notice\/notice\/\d+$/i, stripQuery: true,
+        titleFilter: /운영정책|월드 리프|정책|보안|거래|이용 제한|제재|계정/, titleSkip: /오류|점검|이벤트|테스터|기부|휴무|결과 발표|보상 지급|개인정보/ }
     ],
     seeds: [],
     // 초안 우선순위: 구조 설명이 많은 가이드 → 업데이트(패치 노트) → 공지(점검 안내가 많아 수확이 낮다)
@@ -121,7 +127,19 @@ export const INTERESTS = {
       { kind: 'agency', title: '최저임금위원회 자주 묻는 질문', url: 'https://www.minimumwage.go.kr/customer/faq/list.do' },
       ...[
         ['사업용 신용카드', 2475, 7799], ['현금영수증 발급의무', 2471, 7796], ['신규사업자', 11448, 8817], ['신용카드 결제거부·위장가맹점', 2476, 7800]
-      ].map(([title, mi, id]) => ({ kind: 'agency', title: `국세청 ${title}`, url: `https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=${mi}&cntntsId=${id}` }))
+      ].map(([title, mi, id]) => ({ kind: 'agency', title: `국세청 ${title}`, url: `https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=${mi}&cntntsId=${id}` })),
+      // T-207 씨앗: T-192(손 확장)가 다루는 노동·임대·가맹·카드 영역을 피해 세무 절차·주류 판매·다중이용업소 안전으로 넓힘(2026-11-23 응답 확인)
+      ...[
+        ['국세신고안내', 2224, 7664], ['근로·자녀장려금 신청자격', 2452, 7783], ['세무조사 유예 및 시기선택', 41126, 239081],
+        ['개인사업자 정기조사 선정기준', 41021, 239050], ['체납액 특례제도', 41133, 239088], ['주류시장 진입 완화', 41131, 239086],
+        ['영세납세자지원단', 135739, 109137], ['사업자 차명계좌 신고', 41122, 239077], ['세금계산서 발급의무 위반자 명단공개', 40981, 239041],
+        ['종합소득세 가산세', 2228, 7668], ['성실신고확인제도', 2234, 7672], ['종합소득세 중간예납', 2236, 7673], ['부가가치세 가산세', 2276, 7697]
+      ].map(([title, mi, id]) => ({ kind: 'agency', title: `국세청 ${title}`, url: `https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=${mi}&cntntsId=${id}` })),
+      ...[
+        // 화재배상책임보험 장은 T-192 후보라 남기지 않는다
+        ['다중이용업소의 안전관리에 관한 특별법', /업소의 안전관리|화재위험평가/],
+        ['주류 면허 등에 관한 법률', /판매/]
+      ].map(([name, keep]) => ({ kind: 'law', title: `법령 ${name}`, url: LAW(name.replace(/ /g, '')), keep, keepSub: LAW_SUB, maxSections: 4 }))
     ],
     // 껍데기 페이지 → 실제 본문 주소(T-198). host가 같으면 resolve(html)를 불러 본문을 한 번 더 가져온다
     bodyFrom: [{ host: 'www.law.go.kr', resolve: lawBodyUrl }],
