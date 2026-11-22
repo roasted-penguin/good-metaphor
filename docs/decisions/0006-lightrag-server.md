@@ -29,6 +29,7 @@
 - 워커는 설계대로 `analogy-api` 프로세스 안의 백그라운드 태스크로 돈다. `EXTRACT_OLLAMA_URL`이 있을 때만 켜지고, 작업 디렉터리의 `worker.lock`으로 워커는 하나만 돈다(이미 잡혀 있으면 서버는 워커 없이 뜬다).
 - 큐는 워크스페이스마다 JSON 파일 하나(`extract-queue.json`)이고, 읽고-고치고-쓰는 동안 `extract-queue.lock`을 flock으로 쥔다. 청크 id는 내용 기준이다. `seed --reset`은 큐를 보존해 `done`을 `pending`으로 되돌린다.
 - 클라우드 대체(`EXTRACT_FALLBACK=cloud`)는 사용자 워크스페이스에만, 하루 상한(`EXTRACT_CLOUD_DAILY_CAP`)까지 쓴다. 공통 워크스페이스는 늘 맥만 쓴다.
+- 맥 쪽(T-411, 2026-11-22): launchd 사용자 에이전트 둘(시간창 시작·끝, `infra/mac/`, 시간창은 `window.conf` 한 곳), 환경 변수는 plist에만(`OLLAMA_HOST=127.0.0.1:11434`), 테일넷 노출은 `tailscale serve --tcp 11434`. 정책 `infra/tailscale-policy.json`은 맥 11434를 `tag:rag-server`에만 연다(설계 초안의 내 계정 → 맥 11434 길은 뺐다). 절차는 `infra/README.md`.
 
 ## 관문 측정 (2026-11-22, T-142) — 미달, 상태는 제안 그대로
 EC2(T-401)가 없어 **이 맥의 로컬 Ollama `bge-m3`(127.0.0.1:11434)**로 시드한 서버를 127.0.0.1:8770에 띄워 쟀다. 브라우저 쪽은 같은 시각 실제 크롬 확장(e5-base q8). 자세한 수치는 `docs/EVAL_LOG.md` 2026-11-22 T-142 두 줄.

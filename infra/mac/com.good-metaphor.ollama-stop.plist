@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  시간창 끝: 시작 에이전트(com.good-metaphor.ollama-start)의 Ollama를 끈다(T-411).
+  이 파일은 틀이다. install.sh가 __APP_DIR__·__LOG_DIR__를 바꾸고
+  StartCalendarInterval을 window.conf의 끝 시각으로 채운다.
+  끄는 쪽도 Ollama 환경 변수를 똑같이 둔다(같은 127.0.0.1 주소를 확인한다).
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.good-metaphor.ollama-stop</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>__APP_DIR__/ollama-window.sh</string>
+		<string>stop</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>OLLAMA_HOST</key>
+		<string>127.0.0.1:11434</string>
+		<key>OLLAMA_NUM_PARALLEL</key>
+		<string>1</string>
+		<key>OLLAMA_KEEP_ALIVE</key>
+		<string>5m</string>
+		<key>OLLAMA_CONTEXT_LENGTH</key>
+		<string>16384</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StartCalendarInterval</key>
+	<array/>
+	<key>StandardOutPath</key>
+	<string>__LOG_DIR__/ollama-stop.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOG_DIR__/ollama-stop.log</string>
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>

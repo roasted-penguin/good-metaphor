@@ -190,17 +190,17 @@ IFBench는 Artificial Analysis 값(API, 풀 정밀도 기준). 로컬 Q4는 이�
 **thinking은 실험으로 정한다.** LightRAG는 추출 역할의 thinking을 기본으로 끄고(`EXTRACT_OLLAMA_LLM_THINK=false`), JSON 출력 모드(`ENTITY_EXTRACTION_USE_JSON=true`)를 제공한다. 청크 20개로 네 조합(모델 2 × thinking 켬/끔)을 돌려 파싱 실패율, 청크당 트리플 수, 추상구조 연결 수, 청크당 시간을 비교한다.
 
 ```bash
-# Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다
-launchctl setenv OLLAMA_HOST 127.0.0.1:11434
-launchctl setenv OLLAMA_NUM_PARALLEL 1      # 동시 요청 1개
-launchctl setenv OLLAMA_KEEP_ALIVE 5m       # 끝나면 5분 뒤 메모리에서 내림
-launchctl setenv OLLAMA_CONTEXT_LENGTH 16384
+# Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다(T-411, infra/mac/)
+# 환경 변수는 launchd 에이전트 plist의 EnvironmentVariables에만 둔다(전역 launchctl setenv 안 씀)
+#   OLLAMA_HOST=127.0.0.1:11434  OLLAMA_NUM_PARALLEL=1(동시 요청 1개)
+#   OLLAMA_KEEP_ALIVE=5m(끝나면 5분 뒤 메모리에서 내림)  OLLAMA_CONTEXT_LENGTH=16384
 ollama pull gemma4:12b
-tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434
+infra/mac/install.sh            # 시간창 시작·끝 LaunchAgent 둘(window.conf 한 곳)
+infra/mac/tailscale-serve.sh    # tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434
 ```
 
 - EC2 쪽 추출 인스턴스: `llm_model_max_async=1`, 요청 옵션 `num_ctx=16384`, 타임아웃 600초, `entity_extract_max_gleaning=1`.
-- **운영 시간창**: EC2 워커가 5분마다 테일넷 너머 `GET /api/tags`로 맥을 확인하고, 응답하면 큐를 비운다. 맥에서는 launchd 에이전트가 점심(12:10~13:00)과 밤(23:00~07:00)에만 Ollama를 켜고 `caffeinate -i`로 잠들지 않게 한다. 노트북을 바로 써야 하면 Ollama를 끄면 되고, 워커는 현재 청크를 실패로 표시하고 다음 시간창에 다시 한다.
+- **운영 시간창**: EC2 워커가 5분마다 테일넷 너머 `GET /api/tags`로 맥을 확인하고, 응답하면 큐를 비운다. 맥에서는 launchd 에이전트가 점심(12:10~13:00)과 밤(23:00~07:00)에만 Ollama를 켜고 `caffeinate -i`로 잠들지 않게 한다. 파일은 `infra/mac/`(시간창은 `window.conf` 한 곳, 서버 `EXTRACT_WINDOW`와 같은 형식), 절차는 `infra/README.md`(T-411). 노트북을 바로 써야 하면 Ollama를 끄면 되고, 워커는 현재 청크를 실패로 표시하고 다음 시간창에 다시 한다.
 - **처리량(인상치)**: 청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩이면 메모리 대역폭이 두 배라 더 빠르다. 첫 실험에서 실측.
 - **맥이 오래 꺼져 있을 때**: 관리자 플래그로 추출만 클라우드(Gemini Flash-Lite)로 돌린다. 하루 청크 상한을 두고, 사용자 워크스페이스에만 쓴다.
 - **구현(T-414)**: `server/app/extract_worker.py`. 큐는 워크스페이스 폴더의 `extract-queue.json`(청크 상태 pending·running·done·failed, 원자적 쓰기), 삽입이 끝나야 done이라 맥이 꺼져도 청크를 잃지 않는다. 연결이 끊기면 그 청크를 실패로 두고 창을 멈춘다. `EXTRACT_FALLBACK=cloud`·`EXTRACT_CLOUD_DAILY_CAP`(기본 50). 실제 LightRAG 삽입은 T-421.
@@ -226,13 +226,16 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434
     "tag:llm-node":   ["autogroup:admin"]
   },
   "grants": [
-    { "src": ["tag:rag-server"],  "dst": ["tag:llm-node"],   "ip": ["11434"] },
-    { "src": ["autogroup:admin"], "dst": ["tag:rag-server"], "ip": ["22", "9621"] },
-    { "src": ["autogroup:admin"], "dst": ["tag:llm-node"],   "ip": ["11434"] }
+    { "src": ["tag:rag-server"],  "dst": ["tag:llm-node"],   "ip": ["tcp:11434"] },
+    { "src": ["autogroup:admin"], "dst": ["tag:rag-server"], "ip": ["tcp:22"] }
+  ],
+  "ssh": [
+    { "action": "check", "src": ["autogroup:admin"], "dst": ["tag:rag-server"], "users": ["autogroup:nonroot"] }
   ]
 }
 ```
 
+- 전체 정책(주석·`tests` 포함)은 `infra/tailscale-policy.json`. 맥 11434로 가는 길은 `tag:rag-server` 하나뿐이고, 내 다른 기기에서도 맥 11434에는 못 들어간다(T-411).
 - EC2: 태그 인증 키로 `tailscale up --auth-key=... --advertise-tags=tag:rag-server --ssh`. 보안 그룹 인바운드는 443만.
 - 맥: `tailscale up --advertise-tags=tag:llm-node`. 태그를 붙이면 그 기기는 내 사용자 신원을 잃는다. 맥에서 다른 테일넷 기기를 쓸 일이 있으면 태그 대신 내 계정 기기를 `dst`로 두는 방식을 쓴다.
 - Tailscale 무료 Personal 플랜(사용자 6명, 태그 리소스 50개)은 비상업용이다. 유료화하면 상업 플랜으로 옮긴다.
