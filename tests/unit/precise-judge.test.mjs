@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildAbstractJudgePrompt, buildAbstractPrompt, rewriteQueryText } from '../../extension/lib/prompt.js';
-import { NONE_CHOICE, parseAbstractJudge, judgeTagProbs, tagChoices } from '../../extension/lib/judges.js';
+import { NONE_CHOICE, parseAbstractJudge, judgeTagProbs, judgeSaysNone, isStructureless, tagChoices } from '../../extension/lib/judges.js';
 import { runAbstract, runAnalogy } from '../../extension/lib/pipeline.js';
 import { retrieve } from '../../extension/lib/retrieval.js';
 import { REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
@@ -124,6 +124,39 @@ test('runAbstract: tagJudge가 있으면 같은 한 번의 호출(json true)로 
   assert.equal(r.judge.answers[0].id, 'market_price');
 });
 
+test('judgeSaysNone: 없음이 가장 높은 태그 이상일 때만 참, 판정 없음(null)은 거짓', () => {
+  assert.equal(judgeSaysNone(ans(['none', 1])), true);
+  assert.equal(judgeSaysNone(ans(['none', 0.6], ['a', 0.6])), true);
+  assert.equal(judgeSaysNone(ans(['a', 0.9], ['none', 0.1])), false);
+  assert.equal(judgeSaysNone(ans(['a', 0.9])), false);
+  assert.equal(judgeSaysNone(null), false);
+});
+
+test('runAbstract: 판정이 "구조 없음"이면 원문으로 찾는다(추상 구조는 debug용으로 남김), 태그 가산 없음', async () => {
+  const { ask } = fakeAsk('{"abstract":"이동 중이던 탈것의 부품이 고장 난다","tags":[{"id":"none","p":1}]}');
+  const r = await runAbstract({ sentence: SENT, ask, tagJudge: { tags: TAGS, floor: 0.5 } });
+  assert.equal(r.abstractText, '이동 중이던 탈것의 부품이 고장 난다');
+  assert.equal(r.queryText, SENT);
+  assert.equal(r.judge.none, true);
+  assert.deepEqual(r.judge.probs, []);
+});
+
+test('isStructureless: 판정이 있었는데 쓸 태그가 없을 때만 참(null은 판정 없음이라 거짓)', () => {
+  assert.equal(isStructureless([]), true);
+  assert.equal(isStructureless([{ id: 'a', p: 0.9 }]), false);
+  assert.equal(isStructureless(null), false);
+});
+
+test('runAbstract: 하한을 넘는 태그가 없으면(판정 불확실) 원문으로 찾는다', async () => {
+  const { ask } = fakeAsk('{"abstract":"누적 규모가 클수록 대가가 커진다","tags":[{"id":"scarcity_value","p":0.6},{"id":"none","p":0.3}]}');
+  const low = await runAbstract({ sentence: SENT, ask, tagJudge: { tags: TAGS, floor: 0.7 } });
+  assert.equal(low.queryText, SENT);
+  assert.equal(low.judge.none, true);
+  const ok = await runAbstract({ sentence: SENT, ask, tagJudge: { tags: TAGS, floor: 0.5 } });
+  assert.equal(ok.queryText, rewriteQueryText('누적 규모가 클수록 대가가 커진다', SENT));
+  assert.deepEqual(ok.judge.probs, [{ id: 'scarcity_value', p: 0.6 }]);
+});
+
 test('runAbstract: 판정이 없는 응답(글만)이어도 추상 구조로 검색하고 judge.probs는 null', async () => {
   const { ask } = fakeAsk('가격이 오른다');
   const r = await runAbstract({ sentence: SENT, ask, tagJudge: { tags: TAGS } });
@@ -149,4 +182,22 @@ test('admin.json preciseTagJudge: 정밀 모드 전용 설정, 결합 방식 com
   assert.equal(c.mode, 'combine');
   assert.equal(typeof c.weight, 'number');
   assert.ok(c.floor >= 0 && c.floor <= 1);
+});
+
+// --- 평가 도구: 문장별 1위 변화 (eval-lib.mjs) ---
+import { rank1Changes } from '../../tools/eval-lib.mjs';
+test('rank1Changes: 바뀐 문장만, 일반·음성·비유 없음 문장의 회귀·개선 판정', () => {
+  const cases = [
+    { sentence: 's1', expectNodes: ['a'] },
+    { sentence: 's2', expectNodes: ['a'] },
+    { sentence: 's3', expectNodes: [], forbidNodes: ['x'] },
+    { sentence: 's4', expectNodes: [] },
+    { sentence: 's5', expectNodes: ['a'] }
+  ];
+  const ch = rank1Changes(cases, ['a', 'b', 'y', 'p', 'a'], ['b', 'a', 'x', 'q', 'a']);
+  assert.deepEqual(ch.map(c => c.sentence), ['s1', 's2', 's3', 's4']);
+  assert.deepEqual(ch.map(c => [c.regressed, c.gained]), [[true, false], [false, true], [true, false], [false, false]]);
+  assert.equal(ch[2].kind, 'negative');
+  assert.equal(ch[3].kind, 'noMatch');
+  assert.equal(ch[3].beforeOk, null);
 });

@@ -361,8 +361,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagId: c.tag?.id, tagSim: c.tag?.sim, source: c.source })),
       topTags: tags,
       abstractText,
-      // 정밀 모드 태그 판정(T-184): 하한·없음 적용 뒤 쓴 확률(probs)과 없음 확률. 꺼져 있으면 null
-      tagJudge: judge ? { probs: judge.probs, none: judge.answers?.find(a => a.id === 'none')?.p ?? null } : null,
+      // 정밀 모드 태그 판정(T-184): 하한·없음 적용 뒤 쓴 확률(probs), 없음 확률, 구조 없음 판정(참이면 원문으로 검색). 꺼져 있으면 null
+      tagJudge: judge ? { probs: judge.probs, none: judge.answers?.find(a => a.id === 'none')?.p ?? null, structureless: judge.none } : null,
       embedderId,
       embedderStatus,
       provider: `${answered.id}/${answered.model}`,

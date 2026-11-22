@@ -190,9 +190,24 @@ export function parseAbstractJudge(text, choices) {
  */
 export function judgeTagProbs(answers, { floor = 0 } = {}) {
   if (!answers) return null;
+  if (judgeSaysNone(answers)) return [];
+  return answers.filter(a => a.id !== NONE_CHOICE.id && a.p > 0 && a.p >= floor).map(({ id, p }) => ({ id, p }));
+}
+
+/**
+ * judgeTagProbs 결과가 "구조 없음"인가: 판정은 있었는데(null 아님) 쓸 태그가 하나도 없다
+ * (없음 우세이거나, 하한을 넘는 태그가 없음 = 판정기도 구조를 확신하지 못함). 이때 정밀 모드는 원문으로 검색한다(T-184)
+ */
+export const isStructureless = probs => Array.isArray(probs) && probs.length === 0;
+
+/**
+ * 판정이 "구조 없음"인가: 없음 확률이 0보다 크고 가장 높은 태그 확률 이상. answers가 null이면 false(판정 없음과 구별).
+ * 이때 정밀 모드는 추상 구조를 검색 질의에 섞지 않고 원문으로 찾는다(runAbstract, T-184).
+ * 구조 없는 일상 문장의 추상화("탈것의 부품에 갑작스러운 고장")가 "파괴" 노드로 끌려가는 것을 막는다
+ */
+export function judgeSaysNone(answers) {
+  if (!answers) return false;
   const none = answers.find(a => a.id === NONE_CHOICE.id)?.p || 0;
-  const tags = answers.filter(a => a.id !== NONE_CHOICE.id && a.p > 0);
-  const best = tags.reduce((m, a) => Math.max(m, a.p), 0);
-  if (none > 0 && none >= best) return [];
-  return tags.filter(a => a.p >= floor).map(({ id, p }) => ({ id, p }));
+  const best = answers.reduce((m, a) => (a.id === NONE_CHOICE.id ? m : Math.max(m, a.p || 0)), 0);
+  return none > 0 && none >= best;
 }
