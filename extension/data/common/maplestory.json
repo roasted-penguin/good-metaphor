@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-6",
+  "version": "2026.11.22-7",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -325,6 +325,149 @@
       "tags": ["efficiency_metric"],
       "sources": ["https://maplestory.nexon.com/News/Update/746", "https://maplestory.nexon.com/News/Update/806"],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "additional_option", "label": "추가 옵션과 환생의 불꽃", "aliases": ["추옵", "검환불"], "weakAliases": ["환불"],
+      "facts": [
+        "추가 옵션은 사냥이나 제작으로 얻은 장비에 기본 능력치와 따로 붙는 옵션으로, 환생의 불꽃을 쓰면 다시 정해진다.",
+        "일부 환생의 불꽃은 다시 정해진 옵션과 원래 옵션을 비교해 마음에 드는 쪽을 골라 적용할 수 있다.",
+        "자유롭게 거래되던 장비에 환생의 불꽃을 쓰면 가위 사용 가능 횟수가 생겨 거래 횟수에 제한이 붙는다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/411"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "ability", "label": "어빌리티",
+      "facts": [
+        "어빌리티는 캐릭터 정보창에서 여는 숨은 능력치로, 레어·에픽·유니크·레전드리 등급에 따라 붙는 옵션과 수치가 다르다.",
+        "명성치를 내고 재설정할 때 바꾸고 싶지 않은 옵션을 잠그고 나머지만 다시 돌릴 수 있지만, 잠글수록 한 번에 드는 명성치가 커지고 등급은 오르지 않는다.",
+        "재설정해도 어빌리티 등급은 떨어지지 않는다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/392"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "hyper_stat", "label": "하이퍼 스탯",
+      "facts": [
+        "하이퍼 스탯은 높은 레벨부터 레벨업마다 받는 포인트를 크리티컬·방어율 무시·데미지 같은 능력치에 나눠 투자하는 시스템이다.",
+        "같은 능력치를 높은 단계로 올릴수록 한 단계에 필요한 포인트가 커지고, 높은 레벨 구간일수록 레벨업 때 받는 포인트도 늘어난다.",
+        "메소를 내면 투자한 포인트를 언제든 거둬 다시 나눌 수 있고, 세팅을 프리셋으로 저장해 바꿔 쓸 수 있다."
+      ],
+      "tags": ["escalating_cost"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/386"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "ignore_defense", "label": "방어율 무시", "aliases": ["방무"],
+      "facts": [
+        "방어율 무시는 적의 방어율 일부를 무시하고 피해를 주게 하는 능력치로, 장비·스킬·하이퍼 스탯 등에서 얻는다.",
+        "여러 곳에서 얻은 방어율 무시는 단순히 더해지지 않고 곱하는 방식으로 합쳐진다.",
+        "그래서 이미 방어율 무시가 높을수록 같은 값을 더 얻어도 실제로 오르는 폭은 작아진다.",
+        "하이퍼 스탯, 유니온 아티팩트, 유니온 챔피언 휘장처럼 여러 시스템에서 방어율 무시를 조금씩 올릴 수 있다."
+      ],
+      "tags": ["diminishing_returns"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/390", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/386"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "level_range", "label": "레벨 범위 몬스터",
+      "facts": [
+        "레벨 범위 몬스터는 캐릭터 레벨 기준 위아래 일정 범위 안의 몬스터로, 엘리트 몬스터 등장이나 데일리 기프트 사냥 조건 같은 혜택은 이 몬스터를 잡을 때만 쳐 준다.",
+        "캐릭터와 몬스터의 레벨 차이에 따라 얻는 경험치와 주는 피해가 달라져, 레벨이 비슷한 몬스터를 잡을 때 경험치를 가장 많이 받고 차이가 벌어질수록 줄어든다."
+      ],
+      "tags": ["efficiency_metric", "threshold_req"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/377", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/455", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/448"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "profession", "label": "전문기술과 피로도",
+      "facts": [
+        "전문기술은 약초채집·채광 같은 채집과 장비·장신구 제작, 연금술로 아이템을 직접 만드는 생활 컨텐츠로, 채집 기술을 먼저 배워야 연결된 제작 기술을 배울 수 있다.",
+        "채집이나 제작을 할 때마다 피로도가 쌓이고, 피로도가 한도에 차면 그날은 더 할 수 없으며 매일 자정에 초기화된다.",
+        "직접 만든 아이템을 쓰거나 다른 사람에게 팔 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/379"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "trait", "label": "성향",
+      "facts": [
+        "성향은 카리스마·감성·통찰력·의지·손재주·매력으로 나뉜 캐릭터 능력치로, 레벨이 오를수록 효과가 강해진다.",
+        "보스 사냥, 채집, 아이템 제작처럼 성향마다 경험치를 얻는 활동이 정해져 있다.",
+        "성향 경험치는 하루에 쌓을 수 있는 양에 상한이 있다."
+      ],
+      "tags": ["daily_accumulation"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/382"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "guild_canal", "label": "샤레니안의 지하 수로", "weakAliases": ["수로"],
+      "facts": [
+        "샤레니안의 지하 수로는 길드원이 혼자 들어가 제한 시간 동안 악마 아르카누스에게 준 피해만큼 점수를 얻는 길드 컨텐츠이다.",
+        "길드원 점수를 합쳐 한 주 단위로 다른 길드와 순위를 겨루고, 합이 최소 기준에 못 미치면 순위 구간에 들어도 노블레스 스킬 포인트를 받지 못한다.",
+        "길드원이 탈퇴하거나 추방되면 그 사람이 얻은 점수는 길드 점수에서 빠진다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/391"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "monster_park", "label": "몬스터파크", "aliases": ["몬파"],
+      "facts": [
+        "몬스터파크는 제한 시간 안에 스테이지의 몬스터를 모두 잡아 경험치와 보상을 받는 던전으로, 요일마다 받는 보상이 다르다.",
+        "하루에 클리어할 수 있는 횟수가 정해져 있고, 그중 일부만 무료이며 나머지는 이용권이나 메이플포인트를 내야 한다.",
+        "소탕을 쓰면 한 번 플레이로 여러 번 클리어한 보상을 받을 수 있지만, 하루 횟수를 넘겨 소탕할 수는 없다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/463"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "mureung", "label": "무릉도장", "aliases": ["무릉"],
+      "facts": [
+        "층마다 지키는 몬스터를 쓰러뜨려야 다음 층으로 올라가는 탑으로, 제한 시간 안에 오른 가장 높은 층이 기록으로 남아 다른 플레이어와 순위를 겨룬다.",
+        "무릉도장 안에서는 결계 때문에 원래 힘의 일부만 쓸 수 있고, 하루에 도전할 수 있는 횟수가 정해져 있다.",
+        "도전 기록에 따라 무릉도장 상점에서 쓰는 포인트를 받는다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/468"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "the_seed", "label": "더 시드", "weakAliases": ["시드"],
+      "facts": [
+        "층을 차례로 깨며 올라가는 탑이고, 중간 쉼터 층에서 나가면 다음에 그 층부터 이어서 할 수 있다.",
+        "안에 머물 수 있는 시간이 정해져 있어, 헤이지스톤을 착용해야 더 오래 머문다.",
+        "잠긴 헤이지스톤 슬롯은 특정 층에 도달한 뒤 시드 포인트를 내야 열린다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/464"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "epic_dungeon", "label": "에픽 던전",
+      "facts": [
+        "에픽 던전은 높은 레벨 구간의 성장을 돕는 던전으로, 스테이지를 차례로 깨고 최종 보스까지 처치해야 클리어 보상을 받는다.",
+        "앞 지역의 스토리 퀘스트와 앞 던전의 스토리를 끝내야 다음 던전이 열린다.",
+        "한 주에 넥슨ID당 정해진 수의 캐릭터로만 입장할 수 있고, 같은 캐릭터로 서로 다른 에픽 던전을 깰 수 없다."
+      ],
+      "tags": ["periodic_cap", "progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/470"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "monster_collection", "label": "몬스터 컬렉션",
+      "facts": [
+        "사냥하면 일정 확률로 몬스터가 도감에 수집되고, 몬스터 한 줄을 다 채울 때마다 보상 상자를 받는다.",
+        "같은 월드의 모든 캐릭터가 수집 기록을 함께 쓴다.",
+        "완성한 줄로 탐험을 보내 보상을 받는데, 탐험 시간이 길수록 보상이 좋다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/467"],
+      "verifiedAt": "2026-11-22"
     }
   ],
   "edges": [
@@ -353,6 +496,18 @@
     { "from": "set_effect", "to": "boss_entry", "rel": "보스에 맞는 스펙을 맞추는 데 씀" },
     { "from": "boss_reward_split", "to": "party", "rel": "파티원끼리 보상을 나눔" },
     { "from": "boss_reward_split", "to": "weekly_boss", "rel": "결정석 가격을 인원에 따라 정함" },
-    { "from": "quick_pass", "to": "arcane_symbol", "rel": "일일 퀘스트를 메이플포인트로 대신함" }
+    { "from": "quick_pass", "to": "arcane_symbol", "rel": "일일 퀘스트를 메이플포인트로 대신함" },
+    { "from": "additional_option", "to": "cube", "rel": "잠재능력과 따로 옵션을 다시 뽑음" },
+    { "from": "ability", "to": "cube", "rel": "같은 방식으로 옵션을 무작위로 다시 뽑음" },
+    { "from": "hyper_stat", "to": "level_exp", "rel": "레벨업마다 포인트를 받음" },
+    { "from": "ignore_defense", "to": "boss_entry", "rel": "보스에게 주는 피해를 좌우함" },
+    { "from": "level_range", "to": "hunting", "rel": "사냥터 효율을 정함" },
+    { "from": "profession", "to": "auction", "rel": "만든 아이템을 팔 수 있음" },
+    { "from": "trait", "to": "profession", "rel": "채집·제작으로 성향을 올림" },
+    { "from": "monster_park", "to": "hunting", "rel": "사냥 대신 경험치를 몰아 받음" },
+    { "from": "mureung", "to": "the_seed", "rel": "층을 차례로 오르는 같은 구조" },
+    { "from": "quick_pass", "to": "epic_dungeon", "rel": "에픽 던전을 즉시 완료함" },
+    { "from": "monster_collection", "to": "union_link", "rel": "같은 월드 캐릭터끼리 함께 씀" },
+    { "from": "guild_canal", "to": "party", "rel": "길드원끼리 점수를 모아 다른 길드와 겨룸" }
   ]
 }

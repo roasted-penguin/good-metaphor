@@ -1,0 +1,106 @@
+[
+ {
+  "sentence": "보험 갱신 견적을 다시 받아 보고 새 조건이 나쁘면 기존 조건을 그대로 유지하기로 했다.",
+  "expectNodes": [
+   "additional_option"
+  ],
+  "expectTag": "random_reroll",
+  "since": "T-191"
+ },
+ {
+  "sentence": "마음에 드는 선수 몇 명은 보호 명단에 묶어 두고 나머지만 다시 드래프트하면 비용이 더 든다.",
+  "expectNodes": [
+   "ability"
+  ],
+  "expectTag": "random_reroll",
+  "since": "T-191"
+ },
+ {
+  "sentence": "운동 능력치를 올릴 때 같은 근육만 키우면 갈수록 한 단계 올리는 데 필요한 훈련량이 늘어난다.",
+  "expectNodes": [
+   "hyper_stat"
+  ],
+  "expectTag": "escalating_cost",
+  "since": "T-191"
+ },
+ {
+  "sentence": "할인 쿠폰을 여러 장 겹쳐 써도 할인율이 곱으로 적용돼서 장수를 늘릴수록 추가로 깎이는 금액은 줄어든다.",
+  "expectNodes": [
+   "ignore_defense"
+  ],
+  "expectTag": "diminishing_returns",
+  "since": "T-191"
+ },
+ {
+  "sentence": "자기 실력보다 너무 쉬운 문제집이나 너무 어려운 문제집으로 공부하면 실력이 잘 늘지 않는다.",
+  "expectNodes": [
+   "level_range"
+  ],
+  "expectTag": "efficiency_metric",
+  "since": "T-191"
+ },
+ {
+  "sentence": "공장 기계는 하루 가동 시간이 정해져 있어 한도를 넘기면 다음 날 자정까지 멈춰 둬야 한다.",
+  "expectNodes": [
+   "profession"
+  ],
+  "expectTag": "periodic_cap",
+  "since": "T-191"
+ },
+ {
+  "sentence": "피아노 연습은 하루에 몰아서 열 시간 하는 것보다 매일 조금씩 하는 게 실력이 는다.",
+  "expectNodes": [
+   "trait"
+  ],
+  "expectTag": "daily_accumulation",
+  "since": "T-191"
+ },
+ {
+  "sentence": "지점별 직원 매출을 합산해 지점 순위를 매기는데, 합계가 최소 기준에 못 미치면 순위와 상관없이 포상이 없다.",
+  "expectNodes": [
+   "guild_canal"
+  ],
+  "expectTag": "threshold_req",
+  "since": "T-191"
+ },
+ {
+  "sentence": "헬스장 일일권은 하루 두 번까지 무료이고 그 뒤로는 돈을 내야 들어갈 수 있다.",
+  "expectNodes": [
+   "monster_park"
+  ],
+  "expectTag": "periodic_cap",
+  "since": "T-191"
+ },
+ {
+  "sentence": "등반 대회는 제한 시간 안에 가장 높이 오른 기록으로 순위를 매긴다.",
+  "expectNodes": [
+   "mureung"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "온라인 강의는 단원을 차례로 끝내야 다음 단원이 열리고, 중간 체크포인트에서 멈추면 다음에 그곳부터 이어 들을 수 있다.",
+  "expectNodes": [
+   "the_seed"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "이 교육 과정은 한 주에 계정당 정해진 인원만 수강할 수 있고, 앞 과정을 끝내야 다음 과정이 열린다.",
+  "expectNodes": [
+   "epic_dungeon"
+  ],
+  "expectTag": "periodic_cap",
+  "since": "T-191"
+ },
+ {
+  "sentence": "가족 공유 도장판은 가족 누구든 찍은 도장이 함께 쌓여서 여러 명이 하면 더 빨리 채운다.",
+  "expectNodes": [
+   "monster_collection"
+  ],
+  "expectTag": "shared_bonus",
+  "since": "T-191"
+ }
+]

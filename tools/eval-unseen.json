@@ -8,7 +8,7 @@
   { "sentence": "수영 강습은 초급반 수료증이 있어야 중급반에 등록할 수 있다.", "expectNodes": ["sixth_job", "boss_entry", "arcane_force"], "expectTag": "progression_gate", "since": "T-150" },
   { "sentence": "토익 700점이 안 되면 이 회사 서류 전형에 지원조차 할 수 없다.", "expectNodes": ["boss_entry", "arcane_force", "sixth_job"], "expectTag": "threshold_req", "since": "T-150" },
   { "sentence": "명절 직전에는 과일을 찾는 사람이 몰려 사과 한 상자 값이 평소의 두 배가 된다.", "expectNodes": ["auction"], "expectTag": "market_price", "group": "finance", "since": "T-150" },
-  { "sentence": "외국어 단어는 하루 스무 개씩 매일 외워야 머리에 남고, 시험 전날 몰아 외우면 금방 잊는다.", "expectNodes": ["arcane_symbol", "sol_erda"], "expectTag": "daily_accumulation", "since": "T-150" },
+  { "sentence": "외국어 단어는 하루 스무 개씩 매일 외워야 머리에 남고, 시험 전날 몰아 외우면 금방 잊는다.", "expectNodes": ["arcane_symbol", "sol_erda", "trait"], "expectTag": "daily_accumulation", "since": "T-150" },
   { "sentence": "경품 응모권은 한 장에 오천 원인데 당첨 확률과 상품 값을 곱하면 천 원어치도 안 된다.", "expectNodes": ["cube", "starforce", "starforce_event"], "expectTag": "expected_value", "group": "finance", "since": "T-150" },
   { "sentence": "논문은 투고할 때마다 실릴 수도 떨어질 수도 있지만, 좋은 저널에 실릴수록 경력이 한 단계씩 올라간다.", "expectNodes": ["starforce", "cube"], "expectTag": "prob_upgrade", "since": "T-150" },
   { "sentence": "한 게임 회사 계정으로 쌓은 등급이 같은 회사의 다른 게임에서도 혜택으로 이어진다.", "expectNodes": ["union_link"], "expectTag": "shared_bonus", "since": "T-150" },

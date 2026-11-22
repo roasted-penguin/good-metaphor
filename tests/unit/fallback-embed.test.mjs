@@ -62,7 +62,10 @@ function top1(interest, sentence) {
   const vecs = new Map(embedItems(graph, admin.retrieval).map(it => [it.key, hashEmbed(it.text)]));
   return retrieve(hashEmbed(sentence), graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: 3, aliasText: sentence })[0].id;
 }
-const GATE = ['sixth_job', 'boss_entry', 'arcane_force'];
+const GATE = ['sixth_job', 'boss_entry', 'arcane_force',
+  // T-191 대안 정답: progression_gate 태그이고 facts가 "앞 단계를 끝내야 다음 단계가 열린다"를 설명하는 확장 노드.
+  // 대체 임베더(글자 n-gram)는 태그 하나짜리 노드에 태그 설명 글자가 몰려 이쪽이 1위가 되기 쉽다. item_binding 같은 엉뚱한 노드만 막는다
+  'the_seed'];
 
 test('관문 문장을 item_binding에 뺏기지 않는다', () => {
   for (const s of ['운전면허 필기에 합격해야 도로주행 시험을 볼 수 있다.', '팀장이 되어야 결재 권한이 생기고, 그다음에야 예산 회의에 들어갈 수 있다.']) {
