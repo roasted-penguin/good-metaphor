@@ -217,6 +217,14 @@ test('끝맺음: 고친 답이 후보 밖 nodeId면 규칙 1로 숨긴다(검증
   assert.equal(r.chosen, null);
 });
 
+test('끝맺음: 규칙 1로 숨겨질 비유(후보 밖 nodeId)의 끝맺음은 보지 않는다(헛 호출 없음)', async () => {
+  const { ask, calls } = seqAsk(JSON.stringify({ ...FORMAL, nodeId: null }));
+  const r = await runAnalogy(base({ ask }));
+  assert.equal(calls.length, 1);
+  assert.deepEqual(r.ending, { ok: true, retried: false, issues: [] });
+  assert.equal(r.rejected, REJECTED_TEXT);
+});
+
 test('끝맺음: 데모 제공자는 검사하지 않는다', async () => {
   const r = await runAnalogy(base({ providerKind: 'demo', ask: async () => '' }));
   assert.equal(r.ending, null);

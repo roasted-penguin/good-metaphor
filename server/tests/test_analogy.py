@@ -127,6 +127,10 @@ def test_ending_is_marked_not_retried():
     assert bad["debug"]["ending"] == {"ok": False, "retried": False,
                                       "issues": [{"field": "analogy", "style": "formal"}]}
     assert bad["debug"]["grounding"] == {"ok": True}
+    # 규칙 1로 숨겨질 비유의 끝맺음은 보지 않는다
+    hidden = _post(client, "끝맺음테스트 Leverage magnifies both gains and losses.").json()
+    assert hidden["rejected"] == REJECTED
+    assert hidden["debug"]["ending"] == {"ok": True, "retried": False, "issues": []}
 
 
 def test_number_outside_facts_hides_analogy():
