@@ -46,3 +46,23 @@ cpSync(OUT, SERVER_OUT, { recursive: true });
 writeFileSync(`${SERVER_OUT}/config/admin.json`, JSON.stringify({ ...admin, analogyServer: { url: 'http://127.0.0.1:8767', timeoutMs: 800, cooldownMs: 8000, cooldownMaxMs: 16000 } }, null, 2));
 writeFileSync(`${SERVER_OUT}/manifest.json`, JSON.stringify({ ...manifest, host_permissions: [...manifest.host_permissions, 'http://127.0.0.1:8767/*'] }, null, 2));
 console.log('prepared', OUT, SERVER_OUT);
+
+// 미리 계산 벡터 사본(T-193): 대체 임베더 id로 만든 벡터 파일을 넣는다(실제 동봉 파일은 실제 모델 id라 대체 임베더 사본에서는 안 맞는다).
+// 메이플 파일에서는 한 항목을 일부러 빼서 "파일에 없는 텍스트만 런타임 임베딩"을 본다(VEC_DROPPED)
+const { mergeGraphs, embedItems, COMMON_INTERESTS } = await import('../extension/lib/graph.js');
+const { hashEmbed, FALLBACK_ID } = await import('../extension/lib/fallback-embed.js');
+const { buildVectorFile, precomputedPath } = await import('../extension/lib/precomputed-vectors.js');
+const { loadInterestGraph } = await import('../tools/load-graph.mjs');
+const { createHash } = await import('node:crypto');
+const { mkdirSync } = await import('node:fs');
+const VEC_OUT = '.tmp/ext-e2e-vectors';
+rmSync(VEC_OUT, { recursive: true, force: true });
+cpSync(OUT, VEC_OUT, { recursive: true });
+mkdirSync(`${VEC_OUT}/data/vectors`, { recursive: true });
+for (const { id } of COMMON_INTERESTS) {
+  const items = embedItems(mergeGraphs(loadInterestGraph(id), null), admin.retrieval);
+  let entries = items.map(it => ({ hash: createHash('sha1').update(it.text, 'utf8').digest('hex'), vector: hashEmbed((admin.embedding.passagePrefix ?? '') + it.text) }));
+  if (id === 'maplestory') entries = entries.slice(1); // VEC_DROPPED = 1
+  writeFileSync(`${VEC_OUT}/${precomputedPath(id)}`, JSON.stringify(buildVectorFile({ interest: id, embedderId: FALLBACK_ID, passagePrefix: admin.embedding.passagePrefix ?? '', entries })));
+}
+console.log('prepared', VEC_OUT);
