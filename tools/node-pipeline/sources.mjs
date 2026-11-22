@@ -63,8 +63,9 @@ export const INTERESTS = {
     kindOrder: ['guide', 'update', 'notice'],
     // 절 나누기(T-195)에서 건너뛸 절 제목: 금방 사라지는 이벤트·일정·보상, 오류 수정 목록, 댓글·메뉴. LLM 호출을 아낀다
     sectionSkip: /이벤트|버닝|패스|PC방|미니게임|쿠폰|점검|선착순|접속 보상|댓글|오류 수정|^캐시(샵)?$|^뉴스$|일정|기간|보상 안내|스킬 수정 사항/,
-    // 초안에서 뺄 페이지 제목: 스킬 수치 조정 패치(2026-11-22 묶음 4에서 절 6개 → 후보 0)
-    pageSkip: /스킬 조정/,
+    // 초안에서 뺄 페이지 제목: 스킬 수치 조정만 있는 패치(2026-11-22 묶음 4에서 절 6개 → 후보 0), 서버 점검, 기간 한정 보안 캠페인.
+    // T-211: "(솔 헤카테, 스킬 조정)"처럼 괄호 안에 콘텐츠 이름이 함께 있으면 초안한다(스킬 절은 sectionSkip이 거름)
+    pageSkip: /\((스킬 조정|스킬 수정 사항)\)\s*$|서버\s?점검|보안\s?캠페인/,
     content: [
       { path: /^\/guide\//i, start: 'class="cv_main"', end: 'class="cv_footer"' },
       { path: /^\/news\//i, start: 'class="new_board_con"', end: 'id="footer"' }
