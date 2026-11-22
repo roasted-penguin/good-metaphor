@@ -46,7 +46,11 @@ function mockLLM(req, res) {
     }
     let content;
     if (system.includes('개념 노드 목록으로 정리')) content = '초안이에요.\n```json\n' + JSON.stringify({ nodes: DRAFT_NODES }) + '\n```';
-    else if (system.includes('추상 구조로')) content = user.includes('금칙추상테스트') ? `${BLOCKED_IN_ANALOGY} 처럼 비용을 내고 시도하는 구조` : '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
+    else if (system.includes('추상 구조로')) {
+      const abstract = user.includes('금칙추상테스트') ? `${BLOCKED_IN_ANALOGY} 처럼 비용을 내고 시도하는 구조` : '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
+      // 정밀 모드 태그 판정이 켜져 있으면(T-184) 같은 호출이 JSON으로 추상 구조와 태그 확률을 함께 돌려준다
+      content = system.includes('"tags"') ? JSON.stringify({ abstract, tags: [{ id: 'prob_upgrade', p: 0.9 }, { id: 'none', p: 0.05 }] }) : abstract;
+    }
     else if (user.includes('연결 성공')) content = '연결 성공';
     else {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);

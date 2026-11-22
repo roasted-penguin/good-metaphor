@@ -24,6 +24,10 @@
 //        [--judge-weight 0.05]         # 함께(combine)의 가중치: 태그 점수 = 유사도 − 감점 + w·p
 //        [--rpm 10]                    # 판정 분당 요청 수(새로 물을 때만). 결과는 .tmp/judge-<id>-<모델>.json 캐시(다시 돌려도 호출 안 함)
 //                                      # jev는 키(JEV_API_KEY)와 API 문서가 아직 없어 멈춘다
+//   npm run eval -- --judge precise    # 정밀 모드 합침(T-184): 추상화+태그 판정 한 번의 호출(확장 runAbstract와 같은 프롬프트, Gemini)을
+//                                      # .tmp/judge-precise-<모델>.json에 캐시하고, 임베딩만 / 정밀(판정 없음) / 정밀+판정을 문장별 1위 변화와 함께 비교
+//        [--judge-floor 0.7]           # 판정 확률 하한(기본 admin.preciseTagJudge.floor). --judge-weight 기본은 admin.preciseTagJudge.weight
+//        [--judge-sweep]               # 하한 후보별 한 줄 요약(하한은 검증셋·가드로 고른다, 홀드아웃으로 고르지 않는다)
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadInterestGraph, interestFromArgv } from './load-graph.mjs';
@@ -32,11 +36,11 @@ import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { embedEach } from '../extension/lib/embed-each.js';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
-import { scoreCases, mixedSetting, regressions, latencyStats, rank1Regressions, rank1Gains, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
+import { scoreCases, mixedSetting, regressions, latencyStats, rank1Regressions, rank1Gains, rank1Changes, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
-import { loadJudgeResults } from './eval-judge.mjs';
-import { topChoice } from '../extension/lib/judges.js';
+import { loadJudgeResults, loadPreciseJudgeResults } from './eval-judge.mjs';
+import { topChoice, judgeTagProbs, judgeSaysNone, isStructureless, NONE_CHOICE } from '../extension/lib/judges.js';
 import { rankAllViaServer, gateLine, serverEmbedderLabel, rewriteIdFromArgv, ServerUnavailable } from './eval-server.mjs';
 
 const here = new URL('.', import.meta.url);
@@ -128,11 +132,15 @@ const queryModes = rewrites ? [['원문', null], ['정밀(추상+원문)', 'prec
 
 // 판정기 (T-120). 원문 질의에만 쓴다. 캐시가 있으면 호출하지 않는다. 크롬을 띄우기 전에 물어 둔다(긴 대기 중 확장이 잠들지 않게)
 const judgeId = argAfter('--judge');
-const judgeWeight = Number(argAfter('--judge-weight')) || 0.05;
+const precise = judgeId === 'precise'; // T-184: 정밀 모드 합침 응답
+const ptj = admin.preciseTagJudge || {};
+const judgeWeight = Number(argAfter('--judge-weight')) || (precise ? ptj.weight : 0) || 0.05;
+const judgeFloor = argAfter('--judge-floor') !== null ? Number(argAfter('--judge-floor')) : (ptj.floor ?? 0);
 let judged = null;
 if (judgeId && !serverOnly) {
   try {
-    judged = await loadJudgeResults({ judgeId, cases: sets.flatMap(x => x.cases), graph: mergeGraphs(common, null), admin, rpm: Number(argAfter('--rpm')) || 10 });
+    const args = { cases: sets.flatMap(x => x.cases), graph: mergeGraphs(common, null), admin, rpm: Number(argAfter('--rpm')) || 10 };
+    judged = precise ? await loadPreciseJudgeResults(args) : await loadJudgeResults({ judgeId, ...args });
   } catch (e) {
     console.log(`판정기 ${judgeId}를 쓸 수 없어요: ${e.message}`);
     process.exit(1);
@@ -225,6 +233,50 @@ function printJudge(name, cases, qs, mixedResult, guarded) {
   console.log(`  판정 지연 ${st ? `중앙값 ${st.median}ms · p90 ${st.p90}ms (${st.n}문장, 처음 호출 때 잰 값)` : '없음'}${fails ? ` · 판정 실패 ${fails}` : ''}`);
 }
 
+// 정밀 모드 합침 줄 (T-184): 임베딩만(원문 질의) / 정밀(합침 응답의 추상 구조 + 원문, 판정 없음) / 정밀 + 판정(combine, 하한·없음 적용,
+// "구조 없음"(없음 우세·하한 넘는 태그 없음)이면 원문 질의).
+// 1위 회귀는 임베딩만 기준과 정밀(판정 없음) 기준 둘 다. 문장별 1위 변화는 임베딩만 기준으로 모두 찍는다
+async function printPrecise(name, cases, qs, guarded) {
+  const res = c => judged.results.get(c.sentence) || {};
+  const qsP = await embed(cases.map(c => rewriteQueryText(res(c).abstract, c.sentence)), 'query');
+  const { topK, name: _n, ...base } = mixedSetting(admin, graph);
+  const ranker = (vecsOf, tj) => (c, i) => retrieve(vecsOf[i], graph, vecs, { ...base, topK: graph.nodes.length, aliasText: c.sentence, tagJudge: tj ? tj(c) : null }).map(x => ({ id: x.id, score: x.score }));
+  const judgeOf = floor => c => { const p = judgeTagProbs(res(c).answers, { floor }); return p?.length ? { p, mode: 'combine', weight: judgeWeight } : null; };
+  const top1s = rank => cases.map((c, i) => rank(c, i)[0]?.id);
+  // 정밀+판정의 질의: 판정이 "구조 없음"(없음 우세·하한 넘는 태그 없음)이면 원문 벡터(확장 runAbstract와 같다), 아니면 추상 구조 + 원문
+  const qsJ = floor => cases.map((c, i) => (isStructureless(judgeTagProbs(res(c).answers, { floor })) ? qs[i] : qsP[i]));
+  const rankE = ranker(qs), rankP = ranker(qsP);
+  const rE = scoreCases(cases, rankE), rP = scoreCases(cases, rankP);
+  const tE = top1s(rankE), tP = top1s(rankP);
+  console.log(`\n[${name} · ${judged.label} · 하한 ${judgeFloor} · w=${judgeWeight}]`);
+  const tagged = cases.filter(c => c.expectTag);
+  const tagTop = c => topChoice((res(c).answers || []).filter(a => a.id !== NONE_CHOICE.id));
+  console.log(`  판정 태그 top-1: ${pct(tagged.filter(c => tagTop(c) === c.expectTag).length, tagged.length)} · "없음" 우세 ${cases.filter(c => judgeSaysNone(res(c).answers)).length}문장 · 하한 ${judgeFloor}에서 원문 질의 ${cases.filter(c => isStructureless(judgeTagProbs(res(c).answers, { floor: judgeFloor }))).length}문장 · 판정 빠짐 ${cases.filter(c => !res(c).answers).length}`);
+  const negLine = r => r.negative.n ? `  음성 ${r.negative.pass}/${r.negative.n}` : '';
+  const guardLine = r => guarded ? `  가드 놓침 ${regressions(guard, r).length}` : '';
+  const summary = (label, r, t) => {
+    const chE = rank1Changes(cases, tE, t), chP = rank1Changes(cases, tP, t);
+    const n = (ch, k) => ch.filter(x => x[k]).length;
+    return `${pctLine(label, r)}${negLine(r)}${guardLine(r)}  | 임베딩만 대비 회귀 ${n(chE, 'regressed')} 개선 ${n(chE, 'gained')} | 정밀 대비 회귀 ${n(chP, 'regressed')} 개선 ${n(chP, 'gained')}`;
+  };
+  console.log(summary('임베딩만', rE, tE));
+  console.log(summary('정밀(판정 없음)', rP, tP));
+  const floors = process.argv.includes('--judge-sweep') ? [0, 0.5, 0.6, 0.7, 0.8, 0.9] : [judgeFloor];
+  for (const f of floors) {
+    const rankJ = ranker(qsJ(f), judgeOf(f));
+    const rJ = scoreCases(cases, rankJ), tJ = top1s(rankJ);
+    console.log(summary(`정밀+판정 하한 ${f}`, rJ, tJ));
+    if (f !== judgeFloor) continue;
+    // 원문 질의 + 같은 판정(정밀 질의 효과와 판정 효과를 나눠 보기)
+    const rankOJ = ranker(qs, judgeOf(f));
+    console.log(summary(`원문+판정 하한 ${f}`, scoreCases(cases, rankOJ), top1s(rankOJ)));
+    const mark = ok => (ok === null ? '·' : ok ? '✓' : '✗');
+    for (const x of rank1Changes(cases, tE, tJ)) console.log(`    ${x.regressed ? '⚠ 회귀' : x.gained ? '+ 개선' : '  변화'} ${x.sentence.slice(0, 40)}… ${x.before}${mark(x.beforeOk)} → ${x.after}${mark(x.afterOk)}`);
+  }
+  const st = latencyStats(cases.map(c => res(c).ms));
+  console.log(`  합침 호출 지연 ${st ? `중앙값 ${st.median}ms · p90 ${st.p90}ms (${st.n}문장, 처음 호출 때 잰 값)` : '없음'}`);
+}
+
 if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, cases, guarded } of sets) {
   const qs = await embed(cases.map(c => mode ? rewriteQueryText(rewrites[c.sentence], c.sentence, mode) : c.sentence), 'query');
   console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${embedderLabel}\n`);
@@ -259,7 +311,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
   const tagged = cases.filter(c => c.expectTag);
   cases.forEach((c, i) => { if (c.expectTag && topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
   console.log(`\n추상 태그 top-1 정확도: ${pct(t1, tagged.length)}`);
-  if (judged && !mode) printJudge(name, cases, qs, mixedResult, guarded);
+  if (judged && !mode) await (precise ? printPrecise(name, cases, qs, guarded) : printJudge(name, cases, qs, mixedResult, guarded));
   // 여유 작은 맞힌 문장 (혼합 설정, -v와 상관없이). 기존 줄 뒤에 덧붙이기만 한다
   console.log(lowMarginLines(lowMargins(margins, marginMin), marginMin).join('\n'));
   if (guarded && !mode) marginGuardFailed.push(...marginGuardFails(guard, margins, marginMin));
