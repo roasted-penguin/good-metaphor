@@ -104,7 +104,10 @@ async function readSSE(body, onData) {
     if (!line.startsWith('data:')) return;
     const payload = line.slice(5).trim();
     if (!payload || payload === '[DONE]') return;
-    try { onData(JSON.parse(payload)); } catch {}
+    let data;
+    try { data = JSON.parse(payload); } catch { return; }
+    // onData 가 던지는 오류(스트림 도중 error 이벤트, T-188)는 삼키지 않고 위로 올린다
+    onData(data);
   };
   for (;;) {
     const { value, done } = await reader.read();
@@ -162,7 +165,8 @@ async function postJSON(url, headers, body, { timeoutMs = 30000, stats, onData, 
       return await postOnce(url, headers, body, Math.max(1, deadline - Date.now()), onData);
     } catch (e) {
       // 다음 순서 모델이 있으면(fallback 체인) 429는 기다리지 않고 바로 넘긴다
-      const retryable = e.network || (RETRYABLE.has(e.status) && !(noRetry429 && e.status === 429));
+      // 스트림 도중 끊긴 오류(midStream)는 앞부분을 이미 보냈으니 같은 곳에 다시 보내지 않는다(T-188)
+      const retryable = !e.midStream && (e.network || (RETRYABLE.has(e.status) && !(noRetry429 && e.status === 429)));
       if (!retryable || attempt >= retryPolicy.delays.length) throw e;
       const base = retryPolicy.delays[attempt];
       let wait = base + base * retryPolicy.jitter * Math.random();
@@ -236,6 +240,17 @@ const KINDS = {
   }
 };
 
+// 스트림 도중 온 error 이벤트(Gemini {"error":{"code":503,...}}, OpenAI 호환·Anthropic {"error":{"message"}})를
+// 오류로 바꾼다. 예전엔 조각으로 보고 무시해 잘린 JSON을 돌려줬다(T-188). 숫자 코드(503·429)는 status 로 넘겨
+// fallback 체인이 다음 순서로 넘기게 하고, 같은 제공자에는 다시 보내지 않는다(midStream)
+function streamError(error) {
+  const code = Number(error.code);
+  const status = Number.isInteger(code) && code >= 400 && code < 600 ? code : 0;
+  const err = new ProviderError(`응답이 중간에 끊겼어요: ${status || ''} ${error.message || error.status || error.type || ''}`.replace(/\s+/g, ' ').trim(), status);
+  err.midStream = true;
+  return err;
+}
+
 async function send(kind, req, opts, stream) {
   // opts.timeoutMs: 긴 답(AI 초안, T-301)만 늘린다. 없으면 postJSON 기본값
   if (!stream) return kind.text(await postJSON(req.url, req.headers, req.body, { stats: opts.stats, noRetry429: opts.noRetry429, timeoutMs: opts.timeoutMs }));
@@ -244,7 +259,10 @@ async function send(kind, req, opts, stream) {
     stats: opts.stats,
     noRetry429: opts.noRetry429,
     timeoutMs: opts.timeoutMs,
-    onData: d => { const piece = kind.chunk(d); if (piece) { acc += piece; opts.onText(acc); } }
+    onData: d => {
+      if (d?.error) throw streamError(d.error);
+      const piece = kind.chunk(d); if (piece) { acc += piece; opts.onText(acc); }
+    }
   });
   return acc;
 }
