@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.23-3",
+  "version": "2026.11.23-4",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -1114,6 +1114,244 @@
       "tags": ["periodic_cap"],
       "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/389"],
       "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "level_up_reward", "label": "레벨업 보상",
+      "facts": [
+        "캐릭터 레벨이 오를 때마다 능력치를 직접 찍는 AP와 스킬을 강화하는 SP를 획득한다.",
+        "특정 레벨 구간에 도달하면 하이퍼 스탯이나 하이퍼 스킬과 같은 고성능 성장 요소를 해금한다.",
+        "아주 높은 레벨에 이른 뒤에는 레벨이 오를 때마다 V 매트릭스 슬롯을 강화할 수 있는 전용 포인트를 얻는다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/377"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "treasure_hunter", "label": "트레져 헌터",
+      "facts": [
+        "개인화된 사냥 필드에서 몬스터를 처치하다 보면 일정 확률로 경험치를 주는 트레져 박스가 생성된다.",
+        "트레져 박스는 캐릭터별로 하루에 등장할 수 있는 횟수에 제한이 있다.",
+        "박스를 공격하여 파괴하면 캐릭터 레벨에 맞는 경험치를 즉시 획득한다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/588"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "exploration_coin", "label": "탐험 코인",
+      "facts": [
+        "게임 플레이를 통해 얻을 수 있는 재화로, 전용 상점에서 각종 아이템을 구매하는 데 사용된다.",
+        "넥슨ID 단위로 공유되는 자산이며, 넥슨ID당 매월 정해진 최대 개수까지만 획득할 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/149093"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "remote_play_limit", "label": "넥슨링크 사냥 제한",
+      "facts": [
+        "넥슨링크를 이용해 몬스터를 사냥하면 메이플ID당 하루에 일정 마릿수까지만 정상적으로 경험치와 아이템을 획득할 수 있다.",
+        "제한 마릿수를 초과하면 필드 사냥 시 경험치와 드롭률이 대폭 감소하고 개인화 필드에서 몬스터가 등장하지 않는다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/675"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "reverse_dimension_tower_progression", "label": "리버스 차원의 탑 스테이지 해금",
+      "facts": [
+        "앞 스테이지를 완료해야 다음 스테이지에 도전할 수 있는 단계적 구조를 가진다.",
+        "기존 차원의 탑 기록이 있거나 특정 훈장을 보유한 캐릭터는 예외적으로 뒤 스테이지에 바로 입장할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/804"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "jupiter_boss_entry", "label": "신규 보스 유피테르 입장 조건",
+      "facts": [
+        "특정 지역의 후일담 퀘스트를 완료해야 하며, 일정 레벨 이상인 캐릭터만 보스에 입장할 수 있다.",
+        "보스전은 정해진 지역 내 입구를 통해 진입하며, 난이도에 따라 입장 가능한 시점이 다를 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "destiny_transcendence_2nd", "label": "데스티니 2차 초월",
+      "facts": [
+        "데스티니 1차 초월 무기를 특정 결전 퀘스트를 완료하여 더 높은 등급의 2차 초월 무기로 강화할 수 있다.",
+        "결전 퀘스트를 수행하려면 특정 보스 몬스터를 처치하여 대적자의 결의를 모아야 한다.",
+        "2차 초월 무기는 이전 무기의 잠재능력, 추가 옵션, 스타포스 강화 수치 등을 전승받으며, 착용 레벨 제한이 상승하고 추가 강화가 제한된다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "guild_castle_altar", "label": "강화의 제단",
+      "facts": [
+        "일정 레벨 이상의 길드 캐슬에서 이용 가능하며, 여기서 진행하는 스타포스 강화 현황이 길드원에게 공유된다.",
+        "이용하려면 길드원 여러 명이 제단 필드에 함께 있어야 하며, 하루 이용 횟수와 제한 시간이 정해져 있다."
+      ],
+      "tags": ["periodic_cap", "threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "guild_skill_system", "label": "길드 스킬", "aliases": ["길스"],
+      "facts": [
+        "길드 레벨이 오를 때마다 단계적으로 새로운 패시브 또는 액티브 스킬이 해금되는 구조를 가지고 있다.",
+        "일부 스킬은 스탯 상승, 경험치 획득 증가, 장비 강화 성공률 보정 등 캐릭터 성장에 직접적인 도움을 준다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "maple_hands_search_limit", "label": "메이플핸즈 옥션 검색 제한",
+      "facts": [
+        "메이플핸즈+ 애플리케이션 내의 메이플 옥션 기능을 통한 아이템 검색 횟수는 메이플ID 단위로 하루에 정해진 상한이 존재한다.",
+        "해당 기능 사용 시 검색 횟수가 제한치에 도달하면 당일 추가 검색을 수행할 수 없다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "boss_brilliant_chestvoice", "label": "찬란한 흉성",
+      "facts": [
+        "특정 지역의 사전 퀘스트를 모두 완료하고 최소 레벨 조건을 충족해야 전투에 입장할 수 있다.",
+        "현혹의 신전에 위치한 게이트를 통해 도전하며, 하드 모드와 같은 상위 난이도는 특정 시간대나 인원 제한이 적용될 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/795"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "custom_illustration_ticket", "label": "주간 일러스트 의뢰 티켓",
+      "facts": [
+        "메이플 ID 단위로 매주 일정 수량의 의뢰 티켓을 메소를 소모하여 구매할 수 있으며, 구매 횟수는 매주 목요일에 초기화된다.",
+        "구매한 티켓은 일정 기간 동안만 유효하며, 월드 내 나의 캐릭터 간에만 이동이 가능하다.",
+        "티켓을 사용하여 커스텀 일러스트를 의뢰할 수 있으며, 특정 아이템 착용 시에는 의뢰가 제한될 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/795"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "astra_secondary_acquisition", "label": "아스트라 보조무기 획득과 성장",
+      "facts": [
+        "특정 레벨 이상의 캐릭터가 특정 지역 스토리와 퀘스트를 완료하여 아스트라 보조무기를 획득하며, 퀘스트를 진행할수록 아이템의 성능이 단계적으로 강화된다.",
+        "획득한 아스트라 보조무기는 교환 불가 속성을 가지며, 모든 퀘스트를 완료한 후에는 초기화하여 퀘스트를 다시 진행할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/794"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "special_skill_ring_swap_cooldown", "label": "링 익스체인지 스킬 재사용 제한",
+      "facts": [
+        "링 익스체인지는 등록된 예비 특수 스킬 반지와 현재 장착된 특수 스킬 반지를 교체하는 스킬이다.",
+        "교체 후 짧은 시간 동안 링 액티베이션 및 특수 스킬 반지 스킬을 사용할 수 없다.",
+        "링 익스체인지와 교체로 인한 재사용 대기시간은 재사용 대기시간 초기화나 감소의 효과를 받지 않는다."
+      ],
+      "tags": ["cooldown"],
+      "sources": ["https://maplestory.nexon.com/news/update/779"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "destiny_weapon", "label": "데스티니 무기",
+      "facts": [
+        "제네시스 무기를 보유한 캐릭터가 특정 퀘스트를 완수하여 획득하는 상위 단계의 장비이다.",
+        "기존 무기의 능력치를 상향된 레벨에 맞춰 전승받으며, 캐릭터당 하나만 가질 수 있는 교환 불가 아이템이다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/767"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "hexa_stat_core_iii", "label": "스탯 코어 III",
+      "facts": [
+        "기존 스탯 코어의 강화 수준이 일정 단계에 도달해야 활성화할 수 있는 상위 성장 시스템이다.",
+        "활성화에는 솔 에르다와 솔 에르다 조각이 필요하며, 강화 초기화 시에는 많은 양의 메소가 소모된다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/767"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "world_integrated_boss_limit", "label": "월드 통합 보스 콘텐츠 입장 제한",
+      "facts": [
+        "월드 통합 보스 콘텐츠인 차원의 전장에 입장하기 위해서는 남은 보스 보상 슬롯이 일정 기준 이상 확보되어 있어야 한다.",
+        "보유한 보상 슬롯이 기준에 미치지 못하는 캐릭터는 해당 콘텐츠에 진입할 수 없다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/767"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "quest_story_skip_id", "label": "메이플ID 단위 스토리 스킵",
+      "facts": [
+        "메이플ID 내에 선행 퀘스트를 완료한 캐릭터가 있으면, 다른 캐릭터는 퀘스트를 직접 수행하지 않고 스토리 요약이나 즉시 완료 기능을 선택할 수 있다.",
+        "스토리 스킵을 선택하면 퀘스트 완료 보상은 받을 수 있지만 경험치 보상은 지급되지 않는다.",
+        "보스 선행 퀘스트 역시 메이플ID 내 한 캐릭터만 완료하면 다른 캐릭터들도 해당 보스 콘텐츠를 자유롭게 이용할 수 있다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/news/update/762"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "grand_authentic_symbol", "label": "그랜드 어센틱심볼",
+      "facts": [
+        "그랜드 어센틱심볼은 전용 장비창에서 성장시키며, 레벨이 오를 때마다 어센틱포스와 캐릭터의 추가 능력치가 강화되는 구조다.",
+        "해당 지역 퀘스트를 모두 완료하면 최초 획득이 가능하며, 이후 지역 내 일일 퀘스트를 수행하여 심볼 교환권(성장 재료)을 꾸준히 얻을 수 있다.",
+        "기존의 어센틱심볼과 달리 어센틱 카탈리스트를 사용할 수 없으며, 선택형 어센틱심볼 교환권에서도 획득이 불가능하여 고유한 성장 경로를 갖는다."
+      ],
+      "tags": ["daily_accumulation", "progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/752"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "limbo_boss", "label": "보스 림보",
+      "facts": [
+        "특정 퀘스트를 완료한 고레벨 캐릭터만 입장할 수 있는 보스 콘텐츠로, 일반과 하드 모드로 나뉜다.",
+        "처치 시 에테르넬 장비 제작 재료인 결정과 소울 조각, 그리고 전용 훈장 등의 보상을 획득할 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/749"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "daily_field_meso_cap", "label": "필드 메소 획득 제한",
+      "facts": [
+        "캐릭터 레벨에 따라 하루 동안 필드 사냥을 통해 획득할 수 있는 기본 메소의 양에 상한이 적용된다.",
+        "일일 누적 메소 상한에 도달하면 해당 캐릭터는 더 이상 필드에서 메소를 얻을 수 없으며, 이 한도는 매일 특정 시간에 초기화된다.",
+        "캐릭터의 레벨이 오를수록 하루에 획득 가능한 메소의 상한선도 함께 높아지는 구조를 가진다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/737"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "meso_market_recommendation", "label": "메소마켓 추천 거래가",
+      "facts": [
+        "메소의 현재 수요와 공급 현황을 분석하여 거래에 유리한 적정 가격을 제안한다.",
+        "거래 창에서 추천 가격을 선택하여 즉시 매매가격을 간편하게 설정할 수 있다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://maplestory.nexon.com/news/update/734"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "sol_erda_purchase", "label": "솔 에르다 구매 제한",
+      "facts": [
+        "6차 전직을 완료한 특정 레벨 이상의 캐릭터로만 매월 계정당 정해진 수량만큼 캐시샵에서 솔 에르다를 구매할 수 있다.",
+        "솔 에르다를 최대 보유 수량까지 소지한 상태에서는 추가 구매 아이템을 사용할 수 없으며, 강화 재료를 보유한 상태에서 사용 시 기존 재료가 손실되는 구조를 가진다."
+      ],
+      "tags": ["periodic_cap", "threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/718"],
+      "verifiedAt": "2026-11-23"
     }
   ],
   "edges": [
@@ -1205,6 +1443,22 @@
     { "from": "enheim_defense", "to": "arcane_symbol", "rel": "보상으로 지급" },
     { "from": "training_ground_replay", "to": "training_ground", "rel": "측정 완료 결과를 전달받음" },
     { "from": "union_champion_slot", "to": "union_champion", "rel": "확장하는" },
-    { "from": "maple_guide_teleport", "to": "maple_guide", "rel": "기능 제공" }
+    { "from": "maple_guide_teleport", "to": "maple_guide", "rel": "기능 제공" },
+    { "from": "level_up_reward", "to": "v_matrix", "rel": "슬롯 강화" },
+    { "from": "level_up_reward", "to": "hyper_stat", "rel": "포인트 사용" },
+    { "from": "treasure_hunter", "to": "level_range", "rel": "발생 조건으로 사용" },
+    { "from": "jupiter_boss_entry", "to": "boss_entry", "rel": "규칙을 공유함" },
+    { "from": "destiny_transcendence_2nd", "to": "equipment_transfer", "rel": "능력치를 계승함" },
+    { "from": "guild_castle_altar", "to": "starforce", "rel": "활용하는" },
+    { "from": "boss_brilliant_chestvoice", "to": "boss_entry", "rel": "보스 입장 규칙 적용" },
+    { "from": "special_skill_ring_swap_cooldown", "to": "skill_ring", "rel": "사용 가능한 대상" },
+    { "from": "destiny_weapon", "to": "sixth_job", "rel": "다음 단계의" },
+    { "from": "hexa_stat_core_iii", "to": "sixth_job", "rel": "활성화하는" },
+    { "from": "world_integrated_boss_limit", "to": "boss_entry", "rel": "입장 제약" },
+    { "from": "quest_story_skip_id", "to": "boss_entry", "rel": "입장 완화" },
+    { "from": "grand_authentic_symbol", "to": "arcane_force", "rel": "확장된 개념인" },
+    { "from": "limbo_boss", "to": "boss_entry", "rel": "규칙을 공유하는" },
+    { "from": "meso_market_recommendation", "to": "meso_market", "rel": "개선" },
+    { "from": "sol_erda_purchase", "to": "sol_erda", "rel": "보충하는" }
   ]
 }
