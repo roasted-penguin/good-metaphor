@@ -34,6 +34,7 @@
 //        [--judge-offline]             # 새로 묻지 않고 캐시만(한도 소진 때). 캐시 없는 문장은 "판정 빠짐"으로 원문 질의
 //        [--judge-candidate combine-best] # 결합 방식 후보를 지금 방식(admin.preciseTagJudge.mode)과 문장별 1위로 비교(T-186)
 //   [--precomputed]                    # 그래프 벡터를 동봉 파일(extension/data/vectors)에서 꺼내 채점, 런타임과 비트 동일 수 출력 (T-193)
+//   npm run eval -- --set tools/eval-expand-maplestory.json  # 그 파일 문장만 채점(가드 대상 아님, --interest와 같이 쓰면 그 관심사 그래프로, T-191)
 //   [--dump-top1 <파일>]               # 셋·줄별 문장 1위를 JSON으로 저장(다른 실행과 비교용, T-186). 정밀은 임베딩만·정밀·정밀+판정·후보
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
@@ -75,7 +76,14 @@ console.log(`관심사: ${interest.label} (${common.id} ${common.version})`);
 const readSet = f => JSON.parse(fs.readFileSync(new URL(f, here)));
 const files = interestEvalFiles(interest); // 관심사별 평가셋·홀드아웃·가드 파일 (T-156)
 // 평가셋·검증셋(eval-holdout.json), --holdout이면 홀드아웃(eval-unseen.json)만 (T-150). 다른 관심사면 그 관심사 평가셋이나 홀드아웃만
+// --set <파일>: 그 파일(eval-set과 같은 형식)만 채점 (T-191). 경로는 프로젝트 루트 기준
+const setAt = process.argv.indexOf('--set');
+const extraPath = setAt > 0 ? process.argv[setAt + 1] : null;
+if (setAt > 0 && (!extraPath || extraPath.startsWith('--'))) throw new Error('--set 뒤에 평가 파일 경로를 주세요: --set tools/eval-expand-maplestory.json');
+if (setAt > 0 && (process.argv.includes('--holdout') || process.argv.includes('--write-margin-known'))) throw new Error('--set은 --holdout·--write-margin-known과 같이 쓰지 않아요');
 const sets = pickSets(process.argv, {
+  extraSet: extraPath ? JSON.parse(fs.readFileSync(new URL(`../${extraPath}`, here))) : null,
+  extraName: extraPath ? extraPath.split('/').pop() : '',
   evalSet: isDefaultInterest ? readSet('./eval-set.json') : [],
   validation: isDefaultInterest ? readSet('./eval-holdout.json') : [],
   holdout: process.argv.includes('--holdout') ? readSet(`./${files.holdout}`) : [],

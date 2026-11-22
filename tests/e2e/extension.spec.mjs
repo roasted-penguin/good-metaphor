@@ -2489,7 +2489,7 @@ serverTest('제보 제외(T-118): 서버 결과 근거가 제보 제외 노드�
 /* ───────── AI 초안 + 검수 (T-301) ───────── */
 const reviewNode = (page, label) => page.locator('#reviewList > li', { has: page.locator('.rv-label', { hasText: label }) });
 const draftCalls = since => calls.slice(since).filter(c => c.system.includes('개념 노드 목록으로 정리'));
-const TRANSFER_SENTENCE = '인기 선수는 원하는 구단이 많아 이적료가 오른다.';
+const TRANSFER_SENTENCE = '인기 축구 선수는 데려가려는 구단이 몰려 이적료가 치솟는다.';
 const openDraftPanel = async page => {
   await expect(page.locator('#draftPanel')).toBeVisible();
   if (!(await page.locator('#draftPanel').evaluate(d => d.open))) await page.locator('#draftPanel > summary').click();

@@ -165,7 +165,9 @@ export function interestArgError(argv, interest) {
   return bad.length ? `${bad.join(', ')}는 메이플 관심사에서만 써요(지금 --interest ${interest.id}).` : null;
 }
 
-export function pickSets(argv, { evalSet, validation, holdout, interestSet }, interest = null) {
+export function pickSets(argv, { evalSet, validation, holdout, interestSet, extraSet = null, extraName = '' }, interest = null) {
+  // --set <파일>(T-191·T-192): 그 파일 문장만 채점(관심사 무관, 가드 대상 아님). 확장 노드가 실제로 쓰이는지 보는 셋
+  if (argv.includes('--set')) return [{ name: `추가 셋 ${extraName}`.trim(), cases: extraSet || [], guarded: false }];
   if (interest && interest.id !== 'maplestory') {
     if (argv.includes('--holdout')) return [{ name: `${interest.label} 홀드아웃`, cases: holdout || [], guarded: false }];
     return [{ name: `${interest.label} 평가셋`, cases: interestSet || [], guarded: true }];

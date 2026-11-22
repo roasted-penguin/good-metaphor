@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 
 export const DRAFT_NODES = [
   { label: '오프사이드 규칙', facts: ['공격수가 마지막 수비수보다 앞에서 공을 받으면 오프사이드 반칙이다.', '오프사이드는 부심이 깃발로 알린다.'], tags: ['threshold_req'] },
-  { label: '이적 시장', facts: ['인기 선수는 원하는 구단이 많아 이적료가 오른다.'], tags: ['market_price', 'scarcity_value'] },
+  { label: '이적 시장', facts: ['인기 축구 선수는 데려가려는 구단이 몰려 이적료가 치솟는다.'], tags: ['market_price', 'scarcity_value'] },
   { label: '경기 시간', facts: ['한 경기는 전후반 90분이다.'], tags: ['periodic_cap'] },
   { label: '없는 태그 개념', facts: ['목록 밖 태그만 붙은 개념이다.'], tags: ['made_up_tag'] },
   { label: '금칙 사실 개념', facts: [`${BLOCKED_IN_ANALOGY}는 쓰면 안 되는 말이다.`, '이 사실은 남는다.'], tags: ['role_division', 'made_up_tag'] }

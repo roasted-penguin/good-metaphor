@@ -315,6 +315,24 @@ test('pickSets: 기본은 평가셋·검증셋, --holdout이면 홀드아웃만 
   assert.deepEqual(ho.map(s => [s.name, s.cases, s.guarded]), [['홀드아웃', h, false]]);
 });
 
+test('pickSets: --set이면 그 파일 문장 하나만(가드 대상 아님), 관심사와 무관 (T-191)', () => {
+  const e = [{ sentence: 'e' }], x = [{ sentence: 'x', expectNodes: ['guild'] }];
+  const s = pickSets(['--set', 'tools/eval-expand-maplestory.json'], { evalSet: e, validation: e, holdout: e, extraSet: x, extraName: 'eval-expand-maplestory.json' });
+  assert.deepEqual(s.map(z => [z.name, z.cases, z.guarded]), [['추가 셋 eval-expand-maplestory.json', x, false]]);
+});
+
+// 확장 평가 파일(T-191): 정답 노드가 지금 메이플 그래프에 있고, 다른 평가 파일과 문장이 겹치지 않는다
+test('eval-expand-maplestory.json: 정답 노드가 그래프에 있고 다른 셋과 문장이 겹치지 않는다', () => {
+  const expand = read('tools/eval-expand-maplestory.json');
+  const ids = new Set(read('extension/data/common/maplestory.json').nodes.map(n => n.id));
+  const others = new Set(['tools/eval-set.json', 'tools/eval-holdout.json', 'tools/eval-unseen.json'].flatMap(f => read(f).map(c => c.sentence)));
+  assert.ok(expand.length > 0);
+  for (const c of expand) {
+    assert.ok(c.expectNodes?.length && c.expectNodes.every(id => ids.has(id)), `정답 노드가 그래프에 없어요: ${c.sentence}`);
+    assert.ok(!others.has(c.sentence), `다른 셋과 겹쳐요: ${c.sentence}`);
+  }
+});
+
 // 홀드아웃(tools/eval-unseen.json): 예문을 고를 때 보지 않는 문장. 평가셋·검증셋·가드와 겹치지 않아야 의미가 있다
 const unseen = read('tools/eval-unseen.json');
 
