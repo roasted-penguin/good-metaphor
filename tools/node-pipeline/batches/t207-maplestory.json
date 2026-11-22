@@ -1,6 +1,6 @@
 {
   "interest": "maplestory",
-  "note": "T-207 실제 확장 관문 입력: 대체 임베더 관문 채택분(우리 말로 쓴 사실·출처 주소만, 원문 없음, D-5). npm run node-pipeline:gate -- --interest maplestory --results 이 파일 --embedder browser",
+  "note": "T-207 실제 확장 관문 입력: 대체 임베더 관문 채택분(우리 말로 쓴 사실·출처 주소만, 원문 없음, D-5). npm run node-pipeline:gate -- --interest maplestory --results 이 파일 --embedder browser / 2차(실제 관문 1차 채택 18, guild_contribution은 shared_bonus 뺌)",
   "results": [
     {
       "batch": 7,
@@ -108,35 +108,6 @@
       "batch": 11,
       "status": "warn",
       "node": {
-        "id": "guild_noblesse_skill",
-        "label": "노블레스 길드스킬",
-        "aliases": [
-          "노블스킬",
-          "길드스킬"
-        ],
-        "facts": [
-          "길드 활동으로 쌓은 포인트에 따라 스킬 수준이 달라지며 사용 시 전투 관련 스탯이 일시적으로 대폭 향상된다.",
-          "스킬을 사용하면 강력한 버프 효과를 얻지만 사용 후 다시 쓰기까지 정해진 대기 시간이 적용된다."
-        ],
-        "tags": [
-          "temporary_multiplier",
-          "cooldown"
-        ],
-        "sources": [
-          "https://maplestory.nexon.com/guide/n23gameinformation/articles/451"
-        ]
-      },
-      "edges": [
-        {
-          "to": "guild_canal",
-          "rel": "스킬 포인트를 얻기 위한 컨텐츠로 연결됨"
-        }
-      ]
-    },
-    {
-      "batch": 11,
-      "status": "warn",
-      "node": {
         "id": "extreme_potion",
         "label": "익스트림 물약",
         "aliases": [
@@ -207,7 +178,6 @@
           "모인 길드 포인트를 사용하면 길드 인원을 단계적으로 늘리거나 길드 마크를 설정할 수 있다."
         ],
         "tags": [
-          "shared_bonus",
           "periodic_cap"
         ],
         "sources": [
@@ -218,30 +188,6 @@
         {
           "to": "guild_system",
           "rel": "길드 내 활동으로 누적되는 기여도 체계"
-        }
-      ]
-    },
-    {
-      "batch": 11,
-      "status": "pass",
-      "node": {
-        "id": "guild_name_change",
-        "label": "길드 이름 변경",
-        "facts": [
-          "길드 마스터가 메이플포인트를 소모하여 길드의 이름을 바꿀 수 있다.",
-          "길드 이름을 변경한 뒤에는 일정 시간 동안 다시 이름을 바꾸지 못하도록 재사용 대기시간이 적용된다."
-        ],
-        "tags": [
-          "cooldown"
-        ],
-        "sources": [
-          "https://maplestory.nexon.com/guide/n23gameinformation/articles/389"
-        ]
-      },
-      "edges": [
-        {
-          "to": "guild_system",
-          "rel": "길드 명칭 수정 기능"
         }
       ]
     },
@@ -478,52 +424,6 @@
         ]
       },
       "edges": []
-    },
-    {
-      "batch": 16,
-      "status": "warn",
-      "node": {
-        "id": "transport_system",
-        "label": "지역 이동 시스템",
-        "aliases": [
-          "이동 수단"
-        ],
-        "facts": [
-          "택시, 포탈, 정거장 등 대륙과 지역을 이동하는 다양한 수단을 제공한다.",
-          "이동 경로에 따라 필요한 메소와 소요 시간이 다르므로 상황에 맞는 효율적인 이동 수단을 선택해야 한다."
-        ],
-        "tags": [
-          "efficiency_metric"
-        ],
-        "sources": [
-          "https://maplestory.nexon.com/guide/n23gameinformation/articles/443"
-        ]
-      },
-      "edges": []
-    },
-    {
-      "batch": 16,
-      "status": "warn",
-      "node": {
-        "id": "champion_coin",
-        "label": "챔피언 코인",
-        "facts": [
-          "챔피언 레이드에서 거둔 성과를 바탕으로 지급되며, 챔피언의 가호 버프를 유지하는 용도로 쓰인다.",
-          "월드 내 모든 챔피언 캐릭터가 공유하며, 매달 초기화되지만 미사용 잔여분은 일정 기간 이월되어 우선 사용된다."
-        ],
-        "tags": [
-          "shared_bonus"
-        ],
-        "sources": [
-          "https://maplestory.nexon.com/guide/n23gameinformation/articles/409"
-        ]
-      },
-      "edges": [
-        {
-          "to": "champion_raid",
-          "rel": "획득처"
-        }
-      ]
     },
     {
       "batch": 16,
