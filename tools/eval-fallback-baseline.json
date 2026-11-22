@@ -3,7 +3,7 @@
   "embedderId": "fallback:hash-ngram-4096-v2",
   "tagsVersion": "2026.11.22-5",
   "graphs": {
-    "maplestory": "2026.11.22-4",
+    "maplestory": "2026.11.22-5",
     "restaurant": "2026.11.22-6"
   },
   "summary": {
@@ -121,7 +121,7 @@
       {"sentence":"외국어 단어는 하루 스무 개씩 매일 외워야 머리에 남고, 시험 전날 몰아 외우면 금방 잊는다.","kind":"hit","top3":["sol_erda","arcane_symbol","starforce"],"hit1":true,"hit3":true},
       {"sentence":"경품 응모권은 한 장에 오천 원인데 당첨 확률과 상품 값을 곱하면 천 원어치도 안 된다.","kind":"hit","top3":["starforce","cube","starforce_event"],"hit1":true,"hit3":true},
       {"sentence":"논문은 투고할 때마다 실릴 수도 떨어질 수도 있지만, 좋은 저널에 실릴수록 경력이 한 단계씩 올라간다.","kind":"hit","top3":["starforce","cube","level_exp"],"hit1":true,"hit3":true},
-      {"sentence":"한 게임 회사 계정으로 쌓은 등급이 같은 회사의 다른 게임에서도 혜택으로 이어진다.","kind":"hit","top3":["union_link","starforce","meso_inflation"],"hit1":true,"hit3":true},
+      {"sentence":"한 게임 회사 계정으로 쌓은 등급이 같은 회사의 다른 게임에서도 혜택으로 이어진다.","kind":"hit","top3":["union_link","starforce","meso"],"hit1":true,"hit3":true},
       {"sentence":"투자자는 같은 돈을 넣었을 때 한 해 수익이 더 많이 나는 상품을 고른다.","kind":"hit","top3":["starforce","level_exp","weekly_boss"],"hit1":false,"hit3":true},
       {"sentence":"Collectors pay a fortune for stamps printed with an error, since only a handful of them exist.","kind":"hit","top3":["auction","union_link","weekly_boss"],"hit1":true,"hit3":true},
       {"sentence":"When the government prints money to cover its deficit, rent and groceries eat a bigger share of every paycheck.","kind":"hit","top3":["auction","meso","meso_inflation"],"hit1":false,"hit3":true},
@@ -144,7 +144,7 @@
       {"sentence":"이사철인 봄에는 이삿짐 센터를 찾는 집이 몰려 견적이 비싸지고, 한겨울에는 값이 내려간다.","kind":"hit","top3":["auction","level_exp","cube"],"hit1":true,"hit3":true},
       {"sentence":"올해 귤 농사가 풍년이라 시장에 귤이 넘쳐 한 박스 값이 작년의 절반으로 떨어졌다.","kind":"hit","top3":["auction","arcane_symbol","starforce"],"hit1":true,"hit3":true},
       {"sentence":"연휴에는 여행객이 몰려 제주행 항공권 값이 평소보다 훨씬 비싸진다.","kind":"hit","top3":["level_exp","starforce","auction"],"hit1":false,"hit3":true},
-      {"sentence":"새 학기 직전에는 중고 교과서를 찾는 학생이 많아 거래 가격이 오르고, 학기가 끝나면 다시 내려간다.","kind":"hit","top3":["auction","cube","meso_inflation"],"hit1":true,"hit3":true},
+      {"sentence":"새 학기 직전에는 중고 교과서를 찾는 학생이 많아 거래 가격이 오르고, 학기가 끝나면 다시 내려간다.","kind":"hit","top3":["auction","cube","starforce"],"hit1":true,"hit3":true},
       {"sentence":"Gas prices jumped this week because two refineries shut down for repairs while summer drivers kept filling up.","kind":"hit","top3":["auction","weekly_boss","meso"],"hit1":true,"hit3":true},
       {"sentence":"전쟁 비용을 대려고 화폐를 계속 발행하자 시장 상인들이 지폐 대신 쌀로 값을 받기 시작했다.","kind":"hit","top3":["starforce","cube","starforce_event"],"hit1":false,"hit3":false},
       {"sentence":"The central bank flooded the economy with newly created money, and a year later nearly every price tag in town had crept up.","kind":"hit","top3":["meso","auction","meso_inflation"],"hit1":true,"hit3":true}
