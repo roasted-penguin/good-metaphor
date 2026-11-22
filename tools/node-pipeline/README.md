@@ -41,6 +41,7 @@ npm run node-pipeline:gate -- --interest maplestory --batch N --approve .tmp/nod
 #     tools/node-pipeline/batches/<이름>-<관심사>.json = { interest, results: [{ status, node, edges }] }
 gh workflow run eval.yml --ref <브랜치> -f suites=none -f gate_args="--interest maplestory --results tools/node-pipeline/batches/t196-maplestory.json; --interest restaurant --results tools/node-pipeline/batches/t196-restaurant.json"
 gh run download <실행 번호> -n node-gate -D .tmp/node-pipeline    # <관심사>-batch-all.{gate,accepted,alt}-browser.*
+#     apply·accept-alt 뒤 다시 잴 때는 --regate(그래프에서 후보를 빼고 기준을 잼): 앞 관문에서 다른 후보에 가려 안 보였던 2위 침범을 찾는다
 
 # 4-1. 대안 정답 확인: .alt-<임베더>.md 표를 보고, 맞는 줄은 같은 이름 .json에서 approve를 true로 → 평가 파일 expectNodes에 더함
 npm run node-pipeline:accept-alt -- .tmp/node-pipeline/maplestory-batch-N.alt-browser.json [--dir tools]

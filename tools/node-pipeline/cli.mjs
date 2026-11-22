@@ -3,7 +3,7 @@
 //   node tools/node-pipeline/cli.mjs index  --interest maplestory [--pages 1] [--probe-seeds]
 //   node tools/node-pipeline/cli.mjs draft  --interest maplestory [--limit 10] [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
 //   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-reground] [--no-near-dup] [--dup-embedder e5|fallback] [--no-tag-fit] [--max-calls 14] [--provider gemini]
-//   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]] [--results 입력.json]
+//   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]] [--results 입력.json] [--regate]
 //   node tools/node-pipeline/cli.mjs accept-alt <대안 표 .alt-*.json> [--dir tools] [--all]
 //   node tools/node-pipeline/cli.mjs apply  --interest maplestory --batch N|all --approve ids.json [--gate browser|fallback|none] [--out 경로] [--write-real]
 // 작업 파일은 모두 .tmp/node-pipeline/(커밋 안 함). 페이지 본문은 어디에도 쓰지 않는다(D-5).
@@ -289,7 +289,10 @@ async function cmdGate() {
   const day = arg('day', today());
   const patch = buildPatch(results, ids, { rules: cfg.rules, day });
   for (const r of patch.refused) console.log(`  거절 ${r.id}: ${r.reason}`);
-  const rawGraph = readJson(arg('graph', commonGraphPath(interest)));
+  let rawGraph = readJson(arg('graph', commonGraphPath(interest)));
+  // --regate(T-196): 이미 그래프에 넣은 후보를 다시 잰다. 그래프에서 후보 노드(와 닿는 엣지)를 빼고 기준을 잰 뒤 다시 넣는다.
+  // accept-alt로 expectNodes가 바뀐 뒤, 앞 관문에서 다른 후보에 가려 안 보였던 2위 침범을 찾으려고
+  if (flag('regate')) rawGraph = withoutNodes(rawGraph, patch.nodes.map(x => x.id));
   const tagsFile = readJson(join(COMMON, 'tags.json'));
   const admin = readJson(join(ROOT, 'extension', 'config', 'admin.json'));
   const cases = loadGateCases(interest, casesIo());
@@ -340,6 +343,12 @@ async function cmdGate() {
   for (const r of res.rejected) console.log(`  뺌 ${r.id}: ${r.issues.slice(0, 2).map(i => `${i.kind} "${i.sentence.slice(0, 24)}…" ${i.before ?? ''}→${i.after ?? ''}`).join(' / ')}`);
   console.log(`[gate] 채택 목록 → ${acceptedPath}${embedderId === 'fallback' ? ' (다음: --embedder browser --approve 이 파일)' : ' (다음: apply --approve 이 파일)'}`);
   console.log(`[gate] 대안 정답 후보 표 → ${altPath.replace(/\.json$/, '.md')}`);
+}
+
+// 그래프에서 노드와 그 노드에 닿는 엣지를 뺀 사본
+function withoutNodes(graph, ids) {
+  const drop = new Set(ids);
+  return { ...graph, nodes: graph.nodes.filter(x => !drop.has(x.id)), edges: (graph.edges || []).filter(e => !drop.has(e.from) && !drop.has(e.to)) };
 }
 
 // 최소 입력 → 검사 결과 꼴. 관심사가 다르면 멈춘다(엉뚱한 그래프에 넣지 않게)
