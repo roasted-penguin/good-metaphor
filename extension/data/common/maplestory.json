@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-4",
+  "version": "2026.11.22-5",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -95,12 +95,12 @@
     {
       "id": "meso_inflation", "label": "메소 인플레이션",
       "facts": [
-        "게임 안에 메소가 많이 풀리면 아이템 가격이 오르고 메소의 가치가 떨어진다.",
+        "게임 안에 메소를 많이 풀면 메소의 가치가 떨어지고 물가가 뛴다.",
         "강화 비용처럼 메소를 소모시키는 곳이 풀린 메소를 회수하는 역할을 한다."
       ],
       "tags": ["inflation", "market_price"],
       "sources": ["https://maplestory.nexon.com/News/Notice/Notice/134898"],
-      "verifiedAt": "2026-11-08"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "auction", "label": "경매장", "aliases": ["쌀먹"],
