@@ -20,6 +20,7 @@ export class ServerError extends Error {
 }
 
 const RETRY_AFTER_DEFAULT_MS = 5000;
+const RETRY_502_STEP_MS = 15000;
 const defaultSleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function errorText(res) {
@@ -34,7 +35,9 @@ function retryAfterMs(res) {
 
 /**
  * 문장 하나의 서버 순위 (앞이 1위). analogy가 비어도 후보 순위를 쓴다(검색 품질 평가).
- * 429 → Retry-After(없으면 5초) 기다렸다 같은 문장 다시, 최대 maxRetries번. 502 → 한 번 다시. 503 → 즉시 ServerUnavailable.
+ * 429 → Retry-After(없으면 5초) 기다렸다 같은 문장 다시, 최대 maxRetries번.
+ * 502 → 15초·30초·45초… 기다렸다 다시, 최대 maxRetries번. 서버의 502는 상류 LLM 실패(Gemini 503 "high demand" 등)라
+ *       한 번만 다시 하면 58문장 평가가 중간에 자주 끊겼다(T-142). 503 → 즉시 ServerUnavailable.
  */
 export async function rankViaServer({ url, token, sentence, fetchImpl = fetch, sleep = defaultSleep, maxRetries = 3, onDebug }) {
   const endpoint = url.replace(/\/+$/, '') + '/v1/analogy';
@@ -43,7 +46,7 @@ export async function rankViaServer({ url, token, sentence, fetchImpl = fetch, s
     headers: { 'Content-Type': 'application/json', 'X-Install-Token': token },
     body: JSON.stringify({ sentence, word: '', context: '', pageTitle: '' })
   };
-  let retries429 = 0, retried502 = false;
+  let retries429 = 0, retries502 = 0;
   for (;;) {
     let res;
     try { res = await fetchImpl(endpoint, init); }
@@ -61,8 +64,9 @@ export async function rankViaServer({ url, token, sentence, fetchImpl = fetch, s
       await sleep(retryAfterMs(res));
       continue;
     }
-    if (res.status === 502 && !retried502) {
-      retried502 = true;
+    if (res.status === 502 && retries502 < maxRetries) {
+      retries502++;
+      await sleep(RETRY_502_STEP_MS * retries502);
       continue;
     }
     const why = await errorText(res);
