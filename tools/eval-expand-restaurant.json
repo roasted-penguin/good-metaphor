@@ -6,7 +6,6 @@
   {"sentence": "회사는 근속 연수가 쌓일수록 안식 휴가 일수를 조금씩 늘려 준다.", "expectNodes": ["annual_leave"], "expectTag": "daily_accumulation", "since": "T-192", "why": "꾸준히 다닐수록 쉬는 날이 쌓이고 늘어난다 = 연차 유급휴가"},
   {"sentence": "군인연금은 복무한 햇수가 길수록 전역 뒤 받는 금액이 커진다.", "expectNodes": ["retirement_pay"], "expectTag": "daily_accumulation", "since": "T-192", "why": "일한 햇수에 비례해 그만둘 때 받는 돈이 쌓인다 = 퇴직금"},
   {"sentence": "직원 수가 일정 규모를 넘는 회사만 장애인 의무고용 대상이 된다.", "expectNodes": ["small_workplace"], "expectTag": "threshold_req", "since": "T-192", "why": "직원 수 기준을 넘느냐에 따라 지킬 규정이 달라진다 = 작은 사업장의 노동법 적용"},
-  {"sentence": "통신사 대리점은 계약서에 정한 구역 안에 같은 통신사의 다른 대리점이 새로 들어오지 못하게 보장받는다.", "expectNodes": ["franchise_territory"], "expectTag": "diminishing_returns", "since": "T-192", "why": "정한 구역 안에 같은 공급자의 다른 매장을 못 낸다 = 가맹점 영업지역 보호"},
   {"sentence": "아파트 관리사무소가 요구해 베란다 공사를 하면 공사비 일부를 관리비로 보태 준다.", "expectNodes": ["remodel_cost_share"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "요구한 쪽이 공사비 일부를 함께 낸다 = 점포환경개선 비용 분담"},
   {"sentence": "간편결제 회사는 결제가 일어날 때마다 결제 금액의 일정 비율을 가맹점에서 받고, 작은 가게에는 낮은 요율을 매긴다.", "expectNodes": ["card_fee"], "expectTag": "brokerage_fee", "since": "T-192", "why": "결제마다 일정 비율을 떼 가고 작은 곳은 우대한다 = 카드 가맹점수수료"},
   {"sentence": "기부금은 낸 만큼 세금을 깎아 주지만 한 해에 깎아 주는 금액에는 한도가 있다.", "expectNodes": ["card_sales_credit"], "expectTag": "periodic_cap", "since": "T-192", "why": "비율만큼 깎아 주되 해마다 상한이 있다 = 신용카드매출세액공제"},
@@ -30,7 +29,6 @@
   {"sentence": "자동차 보험에 들어 두면 사고가 나도 보험사가 대신 배상해 운전자가 큰돈을 혼자 물지 않는다.", "expectNodes": ["industrial_accident"], "expectTag": "loss_risk", "since": "T-192", "why": "사고 배상을 보험이 대신 맡아 책임을 덜어 준다 = 산재보험"},
   {"sentence": "집주인이 바뀌어도 새 집주인이 기존 전세 계약을 그대로 이어받아 세입자는 계속 살 수 있다.", "expectNodes": ["lease_opposability"], "expectTag": "loss_risk", "since": "T-192", "why": "주인이 바뀌어도 계약이 그대로 이어진다 = 상가 임대차 대항력"},
   {"sentence": "학원은 조례에 따라 밤늦은 시간에는 수업을 할 수 없다.", "expectNodes": ["business_hours_limit"], "expectTag": "periodic_cap", "since": "T-192", "why": "지자체 규칙으로 영업할 수 있는 시간이 제한된다 = 영업시간 제한"},
-  {"sentence": "제약회사가 불량 원료로 만든 약을 팔면 피해가 없어도 처벌받고, 다시 걸리면 더 무겁게 처벌받는다.", "expectNodes": ["food_poisoning"], "expectTag": "escalating_cost", "since": "T-192", "why": "해로울 우려만으로 처벌하고 되풀이하면 가중한다 = 상한 식재료와 식중독 책임"},
   {"sentence": "올해 커피 원두 산지에 가뭄이 들어 수확이 줄자 원두 값이 크게 뛰었다.", "expectNodes": ["produce_supply"], "expectTag": "market_price", "since": "T-192", "why": "수확이 줄어 공급이 모자라면 값이 오른다 = 농산물 작황과 식재료 수급"},
   {"sentence": "중고거래 안전결제는 구매자가 낸 돈을 중간에서 맡아 두었다가 물건을 받았다고 확인하면 판매자에게 넘긴다.", "expectNodes": ["franchise_escrow"], "expectTag": "progression_gate", "since": "T-192", "why": "낸 돈을 제삼자가 맡았다가 조건이 채워지면 넘긴다 = 가맹금 예치"}
 ]

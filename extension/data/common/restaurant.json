@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.23-3",
+  "version": "2026.11.23-4",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -690,22 +690,6 @@
       "verifiedAt": "2026-11-22"
     },
     {
-      "id": "franchise_territory",
-      "label": "가맹점 영업지역 보호",
-      "facts": [
-        "가맹본부는 계약할 때 가맹점의 영업지역을 정해 계약서에 적고, 계약 기간에는 그 지역 안에 같은 업종의 직영점이나 다른 가맹점을 내지 못한다.",
-        "본부의 계열회사가 여는 같은 업종 가게도 그 영업지역 안에는 낼 수 없다.",
-        "상권이 크게 바뀌어 영업지역을 바꿔야 할 때도 계약을 갱신하면서 가맹점과 합의해야 한다."
-      ],
-      "tags": [
-        "diminishing_returns"
-      ],
-      "sources": [
-        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제12조의4&mode=11"
-      ],
-      "verifiedAt": "2026-11-22"
-    },
-    {
       "id": "remodel_cost_share",
       "label": "점포환경개선 비용 분담",
       "facts": [
@@ -1078,23 +1062,6 @@
       "verifiedAt": "2026-11-22"
     },
     {
-      "id": "food_poisoning",
-      "label": "상한 식재료와 식중독 책임",
-      "facts": [
-        "상하거나 곰팡이 핀 재료로 만든 음식은 손님이 탈이 나지 않았어도 건강을 해칠 우려가 있는 음식으로 보아 처벌받고, 같은 위반을 되풀이하면 더 무겁게 처벌받는다.",
-        "식중독이 생기면 쓰던 식재료를 버리거나 현장을 치우지 말고 원인 조사가 끝날 때까지 그대로 둬야 한다.",
-        "식중독에 책임이 있는 조리사는 면허가 취소되거나 업무정지를 받을 수 있다."
-      ],
-      "tags": [
-        "escalating_cost"
-      ],
-      "sources": [
-        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=1&cciNo=2&cnpClsNo=1",
-        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제44조&mode=11"
-      ],
-      "verifiedAt": "2026-11-22"
-    },
-    {
       "id": "produce_supply",
       "label": "농산물 작황과 식재료 수급",
       "facts": [
@@ -1259,11 +1226,6 @@
       "rel": "직원 수에 따라 함께 따질 노동 규칙"
     },
     {
-      "from": "franchise_territory",
-      "to": "market_saturation",
-      "rel": "같은 브랜드 가게가 한 동네에 몰리는 것을 막음"
-    },
-    {
       "from": "remodel_cost_share",
       "to": "required_items",
       "rel": "같은 가맹본부의 거래 조건 규칙"
@@ -1377,11 +1339,6 @@
       "from": "lease_opposability",
       "to": "fixed_date",
       "rel": "사업자등록과 함께 세입자를 지키는 규칙"
-    },
-    {
-      "from": "food_poisoning",
-      "to": "hygiene_inspection",
-      "rel": "위생 위반으로 처분을 받음"
     },
     {
       "from": "produce_supply",
