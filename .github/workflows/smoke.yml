@@ -9,6 +9,10 @@ on:
         description: '레지스트리의 모델 목록을 모두 시험 (무료 한도에 주의)'
         type: boolean
         default: false
+      compare:
+        description: '평가셋에서 N문장을 골라 제공자별 비교표(T-122). 0이면 안 함. 제공자별 분당 4회라 10문장에 약 3분'
+        type: string
+        default: '0'
 
 permissions:
   contents: read
@@ -16,7 +20,7 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,4 +34,5 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           ALL_MODELS: ${{ inputs.all_models && '--all-models' || '' }}
+          COMPARE: ${{ inputs.compare }}
         run: npm run smoke:providers -- $ALL_MODELS
