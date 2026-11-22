@@ -207,7 +207,10 @@ function printJudge(name, cases, qs, mixedResult, guarded) {
     const r = scoreCases(cases, rank);
     console.log(pctLine(label, r));
     if (verbose) for (const m of r.misses) console.log(missLine(m));
-    if (r.negative.n) console.log(`  alias-negative ${r.negative.pass}/${r.negative.n}`);
+    if (r.negative.n) {
+      console.log(`  alias-negative ${r.negative.pass}/${r.negative.n} (혼합 ${mixedResult.negative.pass}/${mixedResult.negative.n})`);
+      for (const f of r.negative.fails) console.log(`    ⚠ 음성 실패: ${f.sentence.slice(0, 32)}… → 1위 ${f.top} (금지: ${f.forbid.join('/')})`);
+    }
     const reg = rank1Regressions(mixedResult, r), gain = rank1Gains(mixedResult, r);
     console.log(`  혼합 대비 1위 회귀 ${reg.length} · 개선 ${gain.length}`);
     for (const s of reg) console.log(`    ⚠ 회귀: ${s.slice(0, 40)}…`);
