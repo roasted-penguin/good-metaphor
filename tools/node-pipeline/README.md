@@ -1,4 +1,4 @@
-# 반자동 노드 파이프라인 (T-194, 수확·대안 정답 T-195, 태그 적합성·2위 대안 정답 T-197, 묶음 사이 중복·조문 이름 근거 T-205)
+# 반자동 노드 파이프라인 (T-194, 수확·대안 정답 T-195, 태그 적합성·2위 대안 정답 T-197, 묶음 사이 중복·조문 이름 근거 T-205, 커뮤니티 출처 T-212)
 
 관심사마다 노드 1,000개를 손으로 고르기는 어렵다. 이 도구는 공식·공공 페이지에서 후보 개념을 뽑고, 자동 검사와 회귀 관문을 거친 것만 공통 그래프 패치로 만든다. 사람(또는 메인 세션)은 리뷰 시트를 보고 승인만 한다.
 
@@ -11,7 +11,8 @@ index → draft → check → (승인 id 고르기) → gate(fallback) → gate(
 ## 지키는 규칙
 
 - **원문 저장 금지(D-5).** 페이지 본문은 초안 호출 동안 메모리에만 있다. 디스크에는 URL, 제목, 가져온 시각, 본문 해시, 우리 말로 쓴 사실, 겹침 지표(숫자)만 남는다.
-- **공식 출처만.** 메이플은 `maplestory.nexon.com`, 식당은 `*.go.kr`, `www.korea.kr`, `www.sbiz.or.kr`(`sources.mjs` `allowHost`). 출처 주소는 LLM이 아니라 파이프라인이 붙인다.
+- **수집은 공식 출처만.** 목록·초안은 메이플 `maplestory.nexon.com`, 식당 `*.go.kr`, `www.korea.kr`, `www.sbiz.or.kr`(`sources.mjs` `allowHost`)만 돈다. 출처 주소는 LLM이 아니라 파이프라인이 붙인다.
+- **커뮤니티 출처는 확인용(D-8, ADR 0016).** 정책 원본 `tools/source-policy.json`(메이플: 나무위키 `/w/`·인벤 메이플, 식당: 나무위키·티스토리·브런치·다음 뉴스). 커뮤니티 페이지는 색인·초안하지 않고, 사람·에이전트가 읽고 우리 문장으로 쓴 후보(수동 초안 파일 `.tmp/node-pipeline/<관심사>-batch-N.draft.json`의 `candidates`, `grounding` 없이)의 `sources`에 URL로만 들어온다. check가 ① 교차 확인(공식 1개 이상 또는 서로 다른 커뮤니티 사이트 2곳, 같은 플랫폼 두 글은 한 곳) ② 출처 페이지를 한 쪽씩 가져와(robots·1초 간격) 베낌(최장 복사 40자 실패·25자 확인)·겹침을 재고(글은 메모리에만, 결과엔 숫자만) ③ 노드에 `sourceKind: "community"`를 붙인다. 커뮤니티 출처는 `--no-probe`로 통과할 수 없다. 공식과 어긋나면 공식 우선(리뷰 판정).
 - **예의 바른 수집.** 호스트마다 1초에 1번 이하, robots.txt를 지키고(가장 긴 규칙 우선), UA에 도구 이름을 밝힌다. 메이플 가이드 목록은 스크립트로 그려진다. T-207까지는 공식 가이드 검색을 주제어로 돌렸는데 쪽당 5개라 겹침이 많았고, T-208부터는 가이드 첫 화면 분류가 부르는 사이트 자체 목록 API(`POST /guide/n23gameinformation/articles?boardId=…`, robots 허용 경로, `sources.mjs` `MAPLE_GUIDE_BOARDS`)로 분류 9개 × 1번이면 가이드 107글 전부를 얻는다(검색으로 모은 100글을 모두 포함, 2026-11-23). 응답의 본문 칸은 버리고 글 번호·제목만 쓴다(`fetcher.postJson`, 목록 항목 `json.links`).
 - **규칙 2·9·11.** 자주 바뀌는 수치(확률, 판본, 날짜, 가격, 레벨, 횟수)는 실패로 친다(메이플은 `6차` 같은 차수만 허용, 식당은 숫자가 하나라도 있으면 실패). 태그는 `tags.json` 목록 안의 것만 받는다. 금칙어는 `blocklist.json`에서 `승인` 상태인 카드만 쓴다.
 - **회귀 0.** 실제 그래프에는 실제 확장 관문(`gate --embedder browser`)을 통과한 노드만 쓴다(`apply --write-real`은 `--gate browser`일 때만 동작).
@@ -77,8 +78,8 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 
 | 판정 | 사유 |
 | --- | --- |
-| 실패 | id 꼴(영문 소문자·숫자·밑줄), 그래프·묶음 안 id·이름 중복, 사실 2~3개 아님, 200자 넘음, "다."로 안 끝남, 수치, 금칙어, 목록 안 태그 없음, 출처가 허용 밖·https 아님·200 아님·허용 밖으로 넘어감, 기존 노드와 거의 같음(대체 임베더 코사인 0.75 이상), 원문을 40자 넘게 그대로 옮김, 식당은 영문·이름 숫자 |
-| 확인 | 목록 밖 태그를 뺌, 별칭(은어)은 사람이 확인, 식당 별칭은 뺌, 첫 사실이 구조보다 정의에 가까움, 비슷한 노드 있음(0.5 이상 또는 이름 포함), 이름이 본문에 없음, 사실과 본문 겹침이 적음(페이지 밖 지식 의심), 원문 25자 이상 그대로, 없는 노드를 가리키는 엣지를 뺌 |
+| 실패 | id 꼴(영문 소문자·숫자·밑줄), 그래프·묶음 안 id·이름 중복, 사실 2~3개 아님, 200자 넘음, "다."로 안 끝남, 수치, 금칙어, 목록 안 태그 없음, 출처가 정책 밖·https 아님·200 아님·정책 밖으로 넘어감, 커뮤니티 출처 교차 확인 없음(`communityUncorroborated`)·가져오지 않음(`communityUnprobed`), 기존 노드와 거의 같음(대체 임베더 코사인 0.75 이상), 원문(초안 페이지 또는 출처 페이지)을 40자 넘게 그대로 옮김(`copiedHeavy`·`copiedSourceHeavy`), 식당은 영문·이름 숫자 |
+| 확인 | 목록 밖 태그를 뺌, 별칭(은어)은 사람이 확인, 식당 별칭은 뺌, 첫 사실이 구조보다 정의에 가까움, 비슷한 노드 있음(0.5 이상 또는 이름 포함), 이름이 본문에 없음, 사실과 본문 겹침이 적음(페이지 밖 지식 의심), 원문 25자 이상 그대로(`copied`·`copiedSource`), 사실과 겹치는 출처 페이지가 2곳 미만(`communityWeak`, 커뮤니티 노드), 식당 커뮤니티 후보의 가게 이름 확인(`storeNameReview`), 없는 노드를 가리키는 엣지를 뺌 |
 
 | 묶음 사이 중복(T-205, `dedupe.mjs`) | 실패: 같은 id 또는 같은 이름이 다른 묶음에도 있고 그쪽을 남김(`dupCross`, 이유는 메모 "묶음 사이 중복(같은 id): 묶음 5 …를 남겨요") |
 | 이름 근거(조문, T-205) | 조문 꼴 출처(`articleHosts`, 식당 = `www.law.go.kr`)는 이름 핵심 낱말이 본문·장/조 제목에 있으면 `labelNotInPage` 대신 메모 "이름 근거(조문)" |
@@ -123,6 +124,7 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 
 | 파일 | 하는 일 |
 | --- | --- |
+| `../source-policy.mjs`·`.json` | 출처 정책 원본: 관심사별 공식·커뮤니티 호스트, 분류·교차 확인·노드 검사(그래프 테스트·apply와 같은 판정, ADR 0016) |
 | `sources.mjs` | 관심사별 허용 호스트·목록·씨앗·본문 표지·검사 규칙, 법령 껍데기 → 본문 주소(`lawBodyUrl`·`bodyUrlFor`), 씨앗 설정 찾기(`seedFor`) |
 | `web.mjs` | robots.txt, 예의 바른 fetch, HTML → 글·링크·제목, 해시 |
 | `run.mjs` | index(목록 → 색인), draft(페이지 → 후보), 씨앗 확인(`probeSeeds`·`markProbes`), 이름 신호 다시 재기(`regroundLabels`, T-205) |
@@ -135,4 +137,4 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 | `apply.mjs` | 패치 만들기, 판본 올리기, 검증 |
 | `cli.mjs` | 명령줄 |
 
-단위 테스트: `tests/unit/node-pipeline.test.mjs`, `tests/unit/node-pipeline-flow.test.mjs`(가짜 fetch·LLM·평가), `tests/unit/node-pipeline-sources.test.mjs`(법령 본문·남길 장·씨앗 확인, T-198), `tests/unit/node-pipeline-tagfit.test.mjs`(태그 적합성·2위 대안 정답·비유 없음 미루기·근접 중복·태그 밀도, T-197), `tests/unit/node-pipeline-dedupe.test.mjs`(묶음 사이 중복·조문 이름 근거·다시 재기, T-205).
+단위 테스트: `tests/unit/node-pipeline.test.mjs`, `tests/unit/node-pipeline-flow.test.mjs`(가짜 fetch·LLM·평가), `tests/unit/node-pipeline-sources.test.mjs`(법령 본문·남길 장·씨앗 확인, T-198), `tests/unit/node-pipeline-tagfit.test.mjs`(태그 적합성·2위 대안 정답·비유 없음 미루기·근접 중복·태그 밀도, T-197), `tests/unit/node-pipeline-dedupe.test.mjs`(묶음 사이 중복·조문 이름 근거·다시 재기, T-205), `tests/unit/source-policy.test.mjs`(출처 분류·교차 확인·출처 글 베낌·apply 방어, T-212).
