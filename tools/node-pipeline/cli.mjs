@@ -2,7 +2,7 @@
 // 노드 파이프라인(T-194) 명령줄. 사용법은 같은 폴더 README.md.
 //   node tools/node-pipeline/cli.mjs index  --interest maplestory [--pages 1] [--probe-seeds]
 //   node tools/node-pipeline/cli.mjs draft  --interest maplestory [--limit 10] [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
-//   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-tag-fit] [--max-calls 14] [--provider gemini]
+//   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-near-dup] [--dup-embedder e5|fallback] [--no-tag-fit] [--max-calls 14] [--provider gemini]
 //   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]]
 //   node tools/node-pipeline/cli.mjs accept-alt <대안 표 .alt-*.json> [--dir tools] [--all]
 //   node tools/node-pipeline/cli.mjs apply  --interest maplestory --batch N|all --approve ids.json [--gate browser|fallback|none] [--out 경로] [--write-real]
@@ -19,6 +19,7 @@ import { checkBatch, sourceProber, renderSheet, summarize } from './check.mjs';
 import { buildPatch, applyPatch, today } from './apply.mjs';
 import { loadGateCases, memoEmbedder, scoreGraph, gateCandidates, altRows, buildAltExplainPrompt, parseAltExplain, altPendingRefusals, applyAltToText, altTargetFiles, renderAltTable } from './gate.mjs';
 import { applyTagFit, BudgetError } from './tag-fit.mjs';
+import { applyNearDup, applyTagDensity } from './near-dup.mjs';
 import { createHash } from 'node:crypto';
 import { hashEmbed } from '../../extension/lib/fallback-embed.js';
 
@@ -132,6 +133,15 @@ async function cmdCheck() {
   const graph = loadInterestGraph(interest);
   const probe = flag('no-probe') ? null : sourceProber(politeFetcher({ log }), cfg.allowHost);
   const results = await checkBatch(draft.candidates, { cfg, graph, tags: graph.tags, blockTerms: blockTerms(), probe });
+  // 앞 묶음에서 실패 안 한 후보(근접 중복·태그 밀도 비교용, 같은 개념이 다른 묶음에 또 나오는 일이 있다)
+  const prior = batches().filter(b => b < n && existsSync(batchFile(b, '.json'))).flatMap(b => readJson(batchFile(b, '.json')).results.filter(r => r.status !== 'fail').map(r => r.node));
+  // 근접 중복(T-197, ADR 0015 제안 2): LLM 전에(실패 후보에는 태그 적합성을 묻지 않아 한도를 아낀다)
+  let nearDup = null;
+  if (!flag('no-near-dup')) {
+    const { embed, embedderId } = await nearDupEmbedder(arg('dup-embedder', 'e5'));
+    nearDup = await applyNearDup(results, { existing: graph.nodes, prior, embed, embedderId });
+    console.log(`[check] 근접 중복(${embedderId}): 바닥 ${nearDup.floor.score} (${nearDup.floor.a}~${nearDup.floor.b}) · 실패 ${nearDup.failed} · 같은 사실 ${nearDup.reused} · 가까움 ${nearDup.close}`);
+  }
   // 태그 적합성(T-197): 후보마다 LLM 한 번(캐시). --no-tag-fit이면 건너뜀, 키가 없으면 모두 tagFitPending
   let tagFit = null;
   if (!flag('no-tag-fit')) {
@@ -142,14 +152,50 @@ async function cmdCheck() {
     tagFit = { ...stat, model: p?.model || null, calls: p ? complete.calls() : 0, cacheHits: p ? complete.hits() : 0 };
     console.log(`[check] 태그 적합성: 물은 후보 ${stat.asked} · 태그 yes ${stat.yes} · no ${stat.no} · 태그 다 빠져 실패 ${stat.failed} · 못 함 ${stat.pending} (LLM 호출 ${tagFit.calls}번, 캐시 ${tagFit.cacheHits}번)`);
   }
+  // 태그 밀도 상한(T-197, ADR 0015 제안 3, 경고만): 태그 적합성으로 태그가 바뀐 뒤에 센다
+  const density = applyTagDensity(results, { graphNodes: graph.nodes, prior });
+  const dense = density.counts.filter(c => c[2] > density.cap);
+  console.log(`[check] 태그 밀도: 상한 ${density.cap}(노드 ${density.total}) · 넘는 태그 ${dense.map(c => `${c[0]} ${c[1]}→${c[2]}`).join(', ') || '없음'}`);
   const sum = summarize(results);
   const pagesOk = draft.pages.filter(p => p.status === 'ok').length;
-  writeJson(batchFile(n, '.json'), { interest, batch: n, checkedAt: new Date().toISOString(), graphVersion: graph.version, probed: !!probe, tagFit, summary: sum, pages: draft.pages, dropped: draft.dropped || [], results });
-  writeFileSync(batchFile(n, '.md'), renderSheet({ interest, batch: n, results, pages: pagesOk, generatedAt: new Date().toISOString() }));
+  writeJson(batchFile(n, '.json'), { interest, batch: n, checkedAt: new Date().toISOString(), graphVersion: graph.version, probed: !!probe, nearDup, density, tagFit, summary: sum, pages: draft.pages, dropped: draft.dropped || [], results });
+  writeFileSync(batchFile(n, '.md'), renderSheet({ interest, batch: n, results, pages: pagesOk, generatedAt: new Date().toISOString(), nearDup, density }));
   const nd = (draft.dropped || []).length;
   console.log(`[check] 묶음 ${n}: 후보 ${sum.total} (통과 ${sum.pass} · 확인 ${sum.warn} · 실패 ${sum.fail}) · 초안에서 태그 없음으로 버림 ${nd} · 페이지당 ${(sum.total / Math.max(1, pagesOk)).toFixed(1)}개`);
   for (const [k, c] of sum.reasons.slice(0, 8)) console.log(`  ${k} ${c}`);
   console.log(`[check] → ${batchFile(n, '.md')}`);
+}
+
+// 근접 중복용 임베더(T-197). e5 = Node에서 admin.embedding 모델(한 문장씩, passage 접두어), 벡터는 .tmp 캐시(우리 문장만).
+// 모델을 못 불러오면 대체 임베더로 같은 규칙(바닥도 같은 임베더로 잰다). 미리 계산 벡터(크롬)와는 섞지 않는다(near-dup.mjs 머리말)
+async function nearDupEmbedder(kind) {
+  const fallback = { embed: async texts => texts.map(t => hashEmbed(t)), embedderId: 'fallback-ngram' };
+  if (kind === 'fallback') return fallback;
+  const admin = readJson(join(ROOT, 'extension', 'config', 'admin.json'));
+  const cfg = admin.embedding;
+  try {
+    const { pipeline } = await import('@huggingface/transformers');
+    const { embedEach } = await import('../../extension/lib/embed-each.js');
+    const ex = await pipeline('feature-extraction', cfg.model, { dtype: cfg.dtype });
+    const run = async t => (await ex(t, { pooling: 'mean', normalize: true })).tolist();
+    const embedderId = `${cfg.model}@${cfg.dtype}-node`;
+    const cacheFile = join(WORK, 'cache', `vec-${createHash('sha1').update(embedderId).digest('hex').slice(0, 12)}.json`);
+    const cache = existsSync(cacheFile) ? readJson(cacheFile) : {};
+    const embed = async texts => {
+      const key = t => createHash('sha1').update(t).digest('hex');
+      const need = [...new Set(texts.filter(t => !cache[key(t)]))];
+      if (need.length) {
+        const vs = await embedEach(need.map(t => (cfg.passagePrefix || '') + t), run);
+        need.forEach((t, i) => { cache[key(t)] = vs[i]; });
+        writeJson(cacheFile, cache);
+      }
+      return texts.map(t => cache[key(t)]);
+    };
+    return { embed, embedderId };
+  } catch (e) {
+    console.log(`[check] e5 모델을 못 불러와 대체 임베더로 근접 중복을 재요: ${String(e.message || e).slice(0, 80)}`);
+    return fallback;
+  }
 }
 
 // 묶음 번호 또는 all(그 관심사 묶음을 모두 합침) → 검사 결과

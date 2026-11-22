@@ -30,7 +30,7 @@ npm run node-pipeline:draft -- --interest maplestory --limit 10 [--max-calls 40]
 
 # 3. 자동 검사 → 리뷰 시트 .tmp/node-pipeline/<관심사>-batch-N.md (+ .json)
 #    태그 적합성(T-197)이 후보마다 LLM을 한 번 부른다(캐시). --max-calls 14로 나눠 돌리고, 못 한 후보는 다시 돌리면 이어 가요. --no-tag-fit이면 건너뜀
-npm run node-pipeline:check -- --interest maplestory [--batch N] [--no-probe] [--max-calls 14] [--no-tag-fit]
+npm run node-pipeline:check -- --interest maplestory [--batch N] [--no-probe] [--max-calls 14] [--no-tag-fit] [--no-near-dup] [--dup-embedder e5|fallback]
 
 # 4. 회귀 관문: 후보를 그래프 사본에 넣어 평가 문장(평가셋·검증셋·홀드아웃·가드)으로 잰다. --batch all이면 그 관심사 묶음을 모두 합쳐
 npm run node-pipeline:gate -- --interest maplestory --batch N [--approve ids.json] [--explain]          # 대체 임베더(거름)
@@ -69,9 +69,17 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 | 실패 | id 꼴(영문 소문자·숫자·밑줄), 그래프·묶음 안 id·이름 중복, 사실 2~3개 아님, 200자 넘음, "다."로 안 끝남, 수치, 금칙어, 목록 안 태그 없음, 출처가 허용 밖·https 아님·200 아님·허용 밖으로 넘어감, 기존 노드와 거의 같음(대체 임베더 코사인 0.75 이상), 원문을 40자 넘게 그대로 옮김, 식당은 영문·이름 숫자 |
 | 확인 | 목록 밖 태그를 뺌, 별칭(은어)은 사람이 확인, 식당 별칭은 뺌, 첫 사실이 구조보다 정의에 가까움, 비슷한 노드 있음(0.5 이상 또는 이름 포함), 이름이 본문에 없음, 사실과 본문 겹침이 적음(페이지 밖 지식 의심), 원문 25자 이상 그대로, 없는 노드를 가리키는 엣지를 뺌 |
 
+| 근접 중복(T-197, `near-dup.mjs`) | 실패: 개념 글(이름. 사실) 코사인이 기존 노드끼리 가장 가까운 쌍(바닥)보다 높음(`nearDup`), 기존·앞선 후보 사실 문장 재사용(`factReused`). 확인: 바닥 − 0.03 이상(`nearDupClose`) |
+| 태그 밀도(T-197, `near-dup.mjs`) | 확인만: 한 태그를 단 노드 수(그래프 + 앞 묶음 + 이 묶음)가 max(ceil(노드 수의 10%), 5)를 넘음(`tagDense`) |
 | 태그 적합성(T-197, `tag-fit.mjs`) | 실패: 태그가 하나도 안 남음(`tagFitNone`). 확인: LLM no 태그를 뺌(`tagFitDropped`), 못 물음·답 빠짐(`tagFitPending`) |
 
 **태그 적합성(T-197).** T-195 관문 대안 정답 후보 17줄 중 14줄이 LLM no였다(예: 염색 개편 → random_reroll). 억지 태그가 관문까지 가면 같은 태그 문장의 1위·여유를 흔든다. 그래서 check에서 후보마다 LLM을 한 번 불러(태그 여러 개를 한 번에) 태그마다 "이 개념의 사실이 그 태그 구조를 실제로 드러내는가" yes/no와 한 문장 이유를 받는다. 기준 자료는 `tags.json`의 desc와 예문(다른 분야)이다. no 태그는 빼고, 남은 태그가 없으면 실패다. 이미 실패한 후보는 묻지 않는다. 판정과 이유는 리뷰 시트 "후보 자세히"와 `.json` `tagFit`에 남는다. 호출 상한(`--max-calls`)·429·키 없음이면 그 뒤 후보는 태그를 그대로 두고 `tagFitPending`이다.
+
+**근접 중복·태그 밀도(T-197, ADR 0015 제안 2·3).** T-193 측정에서 근접 중복 노드는 어떤 검색 관문도 통과해 정확도를 무너뜨렸다(합성 1,000노드에서 메이플 hit@1 54 → 5). check 순서는 기본 검사 → 근접 중복(LLM 전, 실패 후보에 한도를 안 씀) → 태그 적합성 → 태그 밀도다.
+- 근접 중복은 노드 임베딩 글(태그 설명·예문이 앞에 붙음)이 아니라 개념 글(이름. 사실)로 잰다. 태그가 같으면 사실이 달라도 가깝기 때문이다(같은 구조 몰림은 태그 밀도가 맡는다).
+- 임베더는 Node e5(`admin.embedding` 모델, 한 문장씩, 벡터는 `.tmp/node-pipeline/cache/vec-*.json`)이고, 모델을 못 쓰면 대체 임베더로 같은 규칙이다(`--dup-embedder fallback`). 미리 계산 벡터 파일(`extension/data/vectors/`, 크롬)은 섞지 않는다. 같은 글을 Node와 크롬에서 임베딩하면 코사인이 0.95~0.97뿐이라(2026-11-22) 0.9 근처를 재기에 잡음이 크다.
+- 기준값은 데이터에서 잰다: 기존 노드끼리 가장 가까운 쌍(2026-11-22 Node e5: 메이플 0.895 world_trade_group~meso_market, 식당 0.864 hygiene_inspection~open_prep). 근거는 시트 "근접 중복 관문" 절과 후보마다 "근접 중복" 줄, `.json` `nearDup`에 남는다.
+- 앞 묶음에서 실패 안 한 후보도 비교 대상이다(묶음 번호 순서로 check를 돌린다). `--no-near-dup`이면 건너뜀.
 
 기준값은 `check.mjs` 맨 위 상수다. 코사인 기준은 기존 그래프의 서로 다른 노드끼리 최고값(메이플 0.47, 식당 0.40)보다 위로 잡았다.
 
@@ -103,8 +111,9 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 | `draft.mjs` | 페이지 초안 프롬프트(T-301 `buildDraftPrompt` 꼴), 답 파싱·태그 없음 버림, 근거 지표(겹침·최장 복사), 절 나누기 |
 | `check.mjs` | 자동 검사, 리뷰 시트 |
 | `tag-fit.mjs` | 태그 적합성 LLM 검사(프롬프트·답 파싱·결과 반영, T-197) |
+| `near-dup.mjs` | 근접 중복 관문(바닥 = 기존 노드끼리 최고 코사인, 같은 사실 재사용)·태그 밀도 상한(T-197, ADR 0015) |
 | `gate.mjs` | 회귀 관문, 대안 정답 후보 표·이유, accept-alt(평가 파일 한 줄 꼴 그대로 고치기) |
 | `apply.mjs` | 패치 만들기, 판본 올리기, 검증 |
 | `cli.mjs` | 명령줄 |
 
-단위 테스트: `tests/unit/node-pipeline.test.mjs`, `tests/unit/node-pipeline-flow.test.mjs`(가짜 fetch·LLM·평가), `tests/unit/node-pipeline-sources.test.mjs`(법령 본문·남길 장·씨앗 확인, T-198), `tests/unit/node-pipeline-tagfit.test.mjs`(태그 적합성·2위 대안 정답·비유 없음 미루기, T-197).
+단위 테스트: `tests/unit/node-pipeline.test.mjs`, `tests/unit/node-pipeline-flow.test.mjs`(가짜 fetch·LLM·평가), `tests/unit/node-pipeline-sources.test.mjs`(법령 본문·남길 장·씨앗 확인, T-198), `tests/unit/node-pipeline-tagfit.test.mjs`(태그 적합성·2위 대안 정답·비유 없음 미루기·근접 중복·태그 밀도, T-197).
