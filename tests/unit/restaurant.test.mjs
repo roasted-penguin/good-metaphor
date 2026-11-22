@@ -8,6 +8,7 @@ import {
 } from '../../extension/lib/graph.js';
 import { loadCommonGraphFromDisk, commonGraphPath, loadInterestGraph, interestFromArgv } from '../../tools/load-graph.mjs';
 import { pickSets, interestArgError, interestEvalFiles, mixedSetting } from '../../tools/eval-lib.mjs';
+import { checkNodeSources } from '../../tools/source-policy.mjs';
 
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
 const rawRestaurant = read('extension/data/common/restaurant.json');
@@ -71,16 +72,10 @@ test('식당 노드: 12~1,000개(T-168에서 늘림, T-196 파이프라인 묶�
   }
 });
 
-test('식당 노드 출처: 공공·공식 자료만(go.kr·정책브리핑·소진공), 위키·블로그 없음, 검수 날짜 있음 (T-118, D-5)', () => {
-  const official = h => h.endsWith('.go.kr') || h === 'www.korea.kr' || h === 'www.sbiz.or.kr';
+test('식당 노드 출처: 출처 정책을 따른다(공공, 또는 교차 확인된 커뮤니티·블로그·뉴스 + sourceKind), 검수 날짜 있음 (T-118, D-5, ADR 0016)', () => {
   for (const node of restaurant.nodes) {
     assert.ok(node.sources.length >= 1, node.id);
-    for (const u of node.sources) {
-      const url = new URL(u);
-      assert.equal(url.protocol, 'https:', `${node.id} ${u}`);
-      assert.ok(official(url.hostname), `${node.id} 공식 출처가 아님: ${u}`);
-      assert.doesNotMatch(u, /namu\.wiki|wikipedia|blog|tistory|inven|cafe\.naver/, u);
-    }
+    assert.deepEqual(checkNodeSources(node, 'restaurant'), [], `${node.id} 출처 정책(tools/source-policy.json): ${node.sources.join(', ')}`);
     assert.match(node.verifiedAt, /^\d{4}-\d{2}-\d{2}$/, node.id);
   }
 });

@@ -1,11 +1,13 @@
 // 노드 파이프라인(T-194) 자동 검사: 후보 개념마다 실패(fail)·확인 필요(warn) 사유를 붙인다.
 // 판정 기준은 기존 규칙에서 왔다: 규칙 2(자주 바뀌는 수치), 규칙 9(태그 통제 어휘), 규칙 11(금칙어),
-// T-118·D-5(공식 출처), 기존 그래프 단위 테스트(사실 2~3개 "다."로 끝, 식당은 숫자·영문·별칭 없음).
+// T-118·D-5(공식 출처)·D-8(커뮤니티 출처는 교차 확인·베낌 검사, ADR 0016), 기존 그래프 단위 테스트(사실 2~3개 "다."로 끝, 식당은 숫자·영문·별칭 없음).
 // 순수 함수(출처 응답 확인만 fetcher 주입). 리뷰 시트(md + json)도 여기서 만든다.
 import { findBlocked } from '../../extension/lib/blocklist.js';
 import { hashEmbed } from '../../extension/lib/fallback-embed.js';
-import { PAGE_DRAFT_LIMITS } from './draft.mjs';
-import { isArticleSource } from './sources.mjs';
+import { PAGE_DRAFT_LIMITS, longestCommonRun, bigramOverlap } from './draft.mjs';
+import { isArticleSource, contentMarkers } from './sources.mjs';
+import { htmlToText } from './web.mjs';
+import { corroboration } from '../source-policy.mjs';
 
 // 대체 임베더(글자 n-그램) 코사인. 기존 그래프의 서로 다른 노드끼리 최고값은 메이플 0.47·식당 0.40(2026-11-22 측정)
 export const DUP_WARN = 0.5;   // 이 이상이면 "비슷한 노드가 있어요"(사람이 보고 판단)
@@ -14,6 +16,8 @@ export const COPY_WARN = 25;   // 원문과 공백 뺀 글자 25자 이상 그�
 export const COPY_FAIL = 40;
 export const OVERLAP_WARN = 0.5; // 사실 2그램 중 페이지에 있는 비율이 이보다 낮으면 페이지 밖 지식일 수 있다
 const ALIAS_MAX = 20;
+// 출처 페이지 글(베낌·겹침 검사용, 메모리에만) 최대 글자 수. 나무위키 문서는 길어서 초안용 MAX_TEXT(12,000)보다 넉넉히
+export const SOURCE_TEXT_MAX = 120000;
 
 export const REASONS = {
   idFormat: 'id는 영문 소문자로 시작하는 소문자·숫자·밑줄 2~40자여야 해요.',
@@ -35,6 +39,13 @@ export const REASONS = {
   source: '출처 주소가 허용 목록 밖이거나 https가 아니에요.',
   sourceStatus: '출처 주소가 200으로 응답하지 않아요.',
   sourceRedirect: '출처 주소가 허용 목록 밖으로 넘어가요.',
+  // 커뮤니티 출처(D-8, ADR 0016)
+  communityUncorroborated: '커뮤니티 출처만 있고 교차 확인이 안 돼요(공식 출처 1개 이상 또는 서로 다른 커뮤니티 2곳, ADR 0016).',
+  communityUnprobed: '커뮤니티 출처는 페이지를 가져와 베낌 검사를 해야 해요(--no-probe로는 통과 못 해요).',
+  communityWeak: '사실과 겹치는 출처 페이지가 2곳이 안 돼요. 두 출처가 정말 같은 사실을 말하는지 봐 주세요.',
+  copiedSource: '출처 페이지 문장을 거의 그대로 옮긴 사실이 있어요(D-5·D-8: 우리 말로).',
+  copiedSourceHeavy: '출처 페이지 문장을 길게 그대로 옮겼어요(D-5·D-8).',
+  storeNameReview: '커뮤니티·블로그·뉴스에서 온 식당 사실이에요. 특정 가게·브랜드 이름이 없는지 봐 주세요(ADR 0016).',
   dupNear: '거의 같은 노드가 그래프에 있어요.',
   dupSimilar: '비슷한 노드가 있어요. 같은 개념인지 봐 주세요.',
   structure: '첫 사실이 구조(무엇에 따라 어떻게 바뀌는가)보다 정의에 가까워요.',
@@ -145,20 +156,40 @@ export function sourceAllowed(url, allowHost) {
   try { const u = new URL(url); return u.protocol === 'https:' && allowHost(u.hostname); } catch { return false; }
 }
 
-// 실제 응답 확인(같은 주소는 한 번만). fetcher = web.mjs politeFetcher
-export function sourceProber(fetcher, allowHost) {
+// 출처 주소 분류 { kind:'official'|'community', site } 또는 null. cfg.allowSource(source-policy)가 없으면 allowHost = 공식(테스트용 설정)
+export function sourceClass(url, cfg) {
+  if (cfg?.allowSource) return cfg.allowSource(url);
+  return sourceAllowed(url, cfg.allowHost) ? { kind: 'official', site: 'official' } : null;
+}
+
+// 실제 응답 확인(같은 주소는 한 번만). fetcher = web.mjs politeFetcher(robots·1초 간격).
+// text = 출처 페이지 글(베낌·겹침 검사용). 메모리에만 두고 결과·디스크에는 숫자만 남긴다(D-5)
+export function sourceProber(fetcher, cfg) {
   const memo = new Map();
   return url => {
     if (!memo.has(url)) {
       memo.set(url, (async () => {
         const r = await fetcher.get(url);
         if (!r.ok) return { ok: false, reason: 'sourceStatus', status: r.status, blocked: r.blocked };
-        if (r.redirected && !sourceAllowed(r.url, allowHost)) return { ok: false, reason: 'sourceRedirect', status: r.status };
-        return { ok: true, status: r.status };
+        if (r.redirected && !sourceClass(r.url, cfg)) return { ok: false, reason: 'sourceRedirect', status: r.status };
+        let text = '';
+        try { text = htmlToText(r.html || '', { ...contentMarkers(cfg, r.url || url), max: SOURCE_TEXT_MAX }); } catch { text = ''; }
+        return { ok: true, status: r.status, text };
       })());
     }
     return memo.get(url);
   };
+}
+
+/**
+ * 출처 페이지 글과 사실 비교(숫자만): 사실마다 최장 복사(공백 뺀 글자)·2그램 겹침
+ * @returns {{ copiedRun:number, overlap:number }}  copiedRun = 사실 중 최댓값, overlap = 사실 평균
+ */
+export function sourceTextSignals(facts, text) {
+  if (!text || !facts.length) return { copiedRun: 0, overlap: 0 };
+  const runs = facts.map(f => longestCommonRun(f, text));
+  const ovs = facts.map(f => bigramOverlap(f, text));
+  return { copiedRun: Math.max(...runs), overlap: Math.round(ovs.reduce((a, b) => a + b, 0) / ovs.length * 100) / 100 };
 }
 
 /* ───── 후보 하나 검사 ───── */
@@ -217,15 +248,30 @@ export async function checkCandidate(c, ctx) {
   else if (aliases.length) warns.add('aliasesReview');
   aliases = aliases.slice(0, L.aliases);
 
-  // 출처
+  // 출처: 허용 주소(공식·커뮤니티) → 교차 확인(D-8) → 실제 응답 + 출처 글과 베낌·겹침(숫자만 남김)
   const sources = c.sources || [];
-  if (!sources.length || !sources.every(u => sourceAllowed(u, cfg.allowHost))) fails.add('source');
-  else if (probe) {
-    for (const u of sources) {
-      const r = await probe(u);
-      if (!r.ok) { fails.add(r.reason); notes.push(`출처 응답: ${r.status}${r.blocked ? ' (robots)' : ''}`); }
-    }
+  const classes = sources.map(u => sourceClass(u, cfg));
+  let sourceKind = 'official';
+  const sourceChecks = [];
+  if (!sources.length || classes.some(x => !x)) fails.add('source');
+  else {
+    const cor = corroboration(classes);
+    sourceKind = cor.sourceKind;
+    if (!cor.corroborated) fails.add('communityUncorroborated');
+    if (probe) {
+      for (const [i, u] of sources.entries()) {
+        const r = await probe(u);
+        if (!r.ok) { fails.add(r.reason); notes.push(`출처 응답: ${r.status}${r.blocked ? ' (robots)' : ''}`); continue; }
+        if (r.text) sourceChecks.push({ url: u, kind: classes[i].kind, ...sourceTextSignals(facts, r.text) });
+      }
+      const run = Math.max(0, ...sourceChecks.map(x => x.copiedRun));
+      if (run >= COPY_FAIL) fails.add('copiedSourceHeavy');
+      else if (run >= COPY_WARN) warns.add('copiedSource');
+      // 두 출처가 같은 사실을 말하는가(휴리스틱): 사실과 겹침이 충분한 출처 페이지 수
+      if (sourceKind === 'community' && sourceChecks.filter(x => x.overlap >= OVERLAP_WARN).length < 2) warns.add('communityWeak');
+    } else if (sourceKind === 'community') fails.add('communityUnprobed');
   }
+  if (sourceKind === 'community' && rules.storeNameReview) warns.add('storeNameReview');
 
   // 중복
   const near = dups.nearest({ label, facts });
@@ -252,9 +298,10 @@ export async function checkCandidate(c, ctx) {
   const edges = (c.edges || []).filter(e => ctx.edgeTargets?.has(e.to) && e.to !== c.id).slice(0, L.edges);
   if (edges.length < (c.edges || []).length) warns.add('edgeDropped');
 
-  const node = { id: c.id, label, ...(aliases.length ? { aliases } : {}), facts, tags, sources };
+  // 출처 종류는 LLM·사람이 아니라 파이프라인이 붙인다(커뮤니티 출처가 하나라도 있으면 community)
+  const node = { id: c.id, label, ...(aliases.length ? { aliases } : {}), facts, tags, sources, ...(sourceKind === 'community' ? { sourceKind } : {}) };
   const status = fails.size ? 'fail' : warns.size ? 'warn' : 'pass';
-  return { status, fails: [...fails], warns: [...warns], notes, node, edges, nearest: near };
+  return { status, fails: [...fails], warns: [...warns], notes, node, edges, nearest: near, sourceChecks };
 }
 
 /**
@@ -324,7 +371,8 @@ export function renderSheet({ interest, batch, results, pages, generatedAt, near
   ];
   for (const r of results) {
     lines.push(`### ${mark[r.status]} · ${r.node.id} · ${r.node.label}`, '');
-    lines.push(`- 출처: ${r.source}${r.pageTitle ? ` (${esc(r.pageTitle)})` : ''}`);
+    lines.push(`- 출처: ${r.source}${r.pageTitle ? ` (${esc(r.pageTitle)})` : ''}${r.node.sourceKind === 'community' ? ' · 출처 종류 community(교차 확인 대상)' : ''}`);
+    for (const x of r.sourceChecks || []) lines.push(`- 출처 확인(${x.kind === 'community' ? '커뮤니티' : '공식'}): ${x.url} (최장 복사 ${x.copiedRun}자, 겹침 ${x.overlap})`);
     if (r.node.aliases?.length) lines.push(`- 별칭(검토): ${r.node.aliases.join(', ')}`);
     lines.push(`- 태그: ${r.node.tags.join(', ') || '(없음)'}`);
     if (r.nearDup) lines.push(`- 근접 중복: 가장 가까운 ${r.nearDup.best.id} ${r.nearDup.best.score} (바닥 ${r.nearDup.floor.score}, ${r.nearDup.embedderId})${r.nearDup.reusedFrom ? ` · 같은 사실: ${r.nearDup.reusedFrom.join(', ')}` : ''}`);

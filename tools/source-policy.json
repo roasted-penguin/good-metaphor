@@ -1,0 +1,76 @@
+{
+  "version": "2026.11.23-1",
+  "note": "공통 그래프 출처 정책(D-5·D-8, ADR 0016). official = 공식·공공 원문, community = 사실 확인용 커뮤니티·블로그·뉴스(우리 문장으로만, 원문 저장 금지, 교차 확인 필수, robots 준수). 사이트 id가 독립 출처 단위(같은 플랫폼의 두 글은 한 곳). 확장 그래프 테스트·노드 파이프라인·서버 테스트가 같이 읽는다",
+  "interests": {
+    "maplestory": {
+      "official": [
+        {
+          "host": "maplestory.nexon.com"
+        }
+      ],
+      "community": [
+        {
+          "site": "namuwiki",
+          "host": "namu.wiki",
+          "paths": [
+            "/w/"
+          ],
+          "license": "CC BY-NC-SA 2.0 KR"
+        },
+        {
+          "site": "inven",
+          "host": "www.inven.co.kr",
+          "paths": [
+            "/board/maple/",
+            "/maple/"
+          ],
+          "license": "게시글 저작권은 작성자(인벤 약관 제15조)"
+        }
+      ]
+    },
+    "restaurant": {
+      "official": [
+        {
+          "suffix": ".go.kr"
+        },
+        {
+          "host": "www.korea.kr"
+        },
+        {
+          "host": "www.sbiz.or.kr"
+        }
+      ],
+      "community": [
+        {
+          "site": "namuwiki",
+          "host": "namu.wiki",
+          "paths": [
+            "/w/"
+          ],
+          "license": "CC BY-NC-SA 2.0 KR"
+        },
+        {
+          "site": "tistory",
+          "suffix": ".tistory.com",
+          "license": "글마다 작성자 저작권"
+        },
+        {
+          "site": "brunch",
+          "host": "brunch.co.kr",
+          "paths": [
+            "/@"
+          ],
+          "license": "글마다 작성자 저작권"
+        },
+        {
+          "site": "daumnews",
+          "host": "v.daum.net",
+          "paths": [
+            "/v/"
+          ],
+          "license": "기사마다 언론사 저작권"
+        }
+      ]
+    }
+  }
+}

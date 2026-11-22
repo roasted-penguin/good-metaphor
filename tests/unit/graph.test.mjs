@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { mergeGraphs, validateGraph, nodeText, tagText, tagDescText, embedItems } from '../../extension/lib/graph.js';
 import { validateOverlay } from '../../extension/lib/stores.js';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
+import { checkNodeSources } from '../../tools/source-policy.mjs';
 
 // 해석된 공통 그래프 = maplestory.json + tags.json (T-304)
 const common = loadCommonGraphFromDisk();
@@ -242,10 +243,10 @@ test('오버레이(사용자 노드)는 sources·verifiedAt이 없어도 통과�
   assert.match(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], sources: ['아무거나'] }] }).join(), /sources/);
 });
 
-test('실제 공통 그래프: 모든 노드에 공식 출처(maplestory.nexon.com)와 검수 날짜가 있다 (T-118, D-5)', () => {
+test('실제 공통 그래프: 모든 노드 출처가 출처 정책을 따르고(공식, 또는 교차 확인된 커뮤니티) 검수 날짜가 있다 (T-118, D-5, D-8·ADR 0016)', () => {
   for (const n of common.nodes) {
     assert.ok(Array.isArray(n.sources) && n.sources.length >= 1, `${n.id} 출처 없음`);
-    for (const u of n.sources) assert.match(u, /^https:\/\/maplestory\.nexon\.com\//, `${n.id} 출처는 공식 사이트만(D-5): ${u}`);
+    assert.deepEqual(checkNodeSources(n, 'maplestory'), [], `${n.id} 출처 정책(tools/source-policy.json): ${n.sources.join(', ')}`);
     assert.match(n.verifiedAt, /^\d{4}-\d{2}-\d{2}$/, n.id);
   }
 });

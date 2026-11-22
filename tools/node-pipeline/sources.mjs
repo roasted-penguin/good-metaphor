@@ -1,11 +1,16 @@
-// 노드 파이프라인(T-194) 관심사별 출처 설정. 공식·공공 출처만(D-5): 위키·인벤·블로그는 넣지 않는다.
-// - allowHost(host): 후보 노드 sources에 쓸 수 있는 호스트(check가 검사)
+// 노드 파이프라인(T-194) 관심사별 출처 설정. 목록·초안은 공식·공공 출처만 돈다(D-5). 커뮤니티(메이플 나무위키·인벤, 식당 나무위키·블로그·뉴스, D-8·ADR 0016)는
+// 수집하지 않고, 사람·에이전트가 읽고 우리 문장으로 쓴 후보의 확인용 출처로만 받는다(check가 교차 확인·베낌 검사).
+// 호스트 목록 원본은 tools/source-policy.json(그래프 테스트와 같은 기준)
+// - allowHost(host): 공식 호스트(index가 목록 링크를 거를 때)
+// - allowSource(url): 후보 노드 sources에 쓸 수 있는 주소 분류 { kind, site } 또는 null(check가 검사)
 // - listings: 목록 페이지(index가 읽어 상세 페이지 링크를 모은다). linkPattern에 맞는 링크만, titleFilter가 있으면 제목도 맞아야.
 //   stripQuery면 링크의 ?page=… 같은 꼬리를 떼고 본다(메이플 뉴스 목록)
 // - seeds: 목록 없이 바로 넣는 상세 페이지(식당: 기존 그래프가 실제로 열어 확인한 공공 자료 + 사전)
 // - content: 본문 구역 표지(경로 정규식 → { start, end }). 없으면 페이지 전체에서 머리·꼬리·메뉴를 뺀 글
 // - sectionSkip: 긴 글을 절로 나눌 때(T-195) 건너뛸 절 제목 정규식(없으면 모두 초안)
 // - rules: 사실 검사 규칙(규칙 2·기존 그래프 단위 테스트와 맞춘다)
+
+import { classifySource, isOfficialHost } from '../source-policy.mjs';
 
 const MAPLE = 'https://maplestory.nexon.com';
 
@@ -37,7 +42,8 @@ export const INTERESTS = {
   maplestory: {
     id: 'maplestory',
     domain: '메이플스토리',
-    allowHost: h => h === 'maplestory.nexon.com',
+    allowHost: h => isOfficialHost(h, 'maplestory'),
+    allowSource: url => classifySource(url, 'maplestory'),
     listings: [
       // 가이드 분류별 목록 API(T-208): 분류마다 POST 한 번
       ...MAPLE_GUIDE_BOARDS.map(([id]) => ({
@@ -73,8 +79,10 @@ export const INTERESTS = {
   restaurant: {
     id: 'restaurant',
     domain: '식당',
-    // 공공·공식 자료만(restaurant.test.mjs와 같은 기준): *.go.kr, 정책브리핑, 소상공인시장진흥공단
-    allowHost: h => h.endsWith('.go.kr') || h === 'www.korea.kr' || h === 'www.sbiz.or.kr',
+    // 목록·초안은 공공·공식 자료만: *.go.kr(표준국어대사전 포함), 정책브리핑, 소상공인시장진흥공단.
+    // 커뮤니티·블로그·뉴스(나무위키·티스토리·브런치·다음 뉴스, ADR 0016)는 수집하지 않고 확인용 출처로만(allowSource)
+    allowHost: h => isOfficialHost(h, 'restaurant'),
+    allowSource: url => classifySource(url, 'restaurant'),
     listings: [
       { kind: 'press', url: 'https://www.korea.kr/news/policyNewsList.do?pageIndex={page}', linkPattern: /^https:\/\/www\.korea\.kr\/news\/policyNewsView\.do\?newsId=\d+$/ },
       { kind: 'press', url: 'https://www.mafra.go.kr/bbs/home/792/artclList.do?page={page}', linkPattern: /^https:\/\/www\.mafra\.go\.kr\/bbs\/home\/792\/\d+\/artclView\.do$/ },
@@ -157,7 +165,8 @@ export const INTERESTS = {
       allowAliases: false, // 식당 그래프는 별칭이 없다(restaurant.test.mjs). apply가 뺀다
       allowLatin: false,   // 영문은 브랜드일 수 있어 실패
       labelNoDigits: true, // 이름에도 숫자 없음(restaurant.test.mjs)
-      numberAllow: []      // 숫자는 하나도 안 된다
+      numberAllow: [],     // 숫자는 하나도 안 된다
+      storeNameReview: true // 커뮤니티 출처 후보는 특정 가게 이름 확인(ADR 0016, 경고)
     }
   }
 };

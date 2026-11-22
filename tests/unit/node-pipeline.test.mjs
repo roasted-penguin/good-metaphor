@@ -252,7 +252,9 @@ test('checkBatch: 실패 사유 — id 꼴·그래프 id·이름 중복·사실 
     [good({ facts: ['나쁜 말이 들어가면 바뀐다.', '둘째다.'] }), 'blocked'],
     [good({ aliases: ['나쁜말'] }), 'blocked'],
     [good({ tags: ['made_up_tag'] }), 'noTags'],
-    [good({ sources: ['https://namu.wiki/w/x'] }), 'source'],
+    [good({ sources: ['https://namu.wiki/w/x'] }), 'communityUncorroborated'], // 커뮤니티 하나만은 교차 확인 실패(D-8, ADR 0016)
+    [good({ sources: ['https://namu.wiki/history/x'] }), 'source'],          // 커뮤니티라도 허용 경로(/w/) 밖
+    [good({ sources: ['https://blog.example/x'] }), 'source'],
     [good({ sources: ['http://maplestory.nexon.com/x'] }), 'source'],
     [good({ grounding: { labelInPage: true, factOverlap: [1, 1], copiedRun: [45, 3] } }), 'copiedHeavy']
   ];
@@ -308,7 +310,7 @@ test('checkBatch 식당 규칙: 숫자·영문·이름 숫자 실패, 별칭은 
 test('sourceProber: 200만 통과, 허용 밖으로 넘어가면 실패, 같은 주소는 한 번만 묻는다', async () => {
   const asked = [];
   const fetcher = { get: async url => { asked.push(url); return url.includes('dead') ? { ok: false, status: 404 } : url.includes('moved') ? { ok: true, status: 200, redirected: true, url: 'https://elsewhere.example/' } : { ok: true, status: 200, url }; } };
-  const probe = sourceProber(fetcher, maple.allowHost);
+  const probe = sourceProber(fetcher, maple);
   const rs = await run([good(), good({ id: 'b_one', label: 'ㄴ', sources: ['https://maplestory.nexon.com/dead'] }), good({ id: 'c_one', label: 'ㄷ', sources: ['https://maplestory.nexon.com/moved'] }), good({ id: 'd_one', label: 'ㄹ' })], maple, { probe });
   assert.equal(rs[0].fails.includes('sourceStatus'), false);
   assert.ok(rs[1].fails.includes('sourceStatus'));
