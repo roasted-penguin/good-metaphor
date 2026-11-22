@@ -20,7 +20,8 @@ index → draft → check → (승인 id 고르기) → gate(fallback) → gate(
 
 ```bash
 # 1. 색인: 목록 페이지 → 상세 페이지 URL·제목 (본문은 읽지 않음)
-npm run node-pipeline:index -- --interest maplestory [--pages 3]
+#    --probe-seeds: 씨앗마다 한 번 가져와 살아 있는지 색인에 probe로 기록(응답 없는 씨앗은 초안 순서 맨 뒤, T-198)
+npm run node-pipeline:index -- --interest maplestory [--pages 3] [--probe-seeds]
 
 # 2. 초안: 색인에서 아직 안 한 페이지 N개 → 절마다 LLM 1번 → 후보 (묶음 번호 자동)
 #    키는 GEMINI_API_KEY 등 환경 변수(값은 출력하지 않음). Gemini 무료 한도는 하루 500번을 다른 작업과 나눠 쓴다.
@@ -50,6 +51,15 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 - **한 절에 여러 후보.** 프롬프트가 시스템·규칙·재화·제약을 빠짐없이 따로(보통 2~5개) 고르게 한다. 같은 페이지 앞 절에서 나온 개념은 다음 절의 [이미 있는 개념]에 들어간다.
 - **맞는 태그 없음은 초안에서 버림.** 목록 안 태그가 하나도 없는 후보는 check에 넘기지 않고 초안 파일 `dropped`(사유 `noTags`, 출처·절)에 남긴다.
 - **LLM 답 캐시.** `.tmp/node-pipeline/cache/llm-<해시>.json`(제공자·모델·프롬프트 해시 → LLM 답). 저장하는 것은 LLM이 우리 말로 쓴 답뿐이고 본문은 해시 키로만 쓴다(D-5).
+
+## 식당 출처 (T-198)
+
+식당은 목록 페이지가 거의 없어 씨앗(`sources.mjs` `restaurant.seeds`) 위주다. 종류(`kind`)와 초안 순서는 `law → local → agency → press`.
+
+- **법령(국가법령정보센터):** 씨앗 주소는 사람이 여는 `https://www.law.go.kr/법령/<법령명>`이고 후보 출처도 이 주소다. 이 페이지는 껍데기라 `bodyFrom`(`lawBodyUrl`)이 껍데기에서 현행 판 번호(`lsiSeq`)·시행일(`efYd`)을 읽어 본문(`/LSW/lsInfoR.do`)을 한 번 더 가져온다(개정돼도 씨앗은 그대로). 장 제목(`<p class="gtit">`)을 절 표지로 쓰고(`content` `headingClasses`), 씨앗의 `keep`에 맞는 장만 초안한다(`keepSub`: 하위 "제N절"은 상위 장을 따름, `maxSections` 4). 벌칙·부칙 장은 `sectionSkip`. 판 번호를 못 읽으면 `no-body`로 건너뛴다.
+- **지자체 보건소:** 동대문구 보건소 식품접객업 안내(시설기준·영업자 준수사항·식중독 예방·지위승계·원산지 등), 송파구 식품안심업소. 꼬리 절(컨텐츠 정보·담당자)은 `sectionSkip`.
+- **기관:** 공정위 가맹 안내, 최저임금위원회 제도·자주 묻는 질문, 국세청 사업자 세무(카드·현금영수증 포함).
+- **넣지 않은 것(2026-11-22):** 생활법령(easylaw) 503 지속(씨앗은 남겨 두고 `probe.ok=false`로 맨 뒤), 공정위 가맹사업거래(`franchise.ftc.go.kr`) 403, 소상공인24(`sbiz24.kr`)·소상공인시장진흥공단(`semas.or.kr`)은 허용 호스트 밖(식당 그래프 출처 테스트와 같은 기준이라 넓히지 않음), 식약처 게시판(첨부 파일 위주라 본문이 짧음), 고용노동부 정책안내(목록이 스크립트 링크), 정책브리핑 정책위키(2022년에 멈춘 기록 문서).
 
 ## 자동 검사 (check)
 
@@ -81,13 +91,13 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 
 | 파일 | 하는 일 |
 | --- | --- |
-| `sources.mjs` | 관심사별 허용 호스트·목록·씨앗·본문 표지·검사 규칙 |
+| `sources.mjs` | 관심사별 허용 호스트·목록·씨앗·본문 표지·검사 규칙, 법령 껍데기 → 본문 주소(`lawBodyUrl`·`bodyUrlFor`), 씨앗 설정 찾기(`seedFor`) |
 | `web.mjs` | robots.txt, 예의 바른 fetch, HTML → 글·링크·제목, 해시 |
-| `run.mjs` | index(목록 → 색인), draft(페이지 → 후보) |
+| `run.mjs` | index(목록 → 색인), draft(페이지 → 후보), 씨앗 확인(`probeSeeds`·`markProbes`) |
 | `draft.mjs` | 페이지 초안 프롬프트(T-301 `buildDraftPrompt` 꼴), 답 파싱·태그 없음 버림, 근거 지표(겹침·최장 복사), 절 나누기 |
 | `check.mjs` | 자동 검사, 리뷰 시트 |
 | `gate.mjs` | 회귀 관문, 대안 정답 후보 표·이유, accept-alt(평가 파일 한 줄 꼴 그대로 고치기) |
 | `apply.mjs` | 패치 만들기, 판본 올리기, 검증 |
 | `cli.mjs` | 명령줄 |
 
-단위 테스트: `tests/unit/node-pipeline.test.mjs`, `tests/unit/node-pipeline-flow.test.mjs`(가짜 fetch·LLM·평가).
+단위 테스트: `tests/unit/node-pipeline.test.mjs`, `tests/unit/node-pipeline-flow.test.mjs`(가짜 fetch·LLM·평가), `tests/unit/node-pipeline-sources.test.mjs`(법령 본문·남길 장·씨앗 확인, T-198).

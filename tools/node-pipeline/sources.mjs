@@ -9,6 +9,19 @@
 
 const MAPLE = 'https://maplestory.nexon.com';
 
+// 국가법령정보센터(T-198): 사람이 여는 주소(https://www.law.go.kr/법령/식품위생법)는 껍데기이고 조문은 스크립트가 lsInfoR.do로 불러온다.
+// 껍데기에서 현행 판 번호(lsiSeq)·시행일(efYd)을 읽어 본문 주소를 만든다(판이 바뀌어도 씨앗 주소는 그대로). 출처 주소는 껍데기 주소를 쓴다
+export function lawBodyUrl(html) {
+  const s = String(html || '');
+  const seq = s.match(/lsiSeq\s*[:=]\s*['"]?(\d+)/)?.[1];
+  const ef = s.match(/efYd\s*=\s*['"](\d{8})['"]/)?.[1];
+  if (!seq) return null;
+  return `https://www.law.go.kr/LSW/lsInfoR.do?lsiSeq=${seq}${ef ? `&efYd=${ef}` : ''}&chrClsCd=010202&ancYnChk=0`;
+}
+const LAW = name => `https://www.law.go.kr/${encodeURI('법령/' + name)}`;
+// 법령은 장 제목(제N장)으로 나누고, keep에 맞는 장만 초안한다. 하위 "제N절"은 상위 장을 따른다
+const LAW_SUB = /^제\d+절/;
+
 // 메이플 가이드는 목록 페이지가 스크립트로 그려져서, 공식 가이드 검색(/Guide/N23GameInformation/Articles/Search, robots 허용)을
 // 주제어로 돌려 글 링크를 모은다. 주제어는 기존 노드 영역 + 1,000개를 향한 넓은 영역
 export const MAPLE_GUIDE_KEYWORDS = [
@@ -79,13 +92,46 @@ export const INTERESTS = {
         ['부가가치세', 2272, 7693], ['원천세', 2289, 7701], ['사업자등록 신청', 2444, 7777], ['사업자등록 정정', 2446, 7779],
         ['휴업·폐업', 2447, 7780], ['현금영수증·신용카드', 2468, 7793], ['전자세금계산서', 2460, 7786], ['세금 납부 안내', 2364, 7741],
         ['세액감면 및 절세혜택', 41127, 239082], ['징수유예', 41130, 239085]
+      ].map(([title, mi, id]) => ({ kind: 'agency', title: `국세청 ${title}`, url: `https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=${mi}&cntntsId=${id}` })),
+      // T-198 씨앗(2026-11-22 응답 확인, robots 허용). 생활법령(easylaw) 503·공정위 가맹사업거래(franchise.ftc.go.kr) 403·
+      // 소상공인24(sbiz24.kr, 허용 호스트 밖)·식약처 게시판(첨부 파일 위주)은 넣지 않았다(보고서 T-198)
+      // 법령: 국가법령정보센터 현행 법령에서 식당 운영에 닿는 장만
+      ...[
+        ['식품위생법', /영업|조리사|행정 제재/],
+        ['가맹사업거래의 공정화에 관한 법률', /기본원칙|공정화|분쟁/],
+        ['상가건물 임대차보호법', null],
+        ['농수산물의 원산지 표시 등에 관한 법률', /원산지 표시 등$/],
+        ['근로기준법', /근로계약|임금|근로시간/],
+        ['최저임금법', /제2장 최저임금|최저임금의 결정/],
+        ['부가가치세법', /간이과세/],
+        ['외식산업 진흥법', /진흥기반|경쟁력/],
+        ['식품 등의 표시ㆍ광고에 관한 법률', null],
+        ['소상공인 보호 및 지원에 관한 법률', /창업 및 경영안정|백년소상공인/]
+      ].map(([name, keep]) => ({ kind: 'law', title: `법령 ${name}`, url: LAW(name.replace(/ /g, '')), keep, keepSub: LAW_SUB, maxSections: 4 })),
+      // 지자체 위생 안내: 동대문구 보건소(식품접객업 영업자가 실제로 보는 시설기준·준수사항·원산지·위생교육)
+      ...[
+        ['시설기준', 1305], ['영업자 준수사항', 1306], ['식품위생 교육', 1308], ['식중독 예방', 1309],
+        ['영업자 지위승계', 1302], ['식품진흥기금 융자', 1307], ['음식점 원산지 관리', 1321]
+      ].map(([title, key]) => ({ kind: 'local', title: `동대문구 보건소 ${title}`, url: `https://www.ddm.go.kr/health/contents.do?key=${key}` })),
+      { kind: 'local', title: '송파구 식품안심업소 지정', url: 'https://www.songpa.go.kr/ehealth/contents.do?key=4637' },
+      // 공정위 가맹 거래 안내, 최저임금위원회 제도·자주 묻는 질문, 국세청 카드·현금영수증·신규사업자
+      { kind: 'agency', title: '공정위 가맹 거래질서 확립', url: 'https://www.ftc.go.kr/www/contents.do?key=706' },
+      { kind: 'agency', title: '공정위 가맹사업법 위반행위 유형', url: 'https://www.ftc.go.kr/www/contents.do?key=345' },
+      { kind: 'agency', title: '최저임금위원회 최저임금제도', url: 'https://www.minimumwage.go.kr/minWage/about/main.do' },
+      { kind: 'agency', title: '최저임금위원회 자주 묻는 질문', url: 'https://www.minimumwage.go.kr/customer/faq/list.do' },
+      ...[
+        ['사업용 신용카드', 2475, 7799], ['현금영수증 발급의무', 2471, 7796], ['신규사업자', 11448, 8817], ['신용카드 결제거부·위장가맹점', 2476, 7800]
       ].map(([title, mi, id]) => ({ kind: 'agency', title: `국세청 ${title}`, url: `https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=${mi}&cntntsId=${id}` }))
     ],
-    kindOrder: ['law', 'agency', 'press'],
+    // 껍데기 페이지 → 실제 본문 주소(T-198). host가 같으면 resolve(html)를 불러 본문을 한 번 더 가져온다
+    bodyFrom: [{ host: 'www.law.go.kr', resolve: lawBodyUrl }],
+    kindOrder: ['law', 'local', 'agency', 'press'],
     // 절 나누기(T-195): 본문 표지가 없는 공공 페이지는 메뉴·만족도 조사 제목도 절이 된다(농식품부 보도자료 5쪽에서 호출 10번 → 후보 0)
-    sectionSkip: /Skip Navigation|콘텐츠 만족도|바로가기|^보도자료$|사이트맵|전체메뉴|^메뉴$/i,
+    // T-198: 지자체 누리집 꼬리(컨텐츠 정보·담당자), 법령 벌칙·부칙
+    sectionSkip: /Skip Navigation|콘텐츠 만족도|바로가기|^보도자료$|사이트맵|전체메뉴|^메뉴$|^컨텐츠 (담당자 )?정보$|^제\d+장(의\d+)? 벌칙$|^부칙/i,
     content: [
-      { path: /policyNewsView/, start: 'class="article_body"', end: 'class="article_footer"' }
+      { path: /policyNewsView/, start: 'class="article_body"', end: 'class="article_footer"' },
+      { path: /^\/LSW\/lsInfoR\.do$/, headingClasses: ['gtit'] }
     ],
     rules: {
       allowAliases: false, // 식당 그래프는 별칭이 없다(restaurant.test.mjs). apply가 뺀다
@@ -102,9 +148,26 @@ export function interestConfig(id) {
   return c;
 }
 
-// 경로에 맞는 본문 구역 표지. 없으면 {}
+// 경로에 맞는 본문 구역 표지(+ class 제목). 없으면 {}
 export function contentMarkers(cfg, url) {
   const { pathname } = new URL(url);
   const hit = (cfg.content || []).find(c => c.path.test(pathname));
-  return hit ? { start: hit.start, end: hit.end } : {};
+  if (!hit) return {};
+  const out = {};
+  if (hit.start) out.start = hit.start;
+  if (hit.end) out.end = hit.end;
+  if (hit.headingClasses) out.headingClasses = hit.headingClasses;
+  return out;
+}
+
+// 껍데기 페이지면 실제 본문 주소, 아니면 null (T-198)
+export function bodyUrlFor(cfg, url, html) {
+  const host = new URL(url).hostname;
+  const hit = (cfg.bodyFrom || []).find(b => b.host === host);
+  return hit ? hit.resolve(html) : null;
+}
+
+// 색인 항목(JSON이라 정규식이 없음) → 같은 주소의 씨앗 설정(keep·keepSub·maxSections). 없으면 null
+export function seedFor(cfg, url) {
+  return (cfg.seeds || []).find(s => s.url === url) || null;
 }
