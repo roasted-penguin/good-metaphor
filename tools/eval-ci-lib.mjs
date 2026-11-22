@@ -26,7 +26,8 @@ export const PRESETS = {
   ]
 };
 
-export const PRESET_NAMES = [...Object.keys(PRESETS), 'custom'];
+// none(T-196): 평가 없이(워크플로가 노드 관문 gate_args·벡터 만들기만 돌릴 때). 실행 목록은 비어 있다
+export const PRESET_NAMES = [...Object.keys(PRESETS), 'custom', 'none'];
 
 /**
  * 따옴표를 아는 간단한 인자 나누기(워크플로 입력 문자열용). 셸 확장(글로브·변수)은 하지 않는다
@@ -67,6 +68,7 @@ export function resolveRuns(argv) {
   let rest = rest0;
   const at = rest.indexOf('--args-string');
   if (at >= 0) rest = [...rest.slice(0, at), ...splitArgs(rest[at + 1] ?? ''), ...rest.slice(at + 2)];
+  if (preset === 'none') return { preset, runs: [] };
   if (preset === 'custom') {
     if (!rest.length) throw new Error('custom은 eval 인자가 있어야 해요(예: custom --guard --margin-guard)');
     return { preset, runs: [{ name: 'custom', args: rest }] };
@@ -106,4 +108,22 @@ export function summaryMarkdown({ preset, results, extra = [] }) {
   }
   lines.push('전체 로그는 아티팩트 `eval-logs`에 있어요.');
   return lines.join('\n') + '\n';
+}
+
+/**
+ * 노드 관문 실행 목록(T-196). 워크플로 입력 gate_args: `;`로 나눈 node-pipeline:gate 인자 묶음.
+ * 실행마다 `--embedder browser`로 고정한다(대체 임베더 관문은 맥에서 돌림, CI는 실제 확장 판정만)
+ * @param {string} s  예 "--interest maplestory --results tools/node-pipeline/batches/t196-maplestory.json; --interest restaurant --results ..."
+ * @returns {string[][]}  빈 문자열이면 []
+ */
+export function gateRuns(s) {
+  return String(s ?? '').split(';').map(splitArgs).filter(a => a.length).map(a => {
+    const out = [];
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] === '--embedder') { i++; continue; }
+      out.push(a[i]);
+    }
+    if (!out.includes('--interest')) throw new Error(`관문 실행마다 --interest가 있어야 해요: ${a.join(' ')}`);
+    return [...out, '--embedder', 'browser'];
+  });
 }

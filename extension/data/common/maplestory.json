@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.23-1",
+  "version": "2026.11.23-2",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -880,6 +880,106 @@
       "tags": ["progression_gate"],
       "sources": ["https://maplestory.nexon.com/News/Update/799"],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "achievement", "label": "메이플 업적", "aliases": ["업적"],
+      "facts": [
+        "게임 내 다양한 활동을 수행하면 난이도에 따라 업적 점수가 쌓이고, 점수가 일정 기준을 넘으면 업적 등급이 오른다.",
+        "메이플ID 내 모든 캐릭터가 업적 진행 상황과 정보를 공유하며 월드 통합으로 관리된다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/466"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "monster_park_hands", "label": "몬스터파크 핸즈", "aliases": ["몬파 핸즈"],
+      "facts": [
+        "이용권을 사용해 시간을 충전하면 모바일 환경에서 캐릭터가 자동으로 사냥하며 경험치와 아이템을 모을 수 있다.",
+        "자동 전투 중에는 추가 경험치와 메소 획득량 증가 등 별도의 상시 버프 혜택이 적용된다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/463"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "starforce_hunting_zone", "label": "스타포스 사냥터와 방어막", "aliases": ["스포존"],
+      "facts": [
+        "특정 지역의 사냥터는 몬스터가 방어막을 두르고 있어 요구하는 수치를 채워야만 온전한 피해를 줄 수 있다.",
+        "입장 시 필요한 수치에 도달하지 못하면 오히려 적에게 받는 피해가 커지고 공격 효율이 크게 떨어진다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/457"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "ability_advanced_reset", "label": "어빌리티 고급 재설정과 자동 재설정", "aliases": ["어빌리티 재설정"],
+      "facts": [
+        "명성치와 메소를 소모하여 레전드리 등급의 어빌리티 옵션을 원하는 조건에 맞춰 재설정할 수 있다.",
+        "목표 옵션이나 수치 조건을 설정해두면 조건에 도달할 때까지 자동으로 재설정을 반복할 수 있다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/news/update/813"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "soul_amplification", "label": "소울 증폭", "aliases": ["소울 증폭"],
+      "facts": [
+        "소울 에테르와 메소를 소모하여 위대한 소울이 부여된 무기에 증폭 단계를 올리고 소울 잠재능력을 부여한다.",
+        "증폭에 실패할 때마다 게이지가 쌓이며 게이지가 가득 차면 다음 시도에서 무조건 성공한다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/news/update/813"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "prime_cube", "label": "프라임 큐브와 에디셔널 큐브", "aliases": ["프큐"],
+      "facts": [
+        "레전드리 등급의 장비에 사용할 수 있으며, 첫 번째 옵션을 고정하고 나머지 옵션을 재설정하여 기존 결과와 비교해 선택할 수 있다.",
+        "큐브를 사용할 때마다 전용 조각을 얻으며, 이를 모아 다른 유용한 아이템으로 바꿀 수 있다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/news/update/813"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "boss_bellona", "label": "신규 보스 벨로나", "aliases": ["벨로나"],
+      "facts": [
+        "특정 선행 퀘스트를 완료하고 일정 레벨 이상을 달성한 캐릭터만 전용 게이트를 통해 입장할 수 있다.",
+        "일반 및 하드 난이도에 따라 도전 가능한 시점이 다르게 열리며 격파 시 전용 장비와 소울 등 보상을 얻는다."
+      ],
+      "tags": ["threshold_req", "progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/811"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "mission_ultima_ch2", "label": "미션 울티마 챕터2", "aliases": ["울티마 챕터2"],
+      "facts": [
+        "특정 레벨 이상의 캐릭터가 전구 알림이를 통해 퀘스트를 수락하면 전용 UI를 통해 진행할 수 있다.",
+        "새로운 퀘스트 연계와 지역이 추가되어 사도와 제른 다르모어에 맞서는 이야기를 다룬다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/808"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "yellow_maple_id", "label": "Yellow 메이플ID 제한", "aliases": ["옐로우메이플아이디"],
+      "facts": [
+        "Green 메이플ID로 선택되지 않은 계정은 Yellow 메이플ID로 지정되어 경험치와 드롭률 감소를 비롯한 다수의 콘텐츠 이용 제약을 받는다.",
+        "Yellow 메이플ID 상태에서는 아이템 거래, 경매장, 메소마켓, 길드 창고 등 경제 활동과 교환 기능이 전면 차단된다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/808"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "chronicle_lete", "label": "메이플 크로니클 레테 추가", "aliases": ["크로니클 레테"],
+      "facts": [
+        "특정 업적을 달성한 캐릭터가 있으면 동일 월드 내의 조건을 만족하는 캐릭터로 새로운 스토리 컨텐츠를 진행할 수 있다.",
+        "요건을 채운 뒤 게임 내 이동 수단을 통해 관련 지역으로 이동하여 새로운 서사의 스토리를 시작할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/808"],
+      "verifiedAt": "2026-11-23"
     }
   ],
   "edges": [
@@ -960,6 +1060,11 @@
     { "from": "union_start", "to": "union_link", "rel": "유니온이 열리는 조건" },
     { "from": "maple_home", "to": "vip_sauna", "rel": "사우나 누적 보상 가구로 꾸밈" },
     { "from": "mvp_resort", "to": "mvp_membership", "rel": "MVP 등급에 따라 이용 시간을 줌" },
-    { "from": "skill_ring", "to": "boss_entry", "rel": "보스 스펙을 맞추는 장비" }
+    { "from": "skill_ring", "to": "boss_entry", "rel": "보스 스펙을 맞추는 장비" },
+    { "from": "monster_park_hands", "to": "monster_park", "rel": "모바일 연동 시스템" },
+    { "from": "starforce_hunting_zone", "to": "starforce", "rel": "요구하는 수치를 채우기 위해 필요함" },
+    { "from": "starforce_hunting_zone", "to": "arcane_force", "rel": "입장 요건과 방어막 해제 구조가 비슷함" },
+    { "from": "prime_cube", "to": "cube", "rel": "재설정 보완" },
+    { "from": "boss_bellona", "to": "boss_entry", "rel": "입장 조건 공유" }
   ]
 }

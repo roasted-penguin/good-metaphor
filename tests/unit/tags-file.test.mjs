@@ -54,9 +54,10 @@ test('nodeText 스냅숏: 분리 전과 바이트 단위로 같다 (벡터 캐�
   // T-187: meso_inflation 첫 사실을 고쳐 써 전체 해시가 바뀐다(starforce·sol_erda는 그대로)
   // T-189: mvp_membership·cube·boss_entry 사실 순서를 바꿔 전체 해시가 바뀐다(starforce·sol_erda는 그대로)
   // T-191: 메이플 노드를 확장해 전체 해시가 바뀐다(starforce·sol_erda는 그대로)
+  // T-196: 파이프라인 실제 관문 묶음 노드 10개를 더해 전체 해시가 바뀐다(starforce·sol_erda는 그대로)
   assert.equal(sha1(text('starforce')), '5303d3c5de5c878933c1db407d87d32f8a07d9ba');
   assert.equal(sha1(text('sol_erda')), '7d32aa20155a45a6f7e367d6412601fdb8222384');
-  assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), '4bd2241998ac2cb2f1502eef7b2c530f28603fa4');
+  assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), '8baf4fa75c830d9a79df7adfadc07630455ff9ee');
   // mergeGraphs는 노드가 쓰는 태그만 남긴다. 메이플 노드는 T-171 새 태그를 쓰지 않고 T-176 brokerage_fee(trade_fee)만 써서 19개
   assert.equal(g.tags.length, 19);
 });

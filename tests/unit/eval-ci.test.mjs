@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PRESETS, PRESET_NAMES, resolveRuns, splitArgs, keyLines, summaryMarkdown } from '../../tools/eval-ci-lib.mjs';
+import { PRESETS, PRESET_NAMES, resolveRuns, splitArgs, keyLines, summaryMarkdown, gateRuns } from '../../tools/eval-ci-lib.mjs';
 import { interestArgError } from '../../tools/eval-lib.mjs';
 import { commonInterest } from '../../extension/lib/graph.js';
 import { interestFromArgv } from '../../tools/load-graph.mjs';
@@ -106,4 +106,22 @@ test('summaryMarkdown: 표에 통과·실패, 실행별 요약 줄', () => {
   assert.match(md, /실패\(종료 코드 1\)/);
   assert.match(md, /벡터: 바뀜/);
   assert.match(md, /### maple-holdout\n\n```\n회귀 2건\n```/);
+});
+
+test('gateRuns: ;로 나눈 관문 인자, --embedder는 browser로 고정, --interest 없으면 오류 (T-196)', () => {
+  assert.deepEqual(gateRuns(''), []);
+  assert.deepEqual(resolveRuns(['none']), { preset: 'none', runs: [] });
+  assert.deepEqual(gateRuns('--interest maplestory --results a.json --embedder fallback; --interest restaurant --results "b c.json"'), [
+    ['--interest', 'maplestory', '--results', 'a.json', '--embedder', 'browser'],
+    ['--interest', 'restaurant', '--results', 'b c.json', '--embedder', 'browser']
+  ]);
+  assert.throws(() => gateRuns('--results a.json'), /--interest/);
+});
+
+test('eval 워크플로: gate_args 입력·none 프리셋·node-gate 아티팩트 (T-196)', () => {
+  const yml = readFileSync('.github/workflows/eval.yml', 'utf8');
+  assert.match(yml, /gate_args:/);
+  assert.match(yml, /- none/);
+  assert.match(yml, /tools\/eval-ci\.mjs --gate "\$GATE_ARGS"/);
+  assert.match(yml, /name: node-gate/);
 });
