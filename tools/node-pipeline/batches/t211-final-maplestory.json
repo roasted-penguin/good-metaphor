@@ -84,28 +84,6 @@
       "batch": 29,
       "status": "warn",
       "node": {
-        "id": "flame_wolf_difficulty",
-        "label": "불꽃늑대의 소굴 난이도 분화",
-        "aliases": [
-          "불늑"
-        ],
-        "facts": [
-          "캐릭터의 레벨 구간에 따라 입장할 수 있는 불꽃늑대의 난이도가 자동으로 분류되어 보상 기준이 나뉜다.",
-          "불꽃늑대에게 가한 피해량에 따라 등급이 매겨지며, 해당 등급에 따라 경험치와 아이템 보상 수준이 결정된다."
-        ],
-        "tags": [
-          "threshold_req"
-        ],
-        "sources": [
-          "https://maplestory.nexon.com/news/update/680"
-        ]
-      },
-      "edges": []
-    },
-    {
-      "batch": 29,
-      "status": "warn",
-      "node": {
         "id": "union_rank_expansion",
         "label": "유니온 등급 확장",
         "aliases": [
