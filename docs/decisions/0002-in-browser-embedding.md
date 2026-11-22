@@ -6,7 +6,7 @@
 호버마다 문장을 임베딩해야 한다. 서버를 두면 비용과 개인정보 부담이 생긴다.
 
 ## 결정
-- transformers.js + `Xenova/multilingual-e5-small`(q8, 약 120MB)를 확장 안에서 실행한다.
+- transformers.js + `Xenova/multilingual-e5-small`(q8, 약 120MB)를 확장 안에서 실행한다. → 2026-11-01 `Xenova/multilingual-e5-base`(q8, 약 266MB)로 바꿨다(ADR 0009).
 - MV3 서비스 워커는 동적 import가 막혀 있어 오프스크린 문서에서 실행한다.
 - onnxruntime wasm은 `extension/vendor/`에 번들하고 `useWasmCache=false`(blob URL이 CSP에 막힘).
 - 모델을 못 받으면 글자 n-gram 대체 임베더로 전환한다(`fallbackOnError`).

@@ -1,5 +1,6 @@
 // 설정 우선순위: config/admin.json  <  chrome.storage.managed(조직 정책)  <  사용자 설정(잠금이 아닐 때만)
 import { PROVIDERS } from './providers.js';
+import './site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 
 let adminCache = null;
 
@@ -16,7 +17,8 @@ export async function getAdminConfig({ fresh = false } = {}) {
   if (adminCache && !fresh) return adminCache;
   const res = await fetch(chrome.runtime.getURL('config/admin.json'));
   let admin = await res.json();
-  delete admin._comment;
+  // _ 로 시작하는 키는 파일 안 설명이다
+  for (const k of Object.keys(admin)) if (k.startsWith('_')) delete admin[k];
   try {
     const managed = await chrome.storage.managed.get(null);
     if (managed && Object.keys(managed).length) {
@@ -37,7 +39,11 @@ export const DEFAULT_SETTINGS = {
   provider: null,              // null이면 관리자 기본값
   models: {},                  // 제공자별 사용자가 고른 모델
   apiKeys: {},                 // 제공자별 사용자 키 (이 브라우저에만 저장)
-  customBaseUrl: ''
+  customBaseUrl: '',
+  // 공통 관심사(T-302). 'maplestory' | 'restaurant'. 로그인 없이 팝업·설정에서 고른다. 모르는 값이면 로더가 메이플로 바꾼다
+  interest: 'maplestory',
+  // 이 호스트(와 하위 도메인)에서는 문장을 보내지 않는다(T-107). 팝업 "이 사이트에서 끄기"로 더하고 뺀다
+  excludedHosts: [...globalThis.AnalogySiteFilter.DEFAULT_EXCLUDED_HOSTS]
 };
 
 export async function getSettings() {
@@ -52,6 +58,14 @@ export async function saveSettings(patch) {
   return next;
 }
 
+// 제공자 id·모델에 맞는 키·주소를 붙인다(순수 함수, fallback 체인에서도 씀)
+export function providerFor(id, model, admin, s) {
+  const def = PROVIDERS[id];
+  const apiKey = s.apiKeys?.[id] || admin.sharedApiKeys?.[id] || '';
+  const baseUrl = id === 'custom' ? (s.customBaseUrl || admin.customBaseUrl || '') : def.baseUrl;
+  return { id, def, model: model || admin.defaultModels?.[id] || def.defaultModel, apiKey, baseUrl };
+}
+
 // 실제로 호출에 쓸 제공자·모델·키를 결정
 export async function resolveProvider() {
   const admin = await getAdminConfig();
@@ -59,9 +73,6 @@ export async function resolveProvider() {
   const allowed = (admin.allowedProviders || Object.keys(PROVIDERS)).filter(id => PROVIDERS[id]);
   let id = admin.lockProvider ? admin.defaultProvider : (s.provider || admin.defaultProvider);
   if (!allowed.includes(id)) id = allowed[0];
-  const def = PROVIDERS[id];
-  const model = (!admin.lockProvider && s.models?.[id]) || admin.defaultModels?.[id] || def.defaultModel;
-  const apiKey = s.apiKeys?.[id] || admin.sharedApiKeys?.[id] || '';
-  const baseUrl = id === 'custom' ? (s.customBaseUrl || admin.customBaseUrl || '') : def.baseUrl;
-  return { id, def, model, apiKey, baseUrl, locked: !!admin.lockProvider, allowed };
+  const model = (!admin.lockProvider && s.models?.[id]) || null;
+  return { ...providerFor(id, model, admin, s), locked: !!admin.lockProvider, allowed };
 }

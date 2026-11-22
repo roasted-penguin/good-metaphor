@@ -1,4 +1,6 @@
-# 비유 도우미 (PoC)
+# 좋은비유네용 (PoC)
+
+> 작동 방식과 인프라 구성은 [`docs/intro.html`](docs/intro.html)을 브라우저로 열어 보세요.
 
 웹페이지에서 모르는 문장에 커서를 올리면, 내 관심사(기본: 메이플스토리)에 빗대 한 줄로 풀어 주는 크롬 확장입니다.
 
@@ -26,6 +28,7 @@ extension/                 ← 크롬에 로드하는 폴더 (빌드 결과 포�
   config/admin.json        관리자(배포자) 설정: 기본 제공자, 허용 목록, 잠금, 저장소 주소
   managed_schema.json      크롬 엔터프라이즈 정책으로 admin 값을 덮어쓸 때의 스키마
   data/common/maplestory.json  공통 저장소 샘플 그래프
+  data/common/tags.json        추상 태그(통제 어휘) 원본
   lib/                     providers, stores, graph, retrieval, prompt, config
   vendor/                  onnxruntime-web wasm
 src/offscreen-src.js       오프스크린 원본 (transformers.js 번들 대상)
@@ -63,6 +66,7 @@ npm run build                    # src/offscreen-src.js → extension/offscreen.
 npm test                         # 단위 + e2e (가짜 LLM, 대체 임베더로 네트워크 없이)
 npm run eval                     # 실제 임베딩 모델로 검색 품질 평가 (-- -v 로 틀린 문장 보기)
 npm run eval:fallback            # 모델 없이 같은 평가
+npm run eval:fallback -- --baseline  # 대체 임베더 기준선과 문장별 비교 (CI도 돈다)
 ```
 
 이어서 작업하려면 `CLAUDE.md`(프로젝트 맥락·규칙)와 `docs/TASKS.md`(할 일)를 먼저 보세요. Claude Code에서는 `/next-task`로 다음 작업을 이어 갈 수 있습니다. 작업마다 `task/<ID>-<슬러그>` 브랜치를 만들고, 끝나면 push 후 `dev`로 PR을 엽니다(`/ship`).

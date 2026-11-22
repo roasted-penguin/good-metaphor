@@ -1,0 +1,234 @@
+"""FastAPI 앱 생성. deps로 설정·가짜 부품을 주입할 수 있다(테스트용).
+
+deps 키: settings, graph, llm(키워드·비유 공용) 또는 keyword_llm·analogy_llm, retriever, rag, cache, rate_limiter,
+extract_worker(추출 워커, EXTRACT_OLLAMA_URL이 있을 때만 돌린다).
+주입하지 않은 부품은 첫 요청 때 실제 것으로 만든다(앱 생성·import 때는 네트워크·LightRAG를 건드리지 않는다).
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from typing import Any
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from . import __version__
+from .blocklist import active_terms, load_blocklist
+from .cache import ResultCache, cache_key
+from .config import EXTENSION_ORIGIN_REGEX, Settings, load_common_graph
+from .pipeline import AnalogyPipeline, AnalogyRequest, PipelineError
+from .ratelimit import RateLimiter
+from .seedmeta import embedding_identity, index_status
+
+log = logging.getLogger(__name__)
+
+MAX_SENTENCE_CHARS = 2000
+
+
+def _error(status: int, message: str, headers: dict[str, str] | None = None) -> JSONResponse:
+    return JSONResponse(status_code=status, content={"error": message}, headers=headers)
+
+
+def _opt_str(value: Any) -> str | None:
+    return (value.strip() or None) if isinstance(value, str) else None
+
+
+def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
+    deps = dict(deps or {})
+    settings = deps.get("settings") or Settings.from_env()
+
+    async def run_extract_worker(worker: Any) -> None:
+        """추출 워커 주기 루프(T-161, ADR 0006). 호버 경로와 따로 돌고, 어떤 예외로도 서버를 멈추지 않는다."""
+        from .extract_worker import WorkerLocked, run_forever
+
+        def started() -> None:
+            app.state.extract_running = True
+
+        try:
+            await run_forever(worker, on_start=started)
+        except WorkerLocked as e:
+            # CLI --once나 다른 프로세스가 이미 워커 잠금을 쥠: 서버는 워커 없이 뜬다
+            log.warning("추출 워커를 시작하지 않아요: %s", e)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # 워커가 죽어도 서버는 계속
+            log.exception("추출 워커가 멈췄어요: %s", e)
+        finally:
+            app.state.extract_running = False
+
+    def make_extract_worker() -> Any | None:
+        injected = deps.get("extract_worker")
+        if injected is not None:
+            return injected
+        from .extract_worker import build_default_worker
+
+        try:
+            return build_default_worker(settings)
+        except Exception as e:  # 그래프를 못 읽는 등: 워커 없이 뜬다
+            log.error("추출 워커를 만들지 못했어요: %s", e)
+            return None
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        # 맥 주소가 있을 때만 추출 워커를 백그라운드로 돌린다. run_window를 직접 부르지 않는다(worker.lock에 기댐)
+        if settings.extract_ollama_url:
+            worker = make_extract_worker()
+            if worker is not None:
+                _app.state.extract_task = asyncio.create_task(run_extract_worker(worker))
+        try:
+            yield
+        finally:
+            task = _app.state.extract_task
+            if task is not None:
+                # 종료: 취소하고 끝날 때까지 기다린다(처리 중 running 청크는 다음 시작의 복구가 되돌린다)
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:  # 종료 중 오류는 기록만 한다
+                    log.warning("추출 워커 종료 중 오류: %s", e)
+        # 앱이 직접 만든 검색기만 닫는다(첫 검색 때 연 LightRAG 저장소). 주입된 부품은 건드리지 않는다
+        owned = _app.state.owned_retriever
+        if owned is not None:
+            try:
+                await owned.close()
+            except Exception as e:  # 종료 중 오류는 기록만 한다
+                log.warning("LightRAG 저장소를 닫지 못함: %s", e)
+
+    app = FastAPI(title="analogy-api", version=__version__, lifespan=lifespan)
+    app.state.settings = settings
+    # CORS(T-141): 기본은 닫힘. 덧댐일 뿐 접근 제어가 아니다 — 출처 권한이 있는 확장 서비스 워커 fetch 는 CORS 에
+    # 묶이지 않고, 실제 관문은 설치 토큰 + 요청 한도다. 운영은 ALLOWED_ORIGINS 에 확장 출처를 적고,
+    # 개발 중에만 ALLOW_EXTENSION_ORIGINS=true(확장 id 형식 전부). 쿠키는 쓰지 않는다(설치 토큰은 헤더)
+    if settings.allowed_origins or settings.allow_extension_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.allowed_origins),
+            allow_origin_regex=EXTENSION_ORIGIN_REGEX if settings.allow_extension_origins else None,
+            allow_methods=["POST"],
+            allow_headers=["content-type", "x-install-token"],
+            # 429 의 Retry-After 를 허용 출처의 브라우저가 읽을 수 있게(T-160)
+            expose_headers=["Retry-After"],
+            allow_credentials=False,
+            max_age=600,
+        )
+    app.state.deps = deps
+    app.state.cache = deps.get("cache") or ResultCache()
+    app.state.rate_limiter = deps.get("rate_limiter") or RateLimiter(settings.rate_limit_per_min)
+    app.state.pipeline = None
+    app.state.owned_retriever = None
+    # 추출 워커(T-161): 태스크와 "잠금을 잡고 도는 중" 여부. /health는 이 둘만 본다(파일 잠금 없이)
+    app.state.extract_task = None
+    app.state.extract_running = False
+    # 금칙어(T-114): 시작할 때 한 번 읽는다. 승인 카드가 하나도 없으면 /v1/analogy를 503으로 막는다(실패 시 닫힘)
+    injected = deps.get("blocklist")
+    app.state.blocklist = active_terms(injected) if injected is not None else load_blocklist(settings.blocklist_path)
+    if not app.state.blocklist:
+        log.error("승인된 금칙어가 없어 비유 요청을 막아요: %s", settings.blocklist_path)
+
+    def get_pipeline() -> AnalogyPipeline:
+        """주입된 부품 + 없는 것은 실제 부품으로 파이프라인을 한 번만 만든다."""
+        if app.state.pipeline is not None:
+            return app.state.pipeline
+        s: Settings = app.state.settings
+        keyword_llm = deps.get("keyword_llm") or deps.get("llm")
+        analogy_llm = deps.get("analogy_llm") or deps.get("llm")
+        if keyword_llm is None or analogy_llm is None:
+            if not s.gemini_api_key:
+                raise PipelineError(503, "서버에 AI 키가 설정되지 않았어요.")
+            from .llm import GeminiLLM
+
+            keyword_llm = keyword_llm or GeminiLLM(s.gemini_api_key, s.keyword_model)
+            analogy_llm = analogy_llm or GeminiLLM(s.gemini_api_key, s.analogy_model)
+        graph = deps.get("graph")
+        if graph is None:
+            try:
+                graph = load_common_graph(s.common_graph_path, s.tags_path)  # 태그 파일까지 합친다(T-304)
+            except (OSError, ValueError) as e:
+                log.error("공통 그래프를 읽지 못함: %s", e)
+                raise PipelineError(503, "공통 그래프를 읽지 못했어요.") from e
+        retriever = deps.get("retriever")
+        if retriever is None:
+            from .retriever import LazyLightRAGRetriever, LightRAGRetriever
+
+            if "rag" in deps:
+                retriever = LightRAGRetriever(rag=deps["rag"], graph=graph)
+            else:
+                # 시드된 인덱스(LIGHTRAG_WORKING_DIR/WORKSPACE)를 첫 검색 때 연다. 없으면 검색 단계에서 503
+                retriever = app.state.owned_retriever = LazyLightRAGRetriever(s, graph)
+        emb = embedding_identity(s)
+        app.state.pipeline = AnalogyPipeline(graph, keyword_llm, analogy_llm, retriever, s.analogy_model,
+                                             blocklist=app.state.blocklist,
+                                             embedder_id=f"{emb['provider']}:{emb['model']}")
+        return app.state.pipeline
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
+        # 예상 못 한 오류도 맨 500 대신 한국어 JSON으로 돌려준다
+        log.exception("처리 못 한 오류: %s", exc)
+        return _error(500, "서버에서 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.")
+
+    @app.get("/health")
+    def health() -> dict[str, Any]:
+        # 프로세스는 살아 있으면 ok. 금칙어가 없으면 비유 요청만 503(blocklist.loaded로 보인다)
+        n = len(app.state.blocklist)
+        # 검색 인덱스: 파일과 seed-meta.json만 본다(LightRAG를 열지 않는다, T-140). 안 됐으면 이유에 할 일까지
+        ready, reason = index_status(app.state.settings)
+        # 추출 워커: 켜짐·도는 중만(맥 주소·큐 내용은 내보내지 않는다, 규칙 10)
+        extract = {"enabled": bool(app.state.settings.extract_ollama_url),
+                   "running": bool(app.state.extract_running)}
+        return {"ok": True, "version": __version__, "blocklist": {"loaded": n > 0, "approved": n},
+                "index": {"ready": ready, "reason": reason}, "extract": extract}
+
+    @app.post("/v1/analogy")
+    async def analogy(request: Request) -> JSONResponse:
+        token = (request.headers.get("x-install-token") or "").strip()
+        if not token:
+            return _error(400, "설치 토큰(X-Install-Token)이 필요해요.")
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            return _error(400, "요청 본문은 JSON 객체여야 해요.")
+        sentence = _opt_str(body.get("sentence"))
+        if not sentence:
+            return _error(400, "설명할 문장이 비어 있어요.")
+        if len(sentence) > MAX_SENTENCE_CHARS:
+            return _error(400, "문장이 너무 길어요.")
+
+        # 금칙어 목록 없이는 비유를 내지 않는다(규칙 11, 실패 시 닫힘)
+        if not app.state.blocklist:
+            return _error(503, "금칙어 목록을 읽지 못해 비유를 멈췄어요.")
+
+        # 한도 → 캐시 → 파이프라인
+        if not app.state.rate_limiter.allow(token):
+            # Retry-After: 다시 받아 줄 때까지 남은 정수 초(T-160). 확장 쿨다운·평가 도구가 이만큼 쉰다
+            wait = max(1, app.state.rate_limiter.retry_after(token))
+            return _error(429, "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요.", {"Retry-After": str(wait)})
+        word = _opt_str(body.get("word"))
+        key = cache_key(sentence, word, app.state.settings.workspace_version)
+        hit = app.state.cache.get(key)
+        if hit is not None:
+            return JSONResponse({**hit, "cached": True})
+        try:
+            result = await get_pipeline().run(AnalogyRequest(
+                sentence=sentence,
+                word=word,
+                context=_opt_str(body.get("context")),
+                page_title=_opt_str(body.get("pageTitle")),
+            ))
+        except PipelineError as e:
+            return _error(e.status, e.message)
+        app.state.cache.put(key, result)
+        return JSONResponse(result)
+
+    return app
+
+
+# uvicorn app.main:app 으로 실행할 때 쓰는 기본 앱
+app = create_app()

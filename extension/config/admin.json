@@ -1,30 +1,48 @@
 {
   "_comment": "관리자(배포자) 설정. 확장을 배포하기 전에 이 파일을 고치거나, 크롬 엔터프라이즈 정책(chrome.storage.managed)으로 같은 키를 덮어쓴다. 정책 값이 이 파일보다 우선한다.",
 
-  "defaultProvider": "gemini",
+  "defaultProvider": "groq",
   "defaultModels": {
-    "gemini": "gemini-3.8-flash",
+    "gemini": "gemini-3.5-flash-lite",
     "groq": "openai/gpt-oss-120b",
+    "nvidia": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "ollama": "gemma4:12b",
     "openai": "gpt-6-luna",
     "anthropic": "claude-haiku-4-5-20251001"
   },
-  "allowedProviders": ["gemini", "groq", "openai", "anthropic", "custom", "demo"],
+  "_fallbackComment": "fallback 체인(T-124, ADR 0008): 사용자가 고른 제공자 다음에 이 순서로 부른다. 429·503·네트워크 오류면 다음으로, 429를 받은 모델은 cooldown 동안 건너뛴다(분당은 Retry-After 또는 defaultMs, 상한 maxMs. 하루 한도 429는 본문의 남은 시간·LA 자정 리셋·dailyDefaultMs 순, 상한 dailyMaxMs, T-126). 순위는 앞으로 더 붙는다: 배열에 항목만 추가(코드 수정 없음, 절차는 ADR 0008). 순위 근거는 docs/TASKS.md T-122·T-124.",
+  "fallbackChain": [
+    { "provider": "groq", "model": "openai/gpt-oss-120b" },
+    { "provider": "gemini", "model": "gemini-3.5-flash-lite" },
+    { "provider": "nvidia", "model": "nvidia/nemotron-3.5-super-vl-120b-a12b" },
+    { "provider": "ollama", "model": "gemma4:12b" }
+  ],
+  "cooldown": { "defaultMs": 60000, "maxMs": 600000, "dailyDefaultMs": 3600000, "dailyMaxMs": 86400000 },
+  "allowedProviders": ["gemini", "groq", "nvidia", "ollama", "openai", "anthropic", "custom", "demo"],
   "lockProvider": false,
   "sharedApiKeys": {},
+
+  "_vecCacheMaxComment": "그래프 벡터 캐시(chrome.storage.local vecCache) 상한(T-110). 넘으면 가장 오래 안 쓴 것부터 지운다. 다른 임베더 항목은 상한과 상관없이 지운다.",
+  "vecCacheMax": 2000,
 
   "commonStore": {
     "bundled": "data/common/maplestory.json",
     "url": ""
   },
 
+  "_analogyServerComment": "analogy-api 서버(T-404). url 이 비면 서버 모드 꺼짐(브라우저 파이프라인만). 있으면 POST {url}/v1/analogy 를 먼저 부르고, 실패·timeoutMs 초과·로그인 세션·그 문장 피드백·데모 제공자·서버 출처 권한 없음(설정 화면에서 허용, T-141)이면 로컬로 간다. 서버가 실패하면 cooldownMs(1분)부터 연속 실패마다 두 배, cooldownMaxMs(10분)까지 서버를 건너뛴다(429는 Retry-After, 성공하면 해제, T-159). 정책(managed_schema.json)으로도 줄 수 있다.",
+  "analogyServer": { "url": "", "timeoutMs": 4000, "cooldownMs": 60000, "cooldownMaxMs": 600000 },
+
   "userStore": {
     "adapter": "local-dev",
     "baseUrl": ""
   },
 
+  "_embeddingComment": "검색 모델(T-102). sizeMB는 설정 화면의 '처음 한 번 약 NMB' 문구(모델을 바꾸면 함께 고친다). remoteHost를 넣으면 모델 파일(데이터)을 Hugging Face 대신 그 주소에서 받는다(사내 미러, https만, 형식은 transformers.js env.remoteHost). 스토어 빌드는 기본값(비움)이 아니면 멈춘다(처리방침). fallbackOnError가 false면 로드 실패 때 대체 검색 없이 오류를 낸다.",
   "embedding": {
-    "model": "Xenova/multilingual-e5-small",
+    "model": "Xenova/multilingual-e5-base",
     "dtype": "q8",
+    "sizeMB": 266,
     "queryPrefix": "query: ",
     "passagePrefix": "passage: ",
     "fallbackOnError": true
@@ -33,6 +51,12 @@
   "retrieval": {
     "topK": 3,
     "directWeight": 0.45,
-    "tagWeight": 0.55
+    "tagWeight": 0.55,
+    "_tagPenaltyComment": "경제 태그로 주제가 쏠리는 것을 줄이는 감점(T-113, ADR 0009. inflation 0.03은 T-135). 공통 그래프 태그 id만",
+    "tagPenalty": { "inflation": 0.03, "market_price": 0.02 },
+    "_feedbackSimComment": "비슷한 문장 피드백을 적용할 코사인 하한(T-130). npm run sim:feedback으로 잰 값(e5-base q8, 실제 확장, 2026-11-01)",
+    "feedbackSim": 0.9,
+    "_aliasBoostComment": "원문에 노드 별칭(게임 은어)이 낱말로 있으면 그 노드 점수에 더할 값(T-114). 별칭 없는 문장은 영향 없음",
+    "aliasBoost": 0.08
   }
 }

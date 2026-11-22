@@ -1,0 +1,36 @@
+{
+  "_note": "금칙어 필터 공유 사례(T-114). 확장(tests/unit/blocklist.test.mjs)과 서버(server/tests/test_blocklist.py)가 같은 결과를 내야 한다. find 사례는 실제 extension/data/common/blocklist.json 으로 검사한다.",
+  "normalize": [
+    { "input": "리.선 족!", "output": "리선족" },
+    { "input": "ABC def", "output": "abcdef" },
+    { "input": "Ａｂｃ１２", "output": "abc12" },
+    { "input": "리​선‌족‍﻿", "output": "리선족" },
+    { "input": "ㅤ리ㅤ선족", "output": "리선족" },
+    { "input": "리­선⁠족", "output": "리선족" },
+    { "input": "메이플로 치면, 22성은 \"펑\" ↔ 스타포스예요.", "output": "메이플로치면22성은펑스타포스예요" },
+    { "input": "", "output": "" }
+  ],
+  "find": [
+    { "text": "리선족", "expect": "리선족" },
+    { "text": "그 사람은 리.선.족이래요", "expect": "리선족" },
+    { "text": "리 선 족", "expect": "리선족" },
+    { "text": "ㅤ리선족", "expect": "리선족" },
+    { "text": "리ㅤ선족", "expect": "리선족" },
+    { "text": "리​선​족", "expect": "리선족" },
+    { "text": "리．선．족", "expect": "리선족" },
+    { "text": "리슝좌", "expect": "리슝좍" },
+    { "text": "리 슝 좍", "expect": "리슝좍" },
+    { "text": "리주빈", "expect": "리주빈" },
+    { "text": "쌀-숭-이처럼", "expect": "쌀숭이" },
+    { "text": "메숭이", "expect": "메숭이" },
+    { "text": "동남아 델", "expect": "동남아델" },
+    { "text": "신창섭 디렉터", "expect": "신창섭" },
+    { "text": "김 창섭", "expect": "김창섭" },
+    { "text": "여름이라 매미가 울어요.", "expect": null },
+    { "text": "점심은 먹자골목에서 먹자.", "expect": null },
+    { "text": "쌀먹 위주로 메소를 벌어요.", "expect": null },
+    { "text": "리부트 서버에서 사냥해요.", "expect": null },
+    { "text": "메이플로 치면 스타포스 강화와 같은 구조예요.", "expect": null },
+    { "text": "", "expect": null }
+  ]
+}

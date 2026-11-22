@@ -34290,7 +34290,8 @@ var stdout_write = apis.IS_PROCESS_AVAILABLE ? (x) => process.stdout.write(x) : 
 var CONCRETE_DTYPES = Object.keys(DEFAULT_DTYPE_SUFFIX_MAPPING);
 
 // extension/lib/fallback-embed.js
-var DIM = 512;
+var FALLBACK_DIM = 4096;
+var LEAD_WEIGHT = 0.6;
 function fnv1a(str) {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {
@@ -34299,23 +34300,52 @@ function fnv1a(str) {
   }
   return h >>> 0;
 }
-function hashEmbed(text) {
-  const v = new Float32Array(DIM);
-  const s = " " + String(text).toLowerCase().replace(/\s+/g, " ").replace(/^(query|passage):\s*/, "") + " ";
+function ngramWeights(text) {
+  const s = " " + String(text).toLowerCase().replace(/\s+/g, " ").replace(/^\s*(query|passage):\s*/, "").trim() + " ";
+  const w = /* @__PURE__ */ new Map();
   for (const n of [2, 3]) {
     for (let i = 0; i + n <= s.length; i++) {
       const g = s.slice(i, i + n);
       if (!g.trim()) continue;
-      const h = fnv1a(g);
-      v[h % DIM] += h & 65536 ? 1 : -1;
+      w.set(g, (w.get(g) || 0) + (g[0] === " " ? LEAD_WEIGHT : 1));
     }
+  }
+  return w;
+}
+function hashEmbed(text) {
+  const v = new Float32Array(FALLBACK_DIM);
+  for (const [g, c] of ngramWeights(text)) {
+    const h = fnv1a(g);
+    v[h % FALLBACK_DIM] += h & 65536 ? c : -c;
   }
   let norm = 0;
   for (const x of v) norm += x * x;
   norm = Math.sqrt(norm) || 1;
   return Array.from(v, (x) => x / norm);
 }
-var FALLBACK_ID = "fallback:hash-ngram-512";
+var FALLBACK_ID = "fallback:hash-ngram-4096-v2";
+
+// extension/lib/embed-each.js
+async function embedEach(inputs, run) {
+  const out = [];
+  for (const t of inputs) out.push((await run([t]))[0]);
+  return out;
+}
+
+// extension/lib/embed-status.js
+function remoteHostError(url) {
+  const s = String(url ?? "").trim();
+  if (!s) return "";
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    return "\uBAA8\uB378 \uC8FC\uC18C(remoteHost)\uB294 https \uC8FC\uC18C\uC5EC\uC57C \uD574\uC694.";
+  }
+  if (u.protocol === "https:") return "";
+  if (u.protocol === "http:" && ["localhost", "127.0.0.1"].includes(u.hostname)) return "";
+  return "\uBAA8\uB378 \uC8FC\uC18C(remoteHost)\uB294 https \uC8FC\uC18C\uC5EC\uC57C \uD574\uC694(\uB0B4 \uCEF4\uD4E8\uD130 localhost\uB9CC http \uD5C8\uC6A9).";
+}
 
 // src/offscreen-src.js
 env2.allowLocalModels = false;
@@ -34325,7 +34355,7 @@ env2.backends.onnx.wasm.wasmPaths = {
   wasm: chrome.runtime.getURL("vendor/ort-wasm-simd-threaded.asyncify.wasm")
 };
 env2.backends.onnx.wasm.numThreads = 1;
-var state = { status: "idle", embedderId: null, progress: 0, file: "", error: null };
+var state = { status: "idle", embedderId: null, progress: 0, file: "", loadError: null };
 var extractor = null;
 var loading = null;
 var cfg = null;
@@ -34335,11 +34365,14 @@ async function load(config) {
   if (loading) return loading;
   loading = (async () => {
     if (config.model === "__fallback__") {
-      Object.assign(state, { status: "fallback", embedderId: FALLBACK_ID, error: null });
+      Object.assign(state, { status: "fallback", embedderId: FALLBACK_ID, loadError: null });
       return state;
     }
     state.status = "loading";
     try {
+      const hostErr = remoteHostError(config.remoteHost);
+      if (hostErr) throw new Error(hostErr);
+      if (config.remoteHost) env2.remoteHost = config.remoteHost;
       const files = /* @__PURE__ */ new Map();
       extractor = await pipeline2("feature-extraction", config.model, {
         dtype: config.dtype || "q8",
@@ -34357,10 +34390,10 @@ async function load(config) {
           }
         }
       });
-      Object.assign(state, { status: "ready", embedderId: `${config.model}@${config.dtype || "q8"}`, progress: 1, error: null });
+      Object.assign(state, { status: "ready", embedderId: `${config.model}@${config.dtype || "q8"}`, progress: 1, loadError: null });
     } catch (e) {
       console.error("[offscreen] \uBAA8\uB378 \uB85C\uB4DC \uC2E4\uD328", e);
-      state.error = String(e?.message || e);
+      state.loadError = String(e?.message || e);
       if (config.fallbackOnError !== false) {
         Object.assign(state, { status: "fallback", embedderId: FALLBACK_ID });
       } else {
@@ -34379,12 +34412,7 @@ async function embed(texts, kind) {
   const prefix = kind === "query" ? cfg?.queryPrefix ?? "" : cfg?.passagePrefix ?? "";
   const inputs = texts.map((t) => prefix + t);
   if (state.status === "fallback" || !extractor) return inputs.map(hashEmbed);
-  const out = [];
-  for (let i = 0; i < inputs.length; i += 16) {
-    const t = await extractor(inputs.slice(i, i + 16), { pooling: "mean", normalize: true });
-    out.push(...t.tolist());
-  }
-  return out;
+  return embedEach(inputs, async (batch) => (await extractor(batch, { pooling: "mean", normalize: true })).tolist());
 }
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.target !== "offscreen") return;
@@ -34396,6 +34424,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return { ...state };
       case "embed": {
         if (!extractor && state.status !== "fallback") await load(msg.config || cfg);
+        if (state.status === "error") throw new Error("\uAC80\uC0C9 \uBAA8\uB378\uC744 \uC900\uBE44\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694: " + (state.loadError || "\uC54C \uC218 \uC5C6\uB294 \uC624\uB958"));
         return { vectors: await embed(msg.texts, msg.kind), embedderId: state.embedderId };
       }
       default:

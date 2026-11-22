@@ -1,3 +1,15 @@
+import { localDay, formatFeedbackStats } from './lib/feedback.js';
+import { formatGroundingStats, GROUNDING_REASON_LABEL, FALSE_POSITIVE } from './lib/grounding-log.js';
+import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.js';
+import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
+import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
+import { COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
+import { embedStatusText, modelSizeText, statusKind } from './lib/embed-status.js';
+import { serverOriginPattern } from './lib/analogy-server.js';
+import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
+
+const SF = globalThis.AnalogySiteFilter;
+
 const $ = s => document.querySelector(s);
 const send = (type, extra = {}) => new Promise((resolve, reject) => {
   chrome.runtime.sendMessage({ type, ...extra }, res => {
@@ -28,6 +40,136 @@ function syncTriggerUI() {
   $('#modifierKey').disabled = mode !== 'modifier';
   $('#dwellMs').disabled = mode !== 'auto';
 }
+// 저장된 설정을 "사용 방식" 칸에 그린다 (초기화와 첫 실행 안내가 같이 씀)
+function renderTrigger(s) {
+  $('#enabled').checked = s.enabled;
+  const r = document.querySelector(`input[name=triggerMode][value="${s.triggerMode}"]`);
+  if (r) r.checked = true;
+  $('#modifierKey').value = s.modifierKey;
+  $('#dwellMs').value = s.dwellMs;
+  $('#preciseMode').checked = s.preciseMode;
+  syncTriggerUI();
+}
+
+/* ───────── 공통 관심사 (T-302) ───────── */
+// 팝업과 같은 값(settings.interest). 바꾸면 "공통 저장소" 칸도 그 관심사로 다시 그린다
+function renderInterest(id) {
+  const r = document.querySelector(`input[name=interest][value="${id}"]`) || document.querySelector('input[name=interest][value=maplestory]');
+  r.checked = true;
+}
+document.querySelectorAll('input[name=interest]').forEach(r => r.addEventListener('change', async e => {
+  try { state.settings = await send('settings:save', { patch: { interest: e.target.value } }); }
+  catch (err) { console.warn('관심사를 저장하지 못했어요:', err); renderInterest(state?.settings?.interest); return; }
+  await refreshCommon().catch(err => { $('#commonTitle').textContent = '불러오기 실패: ' + err.message; });
+}));
+// 팝업에서 바꿔도 열린 설정 화면에 반영한다(읽기만, 저장하지 않아 루프가 없다)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  const next = changes.settings.newValue?.interest || 'maplestory';
+  if (document.querySelector('input[name=interest]:checked')?.value === next) return;
+  renderInterest(next);
+  if (state) state.settings = { ...state.settings, interest: next };
+  refreshCommon().catch(err => { $('#commonTitle').textContent = '불러오기 실패: ' + err.message; });
+});
+
+/* ───────── 제외 사이트 (T-107, T-144) ───────── */
+// 저장된 순서 그대로 그린다. 읽기·그리기만 하고 저장하지 않는다(onChanged 갱신이 루프를 만들지 않게)
+let siteHosts = [];
+function renderSites(list) {
+  siteHosts = Array.isArray(list) ? [...list] : [...SF.DEFAULT_EXCLUDED_HOSTS];
+  $('#siteList').innerHTML = siteHosts.map((h, i) => `
+    <li><span class="site-host" title="${esc(h)}">${esc(h)}</span>
+      <button type="button" class="site-del" data-i="${i}" aria-label="${esc(h)} 지우기">×</button></li>`).join('');
+  // 빈 목록 안내는 목록 밖 문단으로(접근성)
+  $('#siteList').hidden = !siteHosts.length;
+  $('#siteEmpty').hidden = !!siteHosts.length;
+}
+// 저장 실패면 화면을 저장 전 목록으로 되돌린다
+async function saveSites(next) {
+  const prev = siteHosts;
+  renderSites(next);
+  try {
+    state.settings = await send('settings:save', { patch: { excludedHosts: next } });
+    return true;
+  } catch {
+    renderSites(prev);
+    setStatus($('#siteStatus'), '저장하지 못했어요. 다시 시도해 주세요.', 'err');
+    return false;
+  }
+}
+const SITE_ERR = { invalid: '주소를 확인해 주세요.', duplicate: '이미 들어 있어요.' };
+$('#siteForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const v = SF.validateHostInput($('#siteInput').value, siteHosts);
+  if (!v.ok) return setStatus($('#siteStatus'), SITE_ERR[v.error], 'err');
+  setStatus($('#siteStatus'), '');
+  if (await saveSites([...siteHosts, v.host])) $('#siteInput').value = '';
+});
+$('#siteList').addEventListener('click', e => {
+  const b = e.target.closest('.site-del');
+  if (!b) return;
+  setStatus($('#siteStatus'), '');
+  saveSites(siteHosts.filter((_, i) => i !== +b.dataset.i));
+});
+$('#siteReset').addEventListener('click', () => {
+  setStatus($('#siteStatus'), '');
+  saveSites([...SF.DEFAULT_EXCLUDED_HOSTS]);
+});
+// 팝업 "이 사이트에서 끄기" 등 다른 곳에서 바뀌면 다시 그린다(읽기만)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  const next = changes.settings.newValue?.excludedHosts;
+  if (JSON.stringify(next ?? SF.DEFAULT_EXCLUDED_HOSTS) !== JSON.stringify(siteHosts)) renderSites(next);
+});
+
+/* ───────── 첫 실행 안내 (T-116) ───────── */
+async function initOnboarding() {
+  try {
+    const { onboarding } = await chrome.storage.local.get('onboarding');
+    $('#onboarding').hidden = !onboarding?.pending;
+  } catch (err) {
+    console.warn('첫 실행 안내 상태를 읽지 못했어요:', err);
+  } finally {
+    $('#onboarding').dataset.ready = '1'; // 보일지 말지 정해졌다는 표시(e2e가 기다림)
+  }
+}
+// 1단계 관심사: COMMON_INTERESTS로 라디오를 그린다. 기본(추천)은 DEFAULT_INTEREST, 안내에서는 정식 이름으로 보여 준다
+const OB_INTEREST_LABELS = { maplestory: '메이플스토리' };
+for (const it of COMMON_INTERESTS) {
+  const label = document.createElement('label');
+  const input = Object.assign(document.createElement('input'), { type: 'radio', name: 'obInterest', value: it.id, checked: it.id === DEFAULT_INTEREST });
+  const span = document.createElement('span');
+  span.textContent = (OB_INTEREST_LABELS[it.id] || it.label) + (it.id === DEFAULT_INTEREST ? ' (추천)' : '');
+  label.append(input, span);
+  $('#obInterest').append(label);
+}
+document.querySelectorAll('input[name=obTrigger]').forEach(r => r.addEventListener('change', () => {
+  $('#obAutoWarn').hidden = document.querySelector('input[name=obTrigger]:checked')?.value !== 'auto';
+}));
+for (const id of ['#obShareYes', '#obShareNo']) $(id).addEventListener('click', e => {
+  // 누른 쪽만 눌림. 미리 선택된 값은 없다(웹스토어 사용자 데이터 정책)
+  for (const b of ['#obShareYes', '#obShareNo']) $(b).setAttribute('aria-pressed', String($(b) === e.currentTarget));
+});
+async function finishOnboarding(patch) {
+  try {
+    // patch가 없으면(넘기기) 설정은 그대로 두고 안내만 닫는다
+    state.settings = patch ? await send('settings:save', { patch }) : (await send('settings:get')).settings;
+    await chrome.storage.local.set({ onboarding: { pending: false, doneAt: Date.now() } });
+    $('#onboarding').hidden = true;
+    renderTrigger(state.settings);
+    if (document.querySelector('input[name=interest]:checked')?.value !== (state.settings.interest || DEFAULT_INTEREST)) { // 사용 방식 관심사·공통 저장소 칸도 저장된 값으로
+      renderInterest(state.settings.interest);
+      await refreshCommon().catch(err => { $('#commonTitle').textContent = '불러오기 실패: ' + err.message; });
+    }
+    await loadFeedback(); // #fbShare를 저장된 값으로
+  } catch (err) { setStatus($('#obStatus'), err.message, 'err'); }
+}
+$('#obStart').addEventListener('click', () => finishOnboarding({
+  interest: document.querySelector('input[name=obInterest]:checked')?.value || DEFAULT_INTEREST,
+  triggerMode: document.querySelector('input[name=obTrigger]:checked')?.value || 'modifier',
+  feedbackShare: $('#obShareYes').getAttribute('aria-pressed') === 'true'
+}));
+$('#obSkip').addEventListener('click', () => finishOnboarding(null));
 
 /* ───────── AI 제공자 ───────── */
 function fillProvider(id) {
@@ -81,13 +223,70 @@ $('#testProvider').addEventListener('click', async () => {
   } catch (e) { setStatus($('#providerStatus'), e.message, 'err'); }
 });
 
+/* ───────── 서버 주소 권한(T-141) ───────── */
+// 관리자(admin.json·정책)가 analogyServer.url 을 줬을 때만 보인다. 권한이 없으면 확장은 조용히 로컬로 만든다(no-permission)
+function serverUrl() { return state.admin.analogyServer?.url || ''; }
+async function renderServerPermission() {
+  const url = serverUrl();
+  $('#serverPermRow').hidden = !url;
+  if (!url) return;
+  const pattern = serverOriginPattern(url);
+  if (!pattern) {
+    $('#grantServer').hidden = true;
+    $('#serverPermHint').hidden = false;
+    return setStatus($('#serverPermStatus'), '서버 주소 형식이 올바르지 않아요. 관리자에게 알려 주세요.', 'err');
+  }
+  let granted = false;
+  try { granted = await chrome.permissions.contains({ origins: [pattern] }); } catch { /* 확인 실패 = 허용 안 됨 */ }
+  $('#grantServer').hidden = granted;
+  $('#serverPermHint').hidden = granted;
+  if (!granted) return setStatus($('#serverPermStatus'), `서버(${new URL(url).origin})를 쓰려면 허용이 필요해요.`, 'warn');
+  // 서버가 막 실패해 쉬는 중이면(T-159) 언제 다시 시도하는지 보인다
+  let cd = null;
+  try { cd = (await chrome.storage.session.get('serverCooldown')).serverCooldown; } catch { /* 못 읽으면 쿨다운 없음으로 */ }
+  const left = (Number(cd?.until) || 0) - Date.now();
+  if (left > 0) setStatus($('#serverPermStatus'), `서버가 잠깐 응답하지 않아 ${Math.ceil(left / 60_000)}분 뒤 다시 시도해요.`, 'warn');
+  else setStatus($('#serverPermStatus'), '서버 허용됨', 'ok');
+}
+// 쿨다운이 생기거나 풀리면 문구를 다시 그린다(T-159)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'session' && 'serverCooldown' in changes) renderServerPermission().catch(e => console.warn('서버 상태 확인 실패', e));
+});
+$('#grantServer').addEventListener('click', async () => {
+  const pattern = serverOriginPattern(serverUrl());
+  if (!pattern) return;
+  // 사용자 제스처 안에서 바로 요청해야 한다(앞에 다른 await 를 두지 않는다)
+  let granted = false;
+  try { granted = await chrome.permissions.request({ origins: [pattern] }); } catch { /* 거절과 같게 */ }
+  await renderServerPermission();
+  if (!granted) setStatus($('#serverPermStatus'), '허용하지 않았어요. 이 기기에서 바로 비유를 만들게요.', 'warn');
+});
+
 /* ───────── 저장소 ───────── */
+// "공통 저장소" 칸. 고른 공통 관심사(T-302)의 그래프를 보인다
+function renderCommon(info) {
+  const c = info.common;
+  $('#commonTitle').textContent = `${c.domain} · ${c.version}`;
+  // 운영자용 교정 내보내기는 지금 고른 관심사만(T-157). 관심사 이름은 그래프 domain
+  $('#fbCorrectionsHint').textContent = `지금 관심사(${c.domain}) 교정만 내보내요.`;
+  $('#commonStats').innerHTML = `<div><b>${c.nodes}</b>개념 노드</div><div><b>${c.tags}</b>추상 태그</div><div><b>${info.merged.usesCommon ? '사용 중' : '꺼짐'}</b>현재 검색 대상</div>`;
+  $('#commonList').innerHTML = `<p><b>노드</b> ${c.nodeList.map(n => esc(n.label)).join(' · ')}</p><p><b>태그</b> ${c.tagList.map(t => `${esc(t.label)} <code>${esc(t.id)}</code>`).join(' · ')}</p>`;
+}
+
+// 관심사를 바꾼 뒤(T-302): 공통 칸과 오버레이 편집기의 공통 노드 목록만 다시 그린다.
+// 오버레이를 다시 읽지 않아 편집 중인 노드 폼·안 저장한 변경이 지워지지 않는다
+async function refreshCommon() {
+  const info = await send('graph:info');
+  renderCommon(info);
+  commonNodes = info.common.nodeList;
+  commonTags = info.common.tagList;
+  if (ov && !$('#loggedIn').hidden) renderCommonNodes();
+}
+
 async function loadStore() {
   const info = await send('graph:info');
   const c = info.common;
-  $('#commonTitle').textContent = `${c.domain} · ${c.version}`;
-  $('#commonStats').innerHTML = `<div><b>${c.nodes}</b>개념 노드</div><div><b>${c.tags}</b>추상 태그</div><div><b>${info.merged.usesCommon ? '사용 중' : '꺼짐'}</b>현재 검색 대상</div>`;
-  $('#commonList').innerHTML = `<p><b>노드</b> ${c.nodeList.map(n => esc(n.label)).join(' · ')}</p><p><b>태그</b> ${c.tagList.map(t => `${esc(t.label)} <code>${esc(t.id)}</code>`).join(' · ')}</p>`;
+  renderCommon(info);
 
   const auth = await send('auth:status');
   $('#adapterHint').textContent = auth.adapter === 'none'
@@ -103,9 +302,11 @@ async function loadStore() {
     $('#loggedIn').hidden = false;
     $('#userTitle').textContent = `${auth.session.name} 님의 오버레이 · 내 노드 ${info.merged.userNodes}개`;
     $('#whoami').textContent = `${auth.adapterLabel}로 로그인됨`;
-    const ov = await send('overlay:get');
-    $('#overlay').value = JSON.stringify(ov, null, 2);
-    document.querySelector(`input[name=useCommon][value="${ov.useCommon !== false}"]`).checked = true;
+    commonNodes = c.nodeList;
+    commonTags = c.tagList;
+    ov = normalizeOverlay(await send('overlay:get'));
+    resetNodeForm();
+    renderOverlayEditor();
   } else {
     $('#loggedOut').hidden = false;
     $('#loggedIn').hidden = true;
@@ -120,40 +321,324 @@ $('#login').addEventListener('click', async () => {
 });
 $('#logout').addEventListener('click', async () => { await send('auth:logout'); await loadStore(); });
 
-document.querySelectorAll('input[name=useCommon]').forEach(r => r.addEventListener('change', () => {
-  try {
-    const ov = JSON.parse($('#overlay').value);
-    ov.useCommon = r.value === 'true';
-    if (!ov.useCommon && !ov.domain) { ov.domain = '내 관심사'; ov.analogyPrefix = '내 관심사로 치면'; }
-    $('#overlay').value = JSON.stringify(ov, null, 2);
-    setStatus($('#overlayStatus'), '바뀐 내용을 저장하세요.', 'warn');
-  } catch { setStatus($('#overlayStatus'), 'JSON 형식을 먼저 고쳐 주세요.', 'err'); }
-}));
+/* ───────── 그래프 편집 (T-202) ─────────
+   폼이 바꾸는 것은 메모리의 ov뿐이고, 저장 버튼이 overlay:save로 보낸다.
+   폼은 아는 필드(nodes, hiddenNodeIds, nodeBoosts, useCommon)만 고치고 나머지(feedbackBoosts, tags 등)는 그대로 둔다.
+   사용자 입력은 모두 textContent로 넣는다(innerHTML 금지). */
+let ov = null;            // 편집 중인 오버레이
+let commonNodes = [];     // graph:info의 공통 노드 목록 [{id,label}]
+let commonTags = [];      // 공통 태그 사전 [{id,label}]
+let editingId = null;     // 수정 중인 내 노드 id (새 노드면 null)
+let formTags = [];        // 폼에서 고른 태그 id (고른 순서)
 
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'text') e.textContent = v;
+    else if (k === 'dataset') Object.assign(e.dataset, v);
+    else if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) if (c) e.append(c);
+  return e;
+}
+const fmtBoost = v => (v > 0 ? '+' : '') + Number(v).toFixed(2);
+
+function markDirty() {
+  $('#overlay').value = JSON.stringify(ov, null, 2);
+  $('#overlayErrors').hidden = true;
+  setStatus($('#overlayStatus'), '바뀐 내용을 저장하세요.', 'warn');
+}
+
+// 가중치 슬라이더 + 값 + (있으면) 피드백 가중치 읽기 전용
+function boostControls(id, label) {
+  const val = clampBoost(ov.nodeBoosts?.[id]);
+  const out = el('output', { class: 'ov-boost-val', text: fmtBoost(val) });
+  const range = el('input', { type: 'range', class: 'ov-boost', min: BOOST_MIN, max: BOOST_MAX, step: '0.01', 'aria-label': `${label} 가중치` });
+  range.value = String(val);
+  range.addEventListener('input', () => { out.textContent = fmtBoost(+range.value); });
+  range.addEventListener('change', () => { ov = setBoost(ov, id, range.value); markDirty(); });
+  const fb = clampBoost(ov.feedbackBoosts?.[id]);
+  return el('span', { class: 'ov-boost-wrap' }, [range, out, fb ? el('span', { class: 'ov-fb', title: '👎 기록으로 정해진 값이라 여기서 고치지 않아요.', text: `피드백 ${fmtBoost(fb)}` }) : null]);
+}
+
+function renderMyNodes() {
+  const list = $('#myNodeList');
+  list.replaceChildren();
+  const tagLabel = new Map(tagChoices(commonTags, ov.tags).map(t => [t.id, t.label]));
+  // 검수 대기(draft) 노드는 아래 "검수 대기" 구역에만 보인다(T-301)
+  const mine = (ov.nodes || []).filter(n => n.draft !== true);
+  for (const n of mine) {
+    const chips = el('span', { class: 'chips small' }, (n.tags || []).map(t => el('span', { class: 'chip', text: tagLabel.get(t) || t })));
+    list.append(el('li', { dataset: { id: n.id } }, [
+      el('span', { class: 'ov-main' }, [el('span', { class: 'ov-label', text: n.label || n.id }), chips]),
+      boostControls(n.id, n.label || n.id),
+      el('button', { class: 'ov-edit', text: '수정', onclick: () => startEdit(n.id) }),
+      el('button', { class: 'ov-del', text: '지우기', onclick: () => deleteNode(n.id) })
+    ]));
+  }
+  const empty = !mine.length;
+  list.hidden = empty;
+  $('#myNodesEmpty').hidden = !empty;
+  renderReview();
+}
+
+/* 검수 대기 (T-301): 사실마다 확인·지우기, 노드마다 모두 확인·수정·노드 지우기.
+   모든 사실이 확인되면 draft가 풀려 내 노드 목록으로 옮겨 간다. 바꾸는 것은 메모리의 ov뿐이고 저장 버튼이 반영한다 */
+function updateNode(id, fn) {
+  const n = (ov.nodes || []).find(x => x.id === id);
+  if (!n) return;
+  const next = fn(n);
+  ov = next ? upsertNode(ov, next) : removeNode(ov, id);
+  if (!next && editingId === id) resetNodeForm();
+  renderMyNodes();
+  markDirty();
+}
+
+function renderReview() {
+  const drafts = draftNodes(ov);
+  const list = $('#reviewList');
+  list.replaceChildren();
+  const tagLabel = new Map(tagChoices(commonTags, ov.tags).map(t => [t.id, t.label]));
+  for (const n of drafts) {
+    const chips = el('span', { class: 'chips small' }, (n.tags || []).map(t => el('span', { class: 'chip', text: tagLabel.get(t) || t })));
+    const facts = el('ul', { class: 'rv-facts' }, n.facts.map((f, i) => {
+      const done = n.factsReviewed?.[i] === true;
+      return el('li', { class: 'rv-fact' + (done ? ' done' : ''), dataset: { i: String(i) } }, [
+        el('span', { class: 'rv-text', text: f }),
+        hasNumber(f) ? el('span', { class: 'rv-warn', title: '자주 바뀌는 값(가격·확률·날짜)이면 지우거나 고쳐 주세요.', text: '숫자 확인' }) : null,
+        done ? el('span', { class: 'rv-done', text: '확인됨' }) : el('button', { class: 'rv-ok', text: '확인', onclick: () => updateNode(n.id, x => confirmFact(x, i)) }),
+        el('button', { class: 'rv-del', text: '지우기', 'aria-label': `사실 ${i + 1} 지우기`, onclick: () => updateNode(n.id, x => removeFact(x, i)) })
+      ]);
+    }));
+    list.append(el('li', { dataset: { id: n.id } }, [
+      el('div', { class: 'rv-head' }, [
+        el('span', { class: 'ov-main' }, [el('span', { class: 'ov-label rv-label', text: n.label }), chips]),
+        el('button', { class: 'rv-all', text: '모두 확인', onclick: () => updateNode(n.id, confirmAllFacts) }),
+        el('button', { class: 'rv-edit', text: '수정', onclick: () => startEdit(n.id) }),
+        el('button', { class: 'rv-del-node', text: '노드 지우기', onclick: () => deleteNode(n.id) })
+      ]),
+      facts
+    ]));
+  }
+  $('#reviewCount').textContent = drafts.length ? `${drafts.length}개` : '';
+  $('#reviewBox').hidden = !drafts.length;
+}
+
+function renderCommonNodes() {
+  $('#commonNodesBox').hidden = ov.useCommon === false;
+  const hidden = new Set(ov.hiddenNodeIds || []);
+  const list = $('#commonNodeList');
+  list.replaceChildren();
+  for (const n of commonNodes) {
+    const box = el('input', { type: 'checkbox', class: 'ov-hide' });
+    box.checked = hidden.has(n.id);
+    box.addEventListener('change', () => { ov = setHidden(ov, n.id, box.checked); markDirty(); });
+    list.append(el('li', { dataset: { id: n.id } }, [
+      el('span', { class: 'ov-main' }, [el('span', { class: 'ov-label', text: n.label })]),
+      el('label', { class: 'ov-hide-label' }, [box, document.createTextNode(' 숨기기')]),
+      boostControls(n.id, n.label)
+    ]));
+  }
+}
+
+function renderTagChips() {
+  const wrap = $('#nfTags');
+  wrap.replaceChildren();
+  for (const t of tagChoices(commonTags, ov.tags)) {
+    const b = el('button', { type: 'button', class: 'chip-btn' + (t.source === 'user' ? ' user' : ''), dataset: { tag: t.id }, title: t.id, text: t.label });
+    b.setAttribute('aria-pressed', String(formTags.includes(t.id)));
+    b.addEventListener('click', () => {
+      formTags = formTags.includes(t.id) ? formTags.filter(x => x !== t.id) : [...formTags, t.id];
+      b.setAttribute('aria-pressed', String(formTags.includes(t.id)));
+    });
+    wrap.append(b);
+  }
+  // 사전에 없는 태그(고급 JSON으로 넣었거나 사전에서 빠진 것)는 눌러서 뺄 수만 있는 칩으로 보인다
+  const known = new Set(tagChoices(commonTags, ov.tags).map(t => t.id));
+  for (const id of formTags.filter(t => !known.has(t))) {
+    const b = el('button', { type: 'button', class: 'chip-btn unknown', dataset: { tag: id }, title: '사전에 없는 태그예요. 눌러서 빼세요.', 'aria-pressed': 'true', text: id + ' ×' });
+    b.addEventListener('click', () => { formTags = formTags.filter(x => x !== id); renderTagChips(); });
+    wrap.append(b);
+  }
+}
+
+function renderOverlayEditor() {
+  const r = document.querySelector(`input[name=useCommon][value="${ov.useCommon !== false}"]`);
+  if (r) r.checked = true;
+  renderMyNodes();
+  renderCommonNodes();
+  renderTagChips();
+  $('#overlay').value = JSON.stringify(ov, null, 2);
+}
+
+/* 노드 폼 */
+const FORM_FIELDS = { label: '#nfLabel', facts: '#nfFacts', aliases: '#nfAliases' };
+const ERR_FIELDS = { label: '#nfLabelErr', facts: '#nfFactsErr', tags: '#nfTagsErr', aliases: '#nfAliasesErr' };
+function showFormErrors(errors = {}) {
+  for (const [k, sel] of Object.entries(ERR_FIELDS)) $(sel).textContent = errors[k] || '';
+}
+function fillForm(form) {
+  for (const [k, sel] of Object.entries(FORM_FIELDS)) $(sel).value = form[k] || '';
+  formTags = [...(form.tags || [])];
+  renderTagChips();
+}
+function readForm() {
+  return { label: $('#nfLabel').value, facts: $('#nfFacts').value, aliases: $('#nfAliases').value, tags: [...formTags] };
+}
+function formHasInput() {
+  const f = readForm();
+  return !!(f.label.trim() || f.facts.trim() || f.aliases.trim() || f.tags.length);
+}
+function resetNodeForm() {
+  editingId = null;
+  fillForm({ label: '', facts: '', tags: [], aliases: '' });
+  showFormErrors();
+  $('#nodeFormTitle').textContent = '새 노드';
+  $('#nfApply').textContent = '노드 추가';
+}
+function startEdit(id) {
+  const n = (ov.nodes || []).find(x => x.id === id);
+  if (!n) return;
+  editingId = id;
+  fillForm(nodeToForm(n));
+  showFormErrors();
+  $('#nodeFormTitle').textContent = '노드 수정';
+  $('#nfApply').textContent = '수정 반영';
+  $('#nfLabel').focus();
+}
+// 폼 → ov. 성공하면 true
+function applyNodeForm() {
+  const prev = editingId ? (ov.nodes || []).find(x => x.id === editingId) : null;
+  const existingIds = [...(ov.nodes || []).map(n => n.id), ...commonNodes.map(n => n.id)];
+  const { node: formed, errors } = formToNode(readForm(), { prev, existingIds });
+  showFormErrors(errors);
+  if (!formed) return false;
+  // 초안 노드를 고쳤으면 고친 사실은 확인된 것으로(T-301). 모두 확인되면 일반 노드가 된다
+  const node = reviewAfterEdit(prev, formed);
+  ov = upsertNode(ov, node);
+  resetNodeForm();
+  renderMyNodes();
+  markDirty();
+  return true;
+}
+function deleteNode(id) {
+  if (!confirm('이 노드를 지울까요?')) return;
+  ov = removeNode(ov, id);
+  if (editingId === id) resetNodeForm();
+  renderMyNodes();
+  markDirty();
+}
+
+$('#nfApply').addEventListener('click', applyNodeForm);
+$('#nfCancel').addEventListener('click', resetNodeForm);
 $('#insertSample').addEventListener('click', () => {
-  try {
-    const ov = JSON.parse($('#overlay').value);
-    ov.nodes = ov.nodes || [];
-    if (!ov.nodes.some(n => n.id === 'u:my_routine')) {
-      ov.nodes.push({
-        id: 'u:my_routine',
-        label: '내 아침 재획 루틴',
-        facts: ['나는 출근 전 30분 동안 매일 같은 사냥터에서 재획을 한다.', '빠진 날이 생기면 주말에 몰아서 채우기 어렵다.'],
-        tags: ['daily_accumulation', 'efficiency_metric']
-      });
-    }
-    $('#overlay').value = JSON.stringify(ov, null, 2);
-    setStatus($('#overlayStatus'), '예시를 넣었어요. 저장을 눌러야 반영돼요.', 'warn');
-  } catch { setStatus($('#overlayStatus'), 'JSON 형식을 먼저 고쳐 주세요.', 'err'); }
+  editingId = null;
+  $('#nodeFormTitle').textContent = '새 노드';
+  $('#nfApply').textContent = '노드 추가';
+  fillForm(SAMPLE_FORM);
+  showFormErrors();
+  setStatus($('#overlayStatus'), '예시를 폼에 채웠어요. 저장하면 반영돼요.', 'warn');
 });
 
-$('#saveOverlay').addEventListener('click', async () => {
-  let ov;
-  try { ov = JSON.parse($('#overlay').value); } catch (e) { return setStatus($('#overlayStatus'), 'JSON 오류: ' + e.message, 'err'); }
-  const r = await send('overlay:save', { overlay: ov }).catch(e => ({ ok: false, errors: [e.message] }));
-  if (!r.ok) return setStatus($('#overlayStatus'), r.errors.join(' / '), 'err');
+document.querySelectorAll('input[name=useCommon]').forEach(r => r.addEventListener('change', () => {
+  if (!ov) return;
+  ov = { ...ov, useCommon: r.value === 'true' };
+  if (!ov.useCommon && !ov.domain) ov = { ...ov, domain: '내 관심사', analogyPrefix: '내 관심사로 치면' };
+  renderCommonNodes();
+  markDirty();
+}));
+
+// 고급: JSON을 고쳐 적용하면 검사 후 폼을 다시 그린다. 실패하면 오류만 보이고 폼은 그대로
+// keepForm: 저장 버튼이 자동 적용할 때는 폼에 적던 값을 지운다(그 뒤 폼 적용이 이어진다)
+function applyJsonBox({ keepForm = false } = {}) {
+  let parsed;
+  try { parsed = JSON.parse($('#overlay').value); } catch (e) { setStatus($('#jsonStatus'), 'JSON 오류: ' + e.message, 'err'); return false; }
+  const errors = validateOverlay(parsed);
+  if (errors.length) { setStatus($('#jsonStatus'), errors.join(' / '), 'err'); return false; }
+  ov = normalizeOverlay(parsed);
+  if (!keepForm) resetNodeForm();
+  else if (editingId && !(ov.nodes || []).some(n => n.id === editingId)) editingId = null;
+  renderOverlayEditor();
+  markDirty();
+  setStatus($('#jsonStatus'), '폼에 반영했어요.', 'ok');
+  return true;
+}
+$('#applyJson').addEventListener('click', () => applyJsonBox());
+const jsonBoxChanged = () => $('#overlay').value !== JSON.stringify(ov, null, 2);
+
+function showSaveErrors(errors) {
+  const ul = $('#overlayErrors');
+  ul.replaceChildren(...errors.map(e => el('li', { text: e })));
+  ul.hidden = !errors.length;
+}
+
+$('#saveOverlay').addEventListener('click', () => saveOverlayNow());
+// 저장 버튼과 AI 초안이 같이 쓴다. 저장했으면 true
+async function saveOverlayNow() {
+  if (!ov) return false;
+  // 고급 JSON을 고치고 "JSON 적용"을 안 눌렀으면 같은 길로 먼저 적용한다. 실패하면 저장하지 않는다
+  if (jsonBoxChanged() && !applyJsonBox({ keepForm: true })) {
+    $('#advanced').open = true;
+    setStatus($('#overlayStatus'), '저장하지 않았어요. 고급 JSON 오류를 고쳐 주세요.', 'err');
+    return false;
+  }
+  // 폼에 적다 만 노드가 있으면 먼저 넣는다. 오류면 저장하지 않는다
+  if (formHasInput() && !applyNodeForm()) { setStatus($('#overlayStatus'), '노드 입력을 먼저 고쳐 주세요.', 'err'); return false; }
+  const errors = validateOverlay(ov);
+  if (errors.length) { showSaveErrors(errors); setStatus($('#overlayStatus'), '저장하지 않았어요. 아래 오류를 고쳐 주세요.', 'err'); return false; }
+  try {
+    // feedbackBoosts는 폼이 고치지 않는다. 편집하는 동안 👎로 바뀌었을 수 있으니 저장 직전 값을 쓴다
+    const fresh = await send('overlay:get');
+    const r = await send('overlay:save', { overlay: { ...ov, feedbackBoosts: fresh.feedbackBoosts || {} } });
+    if (!r.ok) { showSaveErrors(r.errors || []); setStatus($('#overlayStatus'), '저장하지 않았어요. 아래 오류를 고쳐 주세요.', 'err'); return false; }
+  } catch (e) { setStatus($('#overlayStatus'), e.message, 'err'); return false; }
+  showSaveErrors([]);
   setStatus($('#overlayStatus'), '저장했어요. 새 노드는 다음 검색 때 벡터로 바뀌어요.', 'ok');
+  setStatus($('#jsonStatus'), '');
   await loadStore();
+  return true;
+}
+
+/* ───────── AI 초안 (T-301) ─────────
+   background graph:draft(기존 제공자 체인 한 번) → 검수 대기 노드를 ov에 더하고 바로 저장한다(초안을 잃지 않게).
+   새 관심사로 시작이면 useCommon false·domain·analogyPrefix도 함께. 기존 내 노드는 지우지 않는다(더하기만) */
+$('#draftRun').addEventListener('click', async () => {
+  if (!ov) return;
+  const status = $('#draftStatus');
+  const droppedList = $('#draftDropped');
+  // 이름은 domain·analogyPrefix가 되어 말풍선에 보이므로 금칙어도 막는다(규칙 11). background도 다시 검사한다
+  const nameErr = draftNameError($('#draftName').value, await loadBlocklist());
+  if (nameErr) return setStatus(status, nameErr, 'err');
+  const name = validDraftName($('#draftName').value);
+  const mode = document.querySelector('input[name=draftMode]:checked')?.value === 'new' ? 'new' : 'add';
+  const existing = (ov.nodes || []).length;
+  if (mode === 'new' && existing && !confirm(`기존 내 노드 ${existing}개가 있어요. 초안을 더할까요?`)) {
+    return setStatus(status, '초안 만들기를 그만뒀어요.');
+  }
+  $('#draftRun').disabled = true;
+  droppedList.hidden = true;
+  setStatus(status, 'AI가 초안을 만드는 중이에요…');
+  try {
+    const r = await send('graph:draft', { name, mode });
+    droppedList.replaceChildren(...(r.dropped || []).map(d => el('li', { text: d.label ? `${d.label}: ${d.reason}` : d.reason })));
+    droppedList.hidden = !(r.dropped || []).length;
+    if (!r.nodes.length) return setStatus(status, r.error || '쓸 수 있는 초안이 없어요. 이름을 바꿔 다시 해 보세요.', 'err');
+    // 그사이 다른 곳에서 노드가 생겼을 수 있어 id가 겹치면 새 id를 준다(공통 노드 id도 피한다)
+    const fresh = r.nodes;
+    if (mode === 'new') ov = startNewInterest(ov, r.name);
+    ov = addDraftNodes(ov, fresh, { reservedIds: commonNodes.map(n => n.id) });
+    renderOverlayEditor();
+    markDirty();
+    const few = fresh.length < DRAFT_LIMITS.min ? ` AI가 만든 초안이 ${DRAFT_LIMITS.min}개보다 적어요.` : '';
+    if (await saveOverlayNow()) setStatus(status, `초안 ${fresh.length}개를 검수 대기에 넣고 저장했어요. 사실을 하나씩 확인해 주세요.${few}`, 'ok');
+    else setStatus(status, '초안을 저장하지 못했어요. 아래 저장 버튼 옆 문구를 확인해 주세요.', 'err');
+  } catch (e) {
+    setStatus(status, e.message, 'err');
+  } finally {
+    $('#draftRun').disabled = false;
+  }
 });
 
 /* ───────── 임베딩 ───────── */
@@ -161,14 +646,8 @@ let pollTimer = null;
 async function pollEmbed() {
   const st = await send('embed:status').catch(() => null);
   if (!st) return;
-  const text = {
-    idle: '아직 준비 전이에요.',
-    loading: `모델 받는 중… ${Math.round((st.progress || 0) * 100)}%`,
-    ready: `준비 완료 (${st.embedderId})`,
-    fallback: `대체 검색 사용 중 (${st.embedderId})${st.error ? ' · 모델 로드 실패: ' + st.error : ''}`,
-    error: '오류: ' + st.error
-  }[st.status] || st.status;
-  setStatus($('#embedStatus'), text, st.status === 'ready' ? 'ok' : st.status === 'loading' ? '' : st.status === 'idle' ? '' : 'warn');
+  const text = embedStatusText(st);
+  setStatus($('#embedStatus'), text, statusKind(st.status));
   if (st.status !== 'loading') { clearInterval(pollTimer); pollTimer = null; }
 }
 $('#warmup').addEventListener('click', async () => {
@@ -176,7 +655,9 @@ $('#warmup').addEventListener('click', async () => {
   if (!pollTimer) pollTimer = setInterval(pollEmbed, 700);
   try {
     const r = await send('embed:warmup');
-    setStatus($('#embedStatus'), `준비 완료 · 벡터 ${r.vectors}개 · ${r.embedderId}`, r.status === 'ready' ? 'ok' : 'warn');
+    // 대체 검색이면 "준비 완료"로 덮지 않고 원인을 그대로 보인다(T-102)
+    if (r.status === 'ready') setStatus($('#embedStatus'), `준비 완료 · 벡터 ${r.vectors}개 · ${r.embedderId}`, 'ok');
+    else setStatus($('#embedStatus'), embedStatusText(r), statusKind(r.status));
   } catch (e) { setStatus($('#embedStatus'), e.message, 'err'); }
   clearInterval(pollTimer); pollTimer = null;
 });
@@ -214,16 +695,158 @@ $('#tryRun').addEventListener('click', async () => {
   clearInterval(pollTimer); pollTimer = null;
 });
 
+/* ───────── 내 피드백 (T-132) ───────── */
+const VOTE_MARK = { up: '👍', down: '👎', pick: '교정' };
+let fbItems = [];
+const clip = (s, n = 40) => { const cs = [...String(s ?? '')]; return cs.length > n ? cs.slice(0, n).join('') + '…' : cs.join(''); };
+
+function renderSharePreview() {
+  const on = $('#fbShare').checked;
+  $('#fbSharePreview').hidden = !on;
+  $('#fbSharePreview').textContent = fbItems.length ? '이렇게 가려서 보내요: ' + fbItems[0].masked : '보낼 피드백이 아직 없어요.';
+}
+
+// 목록·통계를 읽어 그린다. 읽기만 하고 저장하지 않는다(storage.onChanged 갱신이 루프를 만들지 않게).
+// 여러 번 겹쳐 불려도 마지막 요청 결과만 그린다. 읽기가 실패하면 이전 목록을 그대로 두고 던진다
+let fbLoadSeq = 0;
+let fbSharePending = false; // 보내기 토글 저장 중
+async function loadFeedback() {
+  const seq = ++fbLoadSeq;
+  const [list, st, gst] = await Promise.all([send('feedback:list'), send('feedback:stats'),
+    send('grounding:stats').catch(() => null)]); // 근거 검사 집계가 실패해도 피드백 목록은 그린다
+  const gTotal = gst?.total || 0;
+  if (seq !== fbLoadSeq) return;
+  fbItems = list.items;
+  $('#fbStats').textContent = formatFeedbackStats(st);
+  renderGrounding(gst);
+  $('#fbList').innerHTML = fbItems.map(it => {
+    // 라벨이 없으면(고른 개념 없음 등) 날짜만. 구분점이 홀로 남지 않게
+    const meta = [it.vote === 'pick' ? it.pickedLabel : it.nodeLabel, localDay(it.ts)].filter(Boolean).join(' · ');
+    return `
+    <li data-id="${esc(it.id)}">
+      <span class="fb-vote v-${esc(it.vote)}">${esc(VOTE_MARK[it.vote] || it.vote)}</span>
+      <span class="fb-text"><span class="fb-sentence" title="${esc(it.sentence)}">${esc(clip(it.sentence))}</span>
+        <span class="hint">${esc(meta)}</span></span>
+      <button class="fb-undo">되돌리기</button>
+    </li>`;
+  }).join('');
+  // 빈 목록 안내는 목록 밖 문단으로(접근성)
+  $('#fbList').hidden = !fbItems.length;
+  $('#fbEmpty').hidden = !!fbItems.length;
+  if (!fbSharePending) $('#fbShare').checked = list.share; // 저장 중이면 누른 값을 덮지 않는다
+  renderSharePreview();
+  $('#fbExport').disabled = !fbItems.length;
+  // 근거 검사 기록(T-146)만 있어도 운영자 파일(동의 시 샘플)·지우기를 쓸 수 있다
+  $('#fbCorrections').disabled = !fbItems.length && !gTotal;
+  $('#fbClear').disabled = !fbItems.length && !gTotal;
+}
+
+// 근거 검사 주간 집계와 최근 숨김(T-146). 문장·비유는 이미 가린 것만 온다
+function renderGrounding(gst) {
+  if (!gst) {
+    $('#fbGroundingStats').textContent = '근거 검사 기록을 읽지 못했어요.';
+    $('#fbGroundingList').hidden = true;
+    return;
+  }
+  $('#fbGroundingStats').textContent = formatGroundingStats(gst);
+  $('#fbGroundingList').innerHTML = gst.recent.map(e => {
+    const flagged = e.userFlag === FALSE_POSITIVE;
+    return `
+    <li data-id="${esc(e.id)}">
+      <span class="fb-reason">${esc(GROUNDING_REASON_LABEL[e.reason] || e.reason)}</span>
+      <span class="fb-text"><span class="fb-sentence" title="${esc(e.sentenceMasked)}">${esc(clip(e.sentenceMasked))}</span>
+        <span class="hint" title="${esc(e.analogyMasked)}">${esc(clip(e.analogyMasked, 60))} · ${esc(localDay(e.ts))}</span></span>
+      <button class="fb-flag" aria-pressed="${flagged}">${flagged ? '표시했어요 · 취소' : '괜찮은 비유였어요'}</button>
+    </li>`;
+  }).join('');
+  $('#fbGroundingList').hidden = !gst.recent.length;
+}
+// 되돌리기·지우기 뒤 다시 읽기. 실패하면 이전 목록을 두고 오류 문구
+const reloadFeedback = () => loadFeedback().catch(() => setStatus($('#fbStatus'), '목록을 다시 읽지 못했어요.', 'err'));
+
+// 다른 탭에서 남긴 피드백·호버도 열린 화면에 반영한다. loadFeedback은 읽기만 해서 다시 이벤트가 나지 않는다.
+// 호버가 이어질 때 매번 읽지 않게 짧게 모아서 한 번만 읽는다
+let fbChangeTimer = null;
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !(changes.feedback || changes.hoverCounts || changes.groundingLog || changes.groundingCounts)) return;
+  clearTimeout(fbChangeTimer);
+  fbChangeTimer = setTimeout(reloadFeedback, 150);
+});
+
+$('#fbList').addEventListener('click', async e => {
+  const li = e.target.closest('.fb-undo')?.closest('li');
+  if (!li) return;
+  try { await send('feedback-undo', { id: li.dataset.id }); setStatus($('#fbStatus'), '되돌렸어요.', 'ok'); }
+  catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+  await reloadFeedback();
+});
+
+// "괜찮은 비유였어요"(오탐 표시, T-146). 다시 누르면 표시를 뗀다
+$('#fbGroundingList').addEventListener('click', async e => {
+  const btn = e.target.closest('.fb-flag');
+  const li = btn?.closest('li');
+  if (!li) return;
+  const on = btn.getAttribute('aria-pressed') !== 'true';
+  try { await send('grounding:flag', { id: li.dataset.id, flag: on ? FALSE_POSITIVE : null }); setStatus($('#fbStatus'), on ? '괜찮은 비유였다고 표시했어요.' : '표시를 뗐어요.', 'ok'); }
+  catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+  await reloadFeedback();
+});
+
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// 목록 응답의 items 배열을 그대로 파일로
+$('#fbExport').addEventListener('click', () => downloadJson(fbItems, `good-metaphor-feedback-${localDay(Date.now())}.json`));
+
+// 운영자용 교정 내보내기(T-131). 지금 관심사(T-157)의 공통 노드·공통 태그 대상만, 문장은 가린 것만. 로컬 파일로만 받는다
+$('#fbCorrections').addEventListener('click', async () => {
+  try {
+    const data = await send('corrections:export');
+    // 파일 이름에 관심사 id(T-157). 승인 절차가 그 관심사 평가셋·가드로 간다
+    downloadJson(data, `good-metaphor-corrections-${data.interest}-${localDay(Date.now())}.json`);
+    const n = data.exampleCandidates.length;
+    // 근거 검사 샘플(T-146)은 보내기 동의가 켜졌을 때만 들어 있다
+    const g = data.groundingSamples?.length ? ` 근거 검사 샘플 ${data.groundingSamples.length}개도 담았어요.` : '';
+    setStatus($('#fbStatus'), (n ? `예문 후보 ${n}개를 내보냈어요.` : '공통 그래프 교정이 아직 없어요. 빈 파일을 내보냈어요.') + g, 'ok');
+  } catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+});
+
+$('#fbClear').addEventListener('click', async () => {
+  if (!confirm('남긴 피드백과 근거 검사 기록을 모두 지울까요? 되돌릴 수 없어요.')) return;
+  try { await send('feedback:clear'); setStatus($('#fbStatus'), '모두 지웠어요.', 'ok'); }
+  catch (err) { setStatus($('#fbStatus'), err.message, 'err'); }
+  await reloadFeedback();
+});
+
+$('#fbShare').addEventListener('change', async () => {
+  const on = $('#fbShare').checked;
+  renderSharePreview();
+  fbSharePending = true;
+  try { state.settings = await send('settings:save', { patch: { feedbackShare: on } }); }
+  catch {
+    // 저장하지 못했으면 체크를 되돌린다
+    $('#fbShare').checked = !on;
+    renderSharePreview();
+    setStatus($('#fbStatus'), '저장하지 못했어요. 다시 시도해 주세요.', 'err');
+  } finally { fbSharePending = false; }
+});
+
 /* ───────── 초기화 ───────── */
 (async function init() {
   state = await send('settings:get');
-  const s = state.settings;
-  $('#enabled').checked = s.enabled;
-  document.querySelector(`input[name=triggerMode][value="${s.triggerMode}"]`).checked = true;
-  $('#modifierKey').value = s.modifierKey;
-  $('#dwellMs').value = s.dwellMs;
-  $('#preciseMode').checked = s.preciseMode;
-  syncTriggerUI();
+  renderTrigger(state.settings);
+  renderInterest(state.settings.interest);
+  renderSites(state.settings.excludedHosts);
+  initOnboarding();
+  // 검색 모델 용량은 admin embedding.sizeMB를 따른다(모델을 바꾸면 거기만 고친다)
+  const size = modelSizeText(state.admin.embedding);
+  if (size) $('#embedSize').textContent = size;
 
   const allowed = state.admin.allowedProviders || Object.keys(state.providers);
   $('#provider').innerHTML = allowed.filter(id => state.providers[id])
@@ -235,6 +858,8 @@ $('#tryRun').addEventListener('click', async () => {
     $('#provider').disabled = true;
     $('#model').disabled = true;
   }
+  renderServerPermission().catch(e => console.warn('서버 권한 확인 실패', e));
+  loadFeedback().catch(e => setStatus($('#fbStatus'), '피드백을 불러오지 못했어요: ' + e.message, 'err'));
   await loadStore().catch(e => { $('#commonTitle').textContent = '불러오기 실패: ' + e.message; });
   pollEmbed();
 })();

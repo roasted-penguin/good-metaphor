@@ -1,0 +1,108 @@
+{
+  "_note": "금칙어 목록(T-114, 규칙 11). 형식은 ADR 0007 용어 카드. 필터는 status가 \"승인\"인 카드만 쓴다. 금칙어는 이 파일과 테스트에만 둔다.",
+  "version": "2026.11.08-1",
+  "terms": [
+    {
+      "term": "리선족",
+      "variants": [],
+      "meaning": "리부트 서버 이용자와 특정 민족을 함께 깎아내리는 멸칭이에요.",
+      "category": "D",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "승인"
+    },
+    {
+      "term": "리슝좍",
+      "variants": [
+        "리슝좌"
+      ],
+      "meaning": "앞의 멸칭을 금지어 검사를 피하려고 바꿔 쓴 표현이에요.",
+      "category": "D",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "승인"
+    },
+    {
+      "term": "리주빈",
+      "variants": [],
+      "meaning": "리부트 서버 이용자를 범죄자 이름에 빗대 깎아내리는 멸칭이에요.",
+      "category": "D",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "승인"
+    },
+    {
+      "term": "쌀숭이",
+      "variants": [],
+      "meaning": "현금화 위주로 게임하는 이용자를 깎아내리는 멸칭이에요.",
+      "category": "D",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "승인"
+    },
+    {
+      "term": "메숭이",
+      "variants": [],
+      "meaning": "게임 이용자를 동물에 빗대 깎아내리는 혐오 표현이에요.",
+      "category": "D",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "승인"
+    },
+    {
+      "term": "동남아델",
+      "variants": [],
+      "meaning": "국적을 근거로 깎아내리는 멸칭이에요.",
+      "category": "D",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "승인"
+    },
+    {
+      "term": "매미",
+      "variants": [],
+      "meaning": "특정 이용자를 깎아내리는 말이에요. 곤충 이름과 겹쳐 오탐이 커서 필터에 쓰지 않아요.",
+      "category": "D",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "제안"
+    },
+    {
+      "term": "먹자",
+      "variants": [],
+      "meaning": "특정 이용자를 깎아내리는 말이에요. 일상어 \"먹자\"와 겹쳐 오탐이 커서 필터에 쓰지 않아요.",
+      "category": "D",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "제안"
+    },
+    {
+      "term": "신창섭",
+      "variants": [],
+      "meaning": "실존 인물(게임 디렉터)의 별명이에요.",
+      "category": "C",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "승인"
+    },
+    {
+      "term": "김창섭",
+      "variants": [],
+      "meaning": "실존 인물(게임 디렉터)의 이름이에요.",
+      "category": "C",
+      "links": [],
+      "first_seen": "2026-10-11",
+      "sources": [],
+      "status": "승인"
+    }
+  ]
+}

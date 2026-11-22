@@ -1,16 +1,23 @@
 {
-  "name": "analogy-helper",
+  "name": "good-metaphor",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "관심사 그래프 기반 비유 설명 크롬 확장 (PoC)",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:store": "node scripts/build-store.mjs",
+    "store:screenshots": "node scripts/prepare-e2e.mjs && node scripts/store-screenshots.mjs",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test \"tests/unit/*.test.mjs\"",
     "test:e2e": "node scripts/prepare-e2e.mjs && playwright test",
     "eval": "node tools/eval.mjs",
-    "eval:fallback": "node tools/eval.mjs --fallback"
+    "eval:fallback": "node tools/eval.mjs --fallback",
+    "eval:gen": "node tools/eval-gen.mjs",
+    "smoke:providers": "node tools/smoke-providers.mjs",
+    "check:embed": "node tools/check-real-embed.mjs",
+    "sim:feedback": "node tools/feedback-sim.mjs",
+    "check:corrections": "node tools/check-corrections.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"
@@ -20,6 +27,6 @@
     "esbuild": "^0.28.2"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

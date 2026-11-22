@@ -1,0 +1,321 @@
+// T-302: 두 번째 공통 관심사 "식당". 그래프 데이터 규칙·관심사별 로더·식당 평가셋
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import {
+  validateGraph, mergeGraphs, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest
+} from '../../extension/lib/graph.js';
+import { loadCommonGraphFromDisk, commonGraphPath, loadInterestGraph, interestFromArgv } from '../../tools/load-graph.mjs';
+import { pickSets, interestArgError, interestEvalFiles, mixedSetting } from '../../tools/eval-lib.mjs';
+
+const read = p => JSON.parse(readFileSync(p, 'utf8'));
+const rawRestaurant = read('extension/data/common/restaurant.json');
+const rawMaple = read('extension/data/common/maplestory.json');
+const tagsFile = read('extension/data/common/tags.json');
+const blocklist = read('extension/data/common/blocklist.json');
+const restaurant = loadInterestGraph('restaurant');
+const evalSet = read('tools/eval-set-restaurant.json');
+
+/* ───────────── 관심사 목록 ───────────── */
+
+test('공통 관심사 목록: 메이플(기본)과 식당, 파일 이름이 정해져 있다', () => {
+  assert.equal(DEFAULT_INTEREST, 'maplestory');
+  assert.deepEqual(COMMON_INTERESTS.map(i => [i.id, i.label, i.file]), [
+    ['maplestory', '메이플', 'maplestory.json'],
+    ['restaurant', '식당', 'restaurant.json']
+  ]);
+  assert.equal(commonInterest('restaurant').file, 'restaurant.json');
+  assert.equal(commonInterest('nope'), null);
+  assert.equal(commonInterest(undefined), null);
+});
+
+/* ───────────── 그래프 파일 ───────────── */
+
+test('restaurant.json 머리: id·domain·analogyPrefix·theme·noMatchText·version, tags 없음(tags.json 공유)', () => {
+  assert.equal(rawRestaurant.id, 'restaurant');
+  assert.equal(rawRestaurant.domain, '식당');
+  assert.equal(rawRestaurant.analogyPrefix, '식당으로 비유하자면');
+  assert.equal(rawRestaurant.theme, 'neutral');
+  assert.equal(rawRestaurant.noMatchText, '이건 식당으로도 비유가 안 되네요.');
+  assert.match(rawRestaurant.version, /^\d{4}\.\d{2}\.\d{2}-\d+$/);
+  assert.equal('tags' in rawRestaurant, false);
+});
+
+test('maplestory.json도 noMatchText를 갖는다(지금 말풍선 문구 그대로)', () => {
+  assert.equal(rawMaple.noMatchText, '메이플스토리에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.');
+});
+
+test('식당 그래프는 검증을 통과하고 태그는 공통 tags.json 그대로(관심사 전용 태그 없음, 규칙 9·T-304)', () => {
+  assert.deepEqual(validateGraph(restaurant), []);
+  assert.deepEqual(restaurant.tags.map(t => t.id), tagsFile.tags.map(t => t.id));
+  assert.equal(restaurant.tagsVersion, tagsFile.version);
+});
+
+test('식당 노드: 12~30개(T-168에서 늘림), facts 2~3개(숫자·영문 없음, "다."로 끝), tags 1~3개, aliases 없음', () => {
+  const n = restaurant.nodes.length;
+  assert.ok(n >= 12 && n <= 30, `노드 ${n}개`);
+  for (const node of restaurant.nodes) {
+    assert.match(node.id, /^[a-z][a-z0-9_]*$/, node.id);
+    assert.ok(node.facts.length >= 2 && node.facts.length <= 3, `${node.id} facts ${node.facts.length}개`);
+    for (const f of node.facts) {
+      assert.ok(f.endsWith('다.'), `${node.id} "${f}"`);
+      // 규칙 2: 수치·가격·날짜 금지. 숫자가 아예 없게
+      assert.doesNotMatch(f, /[0-9０-９%]/, `${node.id} 숫자: "${f}"`);
+      assert.doesNotMatch(f, /[A-Za-z]/, `${node.id} 영문(브랜드?): "${f}"`);
+    }
+    assert.doesNotMatch(node.label, /[0-9]/, node.id);
+    assert.ok(node.tags.length >= 1 && node.tags.length <= 3, `${node.id} tags ${node.tags.length}개`);
+    assert.equal(node.aliases, undefined, `${node.id} aliases`);
+    assert.equal(node.weakAliases, undefined, `${node.id} weakAliases`);
+  }
+});
+
+test('식당 노드 출처: 공공·공식 자료만(go.kr·정책브리핑·소진공), 위키·블로그 없음, 검수 날짜 있음 (T-118, D-5)', () => {
+  const official = h => h.endsWith('.go.kr') || h === 'www.korea.kr' || h === 'www.sbiz.or.kr';
+  for (const node of restaurant.nodes) {
+    assert.ok(node.sources.length >= 1, node.id);
+    for (const u of node.sources) {
+      const url = new URL(u);
+      assert.equal(url.protocol, 'https:', `${node.id} ${u}`);
+      assert.ok(official(url.hostname), `${node.id} 공식 출처가 아님: ${u}`);
+      assert.doesNotMatch(u, /namu\.wiki|wikipedia|blog|tistory|inven|cafe\.naver/, u);
+    }
+    assert.match(node.verifiedAt, /^\d{4}-\d{2}-\d{2}$/, node.id);
+  }
+});
+
+test('식당 그래프에 금칙어(멸칭·실존 인물·밈 원문) 없음 (규칙 11)', () => {
+  const text = JSON.stringify(rawRestaurant);
+  const banned = blocklist.terms.flatMap(t => [t.term, ...(t.variants || [])]).filter(Boolean);
+  for (const w of [...banned, '쌀숭이', '신창섭', '김창섭', '이해가쏙쏙', '우우우']) {
+    assert.equal(text.includes(w), false, `금칙어 "${w}"`);
+  }
+});
+
+test('식당 그래프 엣지는 있는 노드끼리', () => {
+  const ids = new Set(restaurant.nodes.map(n => n.id));
+  for (const e of restaurant.edges || []) assert.ok(ids.has(e.from) && ids.has(e.to) && e.rel, `${e.from}→${e.to}`);
+});
+
+test('식당 그래프 노드 id는 메이플 노드 id와 겹치지 않는다(피드백 기록이 엉뚱하게 적용되지 않게)', () => {
+  const maple = new Set(loadCommonGraphFromDisk().nodes.map(n => n.id));
+  for (const n of restaurant.nodes) assert.equal(maple.has(n.id), false, n.id);
+});
+
+test('mergeGraphs: 공통 그래프의 noMatchText를 싣는다, 내 관심사(useCommon=false)면 빈 문자열', () => {
+  const r = mergeGraphs(restaurant, null);
+  assert.equal(r.domain, '식당');
+  assert.equal(r.theme, 'neutral');
+  assert.equal(r.analogyPrefix, '식당으로 비유하자면');
+  assert.equal(r.noMatchText, '이건 식당으로도 비유가 안 되네요.');
+  assert.deepEqual(r.sources.common, { id: 'restaurant', version: rawRestaurant.version, tagsVersion: tagsFile.version });
+  assert.equal(mergeGraphs(restaurant, { useCommon: false, domain: '원신' }).noMatchText, '');
+  assert.equal(mergeGraphs(loadCommonGraphFromDisk(), null).noMatchText, rawMaple.noMatchText);
+});
+
+test('validateGraph: noMatchText가 있으면 빈 문자열이 아닌 문자열', () => {
+  const g = { domain: 'd', tags: [], nodes: [] };
+  assert.deepEqual(validateGraph({ ...g, noMatchText: '없어요.' }), []);
+  assert.match(validateGraph({ ...g, noMatchText: '' }).join(), /noMatchText/);
+  assert.match(validateGraph({ ...g, noMatchText: 3 }).join(), /noMatchText/);
+});
+
+/* ───────────── Node 로더 ───────────── */
+
+test('Node 로더: 관심사 id → 그래프 경로, 모르는 id는 오류', () => {
+  assert.equal(commonGraphPath(), fileURLToPath(new URL('../../extension/data/common/maplestory.json', import.meta.url)));
+  assert.equal(commonGraphPath('restaurant'), fileURLToPath(new URL('../../extension/data/common/restaurant.json', import.meta.url)));
+  assert.throws(() => commonGraphPath('nope'), /nope/);
+  assert.deepEqual(loadInterestGraph('maplestory'), loadCommonGraphFromDisk());
+  assert.equal(loadInterestGraph().id, 'maplestory');
+});
+
+test('interestFromArgv: --interest <id>, 없으면 기본, 모르는 id·값 없음은 오류', () => {
+  assert.equal(interestFromArgv([]), 'maplestory');
+  assert.equal(interestFromArgv(['--interest', 'restaurant', '-v']), 'restaurant');
+  assert.throws(() => interestFromArgv(['--interest', 'nope']), /nope/);
+  assert.throws(() => interestFromArgv(['--interest']), /interest/);
+});
+
+test('pickSets: --interest restaurant면 식당 평가셋 하나(식당 가드 대상), --holdout이면 식당 홀드아웃만, 메이플이면 기존 그대로', () => {
+  const e = [{ sentence: 'e' }], v = [{ sentence: 'v' }], h = [{ sentence: 'h' }], r = [{ sentence: 'r' }];
+  const rest = pickSets(['--interest', 'restaurant'], { evalSet: e, validation: v, holdout: h, interestSet: r }, commonInterest('restaurant'));
+  assert.deepEqual(rest.map(s => [s.name, s.cases, s.guarded]), [['식당 평가셋', r, true]]);
+  const restH = pickSets(['--interest', 'restaurant', '--holdout'], { evalSet: e, validation: v, holdout: h, interestSet: r }, commonInterest('restaurant'));
+  assert.deepEqual(restH.map(s => [s.name, s.cases, s.guarded]), [['식당 홀드아웃', h, false]]);
+  const maple = pickSets([], { evalSet: e, validation: v, holdout: h }, commonInterest('maplestory'));
+  assert.deepEqual(maple.map(s => s.name), ['평가셋', '검증셋']);
+});
+
+/* ───────────── 확장 로더(stores.js) ───────────── */
+
+const EXT = fileURLToPath(new URL('../../extension/', import.meta.url));
+function mockChrome() {
+  const seen = [];
+  globalThis.chrome = { runtime: { getURL: p => 'ext://x/' + p }, storage: { managed: { get: async () => ({}) } } };
+  globalThis.fetch = async (url) => {
+    seen.push(String(url));
+    if (String(url).startsWith('ext://x/')) {
+      const body = readFileSync(EXT + String(url).slice('ext://x/'.length), 'utf8');
+      return { ok: true, status: 200, json: async () => JSON.parse(body) };
+    }
+    throw new Error('unexpected fetch ' + url);
+  };
+  return seen;
+}
+
+test('확장 로더: loadCommonGraph("restaurant")는 번들 restaurant.json + tags.json, 관심사마다 따로 캐시', async () => {
+  const seen = mockChrome();
+  const { loadCommonGraph } = await import('../../extension/lib/stores.js');
+  const r = await loadCommonGraph('restaurant', { fresh: true });
+  assert.ok(seen.includes('ext://x/data/common/restaurant.json'), seen.join());
+  assert.deepEqual(r, restaurant);
+  const m = await loadCommonGraph('maplestory', { fresh: true });
+  assert.equal(m.id, 'maplestory');
+  // 캐시가 관심사별: 다시 불러도 섞이지 않는다
+  assert.equal((await loadCommonGraph('restaurant')).id, 'restaurant');
+  assert.equal((await loadCommonGraph()).id, 'maplestory');
+  // 예전 호출 모양({ fresh })도 기본 관심사
+  assert.equal((await loadCommonGraph({ fresh: true })).id, 'maplestory');
+  // 모르는 id(오래된 설정 값 등)는 기본 관심사로
+  assert.equal((await loadCommonGraph('nope')).id, 'maplestory');
+});
+
+/* ───────────── 식당 평가셋 ───────────── */
+
+const isEnglish = s => !/[가-힣]/.test(s);
+const grams = s => { const t = s.replace(/\s+/g, ' '); const out = new Set(); for (let i = 0; i + 3 <= t.length; i++) out.add(t.slice(i, i + 3)); return out; };
+const jaccard = (a, b) => { const A = grams(a), B = grams(b); let n = 0; for (const g of A) if (B.has(g)) n++; return n / (A.size + B.size - n); };
+
+test('식당 평가셋: 12문장 이상, 메이플 문장 3개 이상, 영어 2개 이상, 기대 노드·태그가 식당 그래프에 있다', () => {
+  const ids = new Set(restaurant.nodes.map(n => n.id));
+  const tagIds = new Set(restaurant.tags.map(t => t.id));
+  assert.ok(evalSet.length >= 12, `${evalSet.length}문장`);
+  assert.ok(evalSet.filter(c => c.group === 'maple').length >= 3, '메이플 문장 부족');
+  assert.ok(evalSet.filter(c => isEnglish(c.sentence)).length >= 2, '영어 부족');
+  assert.equal(new Set(evalSet.map(c => c.sentence)).size, evalSet.length, '중복');
+  for (const c of evalSet) {
+    assert.ok(Array.isArray(c.expectNodes) && c.expectNodes.length >= 1, c.sentence);
+    for (const id of c.expectNodes) assert.ok(ids.has(id), `${c.sentence} → 없는 노드 ${id}`);
+    if (c.expectTag) assert.ok(tagIds.has(c.expectTag), `${c.sentence} → 없는 태그 ${c.expectTag}`);
+  }
+});
+
+test('식당 평가셋: 기존 평가 문장과 3-gram < 0.5, 태그 설명·예문과 < 0.3, 식당 facts와 < 0.3(베끼기 금지)', () => {
+  const others = [
+    ...read('tools/eval-set.json'), ...read('tools/eval-holdout.json'), ...read('tools/eval-unseen.json')
+  ].map(c => c.sentence);
+  const tagTexts = tagsFile.tags.flatMap(t => [t.desc, ...(t.examples || [])]);
+  const facts = restaurant.nodes.flatMap(n => n.facts);
+  for (const c of evalSet) {
+    for (const s of others) assert.ok(jaccard(c.sentence, s) < 0.5, `"${c.sentence}" ↔ "${s}"`);
+    for (const t of tagTexts) assert.ok(jaccard(c.sentence, t) < 0.3, `"${c.sentence}" ↔ 예문 "${t}"`);
+    for (const f of facts) assert.ok(jaccard(c.sentence, f) < 0.3, `"${c.sentence}" ↔ 사실 "${f}"`);
+  }
+});
+
+/* ───────────── 관심사 선택 설정 (Task 2) ───────────── */
+
+test('설정 기본값: interest는 기본 관심사(메이플), 목록에 있는 id다', async () => {
+  await import('../../extension/lib/site-filter.js');
+  const { DEFAULT_SETTINGS } = await import('../../extension/lib/config.js');
+  assert.equal(DEFAULT_SETTINGS.interest, DEFAULT_INTEREST);
+  assert.ok(commonInterest(DEFAULT_SETTINGS.interest));
+});
+
+test('interestArgError: 메이플이 아닌 관심사에 --margin-guard·--server를 주면 오류 문구, --guard·--holdout은 그 관심사 파일로(T-156)', () => {
+  const r = commonInterest('restaurant'), m = commonInterest('maplestory');
+  for (const flag of ['--margin-guard', '--server']) {
+    const msg = interestArgError(['node', 'eval', '--interest', 'restaurant', flag], r);
+    assert.match(msg, new RegExp(flag));
+    assert.match(msg, /메이플 관심사에서만/);
+    assert.equal(interestArgError(['node', 'eval', flag], m), null, '메이플이면 그대로');
+  }
+  for (const flag of ['--guard', '--holdout']) assert.equal(interestArgError(['node', 'eval', '--interest', 'restaurant', flag], r), null, flag);
+  assert.equal(interestArgError(['node', 'eval', '--interest', 'restaurant', '-v'], r), null);
+  assert.equal(interestArgError(['node', 'eval'], null), null);
+});
+
+test('interestEvalFiles: 관심사별 평가셋·홀드아웃·가드 파일 이름, 메이플은 예전 이름 그대로', () => {
+  assert.deepEqual(interestEvalFiles(commonInterest('maplestory')), { evalSet: 'eval-set.json', holdout: 'eval-unseen.json', guard: 'eval-guard.json' });
+  assert.deepEqual(interestEvalFiles(null), { evalSet: 'eval-set.json', holdout: 'eval-unseen.json', guard: 'eval-guard.json' });
+  assert.deepEqual(interestEvalFiles(commonInterest('restaurant')), { evalSet: 'eval-set-restaurant.json', holdout: 'eval-unseen-restaurant.json', guard: 'eval-guard-restaurant.json' });
+});
+
+test('mixedSetting(admin, graph): 관심사 그래프 감점을 admin.retrieval 위에 덮어쓴다, 그래프가 없으면 예전 그대로', () => {
+  const admin = { retrieval: { topK: 3, tagPenalty: { inflation: 0.03 } } };
+  assert.deepEqual(mixedSetting(admin).tagPenalty, { inflation: 0.03 });
+  assert.deepEqual(mixedSetting(admin, { tagPenalty: { inflation: 0, scarcity_value: 0.02 } }).tagPenalty, { inflation: 0, scarcity_value: 0.02 });
+  assert.equal(mixedSetting(admin, { tagPenalty: {} }).name, '혼합 (현재 기본값)');
+});
+
+/* ───────────── 식당 홀드아웃 (T-156) ───────────── */
+// 조정(태그·감점·facts)을 고를 때 보지 않는 문장. 조정 전에 커밋하고 마지막에 한 번만 채점한다
+
+const unseenRestaurant = read('tools/eval-unseen-restaurant.json');
+
+test('식당 홀드아웃: 8문장 이상, 영어 1개 이상, 메이플 문장 2개 이상, 문장마다 근거(why), 기대 노드·태그가 식당 그래프에 있다', () => {
+  const ids = new Set(restaurant.nodes.map(n => n.id));
+  const tagIds = new Set(restaurant.tags.map(t => t.id));
+  assert.ok(unseenRestaurant.length >= 8, `${unseenRestaurant.length}문장`);
+  assert.ok(unseenRestaurant.filter(c => isEnglish(c.sentence)).length >= 1, '영어 부족');
+  assert.ok(unseenRestaurant.filter(c => c.group === 'maple').length >= 2, '메이플 문장 부족');
+  assert.equal(new Set(unseenRestaurant.map(c => c.sentence)).size, unseenRestaurant.length, '중복');
+  for (const c of unseenRestaurant) {
+    assert.ok(typeof c.why === 'string' && c.why.trim(), `근거 없음: ${c.sentence}`);
+    assert.ok(Array.isArray(c.expectNodes) && c.expectNodes.length >= 1, c.sentence);
+    for (const id of c.expectNodes) assert.ok(ids.has(id), `${c.sentence} → 없는 노드 ${id}`);
+    if (c.expectTag) assert.ok(tagIds.has(c.expectTag), `${c.sentence} → 없는 태그 ${c.expectTag}`);
+  }
+});
+
+test('식당 홀드아웃: 다른 평가 문장(메이플·식당 평가셋 포함)과 3-gram < 0.5, 태그 설명·예문과 < 0.3, 식당 facts와 < 0.3', () => {
+  const others = [
+    ...read('tools/eval-set.json'), ...read('tools/eval-holdout.json'), ...read('tools/eval-unseen.json'), ...evalSet
+  ].map(c => c.sentence).concat(read('tools/eval-guard.json'));
+  const tagTexts = tagsFile.tags.flatMap(t => [t.desc, ...(t.examples || [])]);
+  const facts = restaurant.nodes.flatMap(n => n.facts);
+  for (const c of unseenRestaurant) {
+    for (const s of others) assert.ok(jaccard(c.sentence, s) < 0.5, `"${c.sentence}" ↔ "${s}"`);
+    for (const t of tagTexts) assert.ok(jaccard(c.sentence, t) < 0.3, `"${c.sentence}" ↔ 예문 "${t}"`);
+    for (const f of facts) assert.ok(jaccard(c.sentence, f) < 0.3, `"${c.sentence}" ↔ 사실 "${f}"`);
+  }
+});
+
+/* ───────────── 관심사별 감점 (T-156) ───────────── */
+
+test('maplestory.json에는 tagPenalty가 없다(메이플은 admin.retrieval.tagPenalty만, 결과 불변)', () => {
+  assert.equal('tagPenalty' in rawMaple, false);
+  assert.deepEqual(mergeGraphs(loadCommonGraphFromDisk(), null).tagPenalty, {});
+});
+
+test('mergeGraphs: 공통 그래프의 tagPenalty를 싣는다, 내 관심사(useCommon=false)·없으면 빈 객체', () => {
+  const g = { ...restaurant, tagPenalty: { scarcity_value: 0.02 } };
+  assert.deepEqual(mergeGraphs(g, null).tagPenalty, { scarcity_value: 0.02 });
+  assert.deepEqual(mergeGraphs(g, { useCommon: false, domain: '원신' }).tagPenalty, {});
+  const { tagPenalty, ...noPen } = g;
+  assert.deepEqual(mergeGraphs(noPen, null).tagPenalty, {});
+});
+
+test('validateGraph: tagPenalty는 그래프 태그 id → 0~0.1 숫자인 객체', () => {
+  assert.deepEqual(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: 0.02, inflation: 0 } }), []);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: { nope: 0.02 } }).join(), /tagPenalty.*nope/);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: 0.5 } }).join(), /tagPenalty/);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: -0.01 } }).join(), /tagPenalty/);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: { scarcity_value: '0.02' } }).join(), /tagPenalty/);
+  assert.match(validateGraph({ ...restaurant, tagPenalty: [0.02] }).join(), /tagPenalty/);
+});
+
+/* ───────────── 식당 가드 (T-156) ───────────── */
+
+test('식당 가드: 식당 평가셋에서 지금 맞히는 문장 목록(문자열 배열, 중복 없음, 홀드아웃·메이플 가드와 겹치지 않음)', () => {
+  const guard = read('tools/eval-guard-restaurant.json');
+  const sentences = new Set(evalSet.map(c => c.sentence));
+  assert.ok(Array.isArray(guard) && guard.length >= 10, `${guard.length}문장`);
+  assert.equal(new Set(guard).size, guard.length, '중복');
+  for (const s of guard) assert.ok(sentences.has(s), `식당 평가셋에 없는 문장: ${s}`);
+  const unseen = new Set(unseenRestaurant.map(c => c.sentence));
+  const mapleGuard = new Set(read('tools/eval-guard.json'));
+  for (const s of guard) assert.ok(!unseen.has(s) && !mapleGuard.has(s), s);
+});

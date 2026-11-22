@@ -1,0 +1,33 @@
+# 로컬 실행용. 처음 한 번 `cp .env.example .env` 후 `docker compose up --build`.
+# (이 저장소의 Compose v2.19는 env_file의 `required: false`를 모르므로 .env 파일이 있어야 한다)
+# 검색 인덱스는 처음 한 번 시드한다: `docker compose run --rm analogy-api python -m app.seed` (README "도커")
+services:
+  analogy-api:
+    build: .
+    # 종료 유예: 서버를 멈출 때 추출 워커(T-161)가 진행 중인 큐 파일 작업을 최대 10초(THREAD_DRAIN_TIMEOUT_S)
+    # 기다린 뒤 worker.lock을 푼다. 도커 기본 10초면 그 전에 SIGKILL될 수 있어 넉넉히 20초로 둔다
+    stop_grace_period: 20s
+    ports:
+      # 기본은 이 컴퓨터에서만 열린다(맥에서 돌릴 때 같은 망에 포트를 열지 않는다, 규칙 10).
+      # 서버(EC2)에서 바깥에 열어야 하면 BIND_ADDR=0.0.0.0 으로 바꾼다
+      - "${BIND_ADDR:-127.0.0.1}:8000:8000"
+    # GEMINI_API_KEY는 .env에서 읽는다(.env는 커밋하지 않는다). 키가 비어 있어도 서버는 뜬다.
+    env_file:
+      - .env
+    environment:
+      WORKSPACE: common_maplestory
+      RATE_LIMIT_PER_MIN: "30"
+      # 아래 볼륨으로 마운트한 공통 그래프 파일
+      COMMON_GRAPH_PATH: /data/common/maplestory.json
+      # 금칙어 목록(T-114). 같은 볼륨에 있다. 못 읽으면 /v1/analogy가 503
+      BLOCKLIST_PATH: /data/common/blocklist.json
+      # 추상 태그(통제 어휘, T-304). 같은 볼륨에 있다. 그래프에 tags가 없으면 여기서 읽는다
+      TAGS_PATH: /data/common/tags.json
+      # LightRAG 인덱스(T-140). 이름 있는 볼륨이라 컨테이너를 지워도 남는다. 서버와 시드가 같은 경로·EMBEDDING_*를 쓴다
+      LIGHTRAG_WORKING_DIR: /data/rag_storage
+    volumes:
+      - ../extension/data/common:/data/common:ro
+      - rag_storage:/data/rag_storage
+
+volumes:
+  rag_storage:

@@ -1,16 +1,24 @@
 // 확장 전체 흐름 e2e. 네트워크 없이: 대체 임베더 + 가짜 LLM(servers.mjs)
 // 실행: npm run test:e2e   (브라우저 경로 지정: CHROMIUM_PATH=/path/to/chrome)
 import { test as base, expect, chromium } from '@playwright/test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, cpSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startServers, calls } from './servers.mjs';
+import { startServers, calls, analogyCalls, SERVER_ANALOGY, GHOST_NODE, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES } from './servers.mjs';
+import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
+import { COMMON_INTERESTS } from '../../extension/lib/graph.js';
+import { openBrowserEmbedder } from '../../tools/browser-embedder.mjs';
 
 const EXT = path.resolve('.tmp/ext-e2e');
+// 서버 모드 사본(T-141): 가짜 analogy-api(:8767) 주소 + 출처 권한. 서버를 보는 시험만 serverTest 로 이 사본을 쓴다
+const EXT_SERVER = path.resolve('.tmp/ext-e2e-server');
 
 const test = base.extend({
-  context: async ({}, use) => {
-    const args = [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`];
+  // 불러올 확장 사본. 기본은 서버 주소 없음(서버 모드 꺼짐)
+  extPath: async ({}, use) => { await use(EXT); },
+  context: async ({ extPath }, use) => {
+    // localhost iframe(T-111)이 CI의 IPv6 우선 해석에 기대지 않게 127.0.0.1 로 고정한다
+    const args = [`--disable-extensions-except=${extPath}`, `--load-extension=${extPath}`, '--host-resolver-rules=MAP localhost 127.0.0.1'];
     const opts = process.env.CHROMIUM_PATH
       ? { executablePath: process.env.CHROMIUM_PATH, headless: false, args: ['--headless=new', ...args] }
       : { channel: 'chromium', headless: !process.env.HEADED, args };
@@ -35,12 +43,15 @@ const test = base.extend({
   }
 });
 
+// 서버 모드 시험(T-404·T-141)과 서버 요청 0을 함께 보는 개인정보 시험(T-107·T-111·T-144·T-147·T-148)
+const serverTest = test.extend({ extPath: async ({}, use) => { await use(EXT_SERVER); } });
+
 let stop;
 test.beforeAll(async () => { stop = await startServers(); });
 test.afterAll(async () => { await stop?.(); });
 
-const tooltip = page => page.evaluate(() => document.getElementById('analogy-helper-host')?.shadowRoot.querySelector('.box')?.innerText ?? null);
-const boxClass = page => page.evaluate(() => document.getElementById('analogy-helper-host')?.shadowRoot.querySelector('.box')?.className ?? '');
+const tooltip = page => page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.box')?.innerText ?? null);
+const boxClass = page => page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.box')?.className ?? '');
 async function pointOnChar(page, sel, idx) {
   return page.evaluate(([s, i]) => {
     const r = document.createRange(); const t = document.querySelector(s).firstChild;
@@ -72,6 +83,67 @@ test('설정 화면: 공통 저장소 정보, 연결 테스트, 시험해 보기
   await expect(page.locator('#tryOut table tbody tr')).toHaveCount(3);
 });
 
+test('평가 도구 계약: 옵션 페이지에서 오프스크린 embed를 직접 불러 한 문장씩 같은 벡터를 받는다 (T-128)', async ({ ext }) => {
+  const r = await ext.send({ type: 'embed:warmup' });
+  expect(r.ok).toBe(true);
+  const embed = texts => ext.page.evaluate(t => chrome.runtime.sendMessage({ target: 'offscreen', type: 'embed', texts: t, kind: 'passage' }), texts);
+  const both = await embed(['첫 문장', '두 번째 문장']);
+  const alone = await embed(['두 번째 문장']);
+  expect(both.vectors).toHaveLength(2);
+  expect(both.embedderId).toBe(r.data.embedderId);
+  expect(alone.vectors[0]).toEqual(both.vectors[1]); // 묶어 보내도 한 문장씩과 같은 벡터
+});
+
+// npm run eval·check:embed가 쓰는 경로 그대로(T-304 수정 1). 같은 프로필을 다시 쓰면 크롬이 예전 서비스 워커 스크립트를
+// 프로필 캐시에서 계속 돌려, 고친 background(태그 파일 합치기)가 반영되지 않고 "common.tags is not iterable"로 멈췄다
+test('평가 도구(browser-embedder): 같은 프로필을 다시 써도 바뀐 서비스 워커 코드로 돌고, 태그 분리 그래프로 준비된다 (T-304)', async () => {
+  test.setTimeout(120_000);
+  const root = mkdtempSync(path.join(tmpdir(), 'ah-be-'));
+  const launchOptions = process.env.CHROMIUM_PATH
+    ? { executablePath: process.env.CHROMIUM_PATH, headless: false, args: ['--headless=new'] }
+    : { channel: 'chromium', headless: !process.env.HEADED };
+  for (const marker of ['A', 'B']) {
+    // 대체 임베더 사본(.tmp/ext-e2e)에 실행마다 다른 표시를 background.js에 붙인다
+    const src = path.join(root, `src-${marker}`);
+    cpSync(EXT, src, { recursive: true });
+    appendFileSync(path.join(src, 'background.js'), `\nself.__evalMarker = '${marker}';\n`);
+    const be = await openBrowserEmbedder({ src, out: path.join(root, 'out'), profile: path.join(root, 'profile'), requireReady: false, launchOptions });
+    try {
+      expect(await be.sw.evaluate(() => self.__evalMarker), '이번 실행의 background.js가 돌아야 해요').toBe(marker);
+      expect(be.status).toBe('fallback');
+      expect(await be.embed(['첫 문장', '두 번째 문장'], 'query')).toHaveLength(2);
+      const info = await be.send('graph:info');
+      expect(info.ok).toBe(true);
+      expect(info.data.common.tags).toBe(21); // tags.json 전체(T-176에서 21개)
+    } finally {
+      await be.close();
+    }
+  }
+});
+
+test('벡터 캐시 정리(T-110): 다른 임베더 키는 지워지고, 바뀐 것이 없으면 다시 저장하지 않는다', async ({ ext }) => {
+  const getCache = () => ext.page.evaluate(async () => (await chrome.storage.local.get('vecCache')).vecCache || {});
+  // 서비스 워커가 캐시를 읽기 전에 다른 임베더 키를 심는다
+  await ext.page.evaluate(() => chrome.storage.local.set({ vecCache: { 'old-embedder|deadbeef': [0.1, 0.2] } }));
+  const r = await ext.send({ type: 'embed:warmup' });
+  expect(r.ok).toBe(true);
+  const id = r.data.embedderId;
+  await expect.poll(async () => Object.keys(await getCache()).includes('old-embedder|deadbeef')).toBe(false);
+  const keys = Object.keys(await getCache());
+  expect(keys.length).toBe(r.data.vectors);
+  expect(keys.every(k => k.startsWith(id + '|'))).toBe(true);
+
+  // 같은 그래프로 다시: 추가·삭제가 없으면 vecCache를 쓰지 않는다(호버마다 저장 금지)
+  await ext.page.evaluate(() => {
+    window.__vecWrites = 0;
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.vecCache) window.__vecWrites++; });
+  });
+  const r2 = await ext.send({ type: 'embed:warmup' });
+  expect(r2.data.vectors).toBe(r.data.vectors);
+  await ext.page.waitForTimeout(300);
+  expect(await ext.page.evaluate(() => window.__vecWrites)).toBe(0);
+});
+
 test('Alt+호버: 문장 강조, 메이플 테마 말풍선, Esc 닫기, 캐시', async ({ context, ext }) => {
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8766/');
@@ -83,13 +155,337 @@ test('Alt+호버: 문장 강조, 메이플 테마 말풍선, Esc 닫기, 캐시'
   await altHover(page, '#p1');
   await expect.poll(() => tooltip(page)).toContain('메이플스토리로 보면');
   expect(await boxClass(page)).toContain('t-maple');
-  const hl = await page.evaluate(() => [...CSS.highlights.get('analogy-helper-hl')][0].toString());
+  const hl = await page.evaluate(() => [...CSS.highlights.get('good-metaphor-hl')][0].toString());
   expect(hl).toBe('변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
 
   await page.keyboard.press('Escape');
   await expect.poll(() => tooltip(page)).toBe('');
   await altHover(page, '#p1', 7);
   await expect.poll(() => tooltip(page)).toContain('캐시');
+});
+
+// 말풍선 텍스트를 done(text) 이 참이 될 때까지 50ms마다 기록한다
+async function recordTooltip(page, done, timeout = 15_000) {
+  const seen = [];
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    const t = (await tooltip(page)) || '';
+    seen.push(t);
+    if (done(t)) return seen;
+    await page.waitForTimeout(50);
+  }
+  throw new Error('말풍선이 끝나지 않았어요: ' + seen.at(-1));
+}
+
+test('스트리밍: 뜻이 비유보다 먼저 보인다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  const seen = await recordTooltip(page, t => t.includes('같은 구조예요'));
+  const first = seen.findIndex(t => t.includes('테스트 뜻 풀이예요.'));
+  expect(first, '뜻이 보인 순간이 있어야 함').toBeGreaterThanOrEqual(0);
+  expect(seen[first], '뜻이 처음 보일 때 비유는 아직 없음').not.toContain('같은 구조예요');
+});
+
+test('스트리밍: 후보 밖 nodeId 면 비유가 끝까지 안 보인다 (규칙 1)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p3');
+  const seen = await recordTooltip(page, t => t.includes('근거 목록에 없는 개념'));
+  expect(seen.filter(t => t.includes('같은 구조예요')), '비유 문구가 한 번도 보이면 안 됨').toEqual([]);
+  expect(seen.some(t => t.includes('테스트 뜻 풀이예요.') && !t.includes('근거 목록에 없는')), '검증 전에 뜻은 먼저 보임').toBe(true);
+  expect(seen.at(-1)).toContain('테스트 뜻 풀이예요.');
+});
+
+// 근거 검사(T-123): 가짜 LLM은 "입장횟수테스트"면 facts 밖 숫자를, "사실조작테스트"면 facts에 없는 usedFact를 댄다
+const GROUNDING_REJECTED = '근거에 없는 내용이 섞여 있어서 비유를 숨겼어요.';
+
+test('근거 검사(T-123): facts 밖 숫자를 쓴 비유는 끝까지 안 보이고 근거 문구, 뜻은 먼저', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p6');
+  const seen = await recordTooltip(page, t => t.includes(GROUNDING_REJECTED));
+  expect(seen.filter(t => t.includes('7번만')), '지어낸 비유가 한 번도 보이면 안 됨').toEqual([]);
+  expect(seen.some(t => t.includes('테스트 뜻 풀이예요.') && !t.includes(GROUNDING_REJECTED)), '검사 전에 뜻은 먼저 보임').toBe(true);
+  expect(seen.at(-1)).toContain('테스트 뜻 풀이예요.');
+});
+
+test('근거 검사(T-123): 프롬프트에 usedFact, 정상은 통과, 숫자·usedFact 불일치는 숨김', async ({ ext }) => {
+  const ok = await ext.send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(calls.at(-1).system).toContain('usedFact에 글자 그대로 옮긴다');
+  expect(ok.data.analogy).toContain('같은 구조예요');
+  expect(ok.data.evidence).not.toBeNull();
+  expect(ok.data.rejected).toBeNull();
+  expect(ok.data.debug.grounding).toEqual({ ok: true });
+
+  const num = await ext.send({ type: 'explain', sentence: '입장횟수테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
+  expect(num.data.meaning).toBe('테스트 뜻 풀이예요.');
+  expect(num.data.analogy).toBe('');
+  expect(num.data.rejected).toBe(GROUNDING_REJECTED);
+  expect(num.data.evidence).toBeNull();
+  expect(num.data.debug.grounding).toEqual({ ok: false, reason: 'number-outside' });
+
+  const fact = await ext.send({ type: 'explain', sentence: '사실조작테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
+  expect(fact.data.analogy).toBe('');
+  expect(fact.data.rejected).toBe(GROUNDING_REJECTED);
+  expect(fact.data.evidence).toBeNull();
+  expect(fact.data.debug.grounding).toEqual({ ok: false, reason: 'fact-mismatch' });
+});
+
+// 끝맺음 검사(T-122): 합쇼체 답은 교정 문구로 한 번 다시 부르고, 그래도 어기면 결과는 두고 debug 에 표시
+test('끝맺음 검사(T-122): 합쇼체 응답 → 한 번 다시 불러 해요체, 고집하면 표시만', async ({ ext }) => {
+  const before = calls.length;
+  const fixed = await ext.send({ type: 'explain', sentence: '끝맺음교정테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
+  const mine = calls.slice(before).filter(c => c.user.includes('끝맺음교정테스트'));
+  expect(mine.length).toBe(2);
+  expect(mine[1].user).toContain('[고쳐 주세요]');
+  expect(mine[0].system).toContain('해요체(~요)로 끝낸다');
+  expect(fixed.data.analogy).toContain('같은 구조예요');
+  expect(fixed.data.debug.ending).toEqual({ ok: true, retried: true, issues: [{ field: 'analogy', style: 'formal' }] });
+  expect(fixed.data.debug.grounding).toEqual({ ok: true });
+
+  const n = calls.length;
+  const stubborn = await ext.send({ type: 'explain', sentence: '끝맺음고집테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
+  expect(calls.slice(n).filter(c => c.user.includes('끝맺음고집테스트')).length, '한 번만 다시 부른다').toBe(2);
+  expect(stubborn.data.analogy).toContain('같은 구조입니다');
+  expect(stubborn.data.debug.ending).toEqual({ ok: false, retried: true, issues: [{ field: 'analogy', style: 'formal' }] });
+
+  const ok = await ext.send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(ok.data.debug.ending).toEqual({ ok: true, retried: false, issues: [] });
+});
+
+// 근거 검사 오탐률 기록(T-146): 숨김은 기기 안 groundingLog에 가린 문장·비유로, 통과는 날짜별 개수만
+const P6_SENTENCE = '입장횟수테스트 이 적금은 한 달에 한 번만 넣을 수 있다.';
+const groundingLog = page => page.evaluate(async () => (await chrome.storage.local.get('groundingLog')).groundingLog || []);
+
+test('근거 검사 기록(T-146): 호버로 숨긴 비유가 groundingLog에 1건, 설정 집계에 숨김 1개, 괜찮은 비유였어요 표시', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p6');
+  await recordTooltip(page, t => t.includes(GROUNDING_REJECTED));
+  const op = ext.page;
+  await expect.poll(async () => (await groundingLog(op)).length).toBe(1);
+  const [e] = await groundingLog(op);
+  expect(e.reason).toBe('number-outside');
+  expect(e.sentenceMasked).toBe(P6_SENTENCE);
+  expect(e.analogyMasked).toContain('7번만');
+  expect(e.nodeId).toBeTruthy();
+  expect(e.interest).toBe('maplestory');
+  for (const k of ['sentence', 'analogy']) expect(e).not.toHaveProperty(k);
+  const counts = await op.evaluate(async () => (await chrome.storage.local.get('groundingCounts')).groundingCounts);
+  expect(Object.values(counts)[0]).toEqual({ checked: 1, hidden: 1 });
+
+  await op.reload();
+  await expect(op.locator('#fbGroundingStats')).toContainText('숨김 1개');
+  await expect(op.locator('#fbGroundingStats')).toContainText('근거 밖 숫자 1');
+  const li = op.locator('#fbGroundingList li');
+  await expect(li).toHaveCount(1);
+  await expect(li).toContainText('7번만');
+  // 피드백이 없어도 근거 검사 기록이 있으면 지우기를 누를 수 있다
+  await expect(op.locator('#fbClear')).toBeEnabled();
+  await li.locator('.fb-flag').click();
+  await expect.poll(async () => (await groundingLog(op))[0].userFlag).toBe('false-positive');
+  await expect(op.locator('#fbGroundingStats')).toContainText('괜찮았다고 표시 1');
+  await li.locator('.fb-flag').click();
+  await expect.poll(async () => (await groundingLog(op))[0].userFlag).toBeUndefined();
+});
+
+test('근거 검사 기록(T-146): 통과한 비유는 개수만, 동의 꺼짐이면 내보내기에 샘플 없음·켜면 있음, 전부 지우기가 기록도 지운다', async ({ ext }) => {
+  const { send, setSettings, page: op } = ext;
+  await send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  await send({ type: 'explain', sentence: P6_SENTENCE, noCache: true });
+  await expect.poll(async () => (await groundingLog(op)).length).toBe(1);
+  await expect.poll(async () => (await send({ type: 'grounding:stats' })).data.checked).toBe(2);
+  const st = (await send({ type: 'grounding:stats' })).data;
+  expect(st.hidden).toBe(1);
+  expect(st.percent).toBe(50);
+
+  const off = (await send({ type: 'corrections:export' })).data;
+  expect(off).not.toHaveProperty('groundingSamples');
+  await setSettings({ feedbackShare: true });
+  const on = (await send({ type: 'corrections:export' })).data;
+  expect(on.groundingSamples).toHaveLength(1);
+  expect(on.groundingSamples[0]).toMatchObject({ reason: 'number-outside', sentence: P6_SENTENCE });
+  expect(on.groundingSamples[0].analogy).toContain('7번만');
+
+  expect((await send({ type: 'feedback:clear' })).ok).toBe(true);
+  expect(await groundingLog(op)).toEqual([]);
+  expect((await send({ type: 'grounding:stats' })).data.checked).toBe(0);
+});
+
+// 금칙어 필터(T-114): 가짜 LLM은 "금칙비유테스트"면 비유에, "금칙뜻테스트"면 뜻에 금칙어를 섞는다
+const BLOCKED_REJECTED = '부적절한 표현이 섞여 있어서 비유를 숨겼어요.';
+const hasBlocked = t => [BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING].some(w => t.replace(/[\s.]/g, '').includes(w.replace(/[\s.]/g, '')));
+
+test('금칙어(T-114): 비유·뜻에 섞이면 말풍선 어디에도 안 보이고 숨김 문구, 스트리밍 뜻도 막는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await page.evaluate(() => {
+    const p = document.createElement('p');
+    p.id = 'pblock';
+    p.textContent = '금칙뜻테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.';
+    document.body.prepend(p);
+  });
+  await altHover(page, '#pblock');
+  const seen = await recordTooltip(page, t => t.includes(BLOCKED_REJECTED));
+  expect(seen.filter(hasBlocked), '금칙어가 한 번도 보이면 안 됨').toEqual([]);
+  expect(seen.filter(t => t.includes('뜻풀이예요')), '막힌 뜻은 partial로도 안 보임').toEqual([]);
+  const shadowText = await page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.textContent ?? '');
+  expect(hasBlocked(shadowText)).toBe(false);
+
+  const r = await ext.send({ type: 'explain', sentence: '금칙비유테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(r.data.analogy).toBe('');
+  expect(r.data.mapping).toBe('');
+  expect(r.data.meaning).toBe('테스트 뜻 풀이예요.');
+  expect(r.data.rejected).toBe(BLOCKED_REJECTED);
+  expect(r.data.evidence).toBeNull();
+  expect(r.data.debug.blocked).toEqual({ field: 'analogy', term: '(가림)' });
+  expect(hasBlocked(JSON.stringify(r.data))).toBe(false);
+  expect(calls.at(-1).system).toContain('커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.');
+});
+
+serverTest('금칙어(T-114): 서버 결과도 확장이 다시 검사하고, 정밀 모드 추상 구조도 debug에서 지운다', async ({ ext }) => {
+  const s = await ext.send({ type: 'explain', sentence: '서버금칙 확률형 강화는 실패하면 비용만 날아간다.', word: '', context: '', pageTitle: 't', noCache: true });
+  expect(s.data.source).toBe('server');
+  expect(s.data.analogy).toBe('');
+  expect(s.data.mapping).toBe('');
+  expect(s.data.meaning).toBe('서버 뜻 풀이예요.');
+  expect(s.data.rejected).toBe(BLOCKED_REJECTED);
+  expect(s.data.evidence).toBeNull();
+  expect(s.data.debug.blocked).toEqual({ field: 'analogy', term: '(가림)' });
+  expect(hasBlocked(JSON.stringify(s.data))).toBe(false);
+
+  await ext.setSettings({ preciseMode: true });
+  try {
+    const p = await ext.send({ type: 'explain', sentence: '금칙추상테스트 금리가 오르면 이자가 늘어난다.', noCache: true });
+    expect(p.data.debug.abstractText).toBe('');
+    expect(hasBlocked(JSON.stringify(p.data))).toBe(false);
+  } finally {
+    await ext.setSettings({ preciseMode: false });
+  }
+});
+
+test('피드백(T-129): 👎 → 다른 근거로 다시, 다시 물어도 반영, 되돌리기', async ({ ext }) => {
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const first = r1.data.evidence.nodeId;
+  expect(r1.data.feedbackApplied).toBe(false);
+  const fb = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId: first, tagId: null, vote: 'down', provider: r1.data.debug.provider }, rerun: q });
+  expect(fb.ok).toBe(true);
+  expect(fb.data.result.evidence.nodeId).not.toBe(first);
+  expect(fb.data.result.feedbackApplied).toBe(true);
+  const r2 = await ext.send({ type: 'explain', ...q });
+  expect(r2.data.evidence.nodeId).not.toBe(first);
+  expect(r2.data.feedbackApplied).toBe(true);
+  const u = await ext.send({ type: 'feedback-undo', id: fb.data.id, rerun: q });
+  expect(u.data.result.evidence.nodeId).toBe(first);
+  expect(u.data.result.feedbackApplied).toBe(false);
+});
+
+test('피드백(T-129): 다른 개념을 고르면 그 개념이 근거, 후보 밖 nodeId면 여전히 비유 숨김(규칙 1)', async ({ ext }) => {
+  const q = { sentence: '근력 운동은 초보 때는 빨리 늘지만 숙련될수록 같은 노력 대비 성장이 더뎌진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const pick = r1.data.debug.candidates[2].id;
+  const fb = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId: r1.data.evidence.nodeId, vote: 'pick', pickedNodeId: pick }, rerun: q });
+  expect(fb.data.result.evidence.nodeId).toBe(pick);
+  expect(fb.data.result.debug.candidates.map(c => c.id)).toEqual([pick]);
+  // 가짜 LLM은 "Leverage"가 있으면 후보에 없는 nodeId로 답한다
+  const lev = { sentence: 'Leverage amplifies both gains and losses.', word: '', context: '', pageTitle: 't' };
+  const l1 = await ext.send({ type: 'explain', ...lev });
+  const lf = await ext.send({ type: 'feedback', record: { sentence: lev.sentence, nodeId: l1.data.debug.candidates[0].id, vote: 'pick', pickedNodeId: l1.data.debug.candidates[1].id }, rerun: lev });
+  expect(lf.data.result.analogy).toBe('');
+  expect(lf.data.result.rejected).toMatch(/근거 목록에 없는/);
+});
+
+test('비슷한 문장(T-130): 👎 기록에 벡터 저장(목록엔 없음) → 거의 같은 문장은 감점, 무관한 문장은 그대로', async ({ ext }) => {
+  const a = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...a });
+  const x = r1.data.evidence.nodeId;
+  await ext.send({ type: 'feedback', record: { sentence: a.sentence, nodeId: x, tagId: null, vote: 'down', provider: r1.data.debug.provider } });
+  // 기록에는 벡터가 붙지만 설정 화면·내보내기용 목록에는 싣지 않는다
+  const stored = await ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback);
+  expect(Array.isArray(stored[0].vec) && stored[0].vec.length > 0).toBe(true);
+  const l = await ext.send({ type: 'feedback:list' });
+  expect(Object.keys(l.data.items[0])).not.toContain('vec');
+  // 끝 마침표만 다른 문장: 대체 임베더 코사인 ≥ 임계값 → X 감점
+  const a2 = { ...a, sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다' };
+  const r2 = await ext.send({ type: 'explain', ...a2 });
+  const sim = r2.data.debug.feedback.similar;
+  expect(sim.find(s => s.nodeId === x)?.delta).toBeLessThan(0);
+  expect(r2.data.feedbackApplied).toBe(true);
+  // 무관한 문장은 가감 없음
+  const b = { ...a, sentence: '근력 운동은 초보 때는 빨리 늘지만 숙련될수록 같은 노력 대비 성장이 더뎌진다.' };
+  const r3 = await ext.send({ type: 'explain', ...b });
+  expect(r3.data.debug.feedback.similar).toEqual([]);
+  expect(r3.data.feedbackApplied).toBe(false);
+  // 정밀 모드가 꺼져 있으면 검색 벡터를 그대로 쓰고 추가 임베딩이 없다(T-138)
+  for (const r of [r1, r2, r3]) {
+    expect(r.data.debug.feedback.queryVec).toBe('query');
+    expect(r.data.debug.feedback.extraEmbedMs).toBe(0);
+  }
+});
+
+test('정밀 모드 비슷한 문장(T-138): 검색은 추상 구조 + 원문, 비슷한 문장 판정은 원문 벡터로', async ({ ext }) => {
+  await ext.setSettings({ preciseMode: true });
+  const a = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...a });
+  // 가짜 LLM의 추상화 응답이 원문과 달라 검색 질의가 바뀐다
+  expect(r1.data.debug.abstractText).toBeTruthy();
+  expect(r1.data.debug.abstractText).not.toBe(a.sentence);
+  // 메모리가 비면 비슷한 문장 판정이 없으니 추가 임베딩도 건너뛴다
+  expect(r1.data.debug.feedback.queryVec).toBe('query');
+  expect(r1.data.debug.feedback.extraEmbedMs).toBe(0);
+  const x = r1.data.evidence.nodeId;
+  await ext.send({ type: 'feedback', record: { sentence: a.sentence, nodeId: x, tagId: null, vote: 'down', provider: r1.data.debug.provider } });
+  const a2 = { ...a, sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다' };
+  const r2 = await ext.send({ type: 'explain', ...a2 });
+  expect(r2.data.debug.abstractText).toBeTruthy();
+  expect(r2.data.debug.feedback.queryVec).toBe('sentence');
+  expect(r2.data.debug.feedback.extraEmbedMs).toBeGreaterThanOrEqual(0);
+  expect(r2.data.debug.feedback.similar.find(s => s.nodeId === x)?.delta).toBeLessThan(0);
+  expect(r2.data.feedbackApplied).toBe(true);
+});
+
+test('내 피드백(T-132): 목록·공유 설정·7일 통계·지운 노드 라벨·전부 지우기 메시지', async ({ ext }) => {
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const nodeId = r1.data.evidence.nodeId;
+  await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId, tagId: null, vote: 'down', provider: r1.data.debug.provider } });
+  const l1 = await ext.send({ type: 'feedback:list' });
+  expect(l1.ok).toBe(true);
+  expect(l1.data.items).toHaveLength(1);
+  expect(l1.data.items[0].vote).toBe('down');
+  expect(l1.data.items[0].nodeId).toBe(nodeId);
+  expect(l1.data.items[0].nodeLabel).toMatch(/[가-힣]/);
+  expect(l1.data.items[0].masked).toBe(q.sentence);
+  expect(l1.data.share).toBe(false);
+  await ext.setSettings({ feedbackShare: true });
+  expect((await ext.send({ type: 'feedback:list' })).data.share).toBe(true);
+  // 호버 집계는 기다리지 않고 쓰므로 poll로 읽는다
+  const hovers = async () => (await ext.send({ type: 'feedback:stats' })).data.hovers;
+  await expect.poll(hovers).toBeGreaterThanOrEqual(1);
+  const st = await ext.send({ type: 'feedback:stats' });
+  expect(st.data.down).toBe(1);
+  // 피드백 뒤 다시 비유(rerun)는 호버로 세지 않는다
+  const before = st.data.hovers;
+  const rr = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId, tagId: null, vote: 'down' }, rerun: q });
+  expect(rr.data.result).toBeTruthy();
+  await new Promise(r => setTimeout(r, 300));
+  expect(await hovers()).toBe(before);
+  // 그 down 기록은 지워 아래 개수 검사를 그대로 둔다
+  await ext.send({ type: 'feedback-undo', id: rr.data.id });
+  expect(await hovers()).toBe(before);
+  // 그래프에 없는 노드면 라벨 대신 id 그대로
+  await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'gone-node', vote: 'down' } });
+  const l2 = await ext.send({ type: 'feedback:list' });
+  expect(l2.data.items).toHaveLength(2);
+  const gone = l2.data.items.find(i => i.nodeId === 'gone-node');
+  expect(gone.nodeLabel).toBe('gone-node');
+  expect(gone.masked).toBe('연락처 [숫자]');
+  expect(l2.data.items[0].nodeId, '최신순').toBe('gone-node');
+  const c = await ext.send({ type: 'feedback:clear' });
+  expect(c.data).toBe(true);
+  expect((await ext.send({ type: 'feedback:list' })).data.items).toHaveLength(0);
 });
 
 test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ context, ext }) => {
@@ -102,6 +498,412 @@ test('자동 모드: 머무르면 뜨고 벗어나면 닫힌다', async ({ conte
   await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
   await page.mouse.move(900, 750);
   await expect.poll(() => tooltip(page), { timeout: 5000 }).toBe('');
+});
+
+/* ───────── 말풍선 원클릭 피드백 (T-106, ADR 0010) ───────── */
+const box = page => page.locator('#good-metaphor-host .box');
+const evidence = async page => (await tooltip(page)).match(/근거: (.+)/)?.[1]?.trim();
+
+test('피드백 UI: 👎 한 번 → 글자 입력 없이 다른 근거로 다시, 반영 칩, 되돌리기 (T-106)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  await expect(box(page).getByRole('button', { name: '잘 맞아요' })).toBeVisible();
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain(`이 문장엔 '${first}'`);
+  await expect.poll(() => evidence(page)).not.toBe(first);
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+  expect(await box(page).locator('input, textarea, [contenteditable]').count(), '입력칸 없음').toBe(0);
+  const now = await evidence(page);
+  expect(await box(page).locator('button.alt').allInnerTexts(), '지금 근거와 뺀 개념은 칩에 없음').not.toContain(now);
+  expect(await box(page).locator('button.alt').allInnerTexts()).not.toContain(first);
+  const undo = await box(page).getByRole('button', { name: '되돌리기' }).boundingBox();
+  const close = await box(page).locator('button.close').boundingBox();
+  expect(undo.x + undo.width <= close.x || undo.y >= close.y + close.height, '되돌리기와 닫기 버튼이 겹치지 않음').toBe(true);
+  await box(page).getByRole('button', { name: '되돌리기' }).click();
+  await expect.poll(() => evidence(page)).toBe(first);
+  expect(await tooltip(page)).not.toContain('내 피드백 반영');
+});
+
+test('피드백 UI: 다른 개념 칩 → 그 개념이 근거, 다시 호버해도 반영 칩 (T-106)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  const alt = box(page).locator('button.alt').first();
+  await expect(alt).toBeVisible();
+  const label = (await alt.innerText()).trim();
+  await alt.click();
+  await expect.poll(() => evidence(page)).toBe(label);
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p2', 9);
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+  expect(await evidence(page)).toBe(label);
+});
+
+test('피드백 UI: 비유 없음 화면의 후보 칩 → 비유, 후보 밖 nodeId면 골라도 숨김(규칙 1) (T-106)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p4');
+  await expect.poll(() => tooltip(page)).toContain('혹시 이 중에 있나요?');
+  const chip = box(page).locator('button.alt').first();
+  const label = (await chip.innerText()).trim();
+  await chip.click();
+  await expect.poll(() => evidence(page)).toBe(label);
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p3');
+  await expect.poll(() => tooltip(page)).toContain('혹시 이 중에 있나요?');
+  await box(page).locator('button.alt').first().click();
+  await expect.poll(() => tooltip(page)).toContain('근거 목록에 없는');
+  expect(await tooltip(page)).not.toContain('메이플로 치면');
+});
+
+test('피드백 UI: 👍은 "고마워요"만, 이유 칩은 기록에 남는다 (T-106)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const before = await evidence(page);
+  await box(page).getByRole('button', { name: '잘 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain('고마워요');
+  expect(await evidence(page)).toBe(before);
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await box(page).getByRole('button', { name: '비유가 억지예요' }).click();
+  await expect.poll(() => ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback.map(r => `${r.vote}:${r.reason || ''}`))).toEqual(['up:', 'down:forced']);
+});
+
+test('피드백 UI: 자동 모드에서 말풍선으로 옮겨 가도 닫히지 않고 👎를 누를 수 있다 (T-106)', async ({ context, ext }) => {
+  await ext.setSettings({ triggerMode: 'auto', dwellMs: 300 });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { x, y } = await pointOnChar(page, '#p1', 10);
+  await page.mouse.move(x, y);
+  await page.mouse.move(x + 1, y);
+  await expect.poll(() => tooltip(page), { timeout: 10000 }).toContain('메이플로 치면');
+  const first = await evidence(page);
+  const b = await box(page).getByRole('button', { name: '안 맞아요' }).boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
+  await page.mouse.down(); await page.mouse.up();
+  await expect.poll(() => evidence(page), { timeout: 10000 }).not.toBe(first);
+});
+
+/* ───────── 설정 화면 "내 피드백" 칸 (T-132) ───────── */
+const P1 = '변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.';
+const DAY_RE = /\d{4}-\d{2}-\d{2}/;
+const EMPTY_FB = '아직 남긴 피드백이 없어요.';
+
+test('내 피드백 칸(T-132): 말풍선 👎 → 목록·7일 통계 → 되돌리기면 다시 물어도 원래 근거', async ({ context, ext }) => {
+  const r0 = await ext.send({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
+  const original = r0.data.evidence.nodeId;
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+
+  const op = ext.page;
+  await op.reload();
+  await expect(op.locator('#sec-feedback h2')).toHaveText('내 피드백');
+  const items = op.locator('#fbList li');
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText('👎');
+  await expect(items.first()).toContainText(DAY_RE);
+  await expect(items.first()).toContainText(P1); // 40자 이하면 줄이지 않음
+  await expect(op.locator('#fbStats')).toContainText('지난 7일');
+  await expect(op.locator('#fbStats')).toContainText('👎 1');
+
+  await items.first().getByRole('button', { name: '되돌리기' }).click();
+  await expect(op.locator('#fbEmpty')).toHaveText(EMPTY_FB);
+  await expect(op.locator('#fbList li')).toHaveCount(0);
+  const r1 = await ext.send({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
+  expect(r1.data.feedbackApplied).toBe(false);
+  expect(r1.data.evidence.nodeId).toBe(original);
+});
+
+test('내 피드백 칸(T-132): JSON 내보내기, 보내기 설정과 미리보기, 전부 지우기', async ({ ext }) => {
+  const op = ext.page;
+  // 기본(설정 없음)은 보내지 않음
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  await expect(op.locator('#fbSharePreview')).toBeHidden();
+  await expect(op.locator('#fbEmpty')).toHaveText(EMPTY_FB);
+
+  const LONG = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어지며, 그 결과 저축한 돈의 실제 구매력도 함께 줄어든다.';
+  await ext.send({ type: 'feedback', record: { sentence: LONG, nodeId: 'meso', vote: 'down' } });
+  await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'meso', vote: 'up' } });
+  await op.reload();
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  await expect(op.locator('#fbList li').nth(0)).toContainText('👍');
+  await expect(op.locator('#fbList li').nth(0)).toContainText('메소');
+  await expect(op.locator('#fbList li').nth(1)).toContainText([...LONG].slice(0, 40).join('') + '…');
+
+  const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbExport')]);
+  expect(download.suggestedFilename()).toMatch(/^good-metaphor-feedback-\d{4}-\d{2}-\d{2}\.json$/);
+  const { readFileSync } = await import('node:fs');
+  const data = JSON.parse(readFileSync(await download.path(), 'utf8'));
+  expect(data).toHaveLength(2);
+  for (const it of data) { expect(it.vote).toBeTruthy(); expect(it.sentence).toBeTruthy(); }
+
+  await ext.setSettings({ feedbackShare: true });
+  await op.reload();
+  await expect(op.locator('#fbShare')).toBeChecked();
+  await expect(op.locator('#fbSharePreview')).toBeVisible();
+  await expect(op.locator('#fbSharePreview')).toContainText('이렇게 가려서 보내요: 연락처 [숫자]');
+  await op.locator('#fbShare').uncheck();
+  await expect(op.locator('#fbSharePreview')).toBeHidden();
+  await expect.poll(() => op.evaluate(async () => (await chrome.storage.local.get('settings')).settings.feedbackShare)).toBe(false);
+
+  op.once('dialog', d => d.accept());
+  await op.click('#fbClear');
+  await expect(op.locator('#fbEmpty')).toHaveText(EMPTY_FB);
+  expect((await ext.send({ type: 'feedback:list' })).data.items).toHaveLength(0);
+  await op.locator('#fbShare').check();
+  await expect(op.locator('#fbSharePreview')).toContainText('보낼 피드백이 아직 없어요.');
+});
+
+/* ───────── "내 피드백" 다듬기 (T-137) ───────── */
+const storageGetFb = (page, key) => page.evaluate(async k => (await chrome.storage.local.get(k))[k], key);
+// 설정 화면의 chrome.runtime.sendMessage를 바꿔, 고른 메시지 종류만 실패 응답을 돌려준다
+async function failMessages(op, types) {
+  await op.evaluate(ts => {
+    if (!window.__origSend) window.__origSend = chrome.runtime.sendMessage.bind(chrome.runtime);
+    window.__failTypes = new Set(ts);
+    chrome.runtime.sendMessage = (msg, cb) => {
+      if (window.__failTypes.has(msg?.type)) {
+        const res = { ok: false, error: '테스트 실패' };
+        return cb ? setTimeout(() => cb(res)) : Promise.resolve(res);
+      }
+      return cb ? window.__origSend(msg, cb) : window.__origSend(msg);
+    };
+  }, types);
+}
+
+test('내 피드백 칸(T-137): 빈 목록 문구는 목록 밖 문단, 피드백이 생기면 숨김', async ({ ext }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbEmpty')).toBeVisible();
+  await expect(op.locator('#fbEmpty')).toHaveText(EMPTY_FB);
+  expect(await op.evaluate(() => document.getElementById('fbEmpty').tagName)).toBe('P');
+  expect(await op.evaluate(() => !!document.getElementById('fbEmpty').closest('ul,ol'))).toBe(false);
+  await expect(op.locator('#fbList li')).toHaveCount(0);
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await op.reload();
+  await expect(op.locator('#fbList li')).toHaveCount(1);
+  await expect(op.locator('#fbEmpty')).toBeHidden();
+});
+
+test('내 피드백 칸(T-137): 열린 설정 화면은 다른 페이지의 피드백·호버를 새로고침 없이 반영, 통계에 호버 대비 %', async ({ context, ext, extId }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbEmpty')).toBeVisible();
+  // 다른 탭에서 호버(비유)와 👎
+  const other = await context.newPage();
+  await other.goto(`chrome-extension://${extId}/popup.html`);
+  const sendOther = m => other.evaluate(x => chrome.runtime.sendMessage(x), m);
+  await sendOther({ type: 'explain', sentence: P1, word: '', context: '', pageTitle: 't', noCache: true });
+  const r = await sendOther({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await expect(op.locator('#fbList li')).toHaveCount(1);
+  await expect(op.locator('#fbEmpty')).toBeHidden();
+  await expect(op.locator('#fbStats')).toContainText(/👎 1 \(\d+%\)/);
+  await expect(op.locator('#fbExport')).toBeEnabled();
+  const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbExport')]);
+  const { readFileSync } = await import('node:fs');
+  expect(JSON.parse(readFileSync(await download.path(), 'utf8'))).toHaveLength(1);
+  // 다른 탭에서 되돌리면 목록도 빈다
+  await sendOther({ type: 'feedback-undo', id: r.data.id });
+  await expect(op.locator('#fbList li')).toHaveCount(0);
+  await expect(op.locator('#fbEmpty')).toBeVisible();
+  await expect(op.locator('#fbExport')).toBeDisabled();
+});
+
+test('내 피드백 칸(T-137): 라벨 없는 항목은 날짜만, 구분점이 홀로 남지 않는다', async ({ ext }) => {
+  const op = ext.page;
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'pick' } }); // pickedNodeId 없음 → 라벨 없음
+  await op.reload();
+  const hint = op.locator('#fbList li .fb-text .hint');
+  await expect(hint).toHaveCount(1);
+  expect((await hint.textContent()).trim()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('내 피드백 칸(T-137): 보내기 설정 저장이 실패하면 체크를 되돌리고 오류 문구', async ({ ext }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  await failMessages(op, ['settings:save']);
+  await op.locator('#fbShare').click();
+  await expect(op.locator('#fbStatus')).toHaveText('저장하지 못했어요. 다시 시도해 주세요.');
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  await expect(op.locator('#fbSharePreview')).toBeHidden();
+  expect((await storageGetFb(op, 'settings'))?.feedbackShare).not.toBe(true);
+});
+
+test('내 피드백 칸(T-137): 보내기 저장 중에 다른 탭 변경으로 목록을 다시 읽어도 체크가 덮이지 않는다', async ({ ext }) => {
+  const op = ext.page;
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+  // settings:save 응답을 붙잡아 저장이 끝나지 않은 상태를 만든다
+  await op.evaluate(() => {
+    const orig = chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.runtime.sendMessage = (msg, cb) => {
+      if (msg?.type === 'settings:save') { window.__releaseSave = () => orig(msg, cb); return; }
+      return cb ? orig(msg, cb) : orig(msg);
+    };
+  });
+  await op.locator('#fbShare').click();
+  await expect.poll(() => op.evaluate(() => typeof window.__releaseSave)).toBe('function');
+  // 저장 중 피드백 변경 → onChanged로 목록을 다시 읽음(저장된 share는 아직 false)
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await expect(op.locator('#fbList li')).toHaveCount(1);
+  await expect(op.locator('#fbShare')).toBeChecked();
+  await op.evaluate(() => window.__releaseSave());
+  await expect.poll(async () => (await storageGetFb(op, 'settings'))?.feedbackShare).toBe(true);
+  await expect(op.locator('#fbShare')).toBeChecked();
+});
+
+test('내 피드백 칸(T-137): 되돌리기·지우기 뒤 목록 다시 읽기가 실패하면 이전 목록을 두고 오류 문구', async ({ ext }) => {
+  const op = ext.page;
+  await ext.send({ type: 'feedback', record: { sentence: P1, nodeId: 'meso', vote: 'down' } });
+  await ext.send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678', nodeId: 'meso', vote: 'up' } });
+  await op.reload();
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  await failMessages(op, ['feedback:list']);
+  await op.locator('#fbList li').first().getByRole('button', { name: '되돌리기' }).click();
+  await expect(op.locator('#fbStatus')).toHaveText('목록을 다시 읽지 못했어요.');
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  await expect(op.locator('#fbEmpty')).toBeHidden();
+  expect(await storageGetFb(op, 'feedback')).toHaveLength(1); // 되돌리기 자체는 저장됨
+
+  await op.evaluate(() => { document.getElementById('fbStatus').textContent = ''; });
+  op.once('dialog', d => d.accept());
+  await op.click('#fbClear');
+  await expect(op.locator('#fbStatus')).toHaveText('목록을 다시 읽지 못했어요.');
+  await expect(op.locator('#fbList li')).toHaveCount(2);
+  expect(await storageGetFb(op, 'feedback')).toHaveLength(0);
+});
+
+/* ───────── 첫 실행 안내 (T-116) ───────── */
+const storageGet = (page, key) => page.evaluate(async k => (await chrome.storage.local.get(k))[k], key);
+// 설치 이벤트가 onboarding을 비동기로 쓰므로, 써질 때까지 기다린 뒤 설정 화면을 새로 연다
+async function openFirstRun(ext) {
+  await expect.poll(() => storageGet(ext.page, 'onboarding')).toEqual({ pending: true });
+  await ext.page.reload();
+  return ext.page;
+}
+
+test('첫 실행 안내(T-116): 자동 + 보내기 → 시작하기면 저장되고 아래 칸도 같은 값, 새로고침해도 안 뜸', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  await expect(op.locator('#onboarding')).toBeVisible();
+  await expect(op.locator('#onboarding h2')).toHaveText('처음 오셨네요. 세 가지만 골라 주세요');
+  await expect(op.locator('input[name=obTrigger][value=modifier]')).toBeChecked();
+  await expect(op.locator('#obAutoWarn')).toBeHidden();
+  // 동의는 미리 선택된 값 없음
+  await expect(op.locator('#obShareYes')).toHaveAttribute('aria-pressed', 'false');
+  await expect(op.locator('#obShareNo')).toHaveAttribute('aria-pressed', 'false');
+
+  await op.locator('input[name=obTrigger][value=auto]').check();
+  await expect(op.locator('#obAutoWarn')).toBeVisible();
+  await expect(op.locator('#obAutoWarn')).toHaveText('호출이 많아져 무료 한도를 빨리 써요.');
+  await op.click('#obShareNo');
+  await expect(op.locator('#obShareNo')).toHaveAttribute('aria-pressed', 'true');
+  await op.click('#obShareYes');
+  await expect(op.locator('#obShareYes')).toHaveAttribute('aria-pressed', 'true');
+  await expect(op.locator('#obShareNo')).toHaveAttribute('aria-pressed', 'false');
+  await expect(op.locator('#obShareInfo')).toContainText('서버가 생기기 전까지는 이 기기에만 쌓아 둬요.');
+
+  await op.click('#obStart');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  expect(typeof (await storageGet(op, 'onboarding')).doneAt).toBe('number');
+  const s = await storageGet(op, 'settings');
+  expect(s.triggerMode).toBe('auto');
+  expect(s.feedbackShare).toBe(true);
+  await expect(op.locator('input[name=triggerMode][value=auto]')).toBeChecked();
+  await expect(op.locator('#fbShare')).toBeChecked();
+
+  await op.reload();
+  await expect(op.locator('#onboarding[data-ready="1"]')).toHaveCount(1); // 안내 상태를 읽은 뒤에
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect(op.locator('input[name=triggerMode][value=auto]')).toBeChecked();
+});
+
+test('첫 실행 안내(T-116): 아무것도 안 고르고 넘기기 → 설정은 그대로(Alt·보내지 않음), 기존 사용자(onboarding 없음)에겐 안 뜸', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  await expect(op.locator('#onboarding')).toBeVisible();
+  await op.click('#obSkip');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  expect(typeof (await storageGet(op, 'onboarding')).doneAt).toBe('number');
+  const s = await storageGet(op, 'settings');
+  expect(s?.triggerMode ?? 'modifier').toBe('modifier');
+  expect(s?.feedbackShare).not.toBe(true);
+  await expect(op.locator('input[name=triggerMode][value=modifier]')).toBeChecked();
+  await expect(op.locator('#fbShare')).not.toBeChecked();
+
+  // 기존 사용자: onboarding 키 자체가 없다
+  await op.evaluate(() => chrome.storage.local.remove('onboarding'));
+  await op.reload();
+  await expect(op.locator('#onboarding[data-ready="1"]')).toHaveCount(1);
+  await expect(op.locator('#onboarding')).toBeHidden();
+});
+
+test('첫 실행 안내(T-158): 1단계 관심사 — 목록은 COMMON_INTERESTS, 기본 메이플, 식당 고르고 시작하기면 저장·사용 방식·팝업도 식당', async ({ context, ext, extId }) => {
+  const op = await openFirstRun(ext);
+  await expect(op.locator('#onboarding')).toBeVisible();
+  // 단계 번호: 관심사가 1번, 기존 두 단계는 2·3번
+  await expect(op.locator('#onboarding .ob-step h3')).toHaveText([
+    '1. 무엇으로 비유할까요?', '2. 언제 설명을 띄울까요?', '3. 더 나은 비유를 위해 피드백을 보내 주실래요?'
+  ]);
+  const radios = op.locator('input[name=obInterest]');
+  await expect(radios).toHaveCount(COMMON_INTERESTS.length);
+  expect(await radios.evaluateAll(rs => rs.map(r => r.value))).toEqual(COMMON_INTERESTS.map(i => i.id));
+  await expect(op.locator('#obInterest label')).toHaveText(['메이플스토리 (추천)', '식당']);
+  await expect(op.locator('input[name=obInterest][value=maplestory]')).toBeChecked();
+
+  await op.locator('label:has(input[name=obInterest][value=restaurant])').click();
+  await expect(op.locator('input[name=obInterest][value=restaurant]')).toBeChecked();
+  await op.click('#obStart');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'settings'))?.interest).toBe('restaurant');
+  await expect(op.locator('input[name=interest][value=restaurant]')).toBeChecked(); // 사용 방식 칸도 같은 값
+  await expect(op.locator('#commonTitle')).toHaveText(/^식당 · /);
+
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await expect(popup.locator('input[name=interest][value=restaurant]')).toBeChecked();
+  await popup.close();
+});
+
+test('첫 실행 안내(T-158): 넘기기는 저장된 관심사를 바꾸지 않는다(안내에서 메이플이 골라져 있어도)', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  await ext.setSettings({ interest: 'restaurant' });
+  await expect(op.locator('input[name=obInterest][value=maplestory]')).toBeChecked();
+  await op.click('#obSkip');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  expect((await storageGet(op, 'settings')).interest).toBe('restaurant');
+  await expect(op.locator('input[name=interest][value=restaurant]')).toBeChecked();
+});
+
+test('첫 실행 안내(T-137): 보내기 동의 버튼은 이름 붙은 group으로 묶인다', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  const group = op.getByRole('group', { name: '서버로 보내기 동의' });
+  await expect(group).toBeVisible();
+  await expect(group.locator('#obShareYes')).toHaveCount(1);
+  await expect(group.locator('#obShareNo')).toHaveCount(1);
+});
+
+test('첫 실행 안내(T-116): 넘기기는 이미 저장된 설정을 바꾸지 않는다', async ({ ext }) => {
+  const op = await openFirstRun(ext);
+  await ext.setSettings({ triggerMode: 'auto' });
+  await op.click('#obSkip');
+  await expect(op.locator('#onboarding')).toBeHidden();
+  await expect.poll(async () => (await storageGet(op, 'onboarding'))?.pending).toBe(false);
+  expect((await storageGet(op, 'settings')).triggerMode).toBe('auto');
+  await expect(op.locator('input[name=triggerMode][value=auto]')).toBeChecked(); // 아래 칸도 저장된 값
 });
 
 test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async ({ context, ext }) => {
@@ -138,6 +940,401 @@ test('로그인 → 관심사 변경 → 로그아웃: 저장소 두 층', async
   expect((await send({ type: 'graph:info' })).data.merged).toMatchObject({ domain: '메이플스토리', usesCommon: true });
 });
 
+// 같은 개념 👎 누적 → 로그인 사용자 오버레이 가중치 (T-130)
+const DOWN_SENTENCES = ['예금 금리가 오르면 이자가 늘어난다.', '환율이 오르면 수입품 값이 비싸진다.', '물가가 오르면 같은 돈으로 살 수 있는 것이 줄어든다.'];
+
+test('로그인 시 같은 노드에 서로 다른 문장 👎 3건 → 오버레이 feedbackBoosts -0.05, 같은 문장 반복은 세지 않음 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  expect((await send({ type: 'auth:login', nickname: '테스터' })).data.adapter).toBe('local-dev');
+  const boost = async () => (await send({ type: 'overlay:get' })).data.feedbackBoosts.meso;
+  for (const [i, sentence] of DOWN_SENTENCES.entries()) {
+    expect(await boost()).toBeUndefined();
+    expect((await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).ok).toBe(true);
+    if (i < 2) expect(await boost()).toBeUndefined();
+  }
+  expect(await boost()).toBe(-0.05);
+  // 이미 센 문장을 다시 👎해도 그대로
+  await send({ type: 'feedback', record: { sentence: DOWN_SENTENCES[0], nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect(await boost()).toBe(-0.05);
+  // 다른 노드에는 번지지 않는다
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts.auction).toBeUndefined();
+});
+
+test('로그인 시 👎 되돌리기는 가중치도 되돌리고, 다시 👎해도 더 내려가지 않는다 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  const boosts = async () => (await send({ type: 'overlay:get' })).data.feedbackBoosts;
+  const downMeso = async sentence => (await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).data.id;
+  await downMeso(DOWN_SENTENCES[0]);
+  await downMeso(DOWN_SENTENCES[1]);
+  let id = await downMeso(DOWN_SENTENCES[2]);
+  expect((await boosts()).meso).toBe(-0.05);
+  for (let i = 0; i < 3; i++) {
+    expect((await send({ type: 'feedback-undo', id })).ok).toBe(true);
+    expect('meso' in (await boosts())).toBe(false); // 키를 지운다
+    id = await downMeso(DOWN_SENTENCES[2]);
+    expect((await boosts()).meso).toBe(-0.05);
+  }
+});
+
+test('로그인 시 👎 누적은 손으로 넣은 nodeBoosts를 건드리지 않고 feedbackBoosts에만 쓴다 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: { nodeBoosts: { meso: 0.1 } } })).data.ok).toBe(true);
+  for (const sentence of DOWN_SENTENCES) await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } });
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodeBoosts.meso).toBe(0.1);
+  expect(ov.feedbackBoosts.meso).toBe(-0.05);
+});
+
+test('로그인 시 피드백 전부 지우기 → feedbackBoosts도 비워진다(가중치는 기록으로만 정해짐) (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: { nodeBoosts: { meso: 0.1 } } })).data.ok).toBe(true);
+  for (const sentence of DOWN_SENTENCES) await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  expect((await send({ type: 'feedback:clear' })).ok).toBe(true);
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.feedbackBoosts).toEqual({});
+  expect(ov.nodeBoosts).toEqual({ meso: 0.1 }); // 손으로 넣은 값은 그대로
+});
+
+test('로그인 시 500건 상한으로 오래된 👎가 밀려나면 feedbackBoosts도 풀린다 (T-130)', async ({ ext }) => {
+  const { send, page } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  for (const sentence of DOWN_SENTENCES) await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  // 👍 497건 뒤에는 👎 3건이 남고(3 + 497 = 500), 498번째 👍에서 가장 오래된 👎가 밀려난다
+  await page.evaluate(async () => {
+    for (let i = 0; i < 497; i++) await chrome.runtime.sendMessage({ type: 'feedback', record: { sentence: `문장 ${i}`, nodeId: 'auction', vote: 'up' } });
+  });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({ meso: -0.05 });
+  await send({ type: 'feedback', record: { sentence: '마지막 문장', nodeId: 'auction', vote: 'up' } });
+  expect((await send({ type: 'overlay:get' })).data.feedbackBoosts).toEqual({});
+});
+
+test('로그아웃 상태의 같은 노드 👎 3건은 오버레이를 바꾸지 않는다 (T-130)', async ({ ext }) => {
+  const { send } = ext;
+  for (const sentence of DOWN_SENTENCES) {
+    expect((await send({ type: 'feedback', record: { sentence, nodeId: 'meso', tagId: null, vote: 'down' } })).ok).toBe(true);
+  }
+  expect((await send({ type: 'feedback:list' })).data.items).toHaveLength(3); // 피드백 기록은 남는다
+  await send({ type: 'auth:login', nickname: '테스터' });
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodeBoosts).toEqual({});
+  expect(ov.feedbackBoosts).toEqual({});
+});
+
+/* ───────── 교정 → 예문 후보 (T-131) ───────── */
+const FOCUS_OVERLAY = {
+  tags: [{ id: 'u_focus', label: '몰입 시간', examples: ['손으로 적은 예문은 그대로 남아야 한다.'] }],
+  nodes: [{ id: 'u:focus', label: '내 몰입 루틴', facts: ['나는 매일 같은 시간에 30분 집중한다.'], tags: ['u_focus', 'daily_accumulation'] }]
+};
+const FOCUS_SENTENCE = '2026년 목표를 세우고 매일 같은 시간에 공부하면 몰입하는 시간이 길어진다.';
+const FOCUS_MASKED = '[숫자]년 목표를 세우고 매일 같은 시간에 공부하면 몰입하는 시간이 길어진다.';
+
+test('교정(T-131): 로그인 + 내 노드·내 태그 pick → 내 태그 examples에 가린 문장, 되돌리면 빠지고 로그아웃이면 안 바뀐다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const fb = await send({ type: 'feedback', record: { sentence: FOCUS_SENTENCE, nodeId: 'meso', tagId: null, vote: 'pick', pickedNodeId: 'u:focus' } });
+  expect(fb.ok).toBe(true);
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.tags[0].examples).toEqual(['손으로 적은 예문은 그대로 남아야 한다.', FOCUS_MASKED]);
+  expect(JSON.stringify(ov)).not.toContain('2026');
+  // 되돌리기 → 교정 예문도 빠진다
+  await send({ type: 'feedback-undo', id: fb.data.id });
+  expect((await send({ type: 'overlay:get' })).data.tags[0].examples).toEqual(['손으로 적은 예문은 그대로 남아야 한다.']);
+
+  // 로그아웃 상태의 pick은 오버레이를 바꾸지 않는다(규칙 3)
+  await send({ type: 'auth:logout' });
+  await send({ type: 'feedback', record: { sentence: FOCUS_SENTENCE, nodeId: 'meso', tagId: null, vote: 'pick', pickedNodeId: 'u:focus' } });
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:get' })).data.tags[0].examples).toEqual(['손으로 적은 예문은 그대로 남아야 한다.']);
+});
+
+test('교정(T-131): 공통 노드 pick은 오버레이를 안 건드리고, 설정 "운영자용 교정 내보내기" JSON에 가린 후보로', async ({ ext }) => {
+  const { send, page: op } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const S = '중앙은행이 2026년에 돈을 많이 찍어내면 물가가 오르고 저축한 돈의 구매력이 줄어든다.';
+  await send({ type: 'feedback', record: { sentence: S, nodeId: 'cube', tagId: null, vote: 'pick', pickedNodeId: 'meso' } });
+  await send({ type: 'feedback', record: { sentence: FOCUS_SENTENCE, nodeId: 'meso', tagId: null, vote: 'pick', pickedNodeId: 'u:focus' } });
+  await send({ type: 'feedback', record: { sentence: '연락처 010-1234-5678 로 물으면 금리가 오른 이유를 알려 준다.', nodeId: 'meso', tagId: null, vote: 'up' } });
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.tags.map(t => t.id)).toEqual(['u_focus']); // 공통 태그를 오버레이에 만들지 않는다
+
+  await op.reload();
+  await expect(op.locator('#fbCorrections')).toBeEnabled();
+  const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbCorrections')]);
+  expect(download.suggestedFilename()).toMatch(/^good-metaphor-corrections-maplestory-\d{4}-\d{2}-\d{2}\.json$/);
+  const data = JSON.parse(readFileSync(await download.path(), 'utf8'));
+  expect(data.kind).toBe('good-metaphor-corrections');
+  expect(data.version).toBe(1);
+  expect(data.interest).toBe('maplestory');
+  const common = loadCommonGraphFromDisk();
+  expect(data.commonGraphVersion).toBe(common.version);
+  expect(data.tagsVersion).toBe(common.tagsVersion);
+  const mesoTag = common.nodes.find(n => n.id === 'meso').tags[0];
+  expect(data.exampleCandidates).toEqual([{ tagId: mesoTag, text: S.replace('2026', '[숫자]'), nodeId: 'meso', count: 1 }]);
+  // 같은 문장이 예문 후보이기도 해서 표시가 붙는다(한 곳에만 넣는다)
+  expect(data.evalCandidates).toEqual([{ sentence: S.replace('2026', '[숫자]'), expectNodes: ['meso'], expectTag: mesoTag, source: 'pick', alsoExampleCandidate: true }]);
+  expect(data.guardCandidates).toEqual([{ sentence: '연락처 [숫자] 로 물으면 금리가 오른 이유를 알려 준다.', expectNodes: ['meso'], source: 'up' }]);
+  // 판본·시각 필드에는 연도가 있으니 후보 칸만 본다
+  const raw = JSON.stringify([data.exampleCandidates, data.rejected, data.evalCandidates, data.guardCandidates]);
+  for (const bad of ['u:focus', 'u_focus', '2026', '010-1234']) expect(raw).not.toContain(bad);
+});
+
+test('교정(T-131): 내 태그 예문이 바뀌면 다른 문장의 결과 캐시도 새로 만든다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  await send({ type: 'explain', ...q });
+  expect((await send({ type: 'explain', ...q })).data.cached).toBe(true);
+  // 교정 기록은 비슷한 문장 메모리 키로도 캐시를 가르므로, 기록 없이 예문만 바꿔 graphKey가 가르는지 본다
+  const ov = (await send({ type: 'overlay:get' })).data;
+  ov.tags[0].examples = [...ov.tags[0].examples, FOCUS_MASKED];
+  expect((await send({ type: 'overlay:save', overlay: ov })).data.ok).toBe(true);
+  expect((await send({ type: 'explain', ...q })).data.cached).toBeUndefined();
+  expect((await send({ type: 'explain', ...q })).data.cached).toBe(true);
+  // feedbackBoosts만 바뀌어도 새로
+  ov.feedbackBoosts = { meso: -0.05 };
+  await send({ type: 'overlay:save', overlay: ov });
+  expect((await send({ type: 'explain', ...q })).data.cached).toBeUndefined();
+});
+
+test('교정(T-131): 내 관심사만 쓸 때(useCommon false)도 공통 노드 교정을 내보낸다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: { ...FOCUS_OVERLAY, useCommon: false, domain: '공부' } })).data.ok).toBe(true);
+  const S = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 저축한 돈의 구매력이 줄어든다.';
+  await send({ type: 'feedback', record: { sentence: S, nodeId: null, tagId: null, vote: 'pick', pickedNodeId: 'meso' } });
+  const data = (await send({ type: 'corrections:export' })).data;
+  expect(data.exampleCandidates.map(c => [c.nodeId, c.text])).toEqual([['meso', S]]);
+});
+
+test('교정(T-131): 말풍선 "더 맞는 개념" 기록에 고른 개념의 최고 태그(pickedTagId)가 남는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  const alt = box(page).locator('button.alt').first();
+  await expect(alt).toBeVisible();
+  await alt.click();
+  const last = async () => (await storageGet(ext.page, 'feedback'))?.at(-1);
+  await expect.poll(async () => (await last())?.vote).toBe('pick');
+  const r = await last();
+  const node = loadCommonGraphFromDisk().nodes.find(n => n.id === r.pickedNodeId);
+  expect(node.tags).toContain(r.pickedTagId);
+});
+
+// 그래프 편집 화면 (T-202)
+const myNode =(page, id) => page.locator(`#myNodeList li[data-id="${id}"]`);
+const commonNode = (page, id) => page.locator(`#commonNodeList li[data-id="${id}"]`);
+
+test('그래프 편집(T-202): 폼으로 노드 추가(태그 칩)·수정·지우기, 공통 노드 숨김·가중치, 피드백 가중치는 읽기 전용으로 보존', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '편집자' });
+  // 피드백 가중치·내 태그·폼이 모르는 필드는 저장해도 남아야 한다
+  const seeded = { feedbackBoosts: { meso: -0.05 }, tags: [{ id: 'u_tag', label: '내 태그' }], extra: { keep: 1 } };
+  expect((await send({ type: 'overlay:save', overlay: seeded })).data.ok).toBe(true);
+  await page.reload();
+  await expect(page.locator('#loggedIn')).toBeVisible();
+  await expect(page.locator('#myNodesEmpty')).toBeVisible();
+  expect(await page.locator('#advanced').evaluate(d => d.open)).toBe(false); // 고급은 접혀 있다
+
+  // 추가: 태그 칩 2개 (공통 태그 사전 + 내 태그 칩)
+  await expect(page.locator('#nfTags [data-tag="u_tag"]')).toHaveText('내 태그');
+  await page.fill('#nfLabel', 'Morning Routine');
+  await page.fill('#nfFacts', '매일 출근 전에 같은 사냥터를 돈다.\n빠진 날은 몰아서 채우기 어렵다.');
+  await page.click('#nfTags [data-tag="daily_accumulation"]');
+  await page.click('#nfTags [data-tag="efficiency_metric"]');
+  await expect(page.locator('#nfTags [data-tag="daily_accumulation"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.click('#nfApply');
+  await expect(page.locator('#overlayStatus')).toHaveText('바뀐 내용을 저장하세요.');
+  await expect(myNode(page, 'u:morning_routine')).toContainText('Morning Routine');
+  await expect(page.locator('#nfLabel')).toHaveValue(''); // 폼은 비워진다
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  let ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes).toEqual([{ id: 'u:morning_routine', label: 'Morning Routine',
+    facts: ['매일 출근 전에 같은 사냥터를 돈다.', '빠진 날은 몰아서 채우기 어렵다.'], tags: ['daily_accumulation', 'efficiency_metric'] }]);
+  expect(ov.feedbackBoosts).toEqual({ meso: -0.05 });
+  expect(ov.tags).toEqual(seeded.tags);
+  expect(ov.extra).toEqual({ keep: 1 });
+
+  // 수정: id는 그대로, 태그 하나 빼고 별칭 추가, 내 노드 가중치
+  await myNode(page, 'u:morning_routine').locator('.ov-edit').click();
+  await expect(page.locator('#nfLabel')).toHaveValue('Morning Routine');
+  await expect(page.locator('#nfApply')).toHaveText('수정 반영');
+  await page.fill('#nfLabel', '아침 루틴');
+  await page.click('#nfTags [data-tag="efficiency_metric"]');
+  await page.fill('#nfAliases', '아침 재획, 출근 사냥');
+  await page.click('#nfApply');
+  await myNode(page, 'u:morning_routine').locator('.ov-boost').fill('0.1');
+  await expect(myNode(page, 'u:morning_routine').locator('.ov-boost-val')).toHaveText('+0.10');
+
+  // 공통 노드: 피드백 가중치는 읽기 전용 표시, 숨김 체크, 가중치 슬라이더
+  await expect(commonNode(page, 'meso').locator('.ov-fb')).toHaveText('피드백 -0.05');
+  await expect(commonNode(page, 'auction').locator('.ov-fb')).toHaveCount(0);
+  await commonNode(page, 'meso').locator('.ov-hide').check();
+  await commonNode(page, 'auction').locator('.ov-boost').fill('-0.15');
+  await expect(commonNode(page, 'auction').locator('.ov-boost-val')).toHaveText('-0.15');
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes).toEqual([{ id: 'u:morning_routine', label: '아침 루틴',
+    facts: ['매일 출근 전에 같은 사냥터를 돈다.', '빠진 날은 몰아서 채우기 어렵다.'], tags: ['daily_accumulation'], aliases: ['아침 재획', '출근 사냥'] }]);
+  expect(ov.hiddenNodeIds).toEqual(['meso']);
+  expect(ov.nodeBoosts).toEqual({ 'u:morning_routine': 0.1, auction: -0.15 });
+  expect(ov.feedbackBoosts).toEqual({ meso: -0.05 });
+  // 다시 그려도 저장한 값이 보인다
+  await expect(commonNode(page, 'meso').locator('.ov-hide')).toBeChecked();
+  await expect(commonNode(page, 'auction').locator('.ov-boost')).toHaveValue('-0.15');
+
+  // 지우기: 확인 후 목록에서 빠지고, 그 노드의 nodeBoosts도 빠진다
+  page.once('dialog', d => { expect(d.message()).toBe('이 노드를 지울까요?'); d.accept(); });
+  await myNode(page, 'u:morning_routine').locator('.ov-del').click();
+  await expect(myNode(page, 'u:morning_routine')).toHaveCount(0);
+  await expect(page.locator('#overlayStatus')).toHaveText('바뀐 내용을 저장하세요.');
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes).toEqual([]);
+  expect(ov.nodeBoosts).toEqual({ auction: -0.15 });
+  expect(ov.feedbackBoosts).toEqual({ meso: -0.05 });
+});
+
+test('그래프 편집(T-202): 태그 없는 노드는 저장되지 않고 필드 옆 문구, 고급 JSON 적용이 폼에 반영, 예시 노드는 폼에 채움', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '편집자' });
+  await page.reload();
+  await expect(page.locator('#loggedIn')).toBeVisible();
+
+  // 태그 없이 저장 → 폼 오류, 저장 안 됨
+  await page.fill('#nfLabel', '태그 없는 노드');
+  await page.fill('#nfFacts', '사실 한 줄.');
+  await page.click('#saveOverlay');
+  await expect(page.locator('#nfTagsErr')).toHaveText('태그를 하나 이상 골라 주세요.');
+  await expect(page.locator('#overlayStatus')).toHaveClass(/err/);
+  expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
+  await page.click('#nfApply');
+  await expect(page.locator('#nfTagsErr')).toHaveText('태그를 하나 이상 골라 주세요.');
+  await expect(page.locator('#myNodeList li')).toHaveCount(0);
+  await page.fill('#nfLabel', '');
+  await page.click('#nfApply');
+  await expect(page.locator('#nfLabelErr')).toHaveText('이름을 적어 주세요.');
+  await page.click('#nfCancel');
+  await expect(page.locator('#nfLabelErr')).toHaveText('');
+  await expect(page.locator('#nfFacts')).toHaveValue('');
+
+  // 고급 JSON: 적용하면 폼이 다시 그려진다. 라벨은 글자로만 들어간다(innerHTML 아님)
+  await page.click('#advanced summary');
+  const json = JSON.parse(await page.inputValue('#overlay'));
+  json.nodes = [{ id: 'u:json_node', label: '<b>굵게</b>', facts: ['JSON으로 넣은 사실.'], tags: ['cooldown'] }];
+  json.hiddenNodeIds = ['cube'];
+  await page.fill('#overlay', JSON.stringify(json));
+  await page.click('#applyJson');
+  await expect(myNode(page, 'u:json_node')).toContainText('<b>굵게</b>');
+  await expect(myNode(page, 'u:json_node').locator('b')).toHaveCount(0);
+  await expect(commonNode(page, 'cube').locator('.ov-hide')).toBeChecked();
+  await expect(page.locator('#overlayStatus')).toHaveText('바뀐 내용을 저장하세요.');
+
+  // 잘못된 JSON·검증 실패는 오류만, 폼은 그대로
+  await page.fill('#overlay', '{');
+  await page.click('#applyJson');
+  await expect(page.locator('#jsonStatus')).toHaveClass(/err/);
+  await expect(myNode(page, 'u:json_node')).toHaveCount(1);
+  await page.fill('#overlay', JSON.stringify({ nodes: [{ id: 'x', label: 'a', facts: ['f'], tags: ['t'] }] }));
+  await page.click('#applyJson');
+  await expect(page.locator('#jsonStatus')).toContainText('u:');
+  await expect(myNode(page, 'u:json_node')).toHaveCount(1);
+  await expect(page.locator('#myNodeList li')).toHaveCount(1);
+
+  // 고급 칸에 틀린 JSON이 남아 있으면 저장하지 않는다(고친 JSON은 저장 때도 적용되므로) → 맞는 JSON으로 되돌리고 저장
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toHaveClass(/err/);
+  expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
+  await page.fill('#overlay', JSON.stringify(json));
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes.map(n => n.id)).toEqual(['u:json_node']);
+  expect(ov.hiddenNodeIds).toEqual(['cube']);
+
+  // 예시 노드 넣기 → 폼에 채운다(저장은 아직)
+  await page.click('#insertSample');
+  await expect(page.locator('#nfLabel')).toHaveValue('내 아침 재획 루틴');
+  await expect(page.locator('#nfTags [data-tag="daily_accumulation"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#nfTags [data-tag="efficiency_metric"]')).toHaveAttribute('aria-pressed', 'true');
+  expect((await send({ type: 'overlay:get' })).data.nodes).toHaveLength(1);
+
+  // 내 관심사만 → 공통 노드 칸이 숨는다
+  await page.click('#useCommonSeg input[value="false"] + span');
+  await expect(page.locator('#commonNodesBox')).toBeHidden();
+  await expect(page.locator('#overlayStatus')).toHaveText('바뀐 내용을 저장하세요.');
+});
+
+test('그래프 편집(T-202): 고급 JSON을 고치고 "JSON 적용" 없이 저장해도 반영(내 태그 추가), 깨진 JSON이면 저장 안 함', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '편집자' });
+  await page.reload();
+  await expect(page.locator('#loggedIn')).toBeVisible();
+  await page.click('#advanced summary');
+  await expect(page.locator('#advanced')).toContainText('feedbackBoosts는 저장 때 기록 값으로 덮여요.');
+
+  // JSON에서 내 태그를 더하고 바로 저장
+  const json = JSON.parse(await page.inputValue('#overlay'));
+  json.tags = [{ id: 'u_focus', label: '몰입 시간' }];
+  await page.fill('#overlay', JSON.stringify(json, null, 2));
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  expect((await send({ type: 'overlay:get' })).data.tags).toEqual([{ id: 'u_focus', label: '몰입 시간' }]);
+  await expect(page.locator('#nfTags [data-tag="u_focus"]')).toHaveText('몰입 시간'); // 폼에도 반영
+
+  // 깨진 JSON + 저장 → 아무것도 저장하지 않고 오류
+  await page.fill('#overlay', '{ "tags": [');
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toHaveClass(/err/);
+  await expect(page.locator('#jsonStatus')).toContainText('JSON 오류');
+  expect((await send({ type: 'overlay:get' })).data.tags).toEqual([{ id: 'u_focus', label: '몰입 시간' }]);
+  // 검증 실패 JSON + 저장도 마찬가지
+  await page.fill('#overlay', JSON.stringify({ tags: [], nodes: [{ id: 'bad', label: 'a', facts: ['f'], tags: ['cooldown'] }] }));
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toHaveClass(/err/);
+  await expect(page.locator('#jsonStatus')).toContainText('u:');
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes).toEqual([]);
+  expect(ov.tags).toEqual([{ id: 'u_focus', label: '몰입 시간' }]);
+});
+
+test('그래프 편집(T-202): 사전에 없는 태그는 지울 수 있는 칩으로 보이고, 범위 밖 가중치는 잘라서 보인다', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '편집자' });
+  const overlay = { nodeBoosts: { auction: 0.5 }, nodes: [{ id: 'u:ghost', label: '유령 태그 노드', facts: ['사실.'], tags: ['ghost_tag', 'cooldown'] }] };
+  expect((await send({ type: 'overlay:save', overlay })).data.ok).toBe(true);
+  await page.reload();
+  await expect(page.locator('#loggedIn')).toBeVisible();
+  await expect(commonNode(page, 'auction').locator('.ov-boost-val')).toHaveText('+0.20');
+
+  await myNode(page, 'u:ghost').locator('.ov-edit').click();
+  const ghost = page.locator('#nfTags [data-tag="ghost_tag"]');
+  await expect(ghost).toHaveAttribute('aria-pressed', 'true');
+  await expect(ghost).toHaveClass(/unknown/);
+  await ghost.click();
+  await expect(ghost).toHaveCount(0); // 빼면 사라진다
+  await page.click('#nfApply');
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  expect((await send({ type: 'overlay:get' })).data.nodes[0].tags).toEqual(['cooldown']);
+
+  // 예시 문구
+  await page.click('#insertSample');
+  await expect(page.locator('#overlayStatus')).toHaveText('예시를 폼에 채웠어요. 저장하면 반영돼요.');
+});
+
 test('정밀 모드, 데모 제공자, 키 없음 오류', async ({ ext }) => {
   const { send, setSettings } = ext;
   await setSettings({ preciseMode: true });
@@ -153,4 +1350,1536 @@ test('정밀 모드, 데모 제공자, 키 없음 오류', async ({ ext }) => {
   const e = await send({ type: 'explain', sentence: '키 없는 호출은 오류가 나야 한다.', noCache: true });
   expect(e.ok).toBe(false);
   expect(e.error).toContain('API 키가 없어요');
+});
+
+test('fallback 체인: 429 모델은 다음 순서로 넘기고 쿨다운 동안 다시 부르지 않는다 (T-124)', async ({ ext }) => {
+  const { send, setSettings } = ext;
+  await setSettings({ models: { custom: 'mock-busy' } });
+  const busyCalls = () => calls.filter(c => c.model === 'mock-busy').length;
+  const before = busyCalls();
+  const a = await send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(a.ok).toBe(true);
+  expect(a.data.debug.provider).toBe('custom/mock-model');
+  expect(a.data.debug.fallbacks[0]).toMatchObject({ provider: 'custom/mock-busy' });
+  expect(a.data.analogy).toContain('같은 구조예요');
+  expect(busyCalls() - before, '429는 같은 모델을 재시도하지 않음').toBe(1);
+
+  const b = await send({ type: 'explain', sentence: 'API 서버는 분당 요청 수에 상한을 둔다.', noCache: true });
+  expect(b.data.debug.provider).toBe('custom/mock-model');
+  expect(b.data.debug.fallbacks[0]).toMatchObject({ provider: 'custom/mock-busy', reason: '쿨다운 중' });
+  expect(busyCalls() - before, '쿨다운 중에는 부르지 않음').toBe(1);
+});
+
+/* ───────────── 서버 모드(T-404): 가짜 analogy-api(:8767), timeoutMs 800 ───────────── */
+
+const REJECTED = '모델이 근거 목록에 없는 개념을 골라서 비유를 숨겼어요.';
+const footText = page => page.evaluate(() => document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.foot span')?.innerText ?? '');
+
+serverTest('서버 모드(T-404): 서버 결과를 말풍선에 보이고 foot에 서버, 요청마다 같은 설치 토큰', async ({ context, ext }) => {
+  const before = analogyCalls.length;
+  const llmBefore = calls.length;
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p5');
+  await expect.poll(() => tooltip(page)).toContain(SERVER_ANALOGY);
+  expect(await footText(page)).toBe('server/mock-analogy · 서버');
+  expect(await tooltip(page)).toContain('근거: 스타포스 강화');
+
+  const r = await ext.send({ type: 'explain', sentence: '서버정상 두 번째 문장이에요.', word: '', context: '', pageTitle: 't', noCache: true });
+  expect(r.data.source).toBe('server');
+  expect(r.data.analogy).toBe(SERVER_ANALOGY);
+  expect(r.data.feedbackApplied).toBe(false);
+  expect(r.data.debug.server).toMatchObject({ used: true });
+  expect(typeof r.data.debug.server.ms).toBe('number');
+  expect(calls.length - llmBefore, '서버가 답하면 LLM을 부르지 않음').toBe(0);
+
+  const mine = analogyCalls.slice(before);
+  expect(mine).toHaveLength(2);
+  expect(mine[0].path).toBe('/v1/analogy');
+  expect(mine[0].body).toMatchObject({ sentence: '서버정상 확률형 강화는 실패하면 들인 비용만 날아간다.' });
+  expect(Object.keys(mine[0].body).sort()).toEqual(['context', 'pageTitle', 'sentence', 'word']);
+  const token = mine[0].headers['x-install-token'];
+  expect(token).toMatch(/^[0-9a-f-]{36}$/);
+  expect(mine[1].headers['x-install-token']).toBe(token);
+  const stored = await ext.page.evaluate(async () => (await chrome.storage.local.get('installToken')).installToken);
+  expect(stored).toBe(token);
+
+  // 서버 결과도 세션 캐시에 남는다
+  const c = await ext.send({ type: 'explain', sentence: '서버정상 두 번째 문장이에요.', word: '', context: '', pageTitle: 't' });
+  expect(c.data.cached).toBe(true);
+  expect(c.data.source).toBe('server');
+  expect(analogyCalls.length - before).toBe(2);
+});
+
+serverTest('서버 모드(T-404): 서버 500이면 로컬 결과, foot에 로컬', async ({ context, ext }) => {
+  const r = await ext.send({ type: 'explain', sentence: '서버오류 금리가 오르면 이자가 늘어난다.', noCache: true });
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'http-500' });
+  expect(r.data.analogy).toContain('같은 구조예요');
+  expect(r.data.debug.provider).toBe('custom/mock-model');
+
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플스토리로 보면');
+  await expect.poll(() => footText(page)).toBe('custom/mock-model · 로컬');
+});
+
+serverTest('서버 모드(T-404): 서버가 느리면 timeoutMs에서 끊고 로컬로', async ({ ext }) => {
+  await ext.send({ type: 'embed:warmup' }); // 모델 준비 시간을 재지 않게
+  const t0 = Date.now();
+  const r = await ext.send({ type: 'explain', sentence: '서버지연 환율이 오르면 수입품 값이 비싸진다.', noCache: true });
+  const ms = Date.now() - t0;
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'timeout' });
+  expect(r.data.analogy).toContain('같은 구조예요');
+  expect(ms, '서버 지연(5초)을 기다리지 않음').toBeLessThan(3000);
+});
+
+serverTest('서버 모드(T-404): 서버가 후보 밖 nodeId를 대면 비유를 숨긴다(규칙 1)', async ({ ext }) => {
+  const r = await ext.send({ type: 'explain', sentence: '서버후보밖 레버리지는 손익을 키운다.', noCache: true });
+  expect(r.data.source).toBe('server');
+  expect(r.data.analogy).toBe('');
+  expect(r.data.rejected).toBe(REJECTED);
+  expect(r.data.evidence).toBeNull();
+  expect(r.data.meaning).toBe('서버 뜻 풀이예요.');
+});
+
+serverTest('서버 모드(T-404): 그 문장에 👎 기록이 있으면 서버를 부르지 않는다', async ({ ext }) => {
+  const q = { sentence: '서버정상 물가가 오르면 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  expect(r1.data.source).toBe('server');
+  const before = analogyCalls.length;
+  const fb = await ext.send({ type: 'feedback', record: { sentence: q.sentence, nodeId: r1.data.evidence.nodeId, tagId: null, vote: 'down', provider: r1.data.debug.provider }, rerun: q });
+  expect(fb.ok).toBe(true);
+  expect(fb.data.result.source).toBe('local');
+  expect(fb.data.result.debug.server).toEqual({ used: false, reason: 'feedback' });
+  const r2 = await ext.send({ type: 'explain', ...q, noCache: true });
+  expect(r2.data.source).toBe('local');
+  expect(analogyCalls.length - before, '가짜 서버 요청 수 그대로').toBe(0);
+});
+
+serverTest('서버 모드(T-404): 로그인 세션이면 서버를 부르지 않는다', async ({ ext }) => {
+  const { send } = ext;
+  await send({ type: 'auth:login', nickname: '테스터' });
+  const before = analogyCalls.length;
+  const r = await send({ type: 'explain', sentence: '서버정상 예금 금리가 오르면 이자가 늘어난다.', noCache: true });
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'session' });
+  expect(analogyCalls.length - before).toBe(0);
+  await send({ type: 'auth:logout' });
+});
+
+/* ───────────── 서버 모드 실사용 준비(T-141) ───────────── */
+// 서버 사본(.tmp/ext-e2e-server)은 :8767 권한을 manifest 에 미리 받는다(scripts/prepare-e2e.mjs). 권한 없음은 서비스 워커의 contains 를 바꿔 흉내 낸다.
+// 주의: 바꾼 함수는 그 서비스 워커 실행 안에만 있다. 시험 도중 워커가 잠들었다 다시 뜨면 원래 contains(권한 있음)로 돌아가
+// 서버를 부르게 되어 간헐 실패할 수 있다(필수 권한은 permissions.remove 로 못 지우고, 요청 창은 headless 에서 못 누른다)
+async function denyServerPermission(context) {
+  const sw = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+  await sw.evaluate(() => {
+    const real = chrome.permissions.contains.bind(chrome.permissions);
+    chrome.permissions.contains = async q => (q?.origins || []).some(o => o.startsWith('http://127.0.0.1:8767')) ? false : real(q);
+  });
+}
+
+serverTest('서버 모드(T-141): 서버 출처 권한이 없으면 서버를 부르지 않고 조용히 로컬(no-permission), 이 결과는 캐시', async ({ context, ext }) => {
+  await denyServerPermission(context);
+  const q = { sentence: '서버정상 권한 없음 확인 문장이에요.', word: '', context: '', pageTitle: 't' };
+  const before = analogyCalls.length;
+  const r = await ext.send({ type: 'explain', ...q });
+  expect(r.ok).toBe(true);
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'no-permission' });
+  expect(r.data.analogy).toContain('같은 구조예요');
+  expect(analogyCalls.length - before, '서버 요청 없음').toBe(0);
+  // 의도적 건너뜀이라 캐시한다
+  const c = await ext.send({ type: 'explain', ...q });
+  expect(c.data.cached).toBe(true);
+  expect(c.data.debug.server).toEqual({ used: false, reason: 'no-permission' });
+});
+
+/* ───────── 서버 실패 뒤 쿨다운(T-159) ───────── */
+// 서버 사본은 cooldownMs 8000·cooldownMaxMs 16000(scripts/prepare-e2e.mjs). 시험마다 새 브라우저라 session 저장소는 비어 있다.
+// 건너뜀을 보는 부분은 쿨다운 상태를 저장소에 직접 넣어, 로컬 생성이 느려도 쿨다운이 먼저 끝나지 않게 한다
+const getServerCooldown = ext => ext.page.evaluate(async () => (await chrome.storage.session.get('serverCooldown')).serverCooldown ?? null);
+const setServerCooldown = (ext, cd) => ext.page.evaluate(c => chrome.storage.session.set({ serverCooldown: c }), cd);
+// 쿨다운 끝(until)까지 고정 sleep 대신 시계를 폴링한다
+const waitPast = until => expect.poll(() => Date.now() > until, { timeout: 20_000, intervals: [200] }).toBe(true);
+
+serverTest('서버 모드(T-141·T-159): 서버 실패 뒤 쿨다운 동안은 서버를 건너뛰고(cooldown) 그 결과는 쿨다운까지만 캐시, 지나면 같은 문장도 다시 서버, 실패 결과는 캐시 안 함', async ({ ext }) => {
+  await ext.send({ type: 'embed:warmup' }); // 모델 준비 시간을 재지 않게
+  const fail = { sentence: '서버오류 실패 결과 캐시 확인 문장이에요.', word: '', context: '', pageTitle: 't' };
+  const before = analogyCalls.length;
+  const t0 = Date.now();
+  const r1 = await ext.send({ type: 'explain', ...fail });
+  expect(r1.data.source).toBe('local');
+  expect(r1.data.debug.server).toEqual({ used: false, reason: 'http-500' });
+  expect(analogyCalls.length - before).toBe(1);
+  const cd1 = await getServerCooldown(ext);
+  expect(cd1).toMatchObject({ reason: 'http-500', failures: 1 });
+  expect(cd1.until - t0).toBeGreaterThanOrEqual(8000);
+  expect(cd1.until - Date.now()).toBeLessThanOrEqual(8000);
+
+  // 쿨다운 중: 서버가 답할 문장이어도 서버를 부르지 않고 로컬, 의도적 건너뜀이라 캐시(쿨다운 끝까지만).
+  // 로컬 생성 시간과 무관하게 지금부터 8초로 다시 잡는다
+  const until = Date.now() + 8000;
+  await setServerCooldown(ext, { ...cd1, until });
+  const other = { sentence: '서버정상 쿨다운 중 다른 문장이에요.', word: '', context: '', pageTitle: 't' };
+  const r2 = await ext.send({ type: 'explain', ...other });
+  expect(r2.data.source).toBe('local');
+  expect(r2.data.debug.server).toEqual({ used: false, reason: 'cooldown', until });
+  expect(r2.data.analogy).toContain('같은 구조예요');
+  expect(analogyCalls.length - before, '쿨다운 중 서버 요청 없음').toBe(1);
+  const c2 = await ext.send({ type: 'explain', ...other });
+  expect(c2.data.cached).toBe(true);
+  expect(c2.data.debug.server.reason).toBe('cooldown');
+  expect(c2.data.expiresAt, '만료 시각은 결과에 섞이지 않는다').toBeUndefined();
+
+  // 쿨다운이 지나면 쿨다운 중 캐시는 놓침 → 같은 문장도 서버를 부르고, 성공하면 쿨다운이 풀린다
+  await waitPast(until);
+  const r3 = await ext.send({ type: 'explain', ...other });
+  expect(r3.data.cached, '쿨다운 중 결과는 쿨다운 뒤에 쓰지 않는다').toBeFalsy();
+  expect(r3.data.source).toBe('server');
+  expect(analogyCalls.length - before).toBe(2);
+  expect(await getServerCooldown(ext), '성공하면 지운다').toBeNull();
+  const c3 = await ext.send({ type: 'explain', ...other });
+  expect(c3.data.cached).toBe(true);
+  expect(c3.data.source).toBe('server');
+
+  // 실패로 만든 결과는 캐시에 없어 같은 문장도 서버를 다시 시도(T-141). 연속 실패라 두 배(상한 16000)
+  await setServerCooldown(ext, { until: Date.now() - 1, reason: 'http-500', failures: 1 });
+  const t4 = Date.now();
+  const r4 = await ext.send({ type: 'explain', ...fail });
+  expect(r4.data.cached, '실패 결과는 캐시에 없다').toBeFalsy();
+  expect(r4.data.debug.server).toEqual({ used: false, reason: 'http-500' });
+  expect(analogyCalls.length - before, '쿨다운 뒤 서버를 다시 시도').toBe(3);
+  const cd2 = await getServerCooldown(ext);
+  expect(cd2).toMatchObject({ reason: 'http-500', failures: 2 });
+  expect(cd2.until - t4).toBeGreaterThanOrEqual(16000);
+  expect(cd2.until - Date.now()).toBeLessThanOrEqual(16000);
+});
+
+serverTest('서버 모드(T-159): 서버가 성공하면 쿨다운이 바로 풀리고, 다음 실패는 다시 처음 길이부터', async ({ ext }) => {
+  // 연속 실패 2번 뒤 쿨다운이 막 끝난 상태를 만든다
+  await setServerCooldown(ext, { until: Date.now() - 1, reason: 'http-500', failures: 2 });
+  const ok = await ext.send({ type: 'explain', sentence: '서버정상 쿨다운 해제 확인 문장이에요.', noCache: true });
+  expect(ok.data.source).toBe('server');
+  expect(await getServerCooldown(ext), '성공하면 지운다').toBeNull();
+  const t = Date.now();
+  const r = await ext.send({ type: 'explain', sentence: '서버오류 해제 뒤 실패 문장이에요.', noCache: true });
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'http-500' });
+  const cd = await getServerCooldown(ext);
+  expect(cd.failures).toBe(1);
+  expect(cd.until - t).toBeGreaterThanOrEqual(8000);
+  expect(cd.until - Date.now()).toBeLessThanOrEqual(8000);
+});
+
+serverTest('서버 모드(T-159): 서버가 429 와 Retry-After 를 주면 그 시간만큼 쉰다', async ({ ext }) => {
+  const t = Date.now();
+  const r = await ext.send({ type: 'explain', sentence: '서버한도 요청 한도 확인 문장이에요.', noCache: true });
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'http-429' });
+  const cd = await getServerCooldown(ext);
+  expect(cd).toMatchObject({ reason: 'http-429', failures: 1 });
+  // 가짜 서버 Retry-After: 1(초). cooldownMs(8000)가 아니라 1초
+  expect(cd.until - t).toBeGreaterThanOrEqual(1000);
+  expect(cd.until - Date.now()).toBeLessThanOrEqual(1000);
+});
+
+serverTest('설정 화면(T-159): 서버 쿨다운 중이면 몇 분 뒤 다시 시도하는지 보이고, 끝나면 서버 허용됨', async ({ context, extId }) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extId}/options.html`);
+  await expect(page.locator('#serverPermStatus')).toHaveText('서버 허용됨');
+  await page.evaluate(() => chrome.storage.session.set({ serverCooldown: { until: Date.now() + 150_000, reason: 'http-500', failures: 2 } }));
+  await expect(page.locator('#serverPermStatus')).toHaveText('서버가 잠깐 응답하지 않아 3분 뒤 다시 시도해요.');
+  await page.reload();
+  await expect(page.locator('#serverPermStatus')).toHaveText('서버가 잠깐 응답하지 않아 3분 뒤 다시 시도해요.');
+  await page.evaluate(() => chrome.storage.session.remove('serverCooldown'));
+  await expect(page.locator('#serverPermStatus')).toHaveText('서버 허용됨');
+});
+
+serverTest('서버 모드(T-141): 서버 근거가 서버 후보 안이어도 확장 공통 그래프에 없으면 비유를 숨긴다(규칙 1)', async ({ ext }) => {
+  const r = await ext.send({ type: 'explain', sentence: '서버로컬밖 레버리지는 손익을 키운다.', noCache: true });
+  expect(r.data.source).toBe('server');
+  expect(r.data.debug.candidates.map(c => c.id)).toContain(GHOST_NODE);
+  expect(r.data.analogy).toBe('');
+  expect(r.data.rejected).toBe(REJECTED);
+  expect(r.data.evidence).toBeNull();
+  expect(r.data.meaning).toBe('서버 뜻 풀이예요.');
+});
+
+serverTest('설정 화면(T-141): 서버 주소 권한이 있으면 서버 허용됨, 없으면 허용 버튼으로 그 출처만 요청', async ({ context, extId }) => {
+  const ok = await context.newPage();
+  await ok.goto(`chrome-extension://${extId}/options.html`);
+  await expect(ok.locator('#serverPermRow')).toBeVisible();
+  await expect(ok.locator('#serverPermStatus')).toHaveText('서버 허용됨');
+  await expect(ok.locator('#grantServer')).toBeHidden();
+
+  // 권한 없음 흉내: 요청 창은 누를 수 없어 contains·request 를 페이지에서 바꾼다
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    let granted = false;
+    window.__permAsked = [];
+    chrome.permissions.contains = async q => (q?.origins || []).some(o => o.startsWith('http://127.0.0.1:8767')) ? granted : true;
+    chrome.permissions.request = async q => { window.__permAsked.push(q); granted = true; return true; };
+  });
+  await page.goto(`chrome-extension://${extId}/options.html`);
+  await expect(page.locator('#serverPermStatus')).toHaveText('서버(http://127.0.0.1:8767)를 쓰려면 허용이 필요해요.');
+  await expect(page.locator('#grantServer')).toBeVisible();
+  await page.click('#grantServer');
+  await expect(page.locator('#serverPermStatus')).toHaveText('서버 허용됨');
+  expect(await page.evaluate(() => window.__permAsked)).toEqual([{ origins: ['http://127.0.0.1:8767/*'] }]);
+  await expect(page.locator('#grantServer')).toBeHidden();
+});
+
+/* ───────── 제외 사이트 (T-107) ───────── */
+// 가짜 LLM·가짜 analogy-api 요청 수 합계. 제외면 둘 다 그대로여야 한다
+const sentCount = () => calls.length + analogyCalls.length;
+
+serverTest('제외 사이트(T-107): 목록에 넣으면 떠 있던 말풍선이 닫히고 Alt+호버해도 안 보냄, 빼면 새로고침 없이 다시 동작', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+
+  await ext.setSettings({ excludedHosts: ['kbstar.com', '127.0.0.1'] });
+  await expect.poll(() => tooltip(page), { message: '제외되면 떠 있던 말풍선을 숨김' }).toBe('');
+
+  const before = sentCount();
+  await altHover(page, '#p2');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '제외 사이트에서는 말풍선 없음').toBeFalsy();
+  expect(await page.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '제외 사이트에서는 요청을 보내지 않음').toBe(0);
+
+  await ext.setSettings({ excludedHosts: ['kbstar.com'] });
+  await page.waitForTimeout(300);
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});
+
+serverTest('비밀번호 폼(T-107): 폼 안 문장은 안 보내고, 같은 페이지 폼 밖 문장은 정상', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const before = sentCount();
+  await altHover(page, '#p7');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '비밀번호 폼 안에서는 말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '비밀번호 폼 안 문장은 보내지 않음').toBe(0);
+  expect(calls.some(c => c.user.includes('비밀번호폼테스트'))).toBe(false);
+
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});
+
+test('팝업(T-107): 탭 주소를 못 읽으면(확장 페이지로 연 팝업, activeTab 없음) "이 사이트에서 끄기"를 끄고 안내 문구', async ({ context, extId }) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extId}/popup.html`); // 현재 탭이 확장 페이지
+  await expect(page.locator('#siteOff')).toBeDisabled();
+  await expect(page.locator('label[for="siteOff"]')).toHaveText('이 사이트에서 끄기');
+  await expect(page.locator('#siteHost')).toHaveText('이 페이지에서는 쓸 수 없어요.');
+});
+
+serverTest('비밀번호 폼(T-107): 같은 블록 안 비밀번호 폼 글자는 문장·앞 문장으로 새지 않는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const before = calls.length, serverBefore = analogyCalls.length;
+  await altHover(page, '#p8i');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  const mine = calls.slice(before);
+  expect(mine.some(c => c.user.includes('도입문장테스트'))).toBe(true);
+  expect(mine.filter(c => c.user.includes('폼라벨비밀문구')), 'LLM에 폼 글자가 가면 안 됨').toEqual([]);
+  expect(analogyCalls.slice(serverBefore).filter(c => JSON.stringify(c.body).includes('폼라벨비밀문구')), '서버에도 안 감').toEqual([]);
+});
+
+/* ───────── 제외 사이트 다듬기 (T-144) ───────── */
+const siteItems = p => p.locator('#siteList li');
+
+serverTest('설정 화면 제외 사이트(T-144): 기본 17개, 추가하면 열린 탭이 바로 꺼지고 지우면 다시 동작', async ({ context, ext }) => {
+  const opt = ext.page;
+  await expect(siteItems(opt)).toHaveCount(17);
+  await expect(opt.locator('#sec-sites h2')).toHaveText('제외 사이트');
+  await expect(opt.locator('#sec-sites .desc')).toHaveText('이 사이트에서는 문장을 읽지 않아요. 메일·은행·로그인 페이지는 기본으로 들어 있어요.');
+  await expect(opt.locator('#siteInput')).toHaveAttribute('placeholder', '예: mail.example.com');
+  await expect(siteItems(opt).first()).toContainText('mail.google.com');
+
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+
+  await opt.fill('#siteInput', 'http://127.0.0.1:8766/');
+  await opt.click('#siteAdd');
+  await expect(siteItems(opt)).toHaveCount(18);
+  await expect(siteItems(opt).last()).toContainText('127.0.0.1');
+  await expect(opt.locator('#siteInput')).toHaveValue('');
+
+  await page.waitForTimeout(300);
+  const before = sentCount();
+  await altHover(page, '#p1');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '제외 사이트에서는 말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+
+  await opt.getByRole('button', { name: '127.0.0.1 지우기' }).click();
+  await expect(siteItems(opt)).toHaveCount(17);
+  await page.waitForTimeout(300);
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+});
+
+test('설정 화면 제외 사이트(T-144): 잘못된 입력·중복 오류, 기본 목록으로 되돌리기, 다른 곳에서 바뀌면 다시 그림', async ({ ext }) => {
+  const opt = ext.page;
+  await expect(siteItems(opt)).toHaveCount(17);
+  await opt.fill('#siteInput', 'abc');
+  await opt.click('#siteAdd');
+  await expect(opt.locator('#siteStatus')).toHaveText('주소를 확인해 주세요.');
+  await expect(opt.locator('#siteInput')).toHaveValue('abc');
+  await opt.fill('#siteInput', 'https://m.kbstar.com/x');
+  await opt.press('#siteInput', 'Enter');
+  await expect(opt.locator('#siteStatus')).toHaveText('이미 들어 있어요.');
+  await expect(siteItems(opt)).toHaveCount(17);
+
+  await opt.getByRole('button', { name: 'kbstar.com 지우기', exact: true }).click();
+  await opt.getByRole('button', { name: 'toss.im 지우기' }).click();
+  await expect(siteItems(opt)).toHaveCount(15);
+  const saved = async () => (await ext.page.evaluate(async () => (await chrome.storage.local.get('settings')).settings.excludedHosts));
+  expect(await saved()).not.toContain('kbstar.com');
+
+  await opt.click('#siteReset');
+  await expect(siteItems(opt)).toHaveCount(17);
+  expect((await saved()).length).toBe(17);
+
+  // 팝업 토글처럼 다른 곳에서 저장해도 다시 그린다. 빈 목록 안내는 목록 밖 문단
+  await ext.setSettings({ excludedHosts: [] });
+  await expect(opt.locator('#siteEmpty')).toBeVisible();
+  await expect(opt.locator('#siteEmpty')).toHaveText('제외한 사이트가 없어요.');
+  await expect(opt.locator('#siteList')).toBeHidden();
+  await ext.setSettings({ excludedHosts: ['example.com'] });
+  await expect(siteItems(opt)).toHaveCount(1);
+  await expect(opt.locator('#siteEmpty')).toBeHidden();
+});
+
+// 테스트 전용 훅(hook-content.js)으로 content.js를 거치지 않고 background에 바로 보낸다
+const hook = (page, kind, payload) => page.evaluate(([k, p]) => new Promise((resolve, reject) => {
+  const id = Math.random().toString(36).slice(2);
+  const t = setTimeout(() => reject(new Error('훅 응답 없음: ' + k)), 20000);
+  window.addEventListener('message', function on(e) {
+    if (e.source !== window || e.data?.__e2eHookResult?.id !== id) return;
+    window.removeEventListener('message', on);
+    clearTimeout(t);
+    resolve(e.data.__e2eHookResult);
+  });
+  window.postMessage({ __e2eHook: k, id, payload: p }, '*');
+}), [kind, payload]);
+
+serverTest('이중 방어(T-144): content.js를 건너뛰어도 background가 port·sendMessage·피드백 rerun 모두 막고, 빼면 정상', async ({ context, ext }) => {
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const q = { sentence: '이중방어테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', word: '', context: '', pageTitle: 't', noCache: true };
+  const before = sentCount();
+  const fbBefore = (await ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback || [])).length;
+
+  const port = await hook(page, 'explain-port', q);
+  expect(port).toMatchObject({ ok: false, type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+  expect(port.stages, '임베딩·검색 단계도 없음').toEqual([]);
+  const msg = await hook(page, 'explain-msg', q);
+  expect(msg).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  const fb = await hook(page, 'feedback', q);
+  expect(fb).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+
+  expect(sentCount() - before, '가짜 LLM·가짜 analogy-api 요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('이중방어테스트'))).toBe(false);
+  const fbAfter = (await ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback || [])).length;
+  expect(fbAfter, '막힌 피드백은 기록도 안 남김').toBe(fbBefore);
+
+  await ext.setSettings({ excludedHosts: [] });
+  const okRes = await hook(page, 'explain-port', q);
+  expect(okRes.type).toBe('result');
+  expect(okRes.result.analogy).toContain('같은 구조예요');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});
+
+/* ───────── 첫 결과 전 테마 깜빡임 (T-108) ───────── */
+// 말풍선 .box 클래스가 바뀔 때마다 기록한다(처음 그려질 때 포함). 로딩 중인지(spin)도 함께
+async function recordBoxClasses(page) {
+  await page.evaluate(() => {
+    window.__boxLog = [];
+    const log = box => window.__boxLog.push({ cls: box.className, loading: !!box.querySelector('.spin') });
+    const watch = host => {
+      const box = host.shadowRoot.querySelector('.box');
+      log(box);
+      new MutationObserver(() => log(box)).observe(box, { attributes: true, attributeFilter: ['class'], childList: true });
+    };
+    const host = document.getElementById('good-metaphor-host');
+    if (host) return watch(host);
+    new MutationObserver((_, obs) => {
+      const h = document.getElementById('good-metaphor-host');
+      if (h) { obs.disconnect(); watch(h); }
+    }).observe(document.documentElement, { childList: true });
+  });
+}
+const boxLog = page => page.evaluate(() => window.__boxLog);
+// content.js가 미리 받은 테마를 적용할 때까지 기다린다(고정 대기 대신, T-136 교훈)
+const contentTheme = async page => (await hook(page, 'content-theme')).data;
+const waitTheme = (page, theme) => expect.poll(() => contentTheme(page), { message: `content.js 테마 ${theme}` }).toEqual({ theme, ready: true });
+const NEUTRAL_OVERLAY = {
+  useCommon: false, domain: '축구', analogyPrefix: '축구로 치면', theme: 'neutral',
+  nodes: [
+    { id: 'u:offside', label: '오프사이드', facts: ['공격수가 마지막 수비수보다 앞에 있으면 반칙이다.'], tags: ['threshold_req'] },
+    { id: 'u:transfer', label: '이적 시장', facts: ['인기 선수는 원하는 구단이 많아 이적료가 오른다.'], tags: ['market_price', 'scarcity_value'] }
+  ]
+};
+
+test('테마(T-108): 중립 관심사면 로딩 말풍선부터 t-neutral, t-maple은 한 번도 없음', async ({ context, ext }) => {
+  await ext.send({ type: 'auth:login', nickname: '테스터' });
+  expect((await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY })).data.ok).toBe(true);
+  expect((await ext.send({ type: 'graph:info' })).data.merged.theme, 'graph:info에 테마').toBe('neutral');
+
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'neutral');
+  await recordBoxClasses(page);
+  await altHover(page, '#p9');
+  await expect.poll(async () => (await boxLog(page)).some(e => e.loading && e.cls.includes('show')), { message: '로딩 말풍선이 보임' }).toBe(true);
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('축구로 보면');
+  const log = await boxLog(page);
+  expect(log.filter(e => e.loading).length).toBeGreaterThan(0);
+  expect(log.filter(e => e.cls.includes('t-maple')), '메이플 테마가 한 번도 보이면 안 됨').toEqual([]);
+  expect(log.every(e => e.cls.includes('t-neutral'))).toBe(true);
+});
+
+test('테마(T-108): content.js를 거치지 않아도 explain 포트의 stage 메시지마다 theme(중립)이 실린다', async ({ context, ext }) => {
+  await ext.send({ type: 'auth:login', nickname: '테스터' });
+  await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const r = await hook(page, 'explain-port', { sentence: '로딩지연테스트 테마 확인용 문장이에요.', word: '', context: '', pageTitle: 't', noCache: true });
+  expect(r.type).toBe('result');
+  expect(r.stageThemes.length).toBeGreaterThan(0);
+  expect(r.stageThemes.every(t => t === 'neutral'), JSON.stringify(r.stageThemes)).toBe(true);
+  expect(r.result.theme).toBe('neutral');
+});
+
+test('테마(T-108): 메이플 기본이면 로딩 말풍선도 t-maple (바뀌지 않음)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple');
+  await recordBoxClasses(page);
+  await altHover(page, '#p9');
+  await expect.poll(async () => (await boxLog(page)).some(e => e.loading), { message: '로딩 말풍선' }).toBe(true);
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('메이플스토리로 보면');
+  const log = await boxLog(page);
+  expect(log.every(e => e.cls.includes('t-maple')), JSON.stringify(log)).toBe(true);
+});
+
+test('테마(T-108): 페이지를 연 뒤 로그인해 중립 관심사로 바꿔도 새로고침 없이 로딩부터 t-neutral', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // 메이플 테마를 먼저 받아 둔 상태
+  await ext.send({ type: 'auth:login', nickname: '테스터' });
+  await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY });
+  await waitTheme(page, 'neutral'); // 세션·오버레이 키 변경으로 다시 받음
+  await recordBoxClasses(page);
+  await altHover(page, '#p9');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('축구로 보면');
+  const log = await boxLog(page);
+  expect(log.some(e => e.loading)).toBe(true);
+  expect(log.filter(e => e.cls.includes('t-maple')), JSON.stringify(log)).toEqual([]);
+});
+
+/* ───────── 여러 줄 문장 말풍선 위치 (T-109) ───────── */
+// #p10(좁은 칸, 여러 줄)의 줄 rect들과, 줄마다 가운데 글자 index
+const lineInfo = (page, sel = '#p10') => page.evaluate(s => {
+  const t = document.querySelector(s).firstChild;
+  const r = document.createRange();
+  const lines = [];
+  for (let i = 0; i < t.nodeValue.length; i++) {
+    r.setStart(t, i); r.setEnd(t, i + 1);
+    const b = r.getBoundingClientRect();
+    if (!b.width) continue;
+    let line = lines.find(l => Math.abs(l.top - b.top) < 4);
+    if (!line) lines.push(line = { top: b.top, bottom: b.bottom, idx: [] });
+    line.idx.push(i);
+  }
+  return lines.map(l => ({ top: l.top, bottom: l.bottom, mid: l.idx[Math.floor(l.idx.length / 2)] }));
+}, sel);
+// 말풍선 위치. 나타날 때 transform 애니메이션이 있어 style 값(배치 결과)을 읽는다
+const boxPos = page => page.evaluate(() => {
+  const box = document.getElementById('good-metaphor-host')?.shadowRoot.querySelector('.box');
+  if (!box || !box.style.top) return null;
+  const top = parseFloat(box.style.top);
+  return { top, bottom: top + box.offsetHeight, text: box.innerText };
+});
+// #p10의 2번째 줄이 뷰포트 y에 오도록 스크롤
+async function scrollLine2To(page, y, sel = '#p10') {
+  await page.evaluate(([target, s]) => {
+    const t = document.querySelector(s).firstChild;
+    const rects = (() => { const r = document.createRange(); r.selectNodeContents(t); return [...r.getClientRects()]; })();
+    window.scrollBy(0, rects[1].top - target);
+  }, [y, sel]);
+}
+
+test('말풍선 위치(T-109): 여러 줄 문장 2번째 줄에서 호버하면 그 줄 바로 아래, 결과 뒤에도 같은 줄 기준', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await scrollLine2To(page, 200);
+  const lines = await lineInfo(page);
+  expect(lines.length, '3줄 이상으로 감김').toBeGreaterThanOrEqual(3);
+  await altHover(page, '#p10', lines[1].mid);
+  // 로딩 중에도 2번째 줄 아래
+  await expect.poll(async () => { const p = await boxPos(page); return p && Math.abs(p.top - (lines[1].bottom + 8)) <= 3; }, { message: '로딩 말풍선이 2번째 줄 아래' }).toBe(true);
+  // 커서를 (보조키 없이) 다른 줄로 옮겨도 결과 뒤 재배치는 처음 줄 기준
+  const far = await pointOnChar(page, '#p10', lines.at(-1).mid);
+  await page.mouse.move(far.x, far.y);
+  await expect.poll(async () => (await boxPos(page))?.text ?? '').toContain('같은 구조예요');
+  const p = await boxPos(page);
+  expect(Math.abs(p.top - (lines[1].bottom + 8)), JSON.stringify({ p, lines })).toBeLessThanOrEqual(3);
+  expect(p.top).toBeLessThan(lines.at(-1).bottom);
+});
+
+test('말풍선 위치(T-109): 화면 아래쪽 줄에서 호버하면 그 줄 위로 뒤집는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await scrollLine2To(page, 800 - 70); // 뷰포트 높이 800, 2번째 줄이 맨 아래 근처
+  const lines = await lineInfo(page);
+  await altHover(page, '#p10', lines[1].mid);
+  await expect.poll(async () => (await boxPos(page))?.text ?? '').toContain('같은 구조예요');
+  await expect.poll(async () => {
+    const p = await boxPos(page);
+    return p && Math.abs(p.bottom - (lines[1].top - 8)) <= 3;
+  }, { message: '말풍선 bottom이 2번째 줄 top - 8' }).toBe(true);
+});
+
+test('말풍선 위치(T-109): 로딩 중 조금(40px) 스크롤해도 결과 뒤 재배치는 호버한 2번째 줄의 지금 위치 기준', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await scrollLine2To(page, 200, '#p11');
+  const lines = await lineInfo(page, '#p11');
+  expect(lines.length).toBeGreaterThanOrEqual(3);
+  // 줄 아래쪽 가장자리 근처를 호버해, 40px 스크롤 뒤 같은 y가 다음 줄에 걸리게 한다
+  const { x } = await pointOnChar(page, '#p11', lines[1].mid);
+  const y = lines[1].bottom - 2;
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  await expect.poll(async () => { const p = await boxPos(page); return p && Math.abs(p.top - (lines[1].bottom + 8)) <= 3; }, { message: '로딩 말풍선이 2번째 줄 아래' }).toBe(true);
+  // 가짜 LLM이 이 문장은 늦게 답한다(로딩지연테스트). 그 사이 40px 스크롤(닫히는 80px보다 적게)
+  await page.evaluate(() => window.scrollBy(0, 40));
+  await expect.poll(async () => (await boxPos(page))?.text ?? '', { timeout: 15_000 }).toContain('같은 구조예요');
+  const live = await lineInfo(page, '#p11');
+  expect(Math.abs(live[1].top - (lines[1].top - 40)), '스크롤이 실제로 됨').toBeLessThanOrEqual(1);
+  await expect.poll(async () => {
+    const p = await boxPos(page);
+    return p && Math.abs(p.top - (live[1].bottom + 8));
+  }, { message: '결과 뒤 말풍선 top ≈ 지금 2번째 줄 bottom + 8' }).toBeLessThanOrEqual(3);
+});
+
+/* ───────── iframe (T-111) ───────── */
+// page.html 맨 아래의 iframe. 마우스 좌표 = iframe 위치(테두리 0) + 프레임 안 글자 위치
+async function frameOf(page, frameSel) {
+  const el = page.locator(frameSel);
+  await el.scrollIntoViewIfNeeded();
+  const frame = await (await el.elementHandle()).contentFrame();
+  await frame.waitForSelector('p');
+  // content.js 는 document_idle 에 주입된다. 주입 전에 호버하면 무시되니 주입될 때까지 기다린다
+  await expect.poll(async () => (await hook(frame, 'content-loaded')).data, { message: `${frameSel} content.js 주입` }).toBe(true);
+  return { el, frame };
+}
+async function altHoverFrame(page, frameSel, sel, idx = 5) {
+  const { el, frame } = await frameOf(page, frameSel);
+  const box = await el.boundingBox();
+  const p = await pointOnChar(frame, sel, idx);
+  const x = box.x + p.x, y = box.y + p.y;
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  return frame;
+}
+
+test('iframe(T-111): 같은 출처 iframe 안 문장도 Alt+호버로 그 프레임 안에 말풍선, 최상위 문서에는 안 뜸', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const frame = await altHoverFrame(page, '#fr-same', '#fa');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('같은출처프레임테스트 변동금리 대출은'))).toBe(true);
+  const hl = await frame.evaluate(() => [...CSS.highlights.get('good-metaphor-hl')][0].toString());
+  expect(hl).toContain('같은출처프레임테스트');
+  expect(await tooltip(page), '최상위 문서에는 말풍선 없음').toBeFalsy();
+});
+
+serverTest('iframe(T-111): 다른 출처 iframe 안 문장도 동작, 최상위 호스트가 제외면 iframe 문장도 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  let frame = await altHoverFrame(page, '#fr-cross', '#fb');
+  expect(new URL(frame.url()).hostname).toBe('localhost');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('다른출처프레임테스트 API 서버는'))).toBe(true);
+
+  // 최상위(127.0.0.1)만 제외. iframe 호스트(localhost)는 목록에 없다
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  await expect.poll(() => tooltip(frame), { message: '최상위가 제외되면 iframe 말풍선도 닫힘' }).toBe('');
+  await page.reload();
+  const before = sentCount();
+  frame = await altHoverFrame(page, '#fr-cross', '#fb', 8);
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), 'iframe 말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '최상위가 제외면 iframe 문장도 보내지 않음').toBe(0);
+});
+
+serverTest('iframe 이중 방어(T-111): content.js를 건너뛴 iframe 요청도 payload.topHost 가 제외면 background가 막는다', async ({ context, ext }) => {
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { frame } = await frameOf(page, '#fr-cross');
+  const q = { sentence: '프레임이중방어테스트 변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', word: '', context: '', pageTitle: 't', noCache: true, topHost: '127.0.0.1' };
+  const before = sentCount();
+  expect(await hook(frame, 'explain-port', q)).toMatchObject({ ok: false, type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+  expect(await hook(frame, 'explain-msg', q)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(await hook(frame, 'feedback', q)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(sentCount() - before, '요청 0').toBe(0);
+
+  // topHost 를 속여도(example.com) 탭 주소(tab.url, 127.0.0.1 호스트 권한으로 옴)가 제외면 막는다
+  expect(await hook(frame, 'explain-port', { ...q, topHost: 'example.com' })).toMatchObject({ ok: false, type: 'error', error: '이 사이트에서는 꺼져 있어요.' });
+  // topHost 를 안 실은 서브프레임 요청은 실패 시 닫힘
+  const { topHost: _omit, ...noTop } = q;
+  expect(await hook(frame, 'explain-msg', noTop)).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect(sentCount() - before, '요청 0').toBe(0);
+
+  // 제외를 풀면 같은 프레임에서 정상(topHost 는 실어야 함)
+  await ext.setSettings({ excludedHosts: [] });
+  const okRes = await hook(frame, 'explain-port', q);
+  expect(okRes.type).toBe('result');
+  expect(sentCount() - before).toBeGreaterThan(0);
+});
+
+test('iframe(T-111): 서브프레임은 시작 시 테마를 미리 받지 않고, 처음 보조키 호버 때 받는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // 최상위는 지금처럼 시작 시 받음
+  const { frame } = await frameOf(page, '#fr-cross');
+  expect(await contentTheme(frame), '서브프레임은 아직 graph:info 를 보내지 않음').toBeNull();
+  await altHoverFrame(page, '#fr-cross', '#fb');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  await waitTheme(frame, 'maple');
+});
+
+serverTest('iframe(T-111): 최상위 호스트를 알 수 없는 프레임(가려진 출처·referrer 없음)은 실패 시 닫힘, 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/masked.html');
+  const { frame } = await frameOf(page, '#fr-masked');
+  // 전제: 크롬이 출처를 가리고 referrer 도 없으며, content.js 는 이 프레임에 주입돼 있다
+  expect(await frame.evaluate(() => ({ ao: [...location.ancestorOrigins], ref: document.referrer }))).toEqual({ ao: ['null'], ref: '' });
+  expect((await hook(frame, 'content-loaded')).data, 'content.js 주입됨').toBe(true);
+  const before = sentCount();
+  await altHoverFrame(page, '#fr-masked', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '요청 0').toBe(0);
+});
+
+test('피드백 👍(T-111): rerun 이 없어도 record.topHost 가 제외면 막고, 저장되는 기록에는 topHost 를 남기지 않는다', async ({ context, ext }) => {
+  await ext.setSettings({ excludedHosts: ['127.0.0.1'] });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { frame } = await frameOf(page, '#fr-cross');
+  const getFb = () => ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback || []);
+  const n0 = (await getFb()).length;
+  expect(await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: '127.0.0.1' })).toMatchObject({ ok: false, error: '이 사이트에서는 꺼져 있어요.' });
+  expect((await getFb()).length).toBe(n0);
+
+  await ext.setSettings({ excludedHosts: [] });
+  const ok = await hook(frame, 'feedback-up', { sentence: '피드백탑호스트테스트 문장이에요.', topHost: '127.0.0.1' });
+  expect(ok.ok).toBe(true);
+  const recs = await getFb();
+  expect(recs.length).toBe(n0 + 1);
+  expect(recs.some(r => 'topHost' in r), '기록에 topHost 없음').toBe(false);
+});
+
+/* ───────── 열린 Shadow DOM (T-111) ───────── */
+// 경로 [호스트 선택자, (shadow 안) 선택자, ...]를 따라 내려가 마지막 요소(또는 shadow root)의 첫 텍스트 노드 idx 글자 좌표
+async function pointInShadow(page, steps, idx) {
+  return page.evaluate(([steps, i]) => {
+    // '@shadow' = 지금 요소의 shadowRoot, '#closed' = 페이지가 쥔 닫힌 root(window.__closedRoot)
+    let scope = document, node = null;
+    for (const s of steps) {
+      if (s === '#closed') node = window.__closedRoot;
+      else if (s === '@shadow') node = node.shadowRoot;
+      else node = scope.querySelector(s);
+      scope = node;
+    }
+    (node.host ?? node).scrollIntoView({ block: 'center' }); // shadow root 는 호스트를 스크롤
+    const t = node.firstChild;
+    const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 1);
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  }, [steps, idx]);
+}
+async function altHoverAt(page, { x, y }) {
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+}
+const hlText = page => page.evaluate(() => { const h = CSS.highlights.get('good-metaphor-hl'); return h ? [...h][0].toString() : null; });
+
+test('Shadow DOM(T-111): 열린 shadow 안 문장 → 그 문장만 요청, 강조 규칙은 adoptedStyleSheets 에 한 번만 덧붙고 페이지 시트는 보존', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('열린섀도테스트 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.'))).toBe(true);
+  expect(calls.some(c => c.user.includes('두번째 문장이에요')), '문장 하나만').toBe(false);
+  expect(await hlText(page)).toBe('열린섀도테스트 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  const sheets = () => page.evaluate(() => {
+    const root = document.getElementById('sh-open').shadowRoot;
+    return root.adoptedStyleSheets.map(s => [...s.cssRules].map(r => r.cssText).join(' '));
+  });
+  let list = await sheets();
+  expect(list).toHaveLength(2);
+  expect(list[0]).toContain('rgb(0, 0, 200)'); // 페이지 시트가 그대로 앞에
+  expect(list[1]).toContain('::highlight(good-metaphor-hl)');
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('sh-open').shadowRoot.getElementById('so')).color)).toBe('rgb(0, 0, 200)');
+
+  // 같은 shadow 의 다른 문장을 다시 호버해도 시트는 늘지 않는다
+  await page.keyboard.press('Escape');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 50));
+  await expect.poll(() => hlText(page)).toBe('두번째 문장이에요.');
+  expect(await sheets()).toHaveLength(2);
+  // 페이지가 adoptedStyleSheets 를 우리 시트 없이 갈아 끼우면, 다음 호버에서 다시 덧붙인다(그래도 하나)
+  await page.evaluate(() => { const r = document.getElementById('sh-open').shadowRoot; r.adoptedStyleSheets = [r.adoptedStyleSheets[0]]; });
+  expect(await sheets()).toHaveLength(1);
+  await page.keyboard.press('Escape');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => hlText(page)).toContain('열린섀도테스트');
+  list = await sheets();
+  expect(list).toHaveLength(2);
+  expect(list.filter(t => t.includes('::highlight(good-metaphor-hl)'))).toHaveLength(1);
+});
+
+test('Shadow DOM(T-111): shadow root 바로 아래 텍스트 노드(parentElement 없음)도 동작', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-text', '@shadow'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('섀도직속텍스트테스트 고정금리는'))).toBe(true);
+  expect(await hlText(page)).toBe('섀도직속텍스트테스트 고정금리는 약정 기간 동안 금리가 바뀌지 않는다.');
+});
+
+test('Shadow DOM(T-111): shadow 안 shadow(중첩) 문장도 동작', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHoverAt(page, await pointInShadow(page, ['#sh-nested', '@shadow', '#inner-host', '@shadow', '#sn'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.some(c => c.user.includes('중첩섀도테스트 API 서버는'))).toBe(true);
+  expect(await hlText(page)).toBe('중첩섀도테스트 API 서버는 분당 요청 수에 상한을 두어 자원 독점을 막는다.');
+});
+
+serverTest('Shadow DOM(T-111): 닫힌 shadow 안 문장은 요청 0(접근 불가)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // content.js 가 준비된 뒤 호버
+  const before = sentCount();
+  await altHoverAt(page, await pointInShadow(page, ['#closed', '#sc'], 5));
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('닫힌섀도테스트'))).toBe(false);
+});
+
+serverTest('비밀번호 폼 × Shadow DOM(T-111): 비밀번호 칸이 있는 폼 안 호스트의 shadow 문장, shadow 안 폼 문장 모두 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple');
+  const before = sentCount();
+  // (f) light DOM <form><input type=password><호스트> → 호스트의 열린 shadow 안 문장
+  await altHoverAt(page, await pointInShadow(page, ['#sh-inform', '@shadow', '#sif'], 5));
+  // (g) shadow 안 <form> 에 문장 + 비밀번호 칸
+  await altHoverAt(page, await pointInShadow(page, ['#sh-form', '@shadow', '#sf'], 5));
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '말풍선 없음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('폼안섀도테스트') || c.user.includes('섀도폼테스트'))).toBe(false);
+
+  // 같은 페이지의 보통 shadow 문장은 정상(검사가 모든 shadow 를 막는 게 아님)
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+});
+
+test('말풍선 닫은 뒤(T-111 CI): 숨은 말풍선 자리 아래 글자도 바로 호버된다(투명 상자가 커서를 가로채지 않음)', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  await page.keyboard.press('Escape');
+  await expect.poll(() => tooltip(page)).toBe('');
+  // 닫힌 말풍선이 있던 자리(.box rect) 안에 들어오는 #p1 글자를 고른다(말풍선은 호버한 줄 바로 아래에 뜬다)
+  const target = await page.evaluate(() => {
+    const r = document.getElementById('good-metaphor-host').shadowRoot.querySelector('.box').getBoundingClientRect();
+    const t = document.querySelector('#p1').firstChild, g = document.createRange();
+    for (let i = 0; i < t.length; i++) {
+      g.setStart(t, i); g.setEnd(t, i + 1);
+      const b = g.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2;
+      if (b.width && x > r.left + 4 && x < r.right - 4 && y > r.top + 2 && y < r.bottom - 2) return { i, x, y };
+    }
+    return null;
+  });
+  expect(target, '닫힌 말풍선 자리 아래에 #p1 글자가 있어야 재현됨').not.toBeNull();
+  await altHoverAt(page, target);
+  await expect.poll(() => hlText(page)).toBe('반면 고정금리는 약정 기간 동안 금리가 바뀌지 않는다.');
+});
+
+/* ───────── iframe 사용감 (T-147) ───────── */
+// #sh-open 을 화면 위쪽(top 40px)에 두면 그 아래 fr-same 이 한 화면에 들어온다(스크롤로 닫히는 것과 구분)
+async function topSentencePoint(page) {
+  return page.evaluate(() => {
+    window.scrollTo(0, window.scrollY + document.getElementById('sh-open').getBoundingClientRect().top - 40);
+    const t = document.getElementById('sh-open').shadowRoot.querySelector('#so').firstChild;
+    const r = document.createRange(); r.setStart(t, 5); r.setEnd(t, 6);
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  });
+}
+// 프레임 안 글자의 페이지 좌표(스크롤하지 않음)
+async function framePoint(page, frameSel, sel, idx = 5) {
+  const { el, frame } = await frameOf(page, frameSel);
+  const box = await el.boundingBox();
+  const p = await pointOnChar(frame, sel, idx);
+  return { frame, x: box.x + p.x, y: box.y + p.y };
+}
+
+test('iframe(T-147): 커서가 iframe 문장에 있을 때 Alt → 요청은 iframe 문장뿐, 최상위의 이전 커서 자리 문장은 안 보냄', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await frameOf(page, '#fr-same');
+  const top = await topSentencePoint(page);
+  // 최상위 문장 위를 보조키 없이 지나간다(최상위 content.js 의 마지막 좌표가 이 문장이 됨)
+  await page.mouse.move(top.x, top.y);
+  await page.waitForTimeout(200);
+  expect(await tooltip(page), '보조키 없이는 안 뜸').toBeFalsy();
+  const { frame, x, y } = await framePoint(page, '#fr-same', '#fa');
+  const from = calls.length; // calls 는 파일 전체에서 쌓이므로 이 테스트에서 생긴 것만 본다
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt'); // 포커스는 최상위 문서라 keydown 은 최상위로 간다
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  await page.waitForTimeout(800);
+  const mine = calls.slice(from);
+  expect(mine.filter(c => c.user.includes('같은출처프레임테스트')).length, 'iframe 문장 요청').toBeGreaterThan(0);
+  expect(mine.some(c => c.user.includes('열린섀도테스트')), '최상위 이전 자리 문장 요청 0').toBe(false);
+  expect(await tooltip(page), '최상위 말풍선 없음').toBeFalsy();
+  expect(await hlText(page), '최상위 강조 없음').toBeNull();
+});
+
+test('iframe(T-147): 최상위 말풍선(결과) → iframe 문장 Alt+호버 → 최상위 말풍선은 닫히고 iframe 말풍선이 뜬다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await frameOf(page, '#fr-same');
+  await altHoverAt(page, await topSentencePoint(page));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  const scrollY = await page.evaluate(() => window.scrollY);
+  const { frame, x, y } = await framePoint(page, '#fr-same', '#fb');
+  // 전제: iframe 글자가 최상위 말풍선에 가려지지 않는다(가려지면 호버가 말풍선으로 감)
+  const boxRect = await page.evaluate(() => document.getElementById('good-metaphor-host').shadowRoot.querySelector('.box').getBoundingClientRect().toJSON());
+  expect(y > boxRect.bottom || x > boxRect.right || x < boxRect.left, 'iframe 글자는 최상위 말풍선 밖').toBe(true);
+  await page.mouse.move(x, y);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(x + 1, y);
+  await page.keyboard.up('Alt');
+  await expect.poll(() => tooltip(frame)).toContain('같은 구조예요');
+  await expect.poll(() => tooltip(page), { message: '최상위 말풍선은 닫힘' }).toBe('');
+  expect(await hlText(page), '최상위 강조도 지움').toBeNull();
+  expect(await page.evaluate(() => window.scrollY), '스크롤로 닫힌 게 아님').toBe(scrollY);
+  // 보낸 프레임 자신의 말풍선은 닫히지 않는다(결과가 뜬 뒤에도 그대로)
+  await page.waitForTimeout(500);
+  expect(await tooltip(frame)).toContain('같은 구조예요');
+});
+
+serverTest('iframe(T-147): 작은(200×120) iframe 문장은 Alt+호버해도 요청 0·말풍선 없음', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const { frame } = await frameOf(page, '#fr-tiny');
+  expect(await frame.evaluate(() => [innerWidth, innerHeight]), '전제: 프레임 크기').toEqual([200, 120]);
+  const before = sentCount();
+  await altHoverFrame(page, '#fr-tiny', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(await tooltip(page), '최상위에도 없음').toBeFalsy();
+});
+
+/* ───────── 프레임·shadow 보호 빈틈 (T-148) ───────── */
+serverTest('iframe(T-148): 부모 문서의 비밀번호 폼 안 같은 출처 iframe 문장은 요청 0, 부모 폼에 나중에 칸이 생겨도 막고, 폼 밖 iframe 은 정상', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/pwframe.html');
+  const before = sentCount();
+  const from = calls.length; // calls 는 파일 전체에서 쌓인다(앞 테스트도 #fa 문장을 보냄). 이 테스트에서 생긴 것만 본다
+  const frame = await altHoverFrame(page, '#fr-pw', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(frame), '말풍선 없음').toBeFalsy();
+  expect(await frame.evaluate(() => CSS.highlights.has('good-metaphor-hl')), '강조도 없음').toBe(false);
+  expect(sentCount() - before, '부모 비밀번호 폼 안 iframe 문장은 보내지 않음').toBe(0);
+
+  // 시작 때는 칸이 없던 부모 폼에 비밀번호 칸이 생기면 다음 트리거에서 다시 검사해 막는다
+  await frameOf(page, '#fr-late');
+  await page.evaluate(() => { const i = document.createElement('input'); i.type = 'password'; document.getElementById('late-form').appendChild(i); });
+  const late = await altHoverFrame(page, '#fr-late', '#fa');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(late), '나중에 생긴 칸도 막음').toBeFalsy();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.slice(from).some(c => c.user.includes('같은출처프레임테스트')), '그 문장 요청 없음').toBe(false);
+
+  // 같은 페이지의 폼 밖 iframe 은 정상(모든 프레임을 막는 게 아님)
+  const ok = await altHoverFrame(page, '#fr-ok', '#fb');
+  await expect.poll(() => tooltip(ok)).toContain('같은 구조예요');
+});
+
+serverTest('비밀번호 폼(T-148): 폼 안 호스트의 열린 shadow(2겹) 안에만 비밀번호 칸이 있어도 폼의 light DOM 문장은 요청 0', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple'); // content.js 가 준비된 뒤 호버
+  await page.locator('#pdeep').scrollIntoViewIfNeeded();
+  const before = sentCount();
+  await altHover(page, '#pdeep');
+  await page.waitForTimeout(1500);
+  expect(await tooltip(page), '말풍선 없음').toBeFalsy();
+  expect(await hlText(page), '강조 없음').toBeNull();
+  expect(sentCount() - before, '요청 0').toBe(0);
+  expect(calls.some(c => c.user.includes('깊은비밀번호테스트'))).toBe(false);
+});
+
+test('테마(T-148): 중립 관심사면 서브프레임 첫 호버 로딩 말풍선부터 t-neutral, t-maple은 한 번도 없음', async ({ context, ext }) => {
+  await ext.send({ type: 'auth:login', nickname: '테스터' });
+  expect((await ext.send({ type: 'overlay:save', overlay: NEUTRAL_OVERLAY })).data.ok).toBe(true);
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  // #fc(셋째 문단)가 잘리지 않게 프레임을 키운다(크기만 바뀌고 다시 로드되지 않음)
+  await page.evaluate(() => { document.getElementById('fr-same').style.height = '320px'; });
+  const { frame } = await frameOf(page, '#fr-same');
+  expect(await contentTheme(frame), '전제: 서브프레임은 아직 테마를 모름').toBeNull();
+  await recordBoxClasses(frame);
+  await altHoverFrame(page, '#fr-same', '#fc');
+  await expect.poll(async () => (await boxLog(frame)).some(e => e.loading && e.cls.includes('show')), { message: '로딩 말풍선이 보임' }).toBe(true);
+  await expect.poll(() => tooltip(frame), { timeout: 15_000 }).toContain('축구로 보면');
+  const log = await boxLog(frame);
+  expect(log.filter(e => e.cls.includes('t-maple')), JSON.stringify(log)).toEqual([]);
+  expect(log.filter(e => e.cls.includes('box ')).every(e => e.cls.includes('t-neutral')), JSON.stringify(log)).toBe(true);
+});
+
+test('Shadow DOM(T-148): 말풍선을 닫으면 그 root 에서 우리 강조 시트만 빠지고(페이지 시트 보존), 다시 호버하면 하나만 다시 붙는다', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const sheets = () => page.evaluate(() => document.getElementById('sh-open').shadowRoot.adoptedStyleSheets.map(s => [...s.cssRules].map(r => r.cssText).join(' ')));
+  const ours = list => list.filter(t => t.includes('::highlight(good-metaphor-hl)')).length;
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(ours(await sheets())).toBe(1);
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => ours(await sheets()), { message: '닫으면 우리 시트 없음' }).toBe(0);
+  const left = await sheets();
+  expect(left).toHaveLength(1);
+  expect(left[0], '페이지 시트는 그대로').toContain('rgb(0, 0, 200)');
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('sh-open').shadowRoot.getElementById('so')).color)).toBe('rgb(0, 0, 200)');
+
+  await altHoverAt(page, await pointInShadow(page, ['#sh-open', '@shadow', '#so'], 5));
+  await expect.poll(() => hlText(page)).toContain('열린섀도테스트');
+  const again = await sheets();
+  expect(ours(again), '다시 호버하면 하나').toBe(1);
+  expect(again).toHaveLength(2);
+});
+
+/* ───────────── 출처·검수 날짜와 제보 제외 (T-118, D-3) ───────────── */
+const COMMON = loadCommonGraphFromDisk();
+const verifiedYM = label => COMMON.nodes.find(n => n.label === label)?.verifiedAt?.slice(0, 7);
+// "사실이 틀렸어요" 제보(👎 + reason fact). 문장마다 하나씩
+const reportFact = (ext, nodeId, sentence) => ext.send({ type: 'feedback', record: { sentence, nodeId, tagId: null, vote: 'down', reason: 'fact' } });
+const REPORT_SENTENCES = ['제보 문장 하나예요.', '제보 문장 둘이에요.', '제보 문장 셋이에요.'];
+
+test('검수 날짜(T-118): 말풍선 근거 옆에 공통 노드의 "검수 YYYY-MM"', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const label = await evidence(page);
+  const ym = verifiedYM(label);
+  expect(ym, `근거 라벨 "${label}"이 공통 그래프에 있고 verifiedAt이 있어요`).toMatch(/^\d{4}-\d{2}$/);
+  expect(await tooltip(page)).toContain(`검수 ${ym}`);
+});
+
+test('제보 제외(T-118): 같은 공통 노드에 서로 다른 문장 fact 제보 3건이면 그 노드가 후보·근거에서 빠진다', async ({ ext }) => {
+  const q = { sentence: '중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.', word: '', context: '', pageTitle: 't' };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  const x = r1.data.evidence.nodeId;
+  expect(r1.data.evidence.verifiedAt).toBe(COMMON.nodes.find(n => n.id === x).verifiedAt);
+  expect(r1.data.debug.feedback.reported).toEqual([]);
+  // 같은 문장으로 3번은 1건
+  for (let i = 0; i < 3; i++) await reportFact(ext, x, REPORT_SENTENCES[0]);
+  await reportFact(ext, x, REPORT_SENTENCES[1]);
+  const r2 = await ext.send({ type: 'explain', ...q });
+  expect(r2.data.evidence.nodeId, '2건은 아직 그대로').toBe(x);
+  await reportFact(ext, x, REPORT_SENTENCES[2]);
+  // 캐시 없이 다시 묻지 않아도(같은 문장) 바뀐 결과: 제보 제외가 결과 캐시 키에 들어간다
+  const r3 = await ext.send({ type: 'explain', ...q });
+  expect(r3.data.cached).toBeFalsy();
+  expect(r3.data.debug.feedback.reported).toEqual([x]);
+  expect(r3.data.debug.candidates.map(c => c.id)).not.toContain(x);
+  expect(r3.data.evidence?.nodeId).not.toBe(x);
+});
+
+serverTest('제보 제외(T-118): 서버 결과 근거가 제보 제외 노드면 로컬로 대체(reason reported)', async ({ ext }) => {
+  const q = { sentence: '서버정상 제보 제외 확인 문장이에요.', word: '', context: '', pageTitle: 't', noCache: true };
+  const r1 = await ext.send({ type: 'explain', ...q });
+  expect(r1.data.source).toBe('server');
+  expect(r1.data.evidence.nodeId).toBe('starforce');
+  for (const s of REPORT_SENTENCES) await reportFact(ext, 'starforce', s);
+  const r2 = await ext.send({ type: 'explain', ...q });
+  expect(r2.data.source).toBe('local');
+  expect(r2.data.debug.server).toEqual({ used: false, reason: 'reported' });
+  expect(r2.data.debug.candidates.map(c => c.id)).not.toContain('starforce');
+});
+
+/* ───────── AI 초안 + 검수 (T-301) ───────── */
+const reviewNode = (page, label) => page.locator('#reviewList > li', { has: page.locator('.rv-label', { hasText: label }) });
+const draftCalls = since => calls.slice(since).filter(c => c.system.includes('개념 노드 목록으로 정리'));
+const TRANSFER_SENTENCE = '인기 선수는 원하는 구단이 많아 이적료가 오른다.';
+const openDraftPanel = async page => {
+  await expect(page.locator('#draftPanel')).toBeVisible();
+  if (!(await page.locator('#draftPanel').evaluate(d => d.open))) await page.locator('#draftPanel > summary').click();
+};
+
+test('AI 초안(T-301): 로그아웃이면 패널·메시지 모두 막힘 → 로그인 → 공통 위에 초안 → 검수 대기 노드는 후보에 없음 → 확인·저장하면 후보', async ({ ext }) => {
+  const { page, send } = ext;
+  await expect(page.locator('#loggedOut')).toBeVisible();
+  await expect(page.locator('#draftPanel')).toBeHidden();
+  const denied = await send({ type: 'graph:draft', name: '축구', mode: 'add' });
+  expect(denied.ok).toBe(false);
+  expect(denied.error).toBe('로그인이 필요해요.');
+
+  await send({ type: 'auth:login', nickname: '초안' });
+  await page.reload();
+  await openDraftPanel(page);
+  await expect(page.locator('#draftMode input[value="add"]')).toBeChecked();
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('관심사 이름을 1~30자로 적어 주세요.');
+
+  const since = calls.length;
+  await page.fill('#draftName', '축구');
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toContainText('초안 4개를 검수 대기에 넣고 저장했어요.');
+  await expect(page.locator('#draftStatus')).toContainText('10개보다 적어요');
+  // 프롬프트: 기존 체인(가짜 LLM) 한 번, 태그 목록과 규칙
+  const [call] = draftCalls(since);
+  expect(draftCalls(since)).toHaveLength(1);
+  expect(call.user).toContain('관심사: 축구');
+  expect(call.user).toContain('threshold_req');
+  expect(call.system).toContain('목록 밖 태그는 쓰지 않는다');
+
+  // 검수 대기: 4개, 내 노드 목록에는 없음. 뺀 항목 안내(금칙어 자체는 안 보임), 숫자 경고
+  await expect(page.locator('#reviewBox')).toBeVisible();
+  await expect(page.locator('#reviewList > li')).toHaveCount(4);
+  await expect(page.locator('#myNodeList > li')).toHaveCount(0);
+  await expect(page.locator('#draftDropped')).toContainText('없는 태그 개념: 목록에 있는 태그가 없어요.');
+  await expect(page.locator('#draftDropped')).toContainText('금칙 사실 개념: 쓸 수 없는 표현이 든 사실을 뺐어요.');
+  await expect(page.locator('#draftDropped')).not.toContainText(BLOCKED_IN_ANALOGY);
+  await expect(reviewNode(page, '경기 시간').locator('.rv-warn')).toHaveCount(1);
+  await expect(reviewNode(page, '이적 시장').locator('.rv-warn')).toHaveCount(0);
+
+  // 저장됨: draft·factsReviewed, 금칙어 사실은 빠짐, 목록 밖 태그는 빠짐
+  let ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.useCommon).toBe(true);
+  expect(ov.nodes.map(n => n.label)).toEqual(['오프사이드 규칙', '이적 시장', '경기 시간', '금칙 사실 개념']);
+  const transfer = ov.nodes.find(n => n.label === '이적 시장');
+  expect(transfer).toMatchObject({ draft: true, factsReviewed: [false], tags: ['market_price', 'scarcity_value'] });
+  expect(transfer.id).toMatch(/^u:/);
+  expect(ov.nodes.find(n => n.label === '금칙 사실 개념')).toMatchObject({ facts: ['이 사실은 남는다.'], tags: ['role_division'] });
+
+  // 검수 전: 검색 후보·근거·내 노드 수 어디에도 없다(규칙 1)
+  let r = await send({ type: 'explain', sentence: TRANSFER_SENTENCE, noCache: true });
+  expect(r.data.debug.candidates.map(c => c.id)).not.toContain(transfer.id);
+  expect(r.data.evidence?.nodeId ?? null).not.toBe(transfer.id);
+  expect((await send({ type: 'graph:info' })).data.merged.userNodes).toBe(0);
+
+  // 사실 하나씩: 확인 → "확인됨", 남은 사실 지우기 → 모두 확인된 셈이라 내 노드로
+  const off = reviewNode(page, '오프사이드 규칙');
+  await off.locator('.rv-fact').nth(0).locator('.rv-ok').click();
+  await expect(off.locator('.rv-fact').nth(0)).toContainText('확인됨');
+  await expect(page.locator('#overlayStatus')).toHaveText('바뀐 내용을 저장하세요.');
+  await off.locator('.rv-fact').nth(1).locator('.rv-del').click();
+  await expect(page.locator('#reviewList > li')).toHaveCount(3);
+  await expect(page.locator('#myNodeList > li')).toHaveCount(1);
+
+  // 노드 모두 확인
+  await reviewNode(page, '이적 시장').locator('.rv-all').click();
+  await expect(myNode(page, transfer.id)).toBeVisible();
+  // 수정 폼(T-202)으로 사실을 고치면 확인된 것으로
+  await reviewNode(page, '경기 시간').locator('.rv-edit').click();
+  await expect(page.locator('#nfApply')).toHaveText('수정 반영');
+  await page.fill('#nfFacts', '한 경기는 전반과 후반으로 나뉜다.');
+  await page.click('#nfApply');
+  await expect(page.locator('#reviewList > li')).toHaveCount(1);
+  // 노드 지우기
+  page.once('dialog', d => { expect(d.message()).toBe('이 노드를 지울까요?'); d.accept(); });
+  await reviewNode(page, '금칙 사실 개념').locator('.rv-del-node').click();
+  await expect(page.locator('#reviewBox')).toBeHidden();
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+
+  ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes.map(n => n.label)).toEqual(['오프사이드 규칙', '이적 시장', '경기 시간']);
+  for (const n of ov.nodes) {
+    expect(n.draft, n.label).toBeUndefined();
+    expect(n.factsReviewed, n.label).toBeUndefined();
+  }
+  expect(ov.nodes[0].facts).toEqual([DRAFT_NODES[0].facts[0]]);
+  expect(ov.nodes[2].facts).toEqual(['한 경기는 전반과 후반으로 나뉜다.']);
+
+  // 검수 뒤: 다음 검색 후보에 나온다
+  r = await send({ type: 'explain', sentence: TRANSFER_SENTENCE, noCache: true });
+  expect(r.data.debug.candidates.map(c => c.id)).toContain(transfer.id);
+  expect((await send({ type: 'graph:info' })).data.merged.userNodes).toBe(3);
+});
+
+test('AI 초안(T-301): 새 관심사로 시작 → 기존 노드가 있으면 더할지 묻고, useCommon false·domain·"(으)로 치면"·중립 테마', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '새관심사' });
+  const old = { id: 'u:old', label: '기존 노드', facts: ['기존 사실이다.'], tags: ['cooldown'] };
+  expect((await send({ type: 'overlay:save', overlay: { nodes: [old] } })).data.ok).toBe(true);
+  await page.reload();
+  await openDraftPanel(page);
+  await page.fill('#draftName', '원신');
+  await page.locator('#draftMode label', { hasText: '새 관심사로 시작' }).click();
+
+  // 취소하면 호출도 변경도 없다
+  let since = calls.length;
+  page.once('dialog', d => { expect(d.message()).toBe('기존 내 노드 1개가 있어요. 초안을 더할까요?'); d.dismiss(); });
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('초안 만들기를 그만뒀어요.');
+  expect(draftCalls(since)).toHaveLength(0);
+  expect((await send({ type: 'overlay:get' })).data.useCommon).toBe(true);
+
+  since = calls.length;
+  page.once('dialog', d => d.accept());
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toContainText('초안 4개를 검수 대기에 넣고 저장했어요.');
+  expect(draftCalls(since)).toHaveLength(1);
+  let ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov).toMatchObject({ useCommon: false, domain: '원신', analogyPrefix: '원신으로 치면', theme: 'neutral' });
+  expect(ov.nodes[0]).toEqual(old); // 덮어쓰지 않고 더한다
+  expect(ov.nodes.filter(n => n.draft)).toHaveLength(4);
+  await expect(page.locator('input[name=useCommon][value="false"]')).toBeChecked();
+  await expect(page.locator('#commonNodesBox')).toBeHidden();
+  expect((await send({ type: 'graph:info' })).data.merged).toMatchObject({ domain: '원신', theme: 'neutral', usesCommon: false, nodes: 1 });
+
+  await reviewNode(page, '이적 시장').locator('.rv-all').click();
+  await page.click('#saveOverlay');
+  await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
+  const transfer = (await send({ type: 'overlay:get' })).data.nodes.find(n => n.label === '이적 시장');
+  const r = await send({ type: 'explain', sentence: TRANSFER_SENTENCE, noCache: true });
+  expect(r.data.theme).toBe('neutral');
+  expect(r.data.domain).toBe('원신');
+  expect(r.data.debug.candidates.map(c => c.id)).toContain(transfer.id);
+  expect(r.data.debug.candidates.every(c => c.source === 'user')).toBe(true);
+});
+
+test('AI 초안(T-301): 데모 제공자면 LLM 없이 고정 초안, 이름이 30자를 넘으면 거절', async ({ ext }) => {
+  const { send, setSettings } = ext;
+  await send({ type: 'auth:login', nickname: '데모' });
+  await setSettings({ provider: 'demo' });
+  const since = calls.length;
+  const r = await send({ type: 'graph:draft', name: '축구', mode: 'add' });
+  expect(r.ok).toBe(true);
+  expect(r.data.nodes.length).toBeGreaterThanOrEqual(10);
+  expect(r.data.nodes.every(n => n.draft === true && n.id.startsWith('u:'))).toBe(true);
+  expect(calls.length).toBe(since);
+  const long = await send({ type: 'graph:draft', name: '가'.repeat(31), mode: 'add' });
+  expect(long.ok).toBe(false);
+  expect(long.error).toBe('관심사 이름을 1~30자로 적어 주세요.');
+});
+
+test('AI 초안 수정 1회차(T-301): 저장 안내 한 줄, 금칙어 이름은 화면·메시지 모두 거절, 전체 마감을 넘기면 정중한 오류', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '마감' });
+  await page.reload();
+  await openDraftPanel(page);
+  await expect(page.locator('#draftPanel')).toContainText('초안 만들기를 누르면 검수 대기에 넣고 바로 저장해요.');
+
+  let since = calls.length;
+  await page.fill('#draftName', `${BLOCKED_IN_ANALOGY} 게임`);
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('이 이름은 쓸 수 없어요.');
+  const bad = await send({ type: 'graph:draft', name: `${BLOCKED_IN_ANALOGY} 게임`, mode: 'new' });
+  expect(bad.ok).toBe(false);
+  expect(bad.error).toBe('이 이름은 쓸 수 없어요.');
+  expect(draftCalls(since)).toHaveLength(0);
+
+  since = calls.length;
+  await page.fill('#draftName', '초안지연테스트');
+  const t0 = Date.now();
+  await page.click('#draftRun');
+  await expect(page.locator('#draftStatus')).toHaveText('초안을 만드는 데 시간이 너무 오래 걸렸어요. 다시 시도해 주세요.', { timeout: 10_000 });
+  expect(Date.now() - t0).toBeLessThan(5500); // 가짜 LLM(6초)을 기다리지 않고 마감(2.5초)에 끝난다
+  expect(draftCalls(since)).toHaveLength(1);
+  expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
+  await expect(page.locator('#draftRun')).toBeEnabled();
+});
+
+/* ───────── 공통 관심사 선택: 메이플 / 식당 (T-302) ───────── */
+const RESTAURANT_NO_MATCH = '이건 식당으로도 비유가 안 되네요.';
+const MAPLE_NO_MATCH = '메이플스토리에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.';
+const RESTAURANT_NODE_IDS = JSON.parse(readFileSync('extension/data/common/restaurant.json', 'utf8')).nodes.map(n => n.id);
+
+test('관심사(T-302): 로그아웃 상태에서 팝업으로 식당 → "식당으로 비유하자면"·t-neutral·식당 근거·식당 비유 없음 문구, 설정 화면으로 메이플로 되돌리기', async ({ context, ext, extId }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await waitTheme(page, 'maple');
+
+  // 팝업: 관심사 두 칸, 기본은 메이플
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await expect(popup.locator('input[name=interest][value=maplestory]')).toBeChecked();
+  await popup.locator('label:has(input[name=interest][value=restaurant])').click(); // 세그먼트 라디오는 숨겨 두고 라벨을 누른다
+  await expect.poll(() => ext.page.evaluate(async () => (await chrome.storage.local.get('settings')).settings?.interest)).toBe('restaurant');
+  await expect(popup.locator('#domain')).toHaveText(/식당/);
+  // 설정 화면(열려 있던 ext.page)도 storage 변경으로 같이 바뀐다
+  await expect(ext.page.locator('input[name=interest][value=restaurant]')).toBeChecked();
+  await expect(ext.page.locator('#commonTitle')).toHaveText(/^식당 · /);
+
+  // 열린 페이지도 새로고침 없이 중립 테마를 다시 받는다
+  await waitTheme(page, 'neutral');
+  await recordBoxClasses(page);
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('식당으로 비유하자면');
+  expect(await tooltip(page)).toContain('식당으로 보면');
+  expect(await boxClass(page)).toContain('t-neutral');
+  expect((await boxLog(page)).filter(e => e.cls.includes('t-maple')), '메이플 테마가 한 번도 보이면 안 됨').toEqual([]);
+
+  const r = await ext.send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.', noCache: true });
+  expect(r.data).toMatchObject({ domain: '식당', theme: 'neutral', noMatchText: RESTAURANT_NO_MATCH });
+  expect(RESTAURANT_NODE_IDS).toContain(r.data.evidence.nodeId);
+  expect(r.data.debug.candidates.every(c => RESTAURANT_NODE_IDS.includes(c.id)), '후보도 모두 식당 노드').toBe(true);
+  expect(await tooltip(page)).toContain('근거: ' + r.data.evidence.nodeLabel);
+
+  // 비유 없음(가짜 LLM: 펭귄 문장은 빈 비유) → 식당 문구
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p4');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain(RESTAURANT_NO_MATCH);
+
+  // 설정 화면에서 메이플로 되돌리기 → 팝업도 바뀌고, 말풍선은 메이플 테마·말머리·문구
+  await ext.page.locator('label:has(input[name=interest][value=maplestory])').click();
+  await expect(popup.locator('input[name=interest][value=maplestory]')).toBeChecked();
+  await expect(ext.page.locator('#commonTitle')).toHaveText(/^메이플스토리 · /);
+  await waitTheme(page, 'maple');
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain('메이플스토리로 보면');
+  expect(await tooltip(page)).toContain('메이플로 치면');
+  expect(await boxClass(page)).toContain('t-maple');
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p4');
+  await expect.poll(() => tooltip(page), { timeout: 15_000 }).toContain(MAPLE_NO_MATCH);
+});
+
+serverTest('관심사(T-302): 식당이면 서버 모드여도 서버를 부르지 않고 로컬(reason interest), 메이플로 되돌리면 다시 서버', async ({ ext }) => {
+  await ext.setSettings({ interest: 'restaurant' });
+  const before = analogyCalls.length;
+  const r = await ext.send({ type: 'explain', sentence: '서버정상 식당 관심사 확인 문장이에요.', noCache: true });
+  expect(r.data.source).toBe('local');
+  expect(r.data.debug.server).toEqual({ used: false, reason: 'interest' });
+  expect(RESTAURANT_NODE_IDS).toContain(r.data.evidence.nodeId);
+  expect(analogyCalls.length - before, '서버 요청 없음').toBe(0);
+
+  await ext.setSettings({ interest: 'maplestory' });
+  const m = await ext.send({ type: 'explain', sentence: '서버정상 식당 관심사 확인 문장이에요.', noCache: true });
+  expect(m.data.source).toBe('server');
+  expect(analogyCalls.length - before).toBe(1);
+});
+
+test('관심사(T-302): 메이플에서 남긴 👎·고정은 식당에서 조용히 빠지고, 결과 캐시도 관심사별로 갈린다', async ({ ext }) => {
+  const sentence = '물가가 오르면 같은 돈으로 살 수 있는 것이 줄어든다.';
+  const maple = await ext.send({ type: 'explain', sentence, noCache: true });
+  const mapleNode = maple.data.evidence.nodeId;
+  const alt = maple.data.debug.candidates.find(c => c.id !== mapleNode).id;
+  expect((await ext.send({ type: 'feedback', record: { sentence, nodeId: mapleNode, tagId: null, vote: 'pick', pickedNodeId: alt } })).ok).toBe(true);
+
+  await ext.setSettings({ interest: 'restaurant' });
+  const r = await ext.send({ type: 'explain', sentence });
+  expect(r.ok, r.error).toBe(true);
+  expect(r.data.cached, '메이플 결과 캐시를 쓰면 안 됨').toBeFalsy();
+  expect(r.data.domain).toBe('식당');
+  expect(r.data.feedbackApplied).toBe(false);
+  expect(r.data.debug.feedback).toMatchObject({ excluded: [], pinned: null });
+  expect(r.data.debug.candidates).toHaveLength(3);
+  expect(RESTAURANT_NODE_IDS).toContain(r.data.evidence.nodeId);
+
+  await ext.setSettings({ interest: 'maplestory' });
+  const back = await ext.send({ type: 'explain', sentence, noCache: true });
+  expect(back.data.debug.feedback.pinned, '메이플로 돌아오면 고정이 다시 적용').toBe(alt);
+});
+
+test('교정 내보내기(T-157): 지금 고른 관심사만 — 식당이면 interest restaurant·식당 노드만, 메이플로 바꾸면 메이플만', async ({ ext }) => {
+  const { send, page: op } = ext;
+  const SR = '점심시간에는 손님이 한꺼번에 몰려서 한 사람이 하루에 받을 수 있는 양이 정해진다.';
+  const SM = '중앙은행이 돈을 많이 찍어내면 물가가 오르고 저축한 돈의 구매력이 줄어든다.';
+  await send({ type: 'feedback', record: { sentence: SM, nodeId: 'cube', tagId: null, vote: 'pick', pickedNodeId: 'meso' } });
+  await send({ type: 'feedback', record: { sentence: SR, nodeId: null, tagId: null, vote: 'pick', pickedNodeId: 'lunch_peak' } });
+  await ext.setSettings({ interest: 'restaurant' });
+
+  await op.reload();
+  await expect(op.locator('#fbCorrectionsHint')).toHaveText('지금 관심사(식당) 교정만 내보내요.');
+  await expect(op.locator('#fbCorrections')).toBeEnabled();
+  const exportOnce = async () => {
+    const [download] = await Promise.all([op.waitForEvent('download'), op.click('#fbCorrections')]);
+    return { name: download.suggestedFilename(), data: JSON.parse(readFileSync(await download.path(), 'utf8')) };
+  };
+  const r = await exportOnce();
+  expect(r.name).toMatch(/^good-metaphor-corrections-restaurant-\d{4}-\d{2}-\d{2}\.json$/);
+  expect(r.data.interest).toBe('restaurant');
+  const rest = loadCommonGraphFromDisk('extension/data/common/restaurant.json');
+  expect(r.data.commonGraphVersion).toBe(rest.version);
+  expect(r.data.exampleCandidates.map(c => c.nodeId)).toEqual(['lunch_peak']);
+  expect(r.data.evalCandidates.map(c => c.expectNodes)).toEqual([['lunch_peak']]);
+  expect(JSON.stringify(r.data)).not.toContain('meso');
+
+  // 설정 화면에서 메이플로 바꾸면 안내와 내보내기가 메이플로
+  await op.locator('label:has(input[name=interest][value=maplestory])').click();
+  await expect(op.locator('#fbCorrectionsHint')).toHaveText('지금 관심사(메이플스토리) 교정만 내보내요.');
+  const m = await exportOnce();
+  expect(m.name).toMatch(/^good-metaphor-corrections-maplestory-\d{4}-\d{2}-\d{2}\.json$/);
+  expect(m.data.interest).toBe('maplestory');
+  expect(m.data.exampleCandidates.map(c => c.nodeId)).toEqual(['meso']);
+  expect(JSON.stringify(m.data)).not.toContain('lunch_peak');
+});
+
+/* ───────── 고른 범위 비유 (T-182) ───────── */
+// 두 글자 위치 사이를 선택한다(각 요소의 첫 글자 노드 기준). end는 그 글자 앞까지
+async function selectBetween(page, startSel, startIdx, endSel, endIdx) {
+  await page.evaluate(([a, ai, b, bi]) => {
+    const ta = document.querySelector(a).firstChild, tb = document.querySelector(b).firstChild;
+    const r = document.createRange();
+    r.setStart(ta, ai); r.setEnd(tb, bi ?? tb.nodeValue.length);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }, [startSel, startIdx, endSel, endIdx]);
+}
+const sentOf = c => c.user.match(/설명할 문장: (.+)/)?.[1] ?? '';
+const selHl = page => page.evaluate(() => { const h = CSS.highlights.get('good-metaphor-hl'); return h ? [...h][0].toString().replace(/\s+/g, ' ').trim() : null; });
+
+test('고른 범위(T-182): 두 문단에 걸친 선택 위에서 Alt → 선택 전체를 보내고, 앞 문장·강조·마지막 줄 아래 말풍선', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const p1 = await page.evaluate(() => document.querySelector('#p1').textContent);
+  const start = p1.indexOf('반면');
+  const end = await page.evaluate(() => document.querySelector('#p2').textContent.indexOf('이를'));
+  await selectBetween(page, '#p1', start, '#p2', end);
+  const want = '반면 고정금리는 약정 기간 동안 금리가 바뀌지 않는다. API 서버는 분당 요청 수에 상한을 두어 한 사용자가 자원을 독점하지 못하게 한다.';
+  const before = calls.length;
+  await altHover(page, '#p2', 5);
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  const mine = calls.slice(before).filter(c => sentOf(c));
+  expect(mine.length).toBeGreaterThan(0);
+  expect(sentOf(mine[0])).toBe(want);
+  expect(mine[0].user).toContain('앞 문장: 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  expect(await selHl(page)).toBe(want);
+  expect(await tooltip(page)).not.toContain('자까지만 풀었어요');
+  // 말풍선은 선택의 마지막 줄(#p2 첫 줄) 아래
+  const lastBottom = await page.evaluate(() => { const rs = [...getSelection().getRangeAt(0).getClientRects()].filter(r => r.width && r.height); return rs.at(-1).bottom; });
+  await expect.poll(async () => { const p = await page.evaluate(() => parseFloat(document.getElementById('good-metaphor-host').shadowRoot.querySelector('.box').style.top)); return Math.abs(p - (lastBottom + 8)); }).toBeLessThanOrEqual(3);
+
+  // 같은 선택이면 다시 Alt해도 캐시(캐시 키 = 고른 글 전체)
+  await page.keyboard.press('Escape');
+  await expect.poll(() => tooltip(page)).toBe('');
+  await altHover(page, '#p1', start + 3);
+  await expect.poll(() => tooltip(page)).toContain('캐시');
+
+  // 👎은 고른 글을 문장으로 기록한다(피드백 층이 고른 글 기준으로 동작)
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+  const items = (await ext.send({ type: 'feedback:list' })).data.items;
+  expect(items.map(i => i.sentence)).toContain(want);
+});
+
+test('고른 범위(T-182): 선택이 없거나 커서가 선택 밖이면 지금처럼 커서 아래 문장', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  // 선택 없음
+  let before = calls.length;
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.slice(before).map(sentOf).filter(Boolean)[0]).toBe('변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  await page.keyboard.press('Escape');
+  // #p2 전체를 고르고 #p4 위에서 Alt
+  await selectBetween(page, '#p2', 0, '#p2');
+  before = calls.length;
+  await altHover(page, '#p4', 3);
+  await expect.poll(() => tooltip(page)).toContain('쉬운 뜻');
+  const sent = calls.slice(before).map(sentOf).filter(Boolean);
+  expect(sent[0]).toBe('펭귄은 날지 못하지만 헤엄을 아주 잘 친다.');
+  expect(sent.some(s => s.includes('API 서버'))).toBe(false);
+  expect(await selHl(page)).toBe('펭귄은 날지 못하지만 헤엄을 아주 잘 친다.');
+  // 한 글자만 고르면 문장 모드
+  await page.keyboard.press('Escape');
+  await selectBetween(page, '#p1', 0, '#p1', 1);
+  before = calls.length;
+  await altHover(page, '#p1', 0);
+  await expect.poll(() => calls.slice(before).map(sentOf).filter(Boolean)[0] ?? '').toBe('변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+});
+
+test('고른 범위(T-182): 400자를 넘으면 문장 경계에서 자르고 말풍선에 한 줄, 강조도 보낸 앞부분까지', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const unit = '긴선택테스트 금리가 오르면 대출 이자 부담이 커진다. ';
+  await page.evaluate(u => {
+    const p = document.createElement('p'); p.id = 'plong'; p.textContent = u.repeat(30).trim();
+    document.querySelector('h1').after(p);
+  }, unit);
+  await selectBetween(page, '#plong', 0, '#plong');
+  const before = calls.length;
+  await altHover(page, '#plong', 3);
+  await expect.poll(() => tooltip(page)).toContain('앞부분 400자까지만 풀었어요.');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(await tooltip(page)).toContain('앞부분 400자까지만 풀었어요.');
+  const s = calls.slice(before).map(sentOf).filter(Boolean)[0];
+  expect(s.length).toBeLessThanOrEqual(400);
+  expect(s.length).toBeGreaterThan(300);
+  expect(s.endsWith('커진다.')).toBe(true);
+  expect(unit.repeat(30).startsWith(s)).toBe(true);
+  expect(await selHl(page)).toBe(s);
+});
+
+serverTest('고른 범위(T-182): 비밀번호 폼 글자는 선택에 들어 있어도 보내지 않는다, 제외 사이트면 아무것도 안 보냄', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  // #p6(폼 밖) ~ #p9(폼 뒤): 사이의 비밀번호 폼 문장(#p7)은 빠져야 한다
+  await selectBetween(page, '#p6', 0, '#p9');
+  let before = calls.length;
+  await altHover(page, '#p6', 3);
+  // 가짜 LLM은 입장횟수테스트 문장에 facts 밖 숫자를 대므로(근거 검사로 숨김) 비유 대신 보낸 글로 확인한다
+  await expect.poll(() => calls.slice(before).map(sentOf).filter(Boolean)[0] ?? '', { timeout: 15_000 }).toContain('로딩지연테스트');
+  const s = calls.slice(before).map(sentOf).filter(Boolean)[0];
+  expect(s).toContain('입장횟수테스트');
+  expect(s).toContain('로딩지연테스트');
+  expect(calls.slice(before).filter(c => c.user.includes('비밀번호폼테스트'))).toEqual([]);
+  // 폼 안 문장만 고르면 보낼 글이 없어 문장 모드 → 폼 안이라 역시 안 보냄
+  await page.keyboard.press('Escape');
+  await selectBetween(page, '#p7', 0, '#p7');
+  before = sentCount();
+  await altHover(page, '#p7', 3);
+  await page.waitForTimeout(1200);
+  expect(sentCount() - before).toBe(0);
+  expect(await tooltip(page)).toBeFalsy();
+  // 제외 사이트
+  await ext.setSettings({ excludedHosts: ['kbstar.com', '127.0.0.1'] });
+  await page.waitForTimeout(300);
+  await selectBetween(page, '#p1', 0, '#p2');
+  before = sentCount();
+  await altHover(page, '#p1', 3);
+  await page.waitForTimeout(1200);
+  expect(sentCount() - before).toBe(0);
+  expect(await tooltip(page)).toBeFalsy();
 });

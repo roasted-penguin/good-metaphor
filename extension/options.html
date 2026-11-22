@@ -3,26 +3,66 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>비유 도우미 설정</title>
+  <title>좋은비유네용 설정</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
   <header>
     <img src="icons/128.png" alt="">
     <div>
-      <h1>비유 도우미</h1>
+      <h1>좋은비유네용</h1>
       <p>모르는 문장에 커서를 올리면, 내가 잘 아는 분야에 빗대 한 줄로 풀어 드려요.</p>
     </div>
   </header>
 
   <main>
+    <!-- 0. 첫 실행 안내 (T-116) -->
+    <section id="onboarding" class="onboarding" hidden>
+      <h2>처음 오셨네요. 세 가지만 골라 주세요</h2>
+      <div class="ob-step">
+        <h3>1. 무엇으로 비유할까요?</h3>
+        <!-- 선택지는 options.js가 COMMON_INTERESTS로 그린다(관심사가 늘면 자동) -->
+        <div class="ob-choices" id="obInterest" role="radiogroup" aria-label="비유할 관심사"></div>
+      </div>
+      <div class="ob-step">
+        <h3>2. 언제 설명을 띄울까요?</h3>
+        <div class="ob-choices">
+          <label><input type="radio" name="obTrigger" value="modifier" checked><span>Alt 누르고 문장에 올리기 (추천)</span></label>
+          <label><input type="radio" name="obTrigger" value="auto"><span>머무르면 자동</span></label>
+        </div>
+        <p class="ob-warn" id="obAutoWarn" hidden>호출이 많아져 무료 한도를 빨리 써요.</p>
+      </div>
+      <div class="ob-step">
+        <h3>3. 더 나은 비유를 위해 피드백을 보내 주실래요?</h3>
+        <div class="row" role="group" aria-label="서버로 보내기 동의">
+          <button type="button" class="ob-toggle" id="obShareYes" aria-pressed="false">보내기</button>
+          <button type="button" class="ob-toggle" id="obShareNo" aria-pressed="false">내 기기에만</button>
+        </div>
+        <p class="hint" id="obShareInfo">보내는 것: 숫자·메일 주소를 가린 문장 일부, 고른 개념, 👍/👎. 서버가 생기기 전까지는 이 기기에만 쌓아 둬요.</p>
+      </div>
+      <div class="row ob-actions">
+        <button type="button" class="primary" id="obStart">시작하기</button>
+        <button type="button" class="link" id="obSkip">넘기기</button>
+        <span class="status" id="obStatus"></span>
+      </div>
+    </section>
+
     <!-- 1. 사용 방식 -->
     <section id="sec-trigger">
       <h2>사용 방식</h2>
-      <p class="desc">커서를 올렸을 때 언제 설명을 띄울지 정해요.</p>
+      <p class="desc">커서를 올렸을 때 언제 설명을 띄울지 정해요. 여러 줄은 드래그로 고른 뒤 그 위에서 보조키를 누르거나 머무르면 돼요.</p>
       <div class="grid">
         <label>켜기</label>
         <div class="row"><input type="checkbox" id="enabled"> <span class="hint">끄면 모든 페이지에서 반응하지 않아요.</span></div>
+
+        <label>관심사</label>
+        <div class="row">
+          <div class="seg" id="interest">
+            <label><input type="radio" name="interest" value="maplestory"><span>메이플</span></label>
+            <label><input type="radio" name="interest" value="restaurant"><span>식당</span></label>
+          </div>
+          <span class="hint">비유에 쓸 공통 관심사예요. 로그인 없이 바꿀 수 있어요.</span>
+        </div>
 
         <label>띄우는 방법</label>
         <div class="seg" id="triggerMode">
@@ -44,6 +84,20 @@
         <label>정밀 모드</label>
         <div class="row"><input type="checkbox" id="preciseMode"> <span class="hint">AI가 문장의 추상 구조를 먼저 뽑고 검색해요. 더 정확하지만 호출이 2번이라 느려요.</span></div>
       </div>
+    </section>
+
+    <!-- 1-1. 제외 사이트 (T-107, T-144) -->
+    <section id="sec-sites">
+      <h2>제외 사이트</h2>
+      <p class="desc">이 사이트에서는 문장을 읽지 않아요. 메일·은행·로그인 페이지는 기본으로 들어 있어요.</p>
+      <ul class="site-list" id="siteList" hidden></ul>
+      <p class="site-empty hint" id="siteEmpty" hidden>제외한 사이트가 없어요.</p>
+      <form class="row site-add" id="siteForm">
+        <input type="text" id="siteInput" placeholder="예: mail.example.com" aria-label="제외할 사이트 주소" autocomplete="off" spellcheck="false">
+        <button type="submit" id="siteAdd">추가</button>
+        <button type="button" class="link" id="siteReset">기본 목록으로 되돌리기</button>
+      </form>
+      <p class="status" id="siteStatus" role="status"></p>
     </section>
 
     <!-- 2. AI 제공자 -->
@@ -69,6 +123,11 @@
 
         <span></span>
         <div class="row"><button class="primary" id="saveProvider">저장</button><button id="testProvider">연결 테스트</button><span class="status" id="providerStatus"></span></div>
+      </div>
+      <!-- 서버 모드(T-141): 관리자가 서버 주소를 줬을 때만 보인다. 그 출처만 선택 권한으로 요청 -->
+      <div id="serverPermRow" hidden style="margin-top:12px">
+        <div class="row"><span class="status" id="serverPermStatus" role="status"></span><button id="grantServer" hidden>서버 주소 허용</button></div>
+        <p class="hint" id="serverPermHint" hidden>허용하기 전에는 이 기기에서 바로 비유를 만들어요.</p>
       </div>
     </section>
 
@@ -98,9 +157,75 @@
               <label><input type="radio" name="useCommon" value="false"><span>내 관심사만</span></label>
             </div>
           </div>
-          <p class="hint">오버레이 JSON을 고쳐 저장하세요. 내 노드 id는 <code>u:</code>로 시작하고, 공통 태그 id(예: <code>prob_upgrade</code>)를 그대로 쓸 수 있어요.</p>
-          <textarea id="overlay" spellcheck="false"></textarea>
-          <div class="row" style="margin-top:8px"><button class="primary" id="saveOverlay">저장</button><button id="insertSample">예시 노드 넣기</button><span class="status" id="overlayStatus"></span></div>
+          <!-- AI 초안 (T-301): 로그인했을 때만 보인다(#loggedIn 안). 초안은 검수 대기로 들어가고, 사실을 모두 확인해야 검색에 쓴다 -->
+          <details class="ov-block draft-panel" id="draftPanel">
+            <summary>AI로 초안 만들기</summary>
+            <p class="hint">관심사 이름을 넣으면 AI가 개념 노드 10~20개를 제안해요. 사실을 하나씩 확인해야 비유 근거로 써요.</p>
+            <div class="grid">
+              <label for="draftName">관심사 이름</label>
+              <input type="text" id="draftName" maxlength="30" placeholder="예: 축구" autocomplete="off">
+
+              <label id="draftModeLabel">시작 방식</label>
+              <div class="seg" id="draftMode" role="radiogroup" aria-labelledby="draftModeLabel">
+                <label><input type="radio" name="draftMode" value="add" checked><span>공통(메이플) 위에 더하기</span></label>
+                <label><input type="radio" name="draftMode" value="new"><span>새 관심사로 시작</span></label>
+              </div>
+
+              <span></span>
+              <div class="row"><button class="primary" id="draftRun">초안 만들기</button><span class="status" id="draftStatus" role="status"></span></div>
+            </div>
+            <p class="hint">초안 만들기를 누르면 검수 대기에 넣고 바로 저장해요.</p>
+            <ul class="draft-dropped" id="draftDropped" hidden></ul>
+          </details>
+
+          <div class="ov-block" id="reviewBox" hidden>
+            <h4>검수 대기 <span class="hint" id="reviewCount"></span></h4>
+            <p class="hint">확인한 사실만 남겨요. 노드의 사실을 모두 확인하면 내 노드로 옮겨져 검색에 쓰여요. 저장해야 반영돼요.</p>
+            <ul class="review-list" id="reviewList"></ul>
+          </div>
+
+          <!-- 그래프 편집 (T-202): 내 노드 폼, 공통 노드 숨김·가중치, 고급 JSON -->
+          <div class="ov-block">
+            <h4>내 노드</h4>
+            <ul class="ov-list" id="myNodeList"></ul>
+            <p class="ov-empty hint" id="myNodesEmpty" hidden>아직 내 노드가 없어요. 아래에서 추가하세요.</p>
+          </div>
+
+          <div class="ov-block ov-form" id="nodeForm">
+            <h4 id="nodeFormTitle">새 노드</h4>
+            <div class="grid">
+              <label for="nfLabel">이름</label>
+              <div><input type="text" id="nfLabel" maxlength="60" placeholder="예: 내 아침 재획 루틴"><div class="field-err" id="nfLabelErr"></div></div>
+
+              <label for="nfFacts">사실</label>
+              <div><textarea id="nfFacts" class="nf-facts" spellcheck="false" placeholder="한 줄에 한 문장, 다섯 줄까지 적어요."></textarea><div class="field-err" id="nfFactsErr"></div></div>
+
+              <label id="nfTagsLabel">태그</label>
+              <div><div class="chips" id="nfTags" role="group" aria-labelledby="nfTagsLabel"></div><div class="hint">공통 태그 사전에서 1~3개 골라요.</div><div class="field-err" id="nfTagsErr"></div></div>
+
+              <label for="nfAliases">별칭</label>
+              <div><input type="text" id="nfAliases" placeholder="선택, 쉼표로 구분 (예: 아침 재획, 출근 사냥)"><div class="field-err" id="nfAliasesErr"></div></div>
+
+              <span></span>
+              <div class="row"><button id="nfApply">노드 추가</button><button id="nfCancel" class="link">취소</button><button id="insertSample" class="link">예시 노드 넣기</button></div>
+            </div>
+          </div>
+
+          <div class="ov-block" id="commonNodesBox">
+            <h4>공통 노드</h4>
+            <p class="hint">숨기면 검색에서 빠져요. 가중치는 -0.2~0.2, 오른쪽으로 갈수록 더 자주 골라요.</p>
+            <ul class="ov-list" id="commonNodeList"></ul>
+          </div>
+
+          <div class="row" style="margin-top:12px"><button class="primary" id="saveOverlay">저장</button><span class="status" id="overlayStatus"></span></div>
+          <ul class="ov-errors" id="overlayErrors" hidden></ul>
+
+          <details id="advanced" class="ov-advanced">
+            <summary>고급: JSON으로 직접 고치기</summary>
+            <p class="hint">내 노드 id는 <code>u:</code>로 시작하고, 공통 태그 id(예: <code>prob_upgrade</code>)를 그대로 쓸 수 있어요. 내 태그(<code>tags</code>)는 여기서만 더해요. 고친 JSON은 저장할 때도 적용돼요.<br><code>feedbackBoosts</code>는 저장 때 기록 값으로 덮여요.<br><code>correctionExamples</code>와 그 예문은 피드백 교정 기록에서 와요. 지워도 그 기록을 되돌리기 전에는 다시 생겨요.</p>
+            <textarea id="overlay" spellcheck="false"></textarea>
+            <div class="row" style="margin-top:8px"><button id="applyJson">JSON 적용</button><span class="status" id="jsonStatus"></span></div>
+          </details>
         </div>
       </div>
     </section>
@@ -108,7 +233,7 @@
     <!-- 4. 임베딩 모델 -->
     <section id="sec-embed">
       <h2>검색 모델</h2>
-      <p class="desc">문장과 관심사 노드를 비교하는 다국어 임베딩 모델이에요. 브라우저 안에서 돌아가고, 처음 한 번 약 120MB를 받아요.</p>
+      <p class="desc">문장과 관심사 노드를 비교하는 다국어 임베딩 모델이에요. 브라우저 안에서 돌아가고, 처음 한 번 <span id="embedSize">약 270MB</span>를 받아요.</p>
       <div class="row"><button id="warmup">지금 준비하기</button><button id="clearCache">캐시 비우기</button><span class="status" id="embedStatus"></span></div>
     </section>
 
@@ -119,6 +244,30 @@
       <textarea id="trySentence" style="min-height:70px">변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.</textarea>
       <div class="row" style="margin-top:8px"><button class="primary" id="tryRun">비유 만들기</button><span class="status" id="tryStatus"></span></div>
       <div id="tryOut"></div>
+    </section>
+
+    <!-- 6. 내 피드백 (T-132) -->
+    <section id="sec-feedback">
+      <h2>내 피드백</h2>
+      <p class="desc">말풍선에서 남긴 👍·👎·교정이에요. 이 브라우저에만 저장되고, 되돌리면 다음 비유부터 반영이 빠져요.</p>
+      <div class="fb-stats" id="fbStats"></div>
+      <ul class="fb-list" id="fbList" hidden></ul>
+      <p class="fb-empty hint" id="fbEmpty" hidden>아직 남긴 피드백이 없어요.</p>
+      <div class="row" style="margin-top:10px"><button id="fbExport">JSON으로 내보내기</button><button id="fbCorrections">운영자용 교정 내보내기</button><button id="fbClear">전부 지우기</button><span class="status" id="fbStatus"></span></div>
+      <p class="hint" id="fbCorrectionsHint"></p>
+      <p class="hint">운영자용 교정은 공통 그래프 개념을 고른 기록만 가려서 파일로 받아요. 서버로 보내지 않아요.</p>
+      <!-- 근거 검사 오탐률 (T-146) -->
+      <div class="fb-grounding">
+        <h3>근거 검사로 숨긴 비유</h3>
+        <p class="fb-stats" id="fbGroundingStats"></p>
+        <ul class="fb-list" id="fbGroundingList" hidden></ul>
+        <p class="hint">근거에 없는 내용이 섞였다고 보고 숨긴 비유예요. 괜찮은 비유였는데 숨겨졌다면 표시해 주세요. 문장은 가려서 이 기기에만 두고, 보내기를 켜면 운영자용 교정 파일에만 담아요.</p>
+      </div>
+      <div class="fb-share">
+        <label class="row"><input type="checkbox" id="fbShare"> 공통 그래프 개선에 보내기</label>
+        <div class="fb-preview" id="fbSharePreview" hidden></div>
+        <p class="hint">서버가 생기기 전까지는 이 기기에만 쌓아 둬요.</p>
+      </div>
     </section>
   </main>
   <script type="module" src="options.js"></script>

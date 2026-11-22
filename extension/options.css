@@ -66,3 +66,99 @@ td.num { font-variant-numeric: tabular-nums; }
 .bar { height: 6px; border-radius: 3px; background: var(--accent); }
 details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
 kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; }
+/* 내 피드백 (T-132) */
+.fb-stats { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+.fb-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; max-height: 320px; overflow-y: auto; }
+.fb-list li { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.fb-list li:last-child { border-bottom: 0; }
+.fb-empty { margin: 0; padding: 16px; text-align: center; border: 1px solid var(--line); border-radius: 10px; }
+.fb-vote { flex: none; min-width: 34px; text-align: center; font-size: 12px; font-weight: 700; }
+.fb-vote.v-pick { color: var(--accent); }
+.fb-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fb-sentence { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-undo { flex: none; padding: 4px 10px; font-size: 12px; }
+.site-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; max-height: 260px; overflow-y: auto; }
+.site-list li { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+.site-list li:last-child { border-bottom: 0; }
+.site-host { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-del { flex: none; padding: 0 8px; font-size: 15px; line-height: 1.6; }
+.site-empty { margin: 0; padding: 16px; text-align: center; border: 1px solid var(--line); border-radius: 10px; }
+.site-add { margin-top: 10px; flex-wrap: wrap; }
+.site-add input { flex: 1; min-width: 180px; }
+#siteStatus { margin: 6px 0 0; min-height: 1em; }
+/* 근거 검사 오탐률 (T-146) */
+.fb-grounding { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.fb-grounding h3 { font-size: 13.5px; margin: 0 0 6px; }
+.fb-grounding .hint { margin: 6px 0 0; }
+.fb-reason { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); min-width: 72px; }
+.fb-flag { flex: none; padding: 4px 10px; font-size: 12px; }
+.fb-flag[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.fb-share { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.fb-share > label { font-weight: 600; }
+.fb-preview { margin-top: 8px; background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; word-break: break-all; }
+.fb-share .hint { margin: 6px 0 0; }
+/* 첫 실행 안내 (T-116) */
+.onboarding { border: 2px solid var(--accent); }
+.onboarding > h2 { font-size: 16px; margin-bottom: 12px; }
+.ob-step { margin-top: 14px; }
+.ob-step h3 { font-size: 13.5px; margin: 0 0 8px; }
+.ob-choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.ob-choices label { display: flex; gap: 6px; align-items: center; font-weight: 500; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; }
+.ob-choices label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+.ob-choices input { accent-color: var(--accent); margin: 0; }
+.ob-warn { margin: 8px 0 0; color: var(--warn); font-size: 12.5px; }
+.ob-toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.ob-step .hint { margin: 8px 0 0; }
+.ob-actions { margin-top: 18px; }
+button.link { background: none; border-color: transparent; color: var(--muted); text-decoration: underline; padding: 7px 8px; }
+/* 그래프 편집 (T-202) */
+.ov-block { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.ov-block h4 { margin: 0 0 8px; font-size: 13px; }
+.ov-block > .hint { margin: 0 0 8px; }
+.ov-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; max-height: 360px; overflow-y: auto; }
+.ov-list li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.ov-list li:last-child { border-bottom: 0; }
+.ov-main { flex: 1; min-width: 160px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ov-label { font-weight: 600; overflow-wrap: anywhere; }
+.ov-list button { padding: 4px 10px; font-size: 12px; }
+.ov-del { color: var(--err); }
+.ov-hide-label { font-weight: 500; font-size: 12.5px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.ov-hide-label input, .ov-boost { accent-color: var(--accent); }
+.ov-boost-wrap { display: inline-flex; align-items: center; gap: 6px; min-width: 270px; } /* 피드백 표시가 있어도 열이 어긋나지 않게 */
+.ov-boost { width: 120px; }
+.ov-boost-val { min-width: 40px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.ov-fb { font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; font-variant-numeric: tabular-nums; }
+.ov-empty { margin: 0; padding: 14px; text-align: center; border: 1px solid var(--line); border-radius: 10px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: 11.5px; color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; }
+.chip-btn { font-weight: 500; font-size: 12px; padding: 3px 10px; border-radius: 999px; }
+.chip-btn.user { border-style: dashed; }
+.chip-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+textarea.nf-facts { font: inherit; min-height: 90px; }
+.field-err { color: var(--err); font-size: 12px; }
+.field-err:empty { display: none; }
+.ov-form .grid { align-items: start; }
+.ov-form .grid > label { padding-top: 8px; }
+.ov-errors { margin: 8px 0 0; padding-left: 18px; color: var(--err); font-size: 12.5px; }
+.ov-advanced { margin-top: 14px; }
+.ov-advanced > .hint { margin: 8px 0; }
+@media (max-width: 640px) { .ov-form .grid > label { padding-top: 0; } .ov-boost { width: 96px; } .ov-boost-wrap { min-width: 0; } }
+.chip-btn.unknown { border-style: dashed; border-color: var(--err); color: var(--err); background: none; }
+/* AI 초안 + 검수 (T-301) */
+.draft-panel > summary { font-size: 13px; font-weight: 700; color: var(--ink); margin-top: 0; }
+.draft-panel > .hint { margin: 8px 0 10px; }
+.draft-dropped { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+.review-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; max-height: 480px; overflow-y: auto; }
+.review-list > li { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.review-list > li:last-child { border-bottom: 0; }
+.rv-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rv-head .ov-main { min-width: 140px; }
+.rv-head button, .rv-fact button { padding: 3px 10px; font-size: 12px; }
+.rv-facts { list-style: none; margin: 6px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--accent-soft); }
+.rv-fact { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 0; font-size: 13px; }
+.rv-text { flex: 1; min-width: 180px; overflow-wrap: anywhere; }
+.rv-fact.done .rv-text { color: var(--muted); }
+.rv-done { font-size: 12px; color: var(--ok); }
+.rv-warn { font-size: 11.5px; color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 0 7px; }
+.rv-del, .rv-del-node { color: var(--err); }
