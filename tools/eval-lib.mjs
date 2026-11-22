@@ -254,3 +254,21 @@ export function rank1Gains(base, cur) {
   const now = new Set(cur.misses.map(m => m.sentence));
   return base.misses.map(m => m.sentence).filter(s => !now.has(s));
 }
+
+/**
+ * 문장별 1위 변화 (T-184). before·after는 문장 순서대로 1위 노드 id.
+ * 맞음(ok): 일반 문장은 기대 노드, 음성 문장(forbidNodes)은 금지 노드가 아님, 비유 없음 문장(expectNodes [])은 null(판단 없음).
+ * 1위가 바뀐 문장만 돌려준다. regressed = 맞던 것이 틀림, gained = 틀리던 것이 맞음
+ * @returns {{sentence, kind:'hit'|'negative'|'noMatch', before, after, beforeOk, afterOk, regressed, gained}[]}
+ */
+export function rank1Changes(cases, before, after) {
+  const okOf = (c, id) => c.forbidNodes?.length ? !c.forbidNodes.includes(id) : c.expectNodes?.length ? c.expectNodes.includes(id) : null;
+  const out = [];
+  cases.forEach((c, i) => {
+    if (before[i] === after[i]) return;
+    const kind = c.forbidNodes?.length ? 'negative' : c.expectNodes?.length ? 'hit' : 'noMatch';
+    const beforeOk = okOf(c, before[i]), afterOk = okOf(c, after[i]);
+    out.push({ sentence: c.sentence, kind, before: before[i], after: after[i], beforeOk, afterOk, regressed: beforeOk === true && afterOk === false, gained: beforeOk === false && afterOk === true });
+  });
+  return out;
+}

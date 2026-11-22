@@ -287,8 +287,12 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   };
   let queryText = sentence;
   let abstractText = null;
+  // 정밀 모드 태그 판정(T-184): 켜져 있으면 추상화 호출 한 번에 태그 확률도 함께 받는다(호출 수 그대로)
+  const ptj = admin.preciseTagJudge;
+  let judge = null;
   if (settings.preciseMode && provider.def.kind !== 'demo') {
-    ({ abstractText, queryText } = await runAbstract({ sentence, word, pageTitle, ask, onStage }));
+    const tagJudge = ptj?.enabled ? { tags: graph.tags, floor: ptj.floor ?? 0 } : null;
+    ({ abstractText, queryText, judge } = await runAbstract({ sentence, word, pageTitle, ask, onStage, tagJudge }));
     // 추상 구조는 검색 질의로만 쓰고, debug 로 보일 때 금칙어가 섞였으면 지운다(T-114)
     if (findBlocked(abstractText, blocklist)) abstractText = '';
   }
@@ -314,8 +318,10 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   }
   // 제보로 빠진 공통 노드는 그 문장 👎처럼 후보에서 뺀 뒤 피드백을 적용한다(고정도 못 한다)
   const unreported = list => list.filter(c => !reported.has(c.id));
+  // 판정 확률은 정밀 모드에서만 태그 점수에 더한다. 판정이 없거나(형식 어김) "없음"이면 예전과 같다
+  const tagJudgeOpt = judge?.probs?.length ? { p: judge.probs, mode: ptj.mode || 'combine', weight: ptj.weight ?? 0.05 } : null;
   // 관심사 그래프의 감점(tagPenalty)을 admin.retrieval 위에 덮어쓴다(T-156, 메이플은 그대로)
-  const fb = applyFeedback(unreported(retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq, aliasText: sentence })), feedbackRecords, sentenceHash, topK);
+  const fb = applyFeedback(unreported(retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq, aliasText: sentence, tagJudge: tagJudgeOpt })), feedbackRecords, sentenceHash, topK);
   const candidates = fb.candidates;
   const similar = memory.length
     ? [...feedbackAdjust(fq, memory, { sim: admin.retrieval?.feedbackSim ?? 0.92, max: admin.retrieval?.feedbackMax ?? 0.1 })]
@@ -324,7 +330,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // 비슷한 문장 가감이 상위 topK 순서를 바꿨는지는 메모리 없이 한 번 더 뽑아 비교한다(검색은 가볍다)
   let similarChanged = false;
   if (similar.length) {
-    const plain = applyFeedback(unreported(retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: topK + 5, feedbackQuery: fq, aliasText: sentence })), feedbackRecords, sentenceHash, topK);
+    const plain = applyFeedback(unreported(retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: topK + 5, feedbackQuery: fq, aliasText: sentence, tagJudge: tagJudgeOpt })), feedbackRecords, sentenceHash, topK);
     similarChanged = plain.candidates.map(c => c.id).join() !== candidates.map(c => c.id).join();
   }
   const tags = topTags(q, graph, vecs, 5);
@@ -355,6 +361,8 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagId: c.tag?.id, tagSim: c.tag?.sim, source: c.source })),
       topTags: tags,
       abstractText,
+      // 정밀 모드 태그 판정(T-184): 하한·없음 적용 뒤 쓴 확률(probs), 없음 확률, 구조 없음 판정(참이면 원문으로 검색). 꺼져 있으면 null
+      tagJudge: judge ? { probs: judge.probs, none: judge.answers?.find(a => a.id === 'none')?.p ?? null, structureless: judge.none } : null,
       embedderId,
       embedderStatus,
       provider: `${answered.id}/${answered.model}`,

@@ -1341,6 +1341,9 @@ test('정밀 모드, 데모 제공자, 키 없음 오류', async ({ ext }) => {
   const p = await send({ type: 'explain', sentence: '뽑기형 상품은 원하는 결과가 나올 때까지 돈을 내고 다시 뽑게 만든다.', noCache: true });
   expect(p.data.debug.abstractText).toContain('확률');
   expect(calls.some(c => c.system.includes('추상 구조로'))).toBe(true);
+  // 정밀 모드 태그 판정(T-184, e2e 사본에서 켬): 같은 추상화 호출의 JSON에서 태그 확률을 읽어 검색에 쓴다. 호출이 늘지 않는다
+  expect(p.data.debug.tagJudge).toEqual({ probs: [{ id: 'prob_upgrade', p: 0.9 }], none: 0.05, structureless: false });
+  expect(calls.filter(c => c.user.includes('뽑기형 상품') && c.system.includes('추상 구조로'))).toHaveLength(1);
 
   await setSettings({ preciseMode: false, provider: 'demo' });
   const d = await send({ type: 'explain', sentence: '레버리지는 이익과 손실을 모두 키운다.', noCache: true });

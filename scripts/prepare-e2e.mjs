@@ -20,6 +20,8 @@ admin.fallbackChain = [{ provider: 'custom', model: 'mock-model' }];
 admin.analogyServer = { url: '', timeoutMs: 800 };
 // AI 초안 전체 마감(T-301): 시험이 빨리 끝나게 짧게. 가짜 LLM의 "초안지연테스트"는 이보다 늦게 답한다
 admin.draft = { deadlineMs: 2500 };
+// 정밀 모드 태그 판정(T-184)은 기본값과 상관없이 켜서 합친 호출 경로(JSON 추상 구조 + 태그)를 e2e로 지난다. 꺼진 경로는 예전 글 응답 그대로
+admin.preciseTagJudge = { ...admin.preciseTagJudge, enabled: true, floor: 0.5 };
 writeFileSync(p, JSON.stringify(admin, null, 2));
 
 // 테스트 전용 콘텐츠 스크립트(T-144): 사본 manifest에만 등록한다. 실제 extension/ 은 그대로
