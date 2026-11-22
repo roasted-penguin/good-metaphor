@@ -232,3 +232,25 @@ export function baselineReportLines(cmp) {
   }
   return lines;
 }
+
+// --- 판정기 실험 (T-120) ---
+
+/** 지연 시간(ms) 목록 → { n, median, p90 } (선형 보간). 비면 null */
+export function latencyStats(ms) {
+  const xs = (ms || []).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  const q = f => { const i = (xs.length - 1) * f, lo = Math.floor(i), hi = Math.ceil(i); return Math.round(xs[lo] + (xs[hi] - xs[lo]) * (i - lo)); };
+  return { n: xs.length, median: q(0.5), p90: q(0.9) };
+}
+
+// 1위 회귀: 기준(scoreCases 결과)에서 맞던 문장이 새 결과에서 틀린 것. 비유 없음·음성 문장은 misses에 없어 빠진다
+export function rank1Regressions(base, cur) {
+  const was = new Set(base.misses.map(m => m.sentence));
+  return cur.misses.map(m => m.sentence).filter(s => !was.has(s));
+}
+
+// 1위 개선: 기준에서 틀리던 문장이 새 결과에서 맞은 것
+export function rank1Gains(base, cur) {
+  const now = new Set(cur.misses.map(m => m.sentence));
+  return base.misses.map(m => m.sentence).filter(s => !now.has(s));
+}
