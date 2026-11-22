@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-7",
+  "version": "2026.11.23-1",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -470,6 +470,81 @@
         "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=647&ccfNo=2&cciNo=2&cnpClsNo=1"
       ],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "small_amount_exemption",
+      "label": "소액부징수와 과세최저한",
+      "facts": [
+        "세액이나 소득금액이 일정 기준에 못 미치면 징수를 면제하는 방식으로 행정 비용을 줄인다.",
+        "일부 소득은 기준치보다 적어도 예외적으로 징수해야 하는 규칙이 존재한다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=2289&cntntsId=7701"
+      ],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "youth_startup_tax_reduction",
+      "label": "청년 창업기업 세액감면",
+      "facts": [
+        "음식점업 등 감면대상 업종의 중소기업을 창업하면 일정 기간 동안 세액 감면 혜택을 받을 수 있다.",
+        "창업 당시 대표자의 연령 요건을 충족하고 지역별 기준에 따라 감면율과 적용 여부가 달라진다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=41127&cntntsId=239082"
+      ],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "health_certificate_rule",
+      "label": "건강진단과 종사 자격 제한",
+      "facts": [
+        "영업자와 종업원은 건강진단을 받아야 하며 타인에게 위해를 끼칠 우려가 있는 질병이 인정되면 해당 영업에 종사하지 못한다.",
+        "영업자는 건강진단을 받지 않거나 유해 질병이 있는 자를 영업에 종사시키지 못한다."
+      ],
+      "tags": [
+        "compliance_procedure"
+      ],
+      "sources": [
+        "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EC%8B%9D%ED%92%88%EC%9C%84%EC%83%9D%EB%B2%95"
+      ],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "chef_and_nutritionist_deployment",
+      "label": "조리사와 영양사 배치 의무",
+      "facts": [
+        "일정 규모 이상의 집단급식소와 식품접객업자는 자격을 갖춘 조리사나 영양사를 두어야 한다.",
+        "운영자 본인이 직접 조리나 지도를 하거나 일정 규모 미만인 경우에는 배치 의무가 면제된다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EC%8B%9D%ED%92%88%EC%9C%84%EC%83%9D%EB%B2%95"
+      ],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "unfair_franchise_control",
+      "label": "부당한 가맹 영업통제",
+      "facts": [
+        "가맹본부가 점포환경개선을 부당하게 강요하거나 영업시간과 영업지역을 구속하는 행위는 금지된다.",
+        "법 위반 행위가 발생하면 시정조치나 과징금 처분 또는 형사벌이 부과될 수 있다."
+      ],
+      "tags": [
+        "vendor_lock_in"
+      ],
+      "sources": [
+        "https://www.ftc.go.kr/www/contents.do?key=706"
+      ],
+      "verifiedAt": "2026-11-23"
     }
   ],
   "edges": [
@@ -557,6 +632,16 @@
       "from": "franchise_disclosure",
       "to": "franchise_fee",
       "rel": "받기 전에 공개해야 가맹금을 받을 수 있음"
+    },
+    {
+      "from": "chef_and_nutritionist_deployment",
+      "to": "health_certificate_rule",
+      "rel": "자격 요건 관련"
+    },
+    {
+      "from": "unfair_franchise_control",
+      "to": "franchise_disclosure",
+      "rel": "규율"
     }
   ]
 }
