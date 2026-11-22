@@ -163,6 +163,32 @@ test('스트리밍: 응답 시작 전 503 은 재시도한다', async t => {
   assert.equal(stats.retries, 1);
 });
 
+// T-188: Gemini는 스트림 도중 {"error":{"code":503}} 이벤트를 보내고 끊는다. 예전엔 조각을 무시해
+// 잘린 JSON을 돌려줘 "모델 응답을 해석하지 못했어요"가 됐다(스모크 run 45012155475, 로컬 재현 4회 중 1회)
+test('스트리밍: 도중에 온 error 이벤트는 상태 코드를 단 오류로 던지고, 다시 보내지 않는다', async t => {
+  fastRetry(t);
+  const part = text => JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] });
+  const reqs = mockStreamFetch(t, [
+    { sse: [part('{"meaning": "뜻이에요.",'), JSON.stringify({ error: { code: 503, message: 'high demand', status: 'UNAVAILABLE' } })] },
+    { sse: [part('{"meaning": "다시"}')] }
+  ]);
+  const seen = [];
+  await assert.rejects(complete(gemini, 's', 'u', { json: true, onText: s => seen.push(s) }), e => {
+    assert.equal(e.status, 503);
+    assert.match(e.message, /중간에 끊겼어요/);
+    assert.match(e.message, /high demand/);
+    return true;
+  });
+  // 앞부분을 이미 onText로 보냈으니 같은 제공자에 다시 보내지 않는다(이어 붙으면 JSON이 깨진다)
+  assert.equal(reqs.length, 1);
+  assert.deepEqual(seen, ['{"meaning": "뜻이에요.",']);
+});
+
+test('스트리밍: openai-compat 도중 error(숫자 코드 없음)는 상태 0으로 던진다', async t => {
+  mockStreamFetch(t, [{ sse: [delta('{"meaning'), JSON.stringify({ error: { message: 'overloaded', type: 'server_error' } })] }]);
+  await assert.rejects(complete(groq, 's', 'u', { onText: () => {} }), e => e.status === 0 && /overloaded/.test(e.message));
+});
+
 test('NVIDIA: 생각(thinking)을 끄는 chat_template_kwargs 를 보낸다 (켜면 첫 글자까지 14~30초)', async t => {
   const nvidia = { id: 'nvidia', def: PROVIDERS.nvidia, model: 'nvidia/nemotron-3.5-super-vl-120b-a12b', apiKey: 'k', baseUrl: PROVIDERS.nvidia.baseUrl };
   const bodies = mockFetch(t, [[200, chat('답')]]);
