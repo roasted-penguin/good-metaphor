@@ -25,5 +25,17 @@
   {"sentence": "프리랜서 디자이너는 일을 시작하기 전에 작업 범위와 보수, 마감일을 계약서에 적어 둔다.", "expectNodes": ["labor_contract"], "expectTag": "progression_gate", "since": "T-192", "why": "일을 시작할 때 조건을 글로 남긴다 = 근로조건 서면 명시"},
   {"sentence": "매출이 일정 규모를 넘은 개인사업자는 다음 해부터 전자세금계산서를 의무로 발급해야 한다.", "expectNodes": ["cash_receipt"], "expectTag": "threshold_req", "since": "T-192", "why": "직전 해 매출이 기준을 넘으면 발급 의무가 생긴다 = 현금영수증 가맹 의무"},
   {"sentence": "어린이 보호구역에서는 구역 전체에서 속도를 줄여야 하고 입구에 표지판을 세운다.", "expectNodes": ["no_smoking_zone"], "expectTag": "threshold_req", "since": "T-192", "why": "구역 전체에 규칙을 두고 입구에 표지를 붙인다 = 음식점 금연구역"},
-  {"sentence": "집을 고칠 때 공사 규모가 작으면 신고만 하고, 크면 허가를 받아야 한다.", "expectNodes": ["signage_permit"], "expectTag": "threshold_req", "since": "T-192", "why": "크기에 따라 허가와 신고로 나뉜다 = 간판 허가와 신고"}
+  {"sentence": "집을 고칠 때 공사 규모가 작으면 신고만 하고, 크면 허가를 받아야 한다.", "expectNodes": ["signage_permit"], "expectTag": "threshold_req", "since": "T-192", "why": "크기에 따라 허가와 신고로 나뉜다 = 간판 허가와 신고"},
+  {"sentence": "분양 광고에서 예상 임대 수익을 내세우려면 그 수익을 계산한 근거를 함께 밝혀야 한다.", "expectNodes": ["expected_sales_doc"], "expectTag": "expected_value", "since": "T-192", "why": "장래 예상 수익을 알릴 때 근거를 글로 밝혀야 한다 = 예상매출액 산정서"},
+  {"sentence": "학원이 광고와 다르게 수업을 운영하면 수강생은 낸 수강료를 돌려 달라고 할 수 있다.", "expectNodes": ["franchise_fee_refund"], "expectTag": "loss_risk", "since": "T-192", "why": "약속과 다른 정보로 계약했으면 낸 돈을 돌려받는다 = 가맹금 반환"},
+  {"sentence": "보험은 가입하고 나서 정해진 기간 안에는 마음이 바뀌면 청약을 철회할 수 있도록 생각할 시간을 준다.", "expectNodes": ["contract_cooling"], "expectTag": "cooldown", "since": "T-192", "why": "계약 전에 따져 볼 시간을 둔다 = 가맹계약 숙려기간"},
+  {"sentence": "축구 클럽은 선수와 계약을 끝내기 전에 몇 차례 경고하고 고칠 기회를 줘야 한다.", "expectNodes": ["franchise_termination"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "끝내기 전에 여러 번 알리고 고칠 기간을 준다 = 가맹계약 해지 절차"},
+  {"sentence": "배달 기사들은 노동조합을 만들어 플랫폼 회사에 배달료 조건을 협상하자고 요구한다.", "expectNodes": ["franchisee_association"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "한 운영자에 묶인 사람들이 단체로 조건 협의를 요구한다 = 가맹점주 단체 협의"},
+  {"sentence": "워킹홀리데이 비자는 정해진 기간만 머물 수 있고, 한 나라에서 받을 수 있는 횟수도 정해져 있다.", "expectNodes": ["foreign_worker"], "expectTag": "periodic_cap", "since": "T-192", "why": "머물 기간과 횟수에 상한이 있다 = 외국인 근로자 고용 기간"},
+  {"sentence": "자동차 보험에 들어 두면 사고가 나도 보험사가 대신 배상해 운전자가 큰돈을 혼자 물지 않는다.", "expectNodes": ["industrial_accident"], "expectTag": "loss_risk", "since": "T-192", "why": "사고 배상을 보험이 대신 맡아 책임을 덜어 준다 = 산재보험"},
+  {"sentence": "집주인이 바뀌어도 새 집주인이 기존 전세 계약을 그대로 이어받아 세입자는 계속 살 수 있다.", "expectNodes": ["lease_opposability"], "expectTag": "loss_risk", "since": "T-192", "why": "주인이 바뀌어도 계약이 그대로 이어진다 = 상가 임대차 대항력"},
+  {"sentence": "학원은 조례에 따라 밤늦은 시간에는 수업을 할 수 없다.", "expectNodes": ["business_hours_limit"], "expectTag": "periodic_cap", "since": "T-192", "why": "지자체 규칙으로 영업할 수 있는 시간이 제한된다 = 영업시간 제한"},
+  {"sentence": "제약회사가 불량 원료로 만든 약을 팔면 피해가 없어도 처벌받고, 다시 걸리면 더 무겁게 처벌받는다.", "expectNodes": ["food_poisoning"], "expectTag": "escalating_cost", "since": "T-192", "why": "해로울 우려만으로 처벌하고 되풀이하면 가중한다 = 상한 식재료와 식중독 책임"},
+  {"sentence": "약사가 되려면 국가시험에 붙은 뒤 면허를 받아야 약국에서 일할 수 있다.", "expectNodes": ["cook_license"], "expectTag": "progression_gate", "since": "T-192", "why": "자격을 딴 뒤 면허를 받아야 일할 수 있다 = 조리사 면허"},
+  {"sentence": "올해 커피 원두 산지에 가뭄이 들어 수확이 줄자 원두 값이 크게 뛰었다.", "expectNodes": ["produce_supply"], "expectTag": "market_price", "since": "T-192", "why": "수확이 줄어 공급이 모자라면 값이 오른다 = 농산물 작황과 식재료 수급"}
 ]

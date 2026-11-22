@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-9",
+  "version": "2026.11.23-1",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -1012,6 +1012,199 @@
         "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=839&ccfNo=3&cciNo=2&cnpClsNo=2"
       ],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "expected_sales_doc",
+      "label": "예상매출액 산정서",
+      "facts": [
+        "가맹본부가 가맹 희망자에게 장래의 예상 매출이나 수익을 알려 줄 때는 반드시 글로 줘야 하고, 그 숫자를 뽑은 근거 자료를 사무소에 두고 보여 줘야 한다.",
+        "규모가 큰 가맹본부는 계약할 때 예상 매출액의 범위와 산출 근거를 적은 산정서를 따로 건네야 한다.",
+        "사실과 다르거나 부풀린 정보, 계약에 중요한 사실을 숨기는 정보를 주는 것은 금지된다."
+      ],
+      "tags": [
+        "expected_value"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제9조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "franchise_fee_refund",
+      "label": "가맹금 반환",
+      "facts": [
+        "가맹본부가 부풀린 정보를 주었거나 정보공개서를 제대로 주지 않았으면, 가맹점은 정해진 기간 안에 글로 요구해 낸 가맹금을 돌려받을 수 있다.",
+        "본부가 정당한 이유 없이 가맹사업을 혼자 그만둔 경우에도 가맹점은 가맹금 반환을 요구할 수 있다.",
+        "돌려줄 금액은 계약 경위와 계약 기간, 양쪽 잘못의 정도를 따져 정한다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제10조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "contract_cooling",
+      "label": "가맹계약 숙려기간",
+      "facts": [
+        "가맹본부는 가맹계약서 내용을 담은 문서를 가맹 희망자에게 건넨 날부터 정해진 숙려기간이 지나기 전에는 가맹금을 받거나 가맹계약을 맺을 수 없다.",
+        "가맹 희망자가 변호사나 가맹거래사의 자문을 받았다면 숙려기간이 줄어든다.",
+        "가맹 희망자가 계약 내용을 미리 이해하고 따져 볼 시간을 주려는 규칙이다."
+      ],
+      "tags": [
+        "cooldown"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제11조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "franchise_termination",
+      "label": "가맹계약 해지 절차",
+      "facts": [
+        "가맹본부가 계약을 끊으려면 유예기간을 두고 무엇을 어겼는지 밝히며, 고치지 않으면 해지한다는 사실을 여러 번 글로 알려야 한다.",
+        "이 절차를 거치지 않은 해지는 효력이 없다.",
+        "가맹사업을 이어 가기 어려운 정해진 사정이 있으면 이 절차 없이도 해지할 수 있다."
+      ],
+      "tags": [
+        "vendor_lock_in"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제14조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "franchisee_association",
+      "label": "가맹점주 단체 협의",
+      "facts": [
+        "한 가맹본부와 계약한 가맹점들은 단체를 만들어 본부에 계약 조건을 바꾸자고 협의를 요청할 수 있고, 본부는 성실하게 응해야 한다.",
+        "본부는 단체에 들었다는 이유로 가맹점에 불이익을 주거나 단체에 들지 않는 것을 계약 조건으로 삼을 수 없다.",
+        "단체도 가맹사업의 통일성을 해치는 조건을 요구하거나 본부 경영에 부당하게 끼어들면 안 된다."
+      ],
+      "tags": [
+        "vendor_lock_in"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제14조의2&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "foreign_worker",
+      "label": "외국인 근로자 고용 기간",
+      "facts": [
+        "고용허가로 들어온 외국인 근로자는 정해진 기간까지만 일할 수 있고, 일하는 동안 일터를 바꿀 수 있는 횟수에도 상한이 있다.",
+        "기간이 끝나기 전에 사장이 재고용을 요청하면 한 차례 기간을 늘릴 수 있다.",
+        "일을 마치고 출국한 근로자는 일정 기간이 지나야 다시 들어와 일할 수 있다."
+      ],
+      "tags": [
+        "periodic_cap"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=외국인근로자의 고용 등에 관한 법률&joLnkStr=제18조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "industrial_accident",
+      "label": "산재보험",
+      "facts": [
+        "직원이 일하다 다치면 사장이 혼자 물어 주는 대신 산재보험이 보상하고, 보험급여를 받은 만큼 사장의 배상 책임이 면제된다.",
+        "근로자를 쓰는 사업장은 원칙적으로 모두 산재보험 적용을 받는다.",
+        "같은 사고로 다른 배상을 이미 받았으면 그만큼 보험급여를 주지 않는다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=산업재해보상보험법&joLnkStr=제80조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "lease_opposability",
+      "label": "상가 임대차 대항력",
+      "facts": [
+        "세입자가 가게를 넘겨받고 사업자등록을 신청하면 그다음 날부터 건물이 다른 사람에게 팔려도 임대차를 주장할 수 있다.",
+        "건물을 새로 산 사람은 앞 건물주의 지위를 이어받아, 세입자는 계약 기간 동안 계속 장사할 수 있다.",
+        "등기를 하지 않아도 이 효력이 생긴다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=상가건물 임대차보호법&joLnkStr=제3조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "business_hours_limit",
+      "label": "영업시간 제한",
+      "facts": [
+        "지자체는 영업 질서와 풍속을 지키려고 조례로 음식점의 영업시간과 영업 행위를 제한할 수 있다.",
+        "조례로 영업시간을 제한할 때도 하루에 막을 수 있는 시간에는 상한이 있다.",
+        "제한을 어기면 영업정지나 영업소 폐쇄 같은 처분을 받을 수 있다."
+      ],
+      "tags": [
+        "periodic_cap"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=1&cciNo=1&cnpClsNo=1"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "food_poisoning",
+      "label": "상한 식재료와 식중독 책임",
+      "facts": [
+        "상하거나 곰팡이 핀 재료로 만든 음식은 손님이 탈이 나지 않았어도 건강을 해칠 우려가 있는 음식으로 보아 처벌받고, 같은 위반을 되풀이하면 더 무겁게 처벌받는다.",
+        "식중독이 생기면 쓰던 식재료를 버리거나 현장을 치우지 말고 원인 조사가 끝날 때까지 그대로 둬야 한다.",
+        "식중독에 책임이 있는 조리사는 면허가 취소되거나 업무정지를 받을 수 있다."
+      ],
+      "tags": [
+        "escalating_cost"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=1&cciNo=2&cnpClsNo=1",
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제44조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "cook_license",
+      "label": "조리사 면허",
+      "facts": [
+        "조리사 면허는 국가기술자격을 딴 사람에게 관청이 내주며, 감염병 환자처럼 결격 사유가 있으면 받을 수 없다.",
+        "집단급식소와 정해진 음식점은 면허를 가진 조리사를 둬야 하고, 주인이 조리사로서 직접 조리하면 따로 두지 않아도 된다.",
+        "식중독 같은 중대한 위생 사고에 책임이 있는 조리사는 면허가 취소되거나 업무정지를 받을 수 있다."
+      ],
+      "tags": [
+        "progression_gate"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제53조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "produce_supply",
+      "label": "농산물 작황과 식재료 수급",
+      "facts": [
+        "작황이 나빠 수확이 줄거나 저장해 둔 물량이 줄면 시장에 나오는 양이 모자라 식재료 값이 오르고, 출하량이 늘면 값이 다시 안정된다.",
+        "정부는 값이 뛴 품목의 비축 물량을 시장에 풀어 추가 상승을 누른다.",
+        "가축 전염병이 번지거나 사육 마릿수가 줄면 고기와 달걀 값이 평년보다 높아진다."
+      ],
+      "tags": [
+        "market_price"
+      ],
+      "sources": [
+        "https://www.mafra.go.kr/bbs/home/792/576535/artclView.do"
+      ],
+      "verifiedAt": "2026-11-22"
     }
   ],
   "edges": [
@@ -1251,9 +1444,79 @@
       "rel": "문을 열기 전에 갖출 일"
     },
     {
+      "from": "expected_sales_doc",
+      "to": "franchise_disclosure",
+      "rel": "함께 가맹 전에 받아 보는 정보"
+    },
+    {
+      "from": "franchise_fee_refund",
+      "to": "franchise_fee",
+      "rel": "잘못된 정보면 낸 가맹금을 돌려받음"
+    },
+    {
+      "from": "franchise_fee_refund",
+      "to": "expected_sales_doc",
+      "rel": "부풀린 정보가 반환 사유가 됨"
+    },
+    {
+      "from": "franchise_termination",
+      "to": "franchise_renewal",
+      "rel": "같은 가맹계약 보호 규칙"
+    },
+    {
+      "from": "franchisee_association",
+      "to": "required_items",
+      "rel": "거래 조건을 함께 협의함"
+    },
+    {
+      "from": "foreign_worker",
+      "to": "weekly_hour_cap",
+      "rel": "함께 따질 인력 운용 규칙"
+    },
+    {
+      "from": "industrial_accident",
+      "to": "small_workplace",
+      "rel": "작은 사업장도 원칙적으로 적용됨"
+    },
+    {
+      "from": "lease_opposability",
+      "to": "fixed_date",
+      "rel": "사업자등록과 함께 세입자를 지키는 규칙"
+    },
+    {
+      "from": "food_poisoning",
+      "to": "hygiene_inspection",
+      "rel": "위생 위반으로 처분을 받음"
+    },
+    {
+      "from": "food_poisoning",
+      "to": "cook_license",
+      "rel": "책임 있는 조리사의 면허를 잃게 함"
+    },
+    {
+      "from": "cook_license",
+      "to": "meal_staff_roles",
+      "rel": "급식소에 둬야 할 인력"
+    },
+    {
+      "from": "produce_supply",
+      "to": "ingredient_cost",
+      "rel": "식재료 원가를 오르내리게 함"
+    },
+    {
       "from": "lost_item_liability",
       "to": "no_show",
       "rel": "손님과 얽힌 손해를 다루는 규칙"
+    },
+    {
+      "from": "contract_cooling",
+      "to": "franchise_disclosure",
+      "rel": "받은 문서를 따져 볼 시간을 줌"
+    },
+    {
+      "from": "business_hours_limit",
+      "to": "youth_alcohol",
+      "rel": "함께 영업 질서를 지키는 규칙"
     }
   ]
 }
