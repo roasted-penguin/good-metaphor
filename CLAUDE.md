@@ -58,7 +58,7 @@ npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내�
 ```
 extension/                   크롬에 로드되는 폴더. 빌드 결과(offscreen.js, vendor/)도 커밋한다
   background.js              서비스 워커. explain() 파이프라인과 모든 메시지 핸들러
-  content.js / content.css   커서 아래 문장 찾기(Intl.Segmenter), CSS Highlight, Shadow DOM 말풍선. 모든 프레임에 들어가고(서브프레임은 최상위 호스트도 제외 검사, 모르면 꺼짐), 열린 Shadow DOM 문장도 찾는다 (T-111)
+  content.js / content.css   커서 아래 문장 찾기(Intl.Segmenter), CSS Highlight, Shadow DOM 말풍선. 모든 프레임에 들어가고(서브프레임은 최상위 호스트도 제외 검사, 모르면 꺼짐), 열린 Shadow DOM 문장도 찾는다 (T-111). 드래그로 고른 범위가 있고 커서가 그 위면 문장 대신 고른 글 전체(400자 상한, 넘치면 문장 경계에서 자르고 말풍선에 한 줄, 같은 거름: 입력칸·코드·비밀번호 폼 글자 빼기, T-182)
   offscreen.html / .js       임베딩 모델 실행 (빌드 산출물, 직접 고치지 말 것 → src/offscreen-src.js)
   options.* / popup.*        설정·팝업 UI
   lib/config.js              설정 우선순위: admin.json < chrome.storage.managed < 사용자 설정(잠금 아닐 때)
@@ -73,7 +73,8 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/corrections.js         교정 → 예문 후보(가림·금칙어·중복·길이), 내 태그 examples 반영(로그인만, 태그당 5개), 운영자 내보내기 JSON (T-131)
   lib/embed-each.js          임베딩은 항상 한 문장씩 (q8 묶음 차이, ADR 0011)
   lib/site-filter.js         제외 사이트 판정·`frameHosts`(최상위 호스트)·background 이중 방어. 클래식 스크립트(`globalThis.AnalogySiteFilter`) — 콘텐츠·background·팝업·설정이 같이 씀 (T-107·T-111)
-  lib/place.js               말풍선 배치: 호버한 줄(인덱스) 아래, 넘치면 위 (클래식 스크립트, T-109)
+  lib/place.js               말풍선 배치: 호버한 줄(인덱스) 아래, 넘치면 위. 고른 범위는 마지막 줄 아래, 넘치면 첫 줄 위(`placeBoxSpan`) (클래식 스크립트, T-109·T-182)
+  lib/selection.js           고른 범위 순수 함수: 공백 접기·2자 미만 거름·400자 문장 경계 자르기·커서가 범위 위인지 (클래식 스크립트, T-182)
   lib/shadow.js              열린 shadow root 모으기·shadow 경계 블록·`composedParent` (클래식 스크립트, T-111)
   lib/vec-cache.js           그래프 벡터 캐시 정리: 다른 임베더 삭제, 2,000개 LRU (T-110)
   lib/blocklist.js           금칙어 필터(`applyBlocklist`): 출력 직전·스트리밍 뜻·서버 결과·정밀 모드 추상화까지. 확장·서버 같은 규칙 (T-114)
@@ -94,7 +95,7 @@ tests/e2e/                   Playwright: 가짜 LLM(:8765) + 테스트 페이지
 scripts/                     build, prepare-e2e
 ```
 
-호버 한 번의 흐름: content.js가 문장·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 근거 검사(usedFact·숫자) → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
+호버 한 번의 흐름: content.js가 문장(커서가 고른 범위 위면 고른 글, 단어는 빈 값, T-182)·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 근거 검사(usedFact·숫자) → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
 
 ## 지켜야 할 규칙
 
