@@ -14,5 +14,16 @@
   {"sentence": "편의점은 미성년자에게 담배를 팔면 영업정지를 받지만, 위조 신분증에 속은 경우에는 처분을 면할 수 있다.", "expectNodes": ["youth_alcohol"], "expectTag": "threshold_req", "since": "T-192", "why": "나이 기준 밑의 손님에게 팔 수 없고 속은 경우는 면책 = 청소년 주류 제공 금지"},
   {"sentence": "프리랜서는 일이 끊길 때를 대비해 매달 조금씩 비상금을 모아 둔다.", "expectNodes": ["yellow_umbrella"], "expectTag": "daily_accumulation", "since": "T-192", "why": "꾸준히 쌓아 두었다가 위기 때 꺼내 쓴다 = 소상공인 공제"},
   {"sentence": "호텔 프런트에 맡긴 짐이 없어지면 호텔이 물어 줘야 하지만, 귀중품은 미리 알리고 맡겨야 보상받는다.", "expectNodes": ["lost_item_liability"], "expectTag": "loss_risk", "since": "T-192", "why": "맡은 물건이 없어지면 배상하고 귀중품은 알려야 한다 = 손님 물건 보관 책임"},
-  {"sentence": "마트는 수입 소고기와 국산 소고기를 구분해 어느 나라에서 왔는지 진열대에 적어 둔다.", "expectNodes": ["origin_label"], "expectTag": "threshold_req", "since": "T-192", "why": "재료가 어디서 왔는지 손님에게 밝힌다 = 원산지 표시"}
+  {"sentence": "마트는 수입 소고기와 국산 소고기를 구분해 어느 나라에서 왔는지 진열대에 적어 둔다.", "expectNodes": ["origin_label"], "expectTag": "threshold_req", "since": "T-192", "why": "재료가 어디서 왔는지 손님에게 밝힌다 = 원산지 표시"},
+  {"sentence": "공유 오피스는 회의실과 복합기를 여러 회사가 함께 써서 각자 사무실을 따로 차리지 않아도 된다.", "expectNodes": ["shared_kitchen"], "expectTag": "fixed_cost_leverage", "since": "T-192", "why": "시설을 여럿이 함께 써 각자 갖추지 않아도 된다 = 공유주방"},
+  {"sentence": "병원에서는 의사가 진단과 처방을 맡고 간호사는 투약과 환자 관리를 맡아 일을 나눈다.", "expectNodes": ["meal_staff_roles"], "expectTag": "role_division", "since": "T-192", "why": "두 전문 인력이 일을 나눠 맡는다 = 급식소의 조리사와 영양사"},
+  {"sentence": "통신 약정은 만료 전에 해지 의사를 밝히지 않으면 같은 조건으로 자동 연장된다.", "expectNodes": ["franchise_renewal"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "기간 안에 알리지 않으면 같은 조건으로 다시 계약한 것으로 본다 = 가맹계약 갱신요구권"},
+  {"sentence": "아파트 단지에서 주민 돈을 쓰는 공사는 정해진 비율 이상의 주민이 동의해야 하고, 쓴 내역을 공개해야 한다.", "expectNodes": ["franchise_ad_cost"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "구성원 돈이 드는 일은 일정 비율 동의와 집행 내역 공개가 필요하다 = 가맹점 부담 광고·판촉"},
+  {"sentence": "장기 근속 표창은 한 회사에서 오랜 세월 일한 사람만 받을 수 있다.", "expectNodes": ["century_store"], "expectTag": "daily_accumulation", "since": "T-192", "why": "오랜 세월을 쌓아야 받는 인정 = 백년가게"},
+  {"sentence": "청년 전세대출은 나이와 소득 기준을 맞춘 사람만 받을 수 있고, 다른 데 쓰면 바로 갚아야 한다.", "expectNodes": ["startup_fund"], "expectTag": "threshold_req", "since": "T-192", "why": "기준을 맞춘 사람만 융자받고 용도 밖에 쓰면 회수된다 = 소상공인 정책자금"},
+  {"sentence": "중고 거래에서 판매자는 돈을 받을 때까지 물건을 넘기지 않고, 구매자는 물건을 받을 때까지 돈을 주지 않는다.", "expectNodes": ["deposit_return"], "expectTag": "loss_risk", "since": "T-192", "why": "서로 자기 몫을 받을 때까지 내줄 것을 미룰 수 있다 = 보증금 반환과 가게 인도"},
+  {"sentence": "프리랜서 디자이너는 일을 시작하기 전에 작업 범위와 보수, 마감일을 계약서에 적어 둔다.", "expectNodes": ["labor_contract"], "expectTag": "progression_gate", "since": "T-192", "why": "일을 시작할 때 조건을 글로 남긴다 = 근로조건 서면 명시"},
+  {"sentence": "매출이 일정 규모를 넘은 개인사업자는 다음 해부터 전자세금계산서를 의무로 발급해야 한다.", "expectNodes": ["cash_receipt"], "expectTag": "threshold_req", "since": "T-192", "why": "직전 해 매출이 기준을 넘으면 발급 의무가 생긴다 = 현금영수증 가맹 의무"},
+  {"sentence": "어린이 보호구역에서는 구역 전체에서 속도를 줄여야 하고 입구에 표지판을 세운다.", "expectNodes": ["no_smoking_zone"], "expectTag": "threshold_req", "since": "T-192", "why": "구역 전체에 규칙을 두고 입구에 표지를 붙인다 = 음식점 금연구역"},
+  {"sentence": "집을 고칠 때 공사 규모가 작으면 신고만 하고, 크면 허가를 받아야 한다.", "expectNodes": ["signage_permit"], "expectTag": "threshold_req", "since": "T-192", "why": "크기에 따라 허가와 신고로 나뉜다 = 간판 허가와 신고"}
 ]

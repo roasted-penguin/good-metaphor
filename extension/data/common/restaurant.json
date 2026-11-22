@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-8",
+  "version": "2026.11.22-9",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -836,6 +836,182 @@
         "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=2&cciNo=2&cnpClsNo=1"
       ],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "shared_kitchen",
+      "label": "공유주방",
+      "facts": [
+        "공유주방은 조리 시설과 기구를 여러 영업자가 함께 쓰는 장소로, 각자 따로 주방을 갖추지 않아도 영업할 수 있다.",
+        "보통은 영업 시설을 영업자마다 따로 나눠 갖춰야 하지만, 공유주방을 운영하는 경우에는 그러지 않아도 된다.",
+        "공유주방 운영자는 음식으로 손님이 입을 피해를 물어 줄 책임보험에 들어야 한다."
+      ],
+      "tags": [
+        "fixed_cost_leverage"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제36조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "meal_staff_roles",
+      "label": "급식소의 조리사와 영양사",
+      "facts": [
+        "집단급식소에서는 조리사가 재료 손질부터 조리와 배식까지 맡고, 영양사는 식단을 짜고 맛을 보며 배식과 위생을 관리해 일을 나눈다.",
+        "집단급식소 운영자는 조리사와 영양사를 함께 둬야 한다.",
+        "운영자가 직접 조리사나 영양사로 일하거나 한 사람이 두 면허를 함께 가진 작은 급식소는 따로 두지 않아도 된다."
+      ],
+      "tags": [
+        "role_division"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제51조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "franchise_renewal",
+      "label": "가맹계약 갱신요구권",
+      "facts": [
+        "가맹점이 계약 만료 전 정해진 기간에 갱신을 요구하면 본부는 정당한 사유 없이 거절하지 못하지만, 이 권리는 처음 계약부터 법이 정한 전체 기간 안에서만 쓸 수 있다.",
+        "본부가 그 기간에 조건 변경이나 갱신 거절을 글로 알리지 않으면 같은 조건으로 다시 계약한 것으로 본다.",
+        "본부가 갱신을 거절하려면 거절 사유를 적어 정해진 기간 안에 글로 알려야 한다."
+      ],
+      "tags": [
+        "vendor_lock_in"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제13조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "franchise_ad_cost",
+      "label": "가맹점 부담 광고·판촉",
+      "facts": [
+        "가맹점이 비용을 나눠 내는 광고를 하려면 본부는 미리 정해진 비율 이상의 가맹점에게서 동의를 받아야 한다.",
+        "판촉 행사는 비용 부담에 동의한 가맹점만 대상으로 할 수 있다.",
+        "본부는 가맹점 돈이 들어간 광고와 판촉의 집행 내역을 가맹점에 알리고, 요구하면 열람하게 해야 한다."
+      ],
+      "tags": [
+        "vendor_lock_in"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제12조의6&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "century_store",
+      "label": "백년가게",
+      "facts": [
+        "오랜 세월 한자리에서 명맥을 이어 온 가게 가운데 정부가 우수성과 성장 가능성을 평가해 백년가게로 인증한다.",
+        "정해진 햇수 이상 가게를 이어 온 소상공인만 인증 대상이 된다.",
+        "인증받은 가게는 백년가게 간판을 달고, 정부는 가게가 더 오래 이어지고 성장하도록 지원한다."
+      ],
+      "tags": [
+        "daily_accumulation"
+      ],
+      "sources": [
+        "https://www.korea.kr/news/policyNewsView.do?newsId=148929214"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "startup_fund",
+      "label": "소상공인 정책자금",
+      "facts": [
+        "정책자금은 상시 근로자 수가 기준보다 적은 소상공인만 신청할 수 있고, 융자를 제외하는 업종이면 받을 수 없다.",
+        "공단이나 금융기관이 사업계획과 신용도 등을 평가해 융자 여부와 금액을 정한다.",
+        "대출받은 돈을 정해진 용도 밖에 쓰면 자금을 일찍 돌려받는 등의 제재를 받는다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=839&ccfNo=1&cciNo=2&cnpClsNo=1"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "deposit_return",
+      "label": "보증금 반환과 가게 인도",
+      "facts": [
+        "임대차가 끝나면 세입자는 가게를 돌려주고 건물주는 보증금을 돌려줘야 하는데, 한쪽이 자기 의무를 하기 전까지 다른 쪽도 미룰 수 있다.",
+        "그래서 세입자는 보증금을 받을 때까지 가게를 넘겨주지 않을 수 있고, 건물주는 가게를 받을 때까지 보증금을 주지 않을 수 있다.",
+        "계약이 끝난 뒤에도 세입자는 그동안의 월세를 내야 한다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=3&cciNo=2&cnpClsNo=2"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "labor_contract",
+      "label": "근로조건 서면 명시",
+      "facts": [
+        "직원을 쓰기로 계약할 때 사장은 임금, 일하는 시간, 휴일, 휴가 같은 근로조건을 밝히고 글로 적어 건네야 한다.",
+        "계약한 뒤에 이 근로조건을 바꿀 때도 다시 밝혀야 한다.",
+        "임금은 어떤 항목으로 이뤄지고 어떻게 계산해 어떻게 주는지까지 글에 담아야 한다."
+      ],
+      "tags": [
+        "progression_gate"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=근로기준법&joLnkStr=제17조&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "cash_receipt",
+      "label": "현금영수증 가맹 의무",
+      "facts": [
+        "직전 해 매출이 기준을 넘은 음식점은 현금영수증 발급 장치를 달아 현금영수증 가맹점이 되어야 한다.",
+        "문을 연 첫해처럼 직전 해 매출을 알 수 없거나 기준에 못 미치면 가입하지 않아도 된다.",
+        "가맹점은 손님이 잘 보는 계산대 근처에 가맹점 표지를 붙여야 한다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=5&cciNo=1&cnpClsNo=3"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "no_smoking_zone",
+      "label": "음식점 금연구역",
+      "facts": [
+        "음식점 안에서는 어디서도 담배를 피울 수 없도록 가게 전체를 금연구역으로 정하고, 출입구에 금연 표지를 붙여야 한다.",
+        "금연구역을 정하지 않거나 표지를 붙이지 않으면 먼저 고치라는 명령을 받고, 따르지 않으면 과태료를 낸다.",
+        "표지는 한글로 쓰되 필요하면 외국어를 함께 적을 수 있다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=3&cciNo=1&cnpClsNo=2"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "signage_permit",
+      "label": "간판 허가와 신고",
+      "facts": [
+        "가게 간판은 크기와 높이, 다는 위치에 따라 관청의 허가를 받아야 하는 것과 신고만 하면 되는 것으로 나뉜다.",
+        "도시 지역이나 문화유산 주변처럼 정해진 지역에 간판을 달려면 허가나 신고를 거쳐야 한다.",
+        "크기가 큰 벽면 간판이나 옥상 간판은 허가를 받아야 한다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=839&ccfNo=3&cciNo=2&cnpClsNo=2"
+      ],
+      "verifiedAt": "2026-11-22"
     }
   ],
   "edges": [
@@ -1018,6 +1194,61 @@
       "from": "origin_label",
       "to": "price_board",
       "rel": "함께 손님에게 밝혀야 할 메뉴 정보"
+    },
+    {
+      "from": "shared_kitchen",
+      "to": "fixed_variable_cost",
+      "rel": "주방 시설을 여럿이 나눠 씀"
+    },
+    {
+      "from": "meal_staff_roles",
+      "to": "kitchen_division",
+      "rel": "급식소에서 일을 나눠 맡는 방식"
+    },
+    {
+      "from": "franchise_renewal",
+      "to": "lease_renewal",
+      "rel": "같은 꼴의 계약 갱신 보호"
+    },
+    {
+      "from": "franchise_ad_cost",
+      "to": "franchise_fee",
+      "rel": "가맹점이 본부에 내는 또 다른 비용"
+    },
+    {
+      "from": "century_store",
+      "to": "model_restaurant",
+      "rel": "함께 정부가 지정하는 좋은 가게"
+    },
+    {
+      "from": "startup_fund",
+      "to": "small_workplace",
+      "rel": "직원 수 기준으로 대상을 가름"
+    },
+    {
+      "from": "deposit_return",
+      "to": "fixed_date",
+      "rel": "보증금을 지키는 상가 세입자 규칙"
+    },
+    {
+      "from": "labor_contract",
+      "to": "minimum_wage",
+      "rel": "임금을 계약서에 밝힘"
+    },
+    {
+      "from": "cash_receipt",
+      "to": "card_sales_credit",
+      "rel": "현금영수증 매출도 세액공제 대상"
+    },
+    {
+      "from": "no_smoking_zone",
+      "to": "price_board",
+      "rel": "함께 가게에 붙여야 할 표지"
+    },
+    {
+      "from": "signage_permit",
+      "to": "open_prep",
+      "rel": "문을 열기 전에 갖출 일"
     }
   ]
 }
