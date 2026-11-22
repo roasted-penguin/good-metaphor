@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-9",
+  "version": "2026.11.23-1",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -848,6 +848,38 @@
       "tags": ["temporary_multiplier"],
       "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/425"],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "scroll_upgrade", "label": "주문서", "aliases": ["주흔"],
+      "facts": [
+        "주문서는 성공률이 낮을수록 성공했을 때 장비에 더 좋은 옵션을 붙여 주고, 주문의 흔적이나 메소로 쓸 수 있다.",
+        "장비마다 주문서를 쓸 수 있는 횟수가 정해져 있고, 성공하든 실패하든 쓸 때마다 그 횟수가 줄어든다.",
+        "순백의 주문서는 실패로 줄어든 횟수를 하나 되돌리고, 이노센트 주문서는 주문서로 올린 옵션을 표준 상태로 되돌린다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/374", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/418"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "union_raid", "label": "유니온 레이드",
+      "facts": [
+        "유니온 레이드는 내 유니온 공격대가 보스 드래곤을 자동으로 공격해 유니온 코인을 모으는 곳으로, 공격대 전투력이 높을수록 코인이 빨리 쌓인다.",
+        "받기 전에 모아 둘 수 있는 코인 수가 유니온 등급마다 정해져 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/407"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "skill_ring", "label": "특수 스킬 반지",
+      "facts": [
+        "특수 스킬 반지는 착용하면 반지마다 정해진 특수 스킬을 쓸 수 있는 반지이다.",
+        "리스트레인트 링이나 컨티뉴어스 링을 일정 레벨 이상으로 끼면 특수 스킬 반지를 하나 더 낄 수 있는 슬롯이 열린다.",
+        "추가 슬롯을 포함해 액티브 특수 스킬 반지와 패시브 특수 스킬 반지는 각각 한 종씩만 낄 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/News/Update/799"],
+      "verifiedAt": "2026-11-22"
     }
   ],
   "edges": [
@@ -877,6 +909,7 @@
     { "from": "boss_reward_split", "to": "party", "rel": "파티원끼리 보상을 나눔" },
     { "from": "boss_reward_split", "to": "weekly_boss", "rel": "결정석 가격을 인원에 따라 정함" },
     { "from": "quick_pass", "to": "arcane_symbol", "rel": "일일 퀘스트를 메이플포인트로 대신함" },
+    { "from": "scroll_upgrade", "to": "starforce", "rel": "스타포스와 별도로 장비를 강화함" },
     { "from": "additional_option", "to": "cube", "rel": "잠재능력과 따로 옵션을 다시 뽑음" },
     { "from": "ability", "to": "cube", "rel": "같은 방식으로 옵션을 무작위로 다시 뽑음" },
     { "from": "hyper_stat", "to": "level_exp", "rel": "레벨업마다 포인트를 받음" },
@@ -906,6 +939,7 @@
     { "from": "hyper_skill", "to": "hyper_stat", "rel": "높은 레벨에서 함께 열림" },
     { "from": "memento", "to": "item_binding", "rel": "일정 기간 교환을 막음" },
     { "from": "training_ground", "to": "skill_cooldown", "rel": "입장 때 재사용 대기시간을 초기화함" },
+    { "from": "scroll_fever", "to": "scroll_upgrade", "rel": "주말에 성공 확률을 올림" },
     { "from": "macro_detection", "to": "hunting", "rel": "비정상 사냥 기록을 단속함" },
     { "from": "boss_party_board", "to": "party", "rel": "다른 월드 플레이어와 파티를 꾸림" },
     { "from": "item_burning", "to": "challengers_world", "rel": "챌린저스 월드 이벤트로 열림" },
@@ -916,13 +950,16 @@
     { "from": "symbol_catalyst", "to": "arcane_symbol", "rel": "키운 심볼을 다른 캐릭터로 옮김" },
     { "from": "season_boss", "to": "weekly_boss", "rel": "주간 보스 제한과 따로 셈" },
     { "from": "blueberry_farm", "to": "challengers_world", "rel": "챌린저스 패스 보상으로 입장" },
+    { "from": "union_raid", "to": "union_link", "rel": "유니온 공격대가 자동으로 싸움" },
     { "from": "arcane_weekly", "to": "arcane_symbol", "rel": "주간 보상으로 심볼을 줌" },
+    { "from": "chaos_scroll", "to": "scroll_upgrade", "rel": "주문서 강화 횟수 안에서 씀" },
     { "from": "chaos_scroll", "to": "cube", "rel": "능력치를 무작위로 바꾸는 다른 강화 수단" },
     { "from": "sunday_maple", "to": "starforce_event", "rel": "샤이닝 스타포스 타임이 열리는 날" },
     { "from": "buff_stacking", "to": "skill_cooldown", "rel": "버프 스킬을 겹쳐 극딜을 준비함" },
     { "from": "additional_potential", "to": "cube", "rel": "일반 잠재능력 위에 하나 더 붙음" },
     { "from": "union_start", "to": "union_link", "rel": "유니온이 열리는 조건" },
     { "from": "maple_home", "to": "vip_sauna", "rel": "사우나 누적 보상 가구로 꾸밈" },
-    { "from": "mvp_resort", "to": "mvp_membership", "rel": "MVP 등급에 따라 이용 시간을 줌" }
+    { "from": "mvp_resort", "to": "mvp_membership", "rel": "MVP 등급에 따라 이용 시간을 줌" },
+    { "from": "skill_ring", "to": "boss_entry", "rel": "보스 스펙을 맞추는 장비" }
   ]
 }

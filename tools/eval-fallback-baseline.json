@@ -3,7 +3,7 @@
   "embedderId": "fallback:hash-ngram-4096-v2",
   "tagsVersion": "2026.11.22-5",
   "graphs": {
-    "maplestory": "2026.11.22-9",
+    "maplestory": "2026.11.23-1",
     "restaurant": "2026.11.22-6"
   },
   "summary": {
@@ -21,7 +21,7 @@
     "maplestory/holdout": {
       "n": 39,
       "hit1": 18,
-      "hit3": 22
+      "hit3": 21
     },
     "restaurant/eval": {
       "n": 21,
@@ -52,7 +52,7 @@
       {"sentence":"자격증을 따야 다음 단계의 업무를 맡을 수 있다.","kind":"hit","top3":["item_burning","maple_guide","the_seed"],"hit1":true,"hit3":true},
       {"sentence":"누진세는 소득 구간이 높아질수록 세율이 커진다.","kind":"hit","top3":["level_exp","starforce","hyper_skill"],"hit1":true,"hit3":true},
       {"sentence":"Leverage amplifies both gains and losses, so a small price drop can wipe out your margin.","kind":"hit","top3":["auction","meso","meso_inflation"],"hit1":false,"hit3":false},
-      {"sentence":"검을 대장간에 맡기면 날이 좋아질 수도 있고 그대로일 수도 있는데, 잘될수록 더 비싼 검이 된다.","kind":"hit","top3":["starforce","chaos_scroll","masterpiece"],"hit1":true,"hit3":true},
+      {"sentence":"검을 대장간에 맡기면 날이 좋아질 수도 있고 그대로일 수도 있는데, 잘될수록 더 비싼 검이 된다.","kind":"hit","top3":["starforce","chaos_scroll","scroll_upgrade"],"hit1":true,"hit3":true},
       {"sentence":"주차장은 처음 한 시간은 싸지만 시간이 지날수록 한 시간마다 받는 요금이 올라간다.","kind":"hit","top3":["mvp_resort","vip_sauna","level_exp"],"hit1":false,"hit3":true},
       {"sentence":"코인을 더 사려고 대출까지 받았다가 값이 폭락하면 원래 모아 둔 돈까지 날아간다.","kind":"hit","top3":["cube","starforce","ability"],"hit1":false,"hit3":true},
       {"sentence":"이 대회는 예선에서 80점을 못 넘으면 본선 무대에 설 수 없다.","kind":"hit","top3":["macro_detection","sixth_job","boss_entry"],"hit1":false,"hit3":true},
@@ -102,7 +102,7 @@
       {"sentence":"외국어는 처음엔 금방 늘지만 중급을 넘으면 실력이 잘 안 오른다.","kind":"hit","top3":["sunday_maple","scroll_fever","buff_stacking"],"hit1":false,"hit3":false},
       {"sentence":"축구팀은 공격수, 수비수, 골키퍼가 각자 자리를 맡아 경기한다.","kind":"hit","top3":["party","boss_reward_split","boss_party_board"],"hit1":true,"hit3":true},
       {"sentence":"운전면허 필기에 합격해야 도로주행 시험을 볼 수 있다.","kind":"hit","top3":["the_seed","epic_dungeon","item_burning"],"hit1":false,"hit3":false},
-      {"sentence":"무료 번역 API는 하루에 쓸 수 있는 글자 수가 정해져 있다.","kind":"hit","top3":["party_quest","monster_park","weekly_boss"],"hit1":true,"hit3":true},
+      {"sentence":"무료 번역 API는 하루에 쓸 수 있는 글자 수가 정해져 있다.","kind":"hit","top3":["party_quest","monster_park","union_raid"],"hit1":true,"hit3":true},
       {"sentence":"악기 연습은 매일 30분씩 빠지지 않고 해야 실력이 쌓인다.","kind":"hit","top3":["trait","arcane_symbol","sol_erda"],"hit1":true,"hit3":true},
       {"sentence":"랜덤 박스 장난감은 원하는 캐릭터가 나올 때까지 계속 사게 된다.","kind":"hit","top3":["ability","royal_style","cube"],"hit1":true,"hit3":true},
       {"sentence":"한 회사에서 쌓은 경력이 이직할 때 다른 회사에서도 인정된다.","kind":"hit","top3":["union_link","monster_collection","symbol_catalyst"],"hit1":true,"hit3":true},
@@ -120,7 +120,7 @@
       {"sentence":"명절 직전에는 과일을 찾는 사람이 몰려 사과 한 상자 값이 평소의 두 배가 된다.","kind":"hit","top3":["auction","meso_inflation","meso"],"hit1":true,"hit3":true},
       {"sentence":"외국어 단어는 하루 스무 개씩 매일 외워야 머리에 남고, 시험 전날 몰아 외우면 금방 잊는다.","kind":"hit","top3":["sol_erda","arcane_symbol","trait"],"hit1":true,"hit3":true},
       {"sentence":"경품 응모권은 한 장에 오천 원인데 당첨 확률과 상품 값을 곱하면 천 원어치도 안 된다.","kind":"hit","top3":["starforce","cube","masterpiece"],"hit1":true,"hit3":true},
-      {"sentence":"논문은 투고할 때마다 실릴 수도 떨어질 수도 있지만, 좋은 저널에 실릴수록 경력이 한 단계씩 올라간다.","kind":"hit","top3":["masterpiece","chaos_scroll","starforce"],"hit1":false,"hit3":true},
+      {"sentence":"논문은 투고할 때마다 실릴 수도 떨어질 수도 있지만, 좋은 저널에 실릴수록 경력이 한 단계씩 올라간다.","kind":"hit","top3":["masterpiece","chaos_scroll","scroll_upgrade"],"hit1":false,"hit3":false},
       {"sentence":"한 게임 회사 계정으로 쌓은 등급이 같은 회사의 다른 게임에서도 혜택으로 이어진다.","kind":"hit","top3":["union_link","symbol_catalyst","monster_collection"],"hit1":true,"hit3":true},
       {"sentence":"투자자는 같은 돈을 넣었을 때 한 해 수익이 더 많이 나는 상품을 고른다.","kind":"hit","top3":["starforce","level_exp","newname_auction"],"hit1":false,"hit3":false},
       {"sentence":"Collectors pay a fortune for stamps printed with an error, since only a handful of them exist.","kind":"hit","top3":["auction","newname_auction","union_link"],"hit1":true,"hit3":true},
