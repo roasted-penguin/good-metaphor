@@ -102,5 +102,141 @@
   ],
   "expectTag": "shared_bonus",
   "since": "T-191"
+ },
+ {
+  "sentence": "사내 자격 인증은 등급마다 정해진 실기 시험을 혼자 통과해야 다음 등급으로 오른다.",
+  "expectNodes": [
+   "union_champion"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "회사 복지 포인트로 고른 혜택은 유효기간이 있어서 포인트를 내고 연장해야 전 직원에게 계속 적용된다.",
+  "expectNodes": [
+   "union_artifact"
+  ],
+  "expectTag": "shared_bonus",
+  "since": "T-191"
+ },
+ {
+  "sentence": "한정판 랜덤 굿즈는 이번 시즌 구성품 중 하나가 나오고, 뜯지 않았으면 값의 일부를 포인트로 돌려준다.",
+  "expectNodes": [
+   "royal_style"
+  ],
+  "expectTag": "random_reroll",
+  "since": "T-191"
+ },
+ {
+  "sentence": "같은 등급 카드 두 장을 합성하면 정해진 확률로 상위 등급 카드가 나오는 카드 게임이 있다.",
+  "expectNodes": [
+   "masterpiece"
+  ],
+  "expectTag": "prob_upgrade",
+  "since": "T-191"
+ },
+ {
+  "sentence": "새 기념 배지를 달면 예전에 달았던 배지는 사라지고, 배지 강화는 낮은 확률로만 성공한다.",
+  "expectNodes": [
+   "soul_weapon"
+  ],
+  "expectTag": "prob_upgrade",
+  "since": "T-191"
+ },
+ {
+  "sentence": "방탈출 카페는 팀원 수와 하루 이용 횟수가 정해져 있고, 팀으로 함께 풀어야 한다.",
+  "expectNodes": [
+   "party_quest"
+  ],
+  "expectTag": "periodic_cap",
+  "since": "T-191"
+ },
+ {
+  "sentence": "신입 사원용 연습 서버는 각자 전용 데이터가 주어져 다른 사람과 자원을 나눠 쓰지 않아 실습 속도가 빠르다.",
+  "expectNodes": [
+   "theme_dungeon"
+  ],
+  "expectTag": "efficiency_metric",
+  "since": "T-191"
+ },
+ {
+  "sentence": "에너지 드링크 쿠폰은 한 번 쓰면 15분 동안 다른 쿠폰을 쓸 수 없다.",
+  "expectNodes": [
+   "rune"
+  ],
+  "expectTag": "cooldown",
+  "since": "T-191"
+ },
+ {
+  "sentence": "이번 달 가입자는 행사 기간 동안 등급이 오를 때마다 한 등급씩 더 올려 준다.",
+  "expectNodes": [
+   "hyper_burning"
+  ],
+  "expectTag": "temporary_multiplier",
+  "since": "T-191"
+ },
+ {
+  "sentence": "시즌 패스는 매주 미션으로 포인트를 모아 단계를 올리는데, 한 주에 얻을 수 있는 포인트에 상한이 있다.",
+  "expectNodes": [
+   "challengers_pass"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "충전식 독서실 이용권은 충전한 시간만큼 머물 수 있지만, 운영 기간이 끝나면 남은 시간이 사라진다.",
+  "expectNodes": [
+   "vip_sauna"
+  ],
+  "expectTag": "temporary_multiplier",
+  "since": "T-191"
+ },
+ {
+  "sentence": "도메인 경매는 종료 직전에 몰리는 입찰을 막으려고 마감 시각을 몇 분 범위에서 바꾼다.",
+  "expectNodes": [
+   "newname_auction"
+  ],
+  "expectTag": "scarcity_value",
+  "since": "T-191"
+ },
+ {
+  "sentence": "유료 가속권을 사면 이번 시즌 동안 퀘스트 보상이 세 배가 되고, 이미 받은 보상도 소급해 준다.",
+  "expectNodes": [
+   "genesis_pass"
+  ],
+  "expectTag": "temporary_multiplier",
+  "since": "T-191"
+ },
+ {
+  "sentence": "새 기기에서 로그인하면 송금이 제한되고, 본인 인증을 하거나 며칠 꾸준히 쓰면 신뢰 기기로 바뀐다.",
+  "expectNodes": [
+   "green_pc"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "휴대폰 요금제는 변경할 때마다 수수료가 늘어나다가 일정 금액에서 더 오르지 않는다.",
+  "expectNodes": [
+   "hyper_skill"
+  ],
+  "expectTag": "escalating_cost",
+  "since": "T-191"
+ },
+ {
+  "sentence": "할인 쿠폰으로 산 상품은 한 달 동안 되팔 수 없고, 또 쿠폰을 쓰면 그 기간이 처음부터 다시 시작된다.",
+  "expectNodes": [
+   "memento"
+  ],
+  "expectTag": "cooldown",
+  "since": "T-191"
+ },
+ {
+  "sentence": "기록 측정 트랙은 일정 기록 이상인 선수만 공식 기록을 남길 수 있고, 들어갈 때 가져갈 장비가 제한된다.",
+  "expectNodes": [
+   "training_ground"
+  ],
+  "expectTag": "threshold_req",
+  "since": "T-191"
  }
 ]
