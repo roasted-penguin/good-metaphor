@@ -1,0 +1,50 @@
+// 좋은비유네용 테일넷 정책(T-411, ADR 0006). HuJSON: 주석과 끝 쉼표를 쓸 수 있다.
+// 관리 콘솔 Access controls에 이 파일 내용을 그대로 붙여 넣는다(기본 정책 "모두 → 모두"는 지운다).
+// 원칙: 기본은 막힘. 아래 grants에 적힌 길만 열린다. "*" 규칙은 두지 않는다.
+{
+	// 태그를 붙일 수 있는 사람: 관리자(무료 Personal 플랜에서는 소유자 나 하나)만
+	"tagOwners": {
+		"tag:rag-server": ["autogroup:admin"], // EC2 analogy-api(T-401)
+		"tag:llm-node":   ["autogroup:admin"], // 내 M2 맥의 Ollama(T-411)
+	},
+
+	"grants": [
+		// EC2 추출 워커 → 맥 Ollama. 11434(TCP)만, 이 길 하나뿐이다.
+		// 내 다른 기기·같은 와이파이 기기는 맥 11434에 들어올 수 없다.
+		{
+			"src": ["tag:rag-server"],
+			"dst": ["tag:llm-node"],
+			"ip":  ["tcp:11434"],
+		},
+		// 나 → EC2 SSH(Tailscale SSH가 22로 받는다). 관리 포트는 T-401에서 정해지면 여기에만 더한다.
+		{
+			"src": ["autogroup:admin"],
+			"dst": ["tag:rag-server"],
+			"ip":  ["tcp:22"],
+		},
+	],
+
+	// Tailscale SSH: EC2에는 나만, 주기적으로 다시 인증(check)
+	"ssh": [
+		{
+			"action": "check",
+			"src":    ["autogroup:admin"],
+			"dst":    ["tag:rag-server"],
+			"users":  ["autogroup:nonroot"],
+		},
+	],
+
+	// 저장할 때 콘솔이 확인하는 시험. 하나라도 어긋나면 정책이 저장되지 않는다.
+	"tests": [
+		{
+			"src":    "tag:rag-server",
+			"accept": ["tag:llm-node:11434"],
+			"deny":   ["tag:llm-node:22", "tag:llm-node:80", "tag:llm-node:443"],
+		},
+		{
+			// 맥은 EC2에 먼저 들어갈 수 없다
+			"src":  "tag:llm-node",
+			"deny": ["tag:rag-server:22", "tag:rag-server:443"],
+		},
+	],
+}

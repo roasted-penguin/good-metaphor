@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  시간창 시작: Ollama 서버를 켠다(T-411). 사용자 LaunchAgent, root 아님.
+  이 파일은 틀이다. install.sh가 __APP_DIR__·__LOG_DIR__를 바꾸고
+  StartCalendarInterval을 window.conf의 시작 시각으로 채워 ~/Library/LaunchAgents에 넣는다.
+  OLLAMA_HOST는 127.0.0.1만(규칙 10). 테일넷 노출은 tailscale-serve.sh가 맡는다.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.good-metaphor.ollama-start</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>__APP_DIR__/ollama-window.sh</string>
+		<string>start</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>OLLAMA_HOST</key>
+		<string>127.0.0.1:11434</string>
+		<key>OLLAMA_NUM_PARALLEL</key>
+		<string>1</string>
+		<key>OLLAMA_KEEP_ALIVE</key>
+		<string>5m</string>
+		<key>OLLAMA_CONTEXT_LENGTH</key>
+		<string>16384</string>
+	</dict>
+	<!-- 로그인·설치 때 한 번 돈다. 창 밖이면 스크립트가 켜지 않고 바로 끝난다(지금 켜기 표시가 있을 때만 예외) -->
+	<key>RunAtLoad</key>
+	<true/>
+	<!-- 비정상 종료만 다시 띄운다. 끝 에이전트가 끈 것(종료 코드 0)은 다시 띄우지 않는다 -->
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>StartCalendarInterval</key>
+	<array/>
+	<key>StandardOutPath</key>
+	<string>__LOG_DIR__/ollama.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOG_DIR__/ollama.log</string>
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>
