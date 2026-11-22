@@ -53,6 +53,7 @@ npm run eval:ci -- <프리셋>       # 실제 크롬 평가 묶음(guard·full·
 npm run build:vectors            # 공통 그래프 노드·태그 벡터를 실제 확장(크롬, q8, 한 문장씩)으로 미리 계산해 extension/data/vectors/<관심사>.json에 쓴다. 그래프·태그 예문·admin.retrieval 텍스트 방식을 바꾼 PR은 다시 돌려 같은 PR에 커밋(T-193, ADR 0015). -- --verify 다시 임베딩해 비트 동일 확인, -- --interest <id> 한 관심사
 npm run check:vectors            # 크롬 없이(CI): 벡터 파일 형식·embedderId·접두어가 admin.json과 맞는지(틀리면 실패), 그래프와 어긋난 항목은 경고만(-- --strict면 실패)
 npm run eval -- --precomputed     # 그래프 벡터를 동봉 파일에서 꺼내 채점, 런타임과 비트 동일 수 출력(T-193)
+npm run eval -- --set tools/eval-expand-maplestory.json  # 그 파일 문장만 채점(가드 대상 아님). 확장 노드마다 다른 분야 문장 하나, 노드가 실제로 쓰이는지 보는 셋(T-191)
 node tools/scale-bench.mjs        # 합성 1,000노드 그래프(.tmp/scale에만)로 첫 로드·호버·vecCache·여유를 실제 크롬에서 측정(T-193, 30분 안팎)
 npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내기를 평가셋·검증셋·가드와 대조(베낀 예문 후보를 거름). 반영 절차는 /approve-corrections
 npm run node-pipeline:index|draft|check|gate|apply|accept-alt -- --interest <id>  # 반자동 노드 파이프라인(T-194·T-195): 공식 페이지 색인 → 절 단위 LLM 후보(캐시·--max-calls) → 자동 검사 시트 → 회귀 관문(대체 → 실제 확장, 대안 정답 후보 표) → 패치. 원문 저장 안 함, 실제 그래프는 --write-real + 관문 browser만. tools/node-pipeline/README.md
@@ -92,7 +93,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/fallback-embed.js      모델 없을 때 쓰는 글자 n-gram 임베더
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)
   data/common/tags.json     추상 태그 21개(통제 어휘, 규칙 9)의 원본. 새 태그는 맨 뒤에만(T-171: fixed_cost_leverage·vendor_lock_in, T-176: brokerage_fee). 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
-  data/common/maplestory.json 공통 저장소 그래프 (노드 30, 엣지 26, 태그는 id만, T-172). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114). 약한 별칭(`weakAliases`)은 그래프 `cueWords`(메이플 단서 명시 목록, `cueWordProblems`로 일반어·다른 관심사 낱말 검사)가 문장에 있을 때만 (T-199)
+  data/common/maplestory.json 공통 저장소 그래프 (노드 81, 엣지 78, 태그는 id만, T-172·T-191). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114). 약한 별칭(`weakAliases`)은 그래프 `cueWords`(메이플 단서 명시 목록, `cueWordProblems`로 일반어·다른 관심사 낱말 검사)가 문장에 있을 때만 (T-199)
   data/common/restaurant.json 두 번째 공통 관심사 "식당" 그래프 (노드 27, 엣지 17, 공통 태그 id만(T-168·T-171), 수치 없음, 중립 테마, `noMatchText`). 팝업·설정 "관심사"(설정 `interest`)로 로그인 없이 고른다. 서버는 메이플만 알아 식당이면 로컬 (T-302)
   data/vectors/<관심사>.json  미리 계산한 공통 그래프 벡터(데이터, 규칙 4). `npm run build:vectors`가 만든다. 직접 고치지 말 것 (T-193)
   data/common/blocklist.json  금칙어 용어 카드(ADR 0007 형식, `승인`만 필터에 씀). 확장·서버가 같이 읽음 (T-114)
