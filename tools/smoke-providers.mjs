@@ -8,6 +8,9 @@
 //   -- --compare N  : 평가셋(tools/eval-set.json)에서 고르게 N문장을 골라 제공자별 비교표를 낸다(T-122).
 //                     뜻까지 시간·JSON·규칙 1·근거 검사·존댓말(첫 답/최종). -- --rpm 4 로 제공자별 분당 호출 수(기본 4,
 //                     Groq 무료 분당 토큰 한도에 맞춘 값). 비교표는 실패로 세지 않는다
+//   -- --precise-judge [N] : 정밀 모드 합친 호출(추상 구조 + 태그 판정 JSON, T-184)을 고정 문장 N개(기본 전부 8개)로 확인(T-186).
+//                     확장과 같은 buildAbstractJudgePrompt·parseAbstractJudge. JSON 파싱·목록 밖 id·없음 우세·지연을 제공자별 한 줄.
+//                     형식을 어겨도 확장은 예전 정밀 모드로 돌아가므로 실패로 세지 않는다. 환경변수 PRECISE_JUDGE=true(또는 숫자)도 같다
 // 검색은 글자 n-gram 대체 임베더로 한다. 여기서 보는 것은 검색 품질이 아니라 요청·응답 형식과 생성 품질이다.
 // 생성은 확장과 같은 runAnalogy(규칙 1·근거 검사·금칙어·끝맺음 검사, T-104·T-122)로 한다. 키 값은 출력하지 않는다.
 import fs from 'node:fs';
@@ -19,6 +22,7 @@ import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve, retrievalFor } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
+import { PRECISE_SENTENCES, checkPreciseJudge, summarizePrecise, preciseSummaryLine, preciseRowLine } from './smoke-precise.mjs';
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
@@ -29,6 +33,10 @@ const argValue = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i 
 const allModels = argv.includes('--all-models');
 const compareN = Number(argValue('--compare') ?? process.env.COMPARE ?? 0) || 0;
 const compareRpm = Number(argValue('--rpm') ?? process.env.COMPARE_RPM ?? 4) || 4;
+// --precise-judge [N] / PRECISE_JUDGE=true|N (T-186). 0·false·빈 값이면 안 함. N이 없거나 true면 전부
+const preciseArg = argv.includes('--precise-judge') ? (argValue('--precise-judge') ?? 'true') : (process.env.PRECISE_JUDGE || '');
+const preciseN = /^(true|yes)$/i.test(preciseArg) || (argv.includes('--precise-judge') && !/^\d+$/.test(preciseArg))
+  ? PRECISE_SENTENCES.length : Math.min(PRECISE_SENTENCES.length, Number(preciseArg) || 0);
 
 // jargon: 정밀 모드 추상화에 그대로 남으면 안 되는 원문 전문용어(T-122). 띄어쓰기·대소문자 무시
 const SENTENCES = [
@@ -150,6 +158,38 @@ for (const p of runs) {
     if (problem) console.log(`    문제: ${problem}${row.raw ? `\n    원문: ${row.raw}` : ''}`);
     if (row.ok) console.log(describe(row));
   }
+}
+
+// ── 정밀 모드 합친 호출(T-186): 합친 JSON을 지키는지. 실패로 세지 않는다 ──
+if (preciseN > 0) {
+  const ptj = admin.preciseTagJudge || {};
+  const cases = PRECISE_SENTENCES.slice(0, preciseN);
+  const gap = 60_000 / compareRpm;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  console.log(`\n=== 정밀 판정 (고정 ${cases.length}문장, 하한 ${ptj.floor ?? 0}, 제공자별 분당 ${compareRpm}회, 실패로 세지 않음)`);
+  const lines = [];
+  for (const p of runs) {
+    console.log(`\n== 정밀 판정 ${p.id} / ${p.model}`);
+    const rows = [];
+    for (const s of cases) {
+      let row;
+      // 분당 한도 429는 30초 기다려 한 번 더(확장 complete의 재시도 뒤에도 429일 때)
+      for (let tries = 0; ; tries++) {
+        const t = Date.now();
+        row = await checkPreciseJudge((system, user, opts) => complete(p, system, user, opts), s, graph.tags, { floor: ptj.floor ?? 0 });
+        if (row.ok || row.status !== 429 || tries >= 1) { await sleep(Math.max(0, gap - (Date.now() - t))); break; }
+        console.log('  429, 30초 뒤 다시');
+        await sleep(30_000);
+      }
+      rows.push(row);
+      console.log(preciseRowLine(row));
+    }
+    const line = preciseSummaryLine(`${p.id}/${p.model}`, summarizePrecise(rows));
+    console.log(line);
+    lines.push(line);
+  }
+  console.log('\n=== 정밀 판정 요약');
+  for (const l of lines) console.log(l);
 }
 
 // ── 비교표(T-122): 평가셋 문장으로 제공자별 생성 품질·시간 ──

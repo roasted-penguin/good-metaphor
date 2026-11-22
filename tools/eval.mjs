@@ -29,6 +29,8 @@
 //        [--judge-floor 0.7]           # 판정 확률 하한(기본 admin.preciseTagJudge.floor). --judge-weight 기본은 admin.preciseTagJudge.weight
 //        [--judge-sweep]               # 하한 후보별 한 줄 요약(하한은 검증셋·가드로 고른다, 홀드아웃으로 고르지 않는다)
 //        [--judge-offline]             # 새로 묻지 않고 캐시만(한도 소진 때). 캐시 없는 문장은 "판정 빠짐"으로 원문 질의
+//        [--judge-candidate combine-best] # 결합 방식 후보를 지금 방식(admin.preciseTagJudge.mode)과 문장별 1위로 비교(T-186)
+//   [--dump-top1 <파일>]               # 셋·줄별 문장 1위를 JSON으로 저장(다른 실행과 비교용, T-186). 정밀은 임베딩만·정밀·정밀+판정·후보
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadInterestGraph, interestFromArgv } from './load-graph.mjs';
@@ -137,6 +139,15 @@ const precise = judgeId === 'precise'; // T-184: 정밀 모드 합침 응답
 const ptj = admin.preciseTagJudge || {};
 const judgeWeight = Number(argAfter('--judge-weight')) || (precise ? ptj.weight : 0) || 0.05;
 const judgeFloor = argAfter('--judge-floor') !== null ? Number(argAfter('--judge-floor')) : (ptj.floor ?? 0);
+const judgeMode = ptj.mode || 'combine';
+const judgeCandidate = argAfter('--judge-candidate'); // T-186: 결합 방식 후보(예 combine-best)
+// 문장별 1위 저장(T-186): { "<셋 이름>": { "<줄>": { "<문장>": "<1위 노드>" } } }
+const dumpTop1File = argAfter('--dump-top1');
+const top1Dump = {};
+const dumpTop1 = (setName, line, cases, tops) => {
+  if (!dumpTop1File) return;
+  (top1Dump[setName] ??= {})[line] = Object.fromEntries(cases.map((c, i) => [c.sentence, tops[i] ?? null]));
+};
 let judged = null;
 if (judgeId && !serverOnly) {
   try {
@@ -242,7 +253,7 @@ async function printPrecise(name, cases, qs, guarded) {
   const qsP = await embed(cases.map(c => rewriteQueryText(res(c).abstract, c.sentence)), 'query');
   const { topK, name: _n, ...base } = mixedSetting(admin, graph);
   const ranker = (vecsOf, tj) => (c, i) => retrieve(vecsOf[i], graph, vecs, { ...base, topK: graph.nodes.length, aliasText: c.sentence, tagJudge: tj ? tj(c) : null }).map(x => ({ id: x.id, score: x.score }));
-  const judgeOf = floor => c => { const p = judgeTagProbs(res(c).answers, { floor }); return p?.length ? { p, mode: 'combine', weight: judgeWeight } : null; };
+  const judgeOf = (floor, mode = judgeMode) => c => { const p = judgeTagProbs(res(c).answers, { floor }); return p?.length ? { p, mode, weight: judgeWeight } : null; };
   const top1s = rank => cases.map((c, i) => rank(c, i)[0]?.id);
   // 정밀+판정의 질의: 판정이 "구조 없음"(없음 우세·하한 넘는 태그 없음)이면 원문 벡터(확장 runAbstract와 같다), 아니면 추상 구조 + 원문
   const qsJ = floor => cases.map((c, i) => (isStructureless(judgeTagProbs(res(c).answers, { floor })) ? qs[i] : qsP[i]));
@@ -262,6 +273,8 @@ async function printPrecise(name, cases, qs, guarded) {
   };
   console.log(summary('임베딩만', rE, tE));
   console.log(summary('정밀(판정 없음)', rP, tP));
+  dumpTop1(name, '임베딩만', cases, tE);
+  dumpTop1(name, '정밀', cases, tP);
   const floors = process.argv.includes('--judge-sweep') ? [0, 0.5, 0.6, 0.7, 0.8, 0.9] : [judgeFloor];
   for (const f of floors) {
     const rankJ = ranker(qsJ(f), judgeOf(f));
@@ -272,7 +285,18 @@ async function printPrecise(name, cases, qs, guarded) {
     const rankOJ = ranker(qs, judgeOf(f));
     console.log(summary(`원문+판정 하한 ${f}`, scoreCases(cases, rankOJ), top1s(rankOJ)));
     const mark = ok => (ok === null ? '·' : ok ? '✓' : '✗');
-    for (const x of rank1Changes(cases, tE, tJ)) console.log(`    ${x.regressed ? '⚠ 회귀' : x.gained ? '+ 개선' : '  변화'} ${x.sentence.slice(0, 40)}… ${x.before}${mark(x.beforeOk)} → ${x.after}${mark(x.afterOk)}`);
+    const changeLines = (before, after) => rank1Changes(cases, before, after).map(x => `    ${x.regressed ? '⚠ 회귀' : x.gained ? '+ 개선' : '  변화'} ${x.sentence.slice(0, 40)}… ${x.before}${mark(x.beforeOk)} → ${x.after}${mark(x.afterOk)}`);
+    for (const l of changeLines(tE, tJ)) console.log(l);
+    dumpTop1(name, '정밀+판정', cases, tJ);
+    if (judgeCandidate && judgeCandidate !== judgeMode) {
+      // 후보 결합 방식: 같은 질의·같은 판정, 결합만 다르게. 문장별 1위는 지금 방식(정밀+판정) 대비
+      const rankC = ranker(qsJ(f), judgeOf(f, judgeCandidate));
+      const rC = scoreCases(cases, rankC), tC = top1s(rankC);
+      const chJ = rank1Changes(cases, tJ, tC);
+      console.log(`${summary(`후보 ${judgeCandidate} 하한 ${f}`, rC, tC)} | 지금(${judgeMode}) 대비 회귀 ${chJ.filter(x => x.regressed).length} 개선 ${chJ.filter(x => x.gained).length}`);
+      for (const l of changeLines(tJ, tC)) console.log(l);
+      dumpTop1(name, `후보 ${judgeCandidate}`, cases, tC);
+    }
   }
   const st = latencyStats(cases.map(c => res(c).ms));
   console.log(`  합침 호출 지연 ${st ? `중앙값 ${st.median}ms · p90 ${st.p90}ms (${st.n}문장, 처음 호출 때 잰 값)` : '없음'}`);
@@ -291,6 +315,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
     if (verbose) for (const m of r.misses) console.log(missLine(m));
     if (s.name === mixedSetting(admin, graph).name) {
       mixedResult = r;
+      dumpTop1(name, mode ? `혼합 · ${modeName}` : '혼합', cases, cases.map((c, i) => rank(c, i)[0]?.id));
       margins = marginsOf(cases, rank);
       if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…`);
       // 음성 문장(T-149): 1위가 금지 노드가 아니면 통과. hit@1 분모와 따로
@@ -318,6 +343,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
   if (guarded && !mode) marginGuardFailed.push(...marginGuardFails(guard, margins, marginMin));
 }
 await closeEmbedder();
+if (dumpTop1File) { fs.writeFileSync(dumpTop1File, JSON.stringify(top1Dump, null, 1)); console.log(`문장별 1위 저장: ${dumpTop1File}`); }
 
 if (serverUrl) {
   let serverHit1 = null, serverN = 0;

@@ -209,8 +209,9 @@ export function combineTagSim({ sim, penalty = 0, p, mode = null, weight = 0 }) 
  *   aliasText   별칭(게임 은어) 판정에 쓰는 원문. 없으면 별칭 가산 없음 (T-114)
  *   aliasBoost  aliasText에 노드 별칭이 낱말로 있으면 그 노드 점수에 더할 값. 기본 0(영향 없음)
  *               약한 별칭(weakAliases, 일상어와 겹치는 은어)은 mapleCue가 참일 때만 더한다. 한 노드에 한 번만 (T-149)
- *   tagJudge    { p, mode: 'replace'|'combine', weight } 판정기 태그 확률(T-120, combineTagSim). p는 {id: 확률} | Map | [{id,p}].
- *               없으면(기본) 결과가 이전과 같다. 지금은 평가 도구만 쓴다(ADR 0014)
+ *   tagJudge    { p, mode: 'replace'|'combine'|'combine-best', weight } 판정기 태그 확률(T-120, combineTagSim). p는 {id: 확률} | Map | [{id,p}].
+ *               'combine-best'는 가산(weight·p)을 노드마다 임베딩 최고 태그(유사도 − 감점 1위) 하나에만 준다(T-186).
+ *               없으면(기본) 결과가 이전과 같다. 정밀 모드 판정(admin.preciseTagJudge, ADR 0014)과 평가 도구가 쓴다
  */
 export function retrieve(q, graph, vecs, {
   topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {},
@@ -228,7 +229,10 @@ export function retrieve(q, graph, vecs, {
   }
 
   const jp = tagJudge ? judgeProbs(tagJudge.p) : null;
-  const adjOf = id => combineTagSim({ sim: tagSim.get(id) ?? 0, penalty: tagPenalty[id] || 0, p: jp?.get(id), mode: tagJudge?.mode, weight: tagJudge?.weight || 0 });
+  // 'combine-best'(T-186): 판정 가산을 노드의 임베딩 최고 태그(유사도 − 감점 1위)에만 준다.
+  // 그래서 태그 순위는 판정 없이 매기고, 가산은 아래에서 1위 태그에만 더한다
+  const best = tagJudge?.mode === 'combine-best';
+  const adjOf = id => combineTagSim({ sim: tagSim.get(id) ?? 0, penalty: tagPenalty[id] || 0, p: jp?.get(id), mode: best ? null : tagJudge?.mode, weight: tagJudge?.weight || 0 });
 
   const scored = graph.nodes.map(n => {
     const v = vecs.get('node:' + n.id);
@@ -237,6 +241,7 @@ export function retrieve(q, graph, vecs, {
     const ranked = n.tags
       .map(id => ({ id, sim: tagSim.get(id) ?? 0, adj: adjOf(id) }))
       .sort((a, b) => b.adj - a.adj);
+    if (best && ranked.length) ranked[0] = { ...ranked[0], adj: ranked[0].adj + (tagJudge.weight || 0) * (jp.get(ranked[0].id) ?? 0) };
     const top = ranked.slice(0, tagAgg === 'top2mean' ? 2 : 1);
     const tagScore = top.length ? Math.max(0, top.reduce((sum, t) => sum + t.adj, 0) / top.length) : 0;
     const bestTag = ranked[0]?.sim > 0 ? ranked[0].id : null, bestTagSim = bestTag ? ranked[0].sim : 0;
