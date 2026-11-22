@@ -50,6 +50,8 @@ test('pickPages: 초안 안 한 페이지만, 종류 순서대로, 개수 제한
   const es = [{ url: 'a', kind: 'notice' }, { url: 'b', kind: 'guide', drafted: 1 }, { url: 'c', kind: 'update' }, { url: 'd', kind: 'guide' }];
   assert.deepEqual(pickPages(es, { kindOrder: ['guide', 'update', 'notice'], limit: 2 }).map(e => e.url), ['d', 'c']);
   assert.deepEqual(pickPages(es, { kindOrder: [], limit: 9, only: ['notice'] }).map(e => e.url), ['a']);
+  const ups = [{ url: 'u1', kind: 'update', title: '클라이언트 업데이트 안내 (스킬 조정)' }, { url: 'u2', kind: 'update', title: '클라이언트 업데이트 안내' }];
+  assert.deepEqual(pickPages(ups, { pageSkip: maple.pageSkip }).map(e => e.url), ['u2'], '건너뛸 제목(스킬 조정)은 고르지 않는다');
 });
 
 /* ───── draft ───── */

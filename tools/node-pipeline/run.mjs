@@ -51,11 +51,12 @@ export async function buildIndex({ cfg, fetcher, pages = 1, now = () => new Date
 }
 
 // 초안 대상 고르기: 아직 초안 안 한 페이지, kindOrder 순서, 같은 종류 안에서는 색인 순서
-export function pickPages(entries, { kindOrder = [], limit = 10, only } = {}) {
+// pageSkip = 건너뛸 제목 정규식(T-195: 메이플 "스킬 조정" 패치는 수치 조정 목록뿐이라 절 6개에서 후보 0)
+export function pickPages(entries, { kindOrder = [], limit = 10, only, pageSkip = null } = {}) {
   const rank = k => { const i = kindOrder.indexOf(k); return i < 0 ? kindOrder.length : i; };
   return entries
     .map((e, i) => ({ e, i }))
-    .filter(({ e }) => !e.drafted && (!only || only.includes(e.kind)))
+    .filter(({ e }) => !e.drafted && (!only || only.includes(e.kind)) && !(pageSkip && pageSkip.test(e.title || '')))
     .sort((a, b) => rank(a.e.kind) - rank(b.e.kind) || a.i - b.i)
     .slice(0, limit)
     .map(({ e }) => e);
@@ -89,6 +90,10 @@ export async function draftPages({ cfg, pages, fetcher, complete, graph, tags, n
     if (text.length < minText) { report.push({ ...meta, status: 'short', count: 0 }); log(`본문이 짧아 건너뜀(${text.length}자): ${page.url}`); text = null; continue; }
     let { sections, skipped, overflow } = splitSections(text, { mark: HEADING_MARK, skip: cfg.sectionSkip || null, ...sectionOpts });
     text = null;
+    // 건너뛸 절을 빼고 나니 남은 절이 너무 짧으면 부르지 않는다
+    const tiny = sections.filter(x => x.text.length < minText);
+    sections = sections.filter(x => x.text.length >= minText);
+    skipped = [...skipped, ...tiny.map(x => x.title || '(짧은 절)')];
     const pageRow = { ...meta, status: 'ok', count: 0, sections: sections.length, skipped: skipped.length, overflow, dropped: 0 };
     if (!sections.length) { report.push({ ...pageRow, status: 'short' }); log(`건너뛸 절만 있음: ${page.url}`); continue; }
     for (const sec of sections) {

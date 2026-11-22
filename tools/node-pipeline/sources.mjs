@@ -37,7 +37,9 @@ export const INTERESTS = {
     // 초안 우선순위: 구조 설명이 많은 가이드 → 업데이트(패치 노트) → 공지(점검 안내가 많아 수확이 낮다)
     kindOrder: ['guide', 'update', 'notice'],
     // 절 나누기(T-195)에서 건너뛸 절 제목: 금방 사라지는 이벤트·일정·보상, 오류 수정 목록, 댓글·메뉴. LLM 호출을 아낀다
-    sectionSkip: /이벤트|버닝|패스|PC방|미니게임|쿠폰|점검|선착순|접속 보상|댓글|오류 수정|^캐시(샵)?$|^뉴스$|일정|기간|보상 안내/,
+    sectionSkip: /이벤트|버닝|패스|PC방|미니게임|쿠폰|점검|선착순|접속 보상|댓글|오류 수정|^캐시(샵)?$|^뉴스$|일정|기간|보상 안내|스킬 수정 사항/,
+    // 초안에서 뺄 페이지 제목: 스킬 수치 조정 패치(2026-11-22 묶음 4에서 절 6개 → 후보 0)
+    pageSkip: /스킬 조정/,
     content: [
       { path: /^\/guide\//i, start: 'class="cv_main"', end: 'class="cv_footer"' },
       { path: /^\/news\//i, start: 'class="new_board_con"', end: 'id="footer"' }
@@ -71,9 +73,17 @@ export const INTERESTS = {
       { kind: 'agency', title: '식품안전나라 위생등급', url: 'https://www.foodsafetykorea.go.kr/portal/board/boardDetail.do?menu_no=3397&menu_grp=MENU_NEW03&bbs_no=newbbs12' },
       { kind: 'agency', title: '최저임금위원회 결정 과정', url: 'https://www.minimumwage.go.kr/minWage/process/main.do' },
       { kind: 'agency', title: '서울 상권분석 서비스', url: 'https://golmok.seoul.go.kr/fixedAreaAnalysis.do' },
-      { kind: 'agency', title: '커리어넷 조리사 직업정보', url: 'https://www.career.go.kr/cnet/app/base/job/jobView.m?SEQ=173' }
+      { kind: 'agency', title: '커리어넷 조리사 직업정보', url: 'https://www.career.go.kr/cnet/app/base/job/jobView.m?SEQ=173' },
+      // 국세청 사업자 세무 안내(T-195): 식당을 차리고 운영하며 만나는 세금 구조. 생활법령이 503일 때도 열림(2026-11-22)
+      ...[
+        ['부가가치세', 2272, 7693], ['원천세', 2289, 7701], ['사업자등록 신청', 2444, 7777], ['사업자등록 정정', 2446, 7779],
+        ['휴업·폐업', 2447, 7780], ['현금영수증·신용카드', 2468, 7793], ['전자세금계산서', 2460, 7786], ['세금 납부 안내', 2364, 7741],
+        ['세액감면 및 절세혜택', 41127, 239082], ['징수유예', 41130, 239085]
+      ].map(([title, mi, id]) => ({ kind: 'agency', title: `국세청 ${title}`, url: `https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=${mi}&cntntsId=${id}` }))
     ],
     kindOrder: ['law', 'agency', 'press'],
+    // 절 나누기(T-195): 본문 표지가 없는 공공 페이지는 메뉴·만족도 조사 제목도 절이 된다(농식품부 보도자료 5쪽에서 호출 10번 → 후보 0)
+    sectionSkip: /Skip Navigation|콘텐츠 만족도|바로가기|^보도자료$|사이트맵|전체메뉴|^메뉴$/i,
     content: [
       { path: /policyNewsView/, start: 'class="article_body"', end: 'class="article_footer"' }
     ],

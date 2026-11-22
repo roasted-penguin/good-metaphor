@@ -5,7 +5,7 @@
 //   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe]
 //   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]]
 //   node tools/node-pipeline/cli.mjs accept-alt <대안 표 .alt-*.json> [--dir tools] [--all]
-//   node tools/node-pipeline/cli.mjs apply  --interest maplestory --batch N --approve ids.json [--gate browser|fallback|none] [--out 경로] [--write-real]
+//   node tools/node-pipeline/cli.mjs apply  --interest maplestory --batch N|all --approve ids.json [--gate browser|fallback|none] [--out 경로] [--write-real]
 // 작업 파일은 모두 .tmp/node-pipeline/(커밋 안 함). 페이지 본문은 어디에도 쓰지 않는다(D-5).
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -90,7 +90,7 @@ async function cmdDraft() {
   if (!existsSync(indexPath)) throw new Error('색인이 없어요. 먼저 index를 돌려 주세요.');
   const idx = readJson(indexPath);
   const only = arg('kind') ? arg('kind').split(',') : undefined;
-  const pages = pickPages(idx.entries, { kindOrder: cfg.kindOrder, limit: Number(arg('limit', 10)), only });
+  const pages = pickPages(idx.entries, { kindOrder: cfg.kindOrder, limit: Number(arg('limit', 10)), only, pageSkip: cfg.pageSkip || null });
   if (!pages.length) { console.log('[draft] 초안할 새 페이지가 없어요.'); return; }
   const p = provider();
   const graph = loadInterestGraph(interest);
@@ -132,13 +132,19 @@ async function cmdCheck() {
   console.log(`[check] → ${batchFile(n, '.md')}`);
 }
 
+// 묶음 번호 또는 all(그 관심사 묶음을 모두 합침) → 검사 결과
+const batchSel = () => (arg('batch') === 'all' ? 'all' : batchArg());
+const loadResults = n => (n === 'all'
+  ? batches().filter(b => existsSync(batchFile(b, '.json'))).flatMap(b => readJson(batchFile(b, '.json')).results)
+  : readJson(batchFile(n, '.json')).results);
+
 async function cmdApply() {
-  const n = batchArg();
+  const n = batchSel();
   const approvePath = arg('approve');
   if (!approvePath) throw new Error('--approve <승인 id 목록 JSON>이 필요해요.');
   const approved = readJson(approvePath);
   if (!Array.isArray(approved)) throw new Error('승인 파일은 id 문자열 배열이어야 해요.');
-  const checked = readJson(batchFile(n, '.json'));
+  const checked = { results: loadResults(n) };
   const day = arg('day', today());
   // 회귀 관문 통과분만(기본 = 실제 확장 판정 browser). --gate fallback은 사본 시연용, none은 관문 없이(실제 그래프에는 못 씀)
   const gate = arg('gate', 'browser');
@@ -187,11 +193,8 @@ function casesIo() {
 // 회귀 관문: 승인 후보(없으면 실패 아닌 후보 전부)를 그래프 사본에 넣어 1위 회귀 0·여유 악화 0인 것만 채택 목록으로.
 // --batch all이면 그 관심사 묶음을 모두 합쳐 잰다(결과 파일 이름은 batch-all)
 async function cmdGate() {
-  const all = arg('batch') === 'all';
-  const n = all ? 'all' : batchArg();
-  const results = all
-    ? batches().filter(b => existsSync(batchFile(b, '.json'))).flatMap(b => readJson(batchFile(b, '.json')).results)
-    : readJson(batchFile(n, '.json')).results;
+  const n = batchSel();
+  const results = loadResults(n);
   const embedderId = arg('embedder', 'fallback');
   const ids = arg('approve') ? readJson(arg('approve')) : results.filter(r => r.status !== 'fail').map(r => r.node.id);
   const day = arg('day', today());
