@@ -228,38 +228,100 @@ test('retrieve: 별칭이 낱말로 있으면 그 노드 점수에 aliasBoost를
 });
 
 // --- T-149 약한 별칭(weakAliases): 일상어와 겹치는 은어는 메이플 단서가 함께 있을 때만 가산 ---
-import { mapleCue, labelCueWords, MAPLE_GENERIC_WORDS } from '../../extension/lib/retrieval.js';
+import { mapleCue, cueWords, cueWordProblems, MAPLE_GENERIC_WORDS } from '../../extension/lib/retrieval.js';
 import { mergeGraphs } from '../../extension/lib/graph.js';
-import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
+import { loadCommonGraphFromDisk, loadInterestGraph } from '../../tools/load-graph.mjs';
+import { readFileSync } from 'node:fs';
 
 const commonMerged = mergeGraphs(loadCommonGraphFromDisk(), null);
+const restaurantMerged = mergeGraphs(loadInterestGraph('restaurant'), null);
 
-test('labelCueWords: 공통 노드 라벨에서 괄호를 빼고, 끝의 과·와를 떼고, 2글자 이상 낱말 중 일반어가 아닌 것', () => {
-  const g = { nodes: [
+// T-199: 단서 낱말은 관심사 그래프의 명시 목록(cueWords)만. 라벨에서 뽑지 않는다(노드가 늘수록 일상어가 단서가 됐다)
+test('cueWords: 그래프의 명시 목록만 쓰고, 라벨 낱말은 단서가 아니다', () => {
+  const g = { cueWords: ['결정석', '재획'], nodes: [
     { id: 'a', label: '잠재능력 재설정(큐브)', source: 'common' },
-    { id: 'b', label: '사냥 효율과 재획', source: 'common' },
-    { id: 'c', label: '주간 보스와 결정석', source: 'common' },
-    { id: 'u:x', label: '내가 만든 노드', source: 'user' }
+    { id: 'c', label: '영업 신고와 위생교육', source: 'common' }
   ] };
-  const words = labelCueWords(g);
-  assert.ok(!words.includes('큐브'), '괄호 안은 뺀다');
-  assert.ok(words.includes('재획'));
-  assert.ok(words.includes('결정석'));
-  assert.ok(!words.includes('효율') && !words.includes('효율과'), '일반어');
-  assert.ok(!words.includes('보스') && !words.includes('보스와'), '일반어');
-  assert.ok(!words.includes('내가') && !words.includes('노드'), '사용자 노드 라벨은 단서가 아니다');
+  assert.deepEqual(cueWords(g), ['결정석', '재획']);
+  assert.deepEqual(cueWords({ nodes: g.nodes }), [], '목록이 없으면 라벨 단서 없음');
+  assert.deepEqual(cueWords(null), []);
 });
 
-test('MAPLE_GENERIC_WORDS: 모든 항목이 지금 공통 라벨 낱말이다(죽은 항목 없음)', () => {
+test('mergeGraphs: 공통 그래프 cueWords를 싣고, 오버레이는 단서를 더하지 못한다', () => {
+  assert.deepEqual(commonMerged.cueWords, loadCommonGraphFromDisk().cueWords);
+  const ov = { useCommon: true, cueWords: ['신고'], nodes: [], tags: [], edges: [] };
+  assert.deepEqual(mergeGraphs(loadCommonGraphFromDisk(), ov).cueWords, commonMerged.cueWords);
+  assert.deepEqual(mergeGraphs(loadCommonGraphFromDisk(), { ...ov, useCommon: false }).cueWords, []);
+});
+
+test('메이플 cueWords: T-199 전 라벨 단서(labelCueWords 결과)와 같은 13개라 지금 검색 결과가 바뀌지 않는다', () => {
+  assert.deepEqual([...commonMerged.cueWords].sort(), ['스타포스', '샤이닝', '아케인', '아케인포스', '결정석', '메소', '재획', '극딜', 'HEXA', '에르다', '메이플포인트', '챌린저스', '퀵패스'].sort());
+});
+
+// 단서 낱말 데이터 검증(T-199): 일반어 목록·다른 관심사 라벨 낱말·다른 분야 글(태그 설명·예문, 평가셋의 메이플 아닌 문장, 가드는 평가셋 부분집합이라 뺌)에 나오면 안 된다
+const tagsFile = JSON.parse(readFileSync(new URL('../../extension/data/common/tags.json', import.meta.url), 'utf8'));
+const evalCases = f => JSON.parse(readFileSync(new URL(`../../tools/${f}.json`, import.meta.url), 'utf8'));
+const nonMapleTexts = [
+  ...tagsFile.tags.flatMap(t => [t.label, t.desc, ...(t.examples || [])]),
+  ...['eval-set', 'eval-unseen', 'eval-holdout'].flatMap(evalCases).filter(c => c.group !== 'slang').map(c => c.sentence),
+  ...['eval-set-restaurant', 'eval-unseen-restaurant'].flatMap(evalCases).filter(c => c.group !== 'maple').map(c => c.sentence)
+];
+
+test('cueWordProblems: 일반어·다른 관심사 라벨 낱말·다른 분야 글에 나오는 낱말·형식 오류를 알려 준다', () => {
+  const p = cueWordProblems(['메소', '신고', '강화', '세금', '가', ' '], {
+    generic: MAPLE_GENERIC_WORDS, otherGraphs: [restaurantMerged], texts: ['연말정산 때 세금 신고를 미리 준비해야 한다.']
+  });
+  const has = w => p.some(m => m.includes(w));
+  assert.ok(!has('메소'), p.join('\n'));
+  assert.ok(has('신고') && has('강화') && has('세금') && p.some(m => m.includes('형식')), p.join('\n'));
+});
+
+test('관심사 그래프 cueWords는 모두 cueWordProblems를 통과한다(메이플·식당)', () => {
+  assert.ok(commonMerged.cueWords.length > 0);
+  assert.deepEqual(cueWordProblems(commonMerged.cueWords, { generic: MAPLE_GENERIC_WORDS, otherGraphs: [restaurantMerged], texts: nonMapleTexts }), []);
+  assert.deepEqual(cueWordProblems(restaurantMerged.cueWords, { otherGraphs: [commonMerged], texts: [] }), []);
+});
+
+test('MAPLE_GENERIC_WORDS: 모든 항목이 지금 공통 라벨 낱말이다(죽은 항목 없음), 단서 목록과 겹치지 않는다', () => {
   const raw = new Set(commonMerged.nodes.flatMap(n => n.label.replace(/\([^)]*\)/g, ' ').split(/\s+/))
     .map(w => (w.length >= 3 ? w.replace(/[과와]$/, '') : w)).filter(w => w.length >= 2));
   for (const w of MAPLE_GENERIC_WORDS) assert.ok(raw.has(w), `${w}는 라벨 낱말이 아니에요`);
-  const cues = labelCueWords(commonMerged);
-  for (const w of cues) assert.ok(!MAPLE_GENERIC_WORDS.includes(w));
-  assert.ok(cues.includes('메소') && cues.includes('스타포스') && cues.includes('아케인'));
+  for (const w of commonMerged.cueWords) assert.ok(!MAPLE_GENERIC_WORDS.includes(w));
 });
 
-test('mapleCue: 강한 별칭이나 라벨 핵심 낱말이 낱말로 있으면 참', () => {
+// T-193 합성 측정의 재현: 다른 관심사(식당) 노드가 같은 그래프에 섞여도 그 라벨 낱말("신고")은 단서가 아니다
+const mixedWithRestaurant = { ...commonMerged, nodes: [...commonMerged.nodes, ...restaurantMerged.nodes.map(n => ({ ...n, source: 'common' }))] };
+
+test('T-193 재현: 식당 라벨 "영업 신고"가 섞여도 "연말정산 … 세금 신고"는 단서가 없다', () => {
+  assert.ok(mixedWithRestaurant.nodes.some(n => /신고/.test(n.label)), '식당 라벨에 신고가 있어야 재현된다');
+  assert.equal(mapleCue('연말정산 때 세금 신고를 미리 준비해야 한다.', mixedWithRestaurant), false);
+  assert.equal(mapleCue('이번 주 세금 내고 나니 메소가 바닥났다.', mixedWithRestaurant), true, '진짜 단서는 그대로');
+});
+
+test('T-193 재현: 섞인 그래프에서도 약한 별칭 "세금"은 가산되지 않는다(arcane_symbol 점수 불변)', () => {
+  const ids = mixedWithRestaurant.nodes.map(n => n.id);
+  const dim = ids.length;
+  const unit = i => Array.from({ length: dim }, (_, j) => (j === i ? 1 : 0));
+  const v = new Map(ids.map((id, i) => ['node:' + id, unit(i)]));
+  const qq = Array.from({ length: dim }, () => 1);
+  const opts = { topK: dim, directWeight: 1, tagWeight: 0, aliasBoost: 0.08 };
+  const score = text => retrieve(qq, mixedWithRestaurant, v, { ...opts, aliasText: text }).find(r => r.id === 'arcane_symbol').score;
+  const base = score('');
+  assert.equal(score('연말정산 때 세금 신고를 미리 준비해야 한다.'), base);
+  assert.ok(Math.abs(score('아케인 돌고 세금 냈다') - base - 0.08) < 1e-4, '단서가 있으면 가산');
+});
+
+test('규모: 일상어 라벨 1,000개가 있어도 단서는 늘지 않는다', () => {
+  const words = ['신고', '세금', '정산', '준비', '회의', '일정', '가격', '시장', '고객', '서비스', '관리', '계획', '보고', '자료', '문제', '결과', '운영', '지원', '개선', '확인'];
+  const nodes = Array.from({ length: 1000 }, (_, i) => ({ id: 'n' + i, label: `${words[i % 20]} ${words[(i * 7) % 20]}와 ${words[(i * 13) % 20]}`, source: 'common', facts: ['f'], tags: [] }));
+  const big = { ...commonMerged, nodes: [...commonMerged.nodes, ...nodes] };
+  assert.deepEqual(cueWords(big), commonMerged.cueWords);
+  for (const s of ['연말정산 때 세금 신고를 미리 준비해야 한다.', '회의 일정과 고객 자료를 확인했다.', '운영 개선 계획을 보고했다.']) {
+    assert.equal(mapleCue(s, big), false, s);
+  }
+});
+
+test('mapleCue: 강한 별칭이나 단서 낱말(cueWords)이 낱말로 있으면 참', () => {
   assert.equal(mapleCue('이번 주 세금 내고 나니 메소가 바닥났다.', commonMerged), true, '메소');
   assert.equal(mapleCue('오늘도 재획 돌리고 세금 냈다', commonMerged), true, '강한 별칭 재획');
   assert.equal(mapleCue('아케인 지역 세금 냈다', commonMerged), true, '아케인');
@@ -314,6 +376,7 @@ test('mapleCue: 강한 별칭은 aliasMatch 그대로(조사가 아닌 활용도
 
 const gWeak = {
   ...graph,
+  cueWords: ['메소'],
   nodes: [
     { ...graph.nodes[0], label: '메소' },
     { ...graph.nodes[1], weakAliases: ['펑'] }
@@ -325,7 +388,7 @@ test('retrieve: 약한 별칭은 단서가 없으면 가산하지 않는다(결�
   assert.deepEqual(retrieve(q, gWeak, vecs, { topK: 2, aliasBoost: 0.08, aliasText: '타이어가 펑 터졌다' }), base);
 });
 
-test('retrieve: 약한 별칭은 단서(라벨 낱말)가 있으면 aliasBoost를 정확히 더한다', () => {
+test('retrieve: 약한 별칭은 단서(cueWords 낱말)가 있으면 aliasBoost를 정확히 더한다', () => {
   const all = o => Object.fromEntries(retrieve(q, gWeak, vecs, { topK: 2, ...o }).map(r => [r.id, r.score]));
   const base = all({});
   const hit = all({ aliasBoost: 0.08, aliasText: '메소 날리고 또 펑 났다' });
