@@ -189,3 +189,29 @@ test('rank1Regressions·Gains: 기준에서 맞던 문장이 틀린 것 / 틀리
   assert.deepEqual(rank1Regressions(base, cur), ['z']);
   assert.deepEqual(rank1Gains(base, cur), ['x']);
 });
+
+// T-186: combine-best는 판정 가산을 노드의 임베딩 최고 태그 하나에만 준다
+test('retrieve: tagJudge combine-best는 노드의 임베딩 1위 태그에만 가산한다', () => {
+  // nA: 임베딩 1위 태그가 ta(판정 높음), nB: 임베딩 1위 태그가 tb, 둘째 태그가 ta
+  const g2 = {
+    tags: [{ id: 'ta', label: 'A' }, { id: 'tb', label: 'B' }],
+    nodes: [{ id: 'nA', label: 'A', tags: ['ta'] }, { id: 'nB', label: 'B', tags: ['tb', 'ta'] }],
+    edges: []
+  };
+  // 질의와 ta 유사도 0.6, tb 0.62 → nB의 임베딩 1위 태그는 tb(0.62)
+  const v2 = new Map([['tag:ta', [0.6, 0.8]], ['tag:tb', [0.62, Math.sqrt(1 - 0.62 ** 2)]], ['node:nA', [1, 0]], ['node:nB', [1, 0]]]);
+  const q2 = [1, 0];
+  const p = { ta: 1 };
+  const score = (mode, id) => retrieve(q2, g2, v2, { topK: 2, directWeight: 0, tagWeight: 1, tagJudge: { p, mode, weight: 0.1 } }).find(x => x.id === id).score;
+  // combine: nB도 ta(0.6 + 0.1 = 0.7)가 tb(0.62)를 넘어 가산을 받는다 → 둘 다 0.7
+  assert.ok(Math.abs(score('combine', 'nA') - 0.7) < 1e-4);
+  assert.ok(Math.abs(score('combine', 'nB') - 0.7) < 1e-4);
+  // combine-best: nA는 1위 태그 ta에 가산(0.7), nB는 1위 태그 tb(판정 0)라 가산 없음(0.62)
+  assert.ok(Math.abs(score('combine-best', 'nA') - 0.7) < 1e-4);
+  assert.ok(Math.abs(score('combine-best', 'nB') - 0.62) < 1e-4);
+  assert.equal(retrieve(q2, g2, v2, { topK: 2, directWeight: 0, tagWeight: 1, tagJudge: { p, mode: 'combine-best', weight: 0.1 } })[0].id, 'nA');
+  // 결과의 tag(대표 태그)는 판정과 무관하게 임베딩 1위
+  assert.equal(retrieve(q2, g2, v2, { topK: 2, tagJudge: { p, mode: 'combine-best', weight: 0.1 } }).find(x => x.id === 'nB').tag.id, 'tb');
+  // weight 0이면 판정 없음과 같다
+  assert.deepEqual(retrieve(q2, g2, v2, { topK: 2, tagJudge: { p, mode: 'combine-best', weight: 0 } }), retrieve(q2, g2, v2, { topK: 2 }));
+});
