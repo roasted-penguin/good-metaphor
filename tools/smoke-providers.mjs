@@ -18,6 +18,7 @@ import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, leakedTerms } from '../extension/lib/prompt.js';
 import { runAnalogy } from '../extension/lib/pipeline.js';
 import { REJECTED_TEXT } from '../extension/lib/analogy-server.js';
+import { generationVerdict } from './smoke-check.mjs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve, retrievalFor } from '../extension/lib/retrieval.js';
@@ -144,18 +145,16 @@ for (const p of runs) {
     console.log(`  추상화    ${bad ? '✗' : '✓'} ${r0.ms}ms${r0.retry}  ${r0.ok ? r0.value.trim().slice(0, 100) : r0.error}`);
     if (leaked.length) console.log(`    문제: 원문 용어가 그대로 남음: ${leaked.join(', ')}`);
   }
-  // 비유 생성(json, 스트리밍). 확장과 같은 검사: JSON, 규칙 1, 끝맺음(다시 불러도 어기면 실패). 근거 검사는 결과만 보인다
+  // 비유 생성(json, 스트리밍). 확장과 같은 검사: JSON, 규칙 1(후보 밖 id), 끝맺음(다시 불러도 어기면 실패). 근거 검사는 결과만 보인다
   for (const s of SENTENCES) {
     const row = await generate(p, s);
-    const problem = !row.ok ? row.error
-      : !row.answer.meaning ? 'meaning 없음'
-      : !row.rule1 ? `후보에 없는 nodeId: ${row.nodeId}`
-      : row.ending && !row.ending.ok ? `존댓말 아님: ${row.ending.issues.map(i => `${i.field}(${i.style})`).join(', ')}`
-      : null;
+    // 판정은 smoke-check.mjs(T-188): nodeId null + analogy 는 실패가 아니라 참고
+    const { problem, note } = generationVerdict(row);
     if (problem) failed++;
     const marks = `첫 글자 ${row.first ?? '-'}ms · 뜻 ${row.meaningMs ?? '-'}ms · 전체 ${row.ms}ms${row.calls > 1 ? ` · 호출 ${row.calls}회` : ''}${row.retries ? ` (재시도 ${row.retries}회)` : ''}`;
     console.log(`  비유 생성  ${problem ? '✗' : '✓'} ${marks}  ${s.sentence.slice(0, 24)}…`);
     if (problem) console.log(`    문제: ${problem}${row.raw ? `\n    원문: ${row.raw}` : ''}`);
+    if (note) console.log(`    참고: ${note}`);
     if (row.ok) console.log(describe(row));
   }
 }
