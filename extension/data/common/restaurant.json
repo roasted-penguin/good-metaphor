@@ -966,22 +966,6 @@
       "verifiedAt": "2026-11-22"
     },
     {
-      "id": "signage_permit",
-      "label": "간판 허가와 신고",
-      "facts": [
-        "가게 간판은 크기와 높이, 다는 위치에 따라 관청의 허가를 받아야 하는 것과 신고만 하면 되는 것으로 나뉜다.",
-        "도시 지역이나 문화유산 주변처럼 정해진 지역에 간판을 달려면 허가나 신고를 거쳐야 한다.",
-        "크기가 큰 벽면 간판이나 옥상 간판은 허가를 받아야 한다."
-      ],
-      "tags": [
-        "threshold_req"
-      ],
-      "sources": [
-        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=839&ccfNo=3&cciNo=2&cnpClsNo=2"
-      ],
-      "verifiedAt": "2026-11-22"
-    },
-    {
       "id": "franchise_fee_refund",
       "label": "가맹금 반환",
       "facts": [
@@ -1363,11 +1347,6 @@
       "from": "no_smoking_zone",
       "to": "price_board",
       "rel": "함께 가게에 붙여야 할 표지"
-    },
-    {
-      "from": "signage_permit",
-      "to": "open_prep",
-      "rel": "문을 열기 전에 갖출 일"
     },
     {
       "from": "franchise_fee_refund",

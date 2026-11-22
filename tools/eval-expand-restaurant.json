@@ -23,7 +23,6 @@
   {"sentence": "프리랜서 디자이너는 일을 시작하기 전에 작업 범위와 보수, 마감일을 계약서에 적어 둔다.", "expectNodes": ["labor_contract"], "expectTag": "progression_gate", "since": "T-192", "why": "일을 시작할 때 조건을 글로 남긴다 = 근로조건 서면 명시"},
   {"sentence": "매출이 일정 규모를 넘은 개인사업자는 다음 해부터 전자세금계산서를 의무로 발급해야 한다.", "expectNodes": ["cash_receipt"], "expectTag": "threshold_req", "since": "T-192", "why": "직전 해 매출이 기준을 넘으면 발급 의무가 생긴다 = 현금영수증 가맹 의무"},
   {"sentence": "어린이 보호구역에서는 구역 전체에서 속도를 줄여야 하고 입구에 표지판을 세운다.", "expectNodes": ["no_smoking_zone"], "expectTag": "threshold_req", "since": "T-192", "why": "구역 전체에 규칙을 두고 입구에 표지를 붙인다 = 음식점 금연구역"},
-  {"sentence": "집을 고칠 때 공사 규모가 작으면 신고만 하고, 크면 허가를 받아야 한다.", "expectNodes": ["signage_permit"], "expectTag": "threshold_req", "since": "T-192", "why": "크기에 따라 허가와 신고로 나뉜다 = 간판 허가와 신고"},
   {"sentence": "학원이 광고와 다르게 수업을 운영하면 수강생은 낸 수강료를 돌려 달라고 할 수 있다.", "expectNodes": ["franchise_fee_refund"], "expectTag": "loss_risk", "since": "T-192", "why": "약속과 다른 정보로 계약했으면 낸 돈을 돌려받는다 = 가맹금 반환"},
   {"sentence": "축구 클럽은 선수와 계약을 끝내기 전에 몇 차례 경고하고 고칠 기회를 줘야 한다.", "expectNodes": ["franchise_termination"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "끝내기 전에 여러 번 알리고 고칠 기간을 준다 = 가맹계약 해지 절차"},
   {"sentence": "배달 기사들은 노동조합을 만들어 플랫폼 회사에 배달료 조건을 협상하자고 요구한다.", "expectNodes": ["franchisee_association"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "한 운영자에 묶인 사람들이 단체로 조건 협의를 요구한다 = 가맹점주 단체 협의"},
