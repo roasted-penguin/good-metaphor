@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { buildIndex, pickPages, draftPages, indexKey } from '../../tools/node-pipeline/run.mjs';
 import { compareScores, gateCandidates, mergeCases, loadGateCases, memoEmbedder, scoreGraph, blocking, altReason, altRows, renderAltTable, buildAltExplainPrompt, parseAltExplain, altPendingRefusals, applyAltToText, inlineJson, altTargetFiles } from '../../tools/node-pipeline/gate.mjs';
 import { bumpVersion, buildPatch, applyPatch, today } from '../../tools/node-pipeline/apply.mjs';
-import { INTERESTS } from '../../tools/node-pipeline/sources.mjs';
+import { INTERESTS, mapleBoardLinks, MAPLE_GUIDE_BOARDS } from '../../tools/node-pipeline/sources.mjs';
 import { hashEmbed } from '../../extension/lib/fallback-embed.js';
 import { loadInterestGraph, commonGraphPath } from '../../tools/load-graph.mjs';
 
@@ -52,6 +52,29 @@ test('buildIndex: 목록별 titleFilter·titleSkip(T-207, 메이플 공지)', as
   const cfg = { allowHost: () => true, seeds: [], listings: [{ kind: 'notice', url: 'https://x.go.kr/l?p={page}', linkPattern: /\/n\/\d+$/, titleFilter: /운영정책|점검/, titleSkip: /오류/ }] };
   const { entries } = await buildIndex({ cfg, fetcher, pages: 2, now: () => 'T' });
   assert.deepEqual(entries.map(e => e.title), ['운영정책 변경 안내', '정기점검 안내']);
+});
+
+test('buildIndex: JSON 목록(T-208 메이플 가이드 분류) — 글 번호·제목만, 본문 칸은 버림, 실패는 failures', async () => {
+  const json = { pageInfo: {}, list: [
+    { articleId: 404, title: '5차 스킬 강화하기', content: '<p>본문</p>', textContent: '본문' },
+    { articleId: 'x', title: '이상한 번호' },
+    { articleId: 410, title: '장비 가이드', content: '<p>본문</p>' }
+  ] };
+  const fetcher = {
+    get: async () => { throw new Error('GET 안 씀'); },
+    postJson: async url => (url.endsWith('=1') ? { ok: true, status: 200, url, json } : { ok: false, status: 500 })
+  };
+  const listing = id => ({ ...maple.listings.find(l => l.json), url: `https://maplestory.nexon.com/guide/n23gameinformation/articles?boardId=${id}` });
+  const cfg = { allowHost: maple.allowHost, seeds: [], listings: [listing(1), listing(2)] };
+  const { entries, failures } = await buildIndex({ cfg, fetcher, now: () => 'T' });
+  assert.deepEqual(entries.map(e => [e.url, e.title, e.kind]), [
+    ['https://maplestory.nexon.com/Guide/N23GameInformation/Articles/404', '5차 스킬 강화하기', 'guide'],
+    ['https://maplestory.nexon.com/Guide/N23GameInformation/Articles/410', '장비 가이드', 'guide']
+  ]);
+  for (const e of entries) assert.deepEqual(Object.keys(e).filter(k => /html|text|body|content/.test(k)), [], '본문 칸 없음(D-5)');
+  assert.equal(failures.length, 1);
+  assert.deepEqual(mapleBoardLinks(null), []);
+  assert.equal(maple.listings.filter(l => l.json).length, MAPLE_GUIDE_BOARDS.length, '분류마다 목록 하나');
 });
 
 test('pickPages: 초안 안 한 페이지만, 종류 순서대로, 개수 제한·종류 거름', () => {

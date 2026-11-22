@@ -22,17 +22,16 @@ const LAW = name => `https://www.law.go.kr/${encodeURI('법령/' + name)}`;
 // 법령은 장 제목(제N장)으로 나누고, keep에 맞는 장만 초안한다. 하위 "제N절"은 상위 장을 따른다
 const LAW_SUB = /^제\d+절/;
 
-// 메이플 가이드는 목록 페이지가 스크립트로 그려져서, 공식 가이드 검색(/Guide/N23GameInformation/Articles/Search, robots 허용)을
-// 주제어로 돌려 글 링크를 모은다. 주제어는 기존 노드 영역 + 1,000개를 향한 넓은 영역
-export const MAPLE_GUIDE_KEYWORDS = [
-  '강화', '잠재능력', '큐브', '스타포스', '심볼', '보스', '길드', '경매장', '메소', '파티', '유니온', '링크',
-  '전직', '스킬', '퀘스트', '사냥', '경험치', '펫', '코디', '이벤트', '월드', '거래', '교환', '제작',
-  '전문기술', '몬스터파크', '무릉도장', '에픽 던전', '어빌리티', '하이퍼', '헥사', '솔 에르다', '세트', '익스트림',
-  // T-207: 가이드 전체로 넓히기(장비·성장·편의·커뮤니티·꾸미기 영역)
-  '장비', '주문서', '추가옵션', '소울', '엠블렘', '보조무기', '캐릭터', '버닝', '챌린저스', '옥션', '창고', '마일리지',
-  '코인샵', '농장', '몬스터 라이프', '명성', '칭호', '훈장', '라이딩', '데미지 스킨', '룬', '엘리트', '지하수로', '플래그',
-  '노블레스', '보안', '제재', '월드 리프', '성장', '편의', '커뮤니티', '미니룸', '마이스터', '가디언', '테라', '카르마'
+// 메이플 가이드 목록은 스크립트로 그려진다. T-207까지는 공식 가이드 검색을 주제어로 돌렸지만 쪽당 5개라 겹침이 많았다.
+// T-208: 가이드 첫 화면 왼쪽 분류(Quickboard.articles)가 부르는 사이트 자체 목록 API(POST /guide/n23gameinformation/articles?boardId=…,
+// robots 허용 경로)가 분류마다 글 전부를 준다(2026-11-23: 9분류 107글, 검색으로 모은 100글을 모두 포함). 글 번호·제목만 쓴다(본문 칸은 버림, D-5)
+export const MAPLE_GUIDE_BOARDS = [
+  [429467337, '기초 가이드'], [429467338, '성장'], [429467339, '아이템'], [429467340, '사냥/보스 컨텐츠'], [429467341, '스페셜 컨텐츠'],
+  [429467342, '커뮤니티'], [429467343, '거래'], [429467344, '캐시 & 코디'], [429467345, '기타/TIP']
 ];
+export const mapleBoardLinks = json => (Array.isArray(json?.list) ? json.list : [])
+  .filter(x => /^\d+$/.test(String(x?.articleId ?? '')))
+  .map(x => ({ url: `${MAPLE}/Guide/N23GameInformation/Articles/${x.articleId}`, text: String(x.title || '') }));
 
 export const INTERESTS = {
   maplestory: {
@@ -40,10 +39,11 @@ export const INTERESTS = {
     domain: '메이플스토리',
     allowHost: h => h === 'maplestory.nexon.com',
     listings: [
-      // 가이드 검색: 주제어마다 첫 쪽(필요하면 --pages로 늘린다)
-      ...MAPLE_GUIDE_KEYWORDS.map(k => ({
+      // 가이드 분류별 목록 API(T-208): 분류마다 POST 한 번
+      ...MAPLE_GUIDE_BOARDS.map(([id]) => ({
         kind: 'guide',
-        url: `${MAPLE}/Guide/N23GameInformation/Articles/Search?page={page}&keyword=${encodeURIComponent(k)}`,
+        url: `${MAPLE}/guide/n23gameinformation/articles?boardId=${id}`,
+        json: { body: {}, links: mapleBoardLinks },
         linkPattern: /^https:\/\/maplestory\.nexon\.com\/guide\/n23gameinformation\/articles\/\d+$/i
       })),
       { kind: 'guide', url: `${MAPLE}/Guide/N23GameInformation`, linkPattern: /^https:\/\/maplestory\.nexon\.com\/guide\/n23gameinformation\/articles\/\d+$/i, paged: false },

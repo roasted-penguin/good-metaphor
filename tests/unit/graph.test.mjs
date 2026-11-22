@@ -196,7 +196,7 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
     // T-191: 확장 노드의 일상어 겹침 은어(천장·수로·시드 등)도 약한 별칭으로 넣었다
     additional_option: ['환불'], guild_canal: ['수로'], the_seed: ['시드']
   });
-  assert.equal(common.version, '2026.11.23-3'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가, T-172 quick_pass, T-174 사냥 룬 사실, T-177 주간 보스 사실 순서, T-176 trade_fee 태그, T-187 meso_inflation 사실 고쳐 씀, T-189 mvp·cube·boss_entry 사실 순서, T-191 노드 확장, T-196 파이프라인 첫 실제 관문 묶음 10개, T-207 묶음 2 13개
+  assert.equal(common.version, '2026.11.23-4'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가, T-172 quick_pass, T-174 사냥 룬 사실, T-177 주간 보스 사실 순서, T-176 trade_fee 태그, T-187 meso_inflation 사실 고쳐 씀, T-189 mvp·cube·boss_entry 사실 순서, T-191 노드 확장, T-196 파이프라인 첫 실제 관문 묶음 10개, T-207 묶음 2 13개, T-208 묶음 3 23개
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {
