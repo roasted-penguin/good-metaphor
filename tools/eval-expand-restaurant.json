@@ -1,0 +1,10 @@
+[
+  {"sentence": "중고차를 사면 앞 차주가 안 낸 과태료까지 떠안을 수 있어서 계약 전에 미납 내역을 확인한다.", "expectNodes": ["business_succession"], "expectTag": "loss_risk", "since": "T-192", "why": "넘겨받으면 앞 주인의 불이익까지 이어받는다 = 영업자 지위 승계"},
+  {"sentence": "수영장 안전요원은 일을 시작하기 전에 인명구조 자격을 따야 하고, 몇 년마다 다시 보수교육을 받아야 자격이 유지된다.", "expectNodes": ["health_check"], "expectTag": "progression_gate", "since": "T-192", "why": "시작 전에 확인받고 주기마다 다시 받아야 계속 할 수 있다 = 건강진단"},
+  {"sentence": "원동기 면허로는 오토바이만 몰 수 있고, 승용차를 몰려면 다른 종류의 면허를 따로 따야 한다.", "expectNodes": ["restaurant_category"], "expectTag": "progression_gate", "since": "T-192", "why": "어떤 종류로 등록했느냐에 따라 할 수 있는 일이 정해진다 = 휴게음식점과 일반음식점"},
+  {"sentence": "회사가 파산하면 담보를 먼저 잡아 둔 채권자부터 순서대로 돈을 돌려받는다.", "expectNodes": ["fixed_date"], "expectTag": "loss_risk", "since": "T-192", "why": "먼저 날짜를 받아 둔 쪽이 먼저 돌려받는다 = 확정일자와 우선변제"},
+  {"sentence": "휴대폰 데이터는 한 달 정해진 양을 다 쓰면 다음 달이 될 때까지 더 쓸 수 없다.", "expectNodes": ["weekly_hour_cap"], "expectTag": "periodic_cap", "since": "T-192", "why": "기간마다 쓸 수 있는 양에 상한이 있고 다음 기간에 다시 찬다 = 주당 근로시간 한도"},
+  {"sentence": "회사는 근속 연수가 쌓일수록 안식 휴가 일수를 조금씩 늘려 준다.", "expectNodes": ["annual_leave"], "expectTag": "daily_accumulation", "since": "T-192", "why": "꾸준히 다닐수록 쉬는 날이 쌓이고 늘어난다 = 연차 유급휴가"},
+  {"sentence": "군인연금은 복무한 햇수가 길수록 전역 뒤 받는 금액이 커진다.", "expectNodes": ["retirement_pay"], "expectTag": "daily_accumulation", "since": "T-192", "why": "일한 햇수에 비례해 그만둘 때 받는 돈이 쌓인다 = 퇴직금"},
+  {"sentence": "직원 수가 일정 규모를 넘는 회사만 장애인 의무고용 대상이 된다.", "expectNodes": ["small_workplace"], "expectTag": "threshold_req", "since": "T-192", "why": "직원 수 기준을 넘느냐에 따라 지킬 규정이 달라진다 = 작은 사업장의 노동법 적용"}
+]
