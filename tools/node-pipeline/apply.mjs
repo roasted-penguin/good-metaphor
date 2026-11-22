@@ -2,6 +2,7 @@
 // 원본 그래프 객체는 바꾸지 않는다. 결과는 validateGraph(태그 파일과 합친 해석된 그래프)로 다시 검사한다.
 // 실제 extension/data/common/*.json에 쓰는 것은 CLI의 --write-real일 때만(이 작업에서는 .tmp 사본으로만 시연)
 import { validateGraph, resolveCommonGraph } from '../../extension/lib/graph.js';
+import { SOURCE_POLICY, checkNodeSources } from '../source-policy.mjs';
 
 // 오늘(로컬) YYYY-MM-DD
 export function today(now = new Date()) {
@@ -35,8 +36,8 @@ export function buildPatch(results, approved, { rules = {}, day }) {
     if (r.status === 'fail') { refused.push({ id, reason: '검사 실패 후보: ' + r.fails.join(', ') }); continue; }
     const { aliases, ...rest } = r.node;
     const node = { ...rest, ...(rules.allowAliases && aliases?.length ? { aliases } : {}), verifiedAt: day };
-    // 키 순서를 기존 그래프와 맞춘다: id, label, aliases, facts, tags, sources, verifiedAt
-    nodes.push(Object.fromEntries(['id', 'label', 'aliases', 'facts', 'tags', 'sources', 'verifiedAt'].filter(k => node[k] !== undefined).map(k => [k, node[k]])));
+    // 키 순서를 기존 그래프와 맞춘다: id, label, aliases, facts, tags, sources, sourceKind(커뮤니티만, ADR 0016), verifiedAt
+    nodes.push(Object.fromEntries(['id', 'label', 'aliases', 'facts', 'tags', 'sources', 'sourceKind', 'verifiedAt'].filter(k => node[k] !== undefined).map(k => [k, node[k]])));
     for (const e of r.edges || []) pending.push({ from: id, to: e.to, rel: e.rel });
   }
   return { nodes, edges: pending, refused };
@@ -64,5 +65,9 @@ export function applyPatch(rawGraph, patch, { tagsFile, day }) {
     edges: [...(rawGraph.edges || []), ...edges]
   };
   const errors = validateGraph(resolveCommonGraph(graph, tagsFile));
+  // 출처 정책(D-5·D-8, ADR 0016): 새 노드만 다시 본다(그래프 테스트와 같은 판정)
+  if (SOURCE_POLICY.interests[rawGraph.id]) {
+    for (const n of nodes) for (const e of checkNodeSources(n, rawGraph.id)) errors.push(`노드 ${n.id} 출처 정책: ${e}`);
+  }
   return { graph, added: { nodes: nodes.length, edges: edges.length }, skippedEdges, errors };
 }

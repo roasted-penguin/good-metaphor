@@ -98,6 +98,10 @@ export function validateGraph(g, { partial = false } = {}) {
     if (n.sources !== undefined || !partial) {
       if (!validSources(n.sources)) errors.push(`노드 ${n.id || i}의 sources(출처)는 http(s) 주소 1개 이상인 배열이어야 해요.`);
     }
+    // 출처 종류(D-8, ADR 0016): 커뮤니티(나무위키·인벤) 출처가 있는 노드는 'community'. 호스트·교차 확인 판정은 tools/source-policy.mjs(테스트·파이프라인)
+    if (n.sourceKind !== undefined && n.sourceKind !== 'official' && n.sourceKind !== 'community') {
+      errors.push(`노드 ${n.id || i}의 sourceKind(출처 종류)는 official 또는 community여야 해요.`);
+    }
     if (n.verifiedAt !== undefined || !partial) {
       if (!validDate(n.verifiedAt)) errors.push(`노드 ${n.id || i}의 verifiedAt(검수 날짜)은 YYYY-MM-DD 형식의 날짜여야 해요.`);
     }

@@ -8,6 +8,7 @@ import {
 } from '../../extension/lib/graph.js';
 import { loadCommonGraphFromDisk, commonGraphPath, loadInterestGraph, interestFromArgv } from '../../tools/load-graph.mjs';
 import { pickSets, interestArgError, interestEvalFiles, mixedSetting } from '../../tools/eval-lib.mjs';
+import { classifySource } from '../../tools/source-policy.mjs';
 
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
 const rawRestaurant = read('extension/data/common/restaurant.json');
@@ -79,6 +80,7 @@ test('식당 노드 출처: 공공·공식 자료만(go.kr·정책브리핑·소
       const url = new URL(u);
       assert.equal(url.protocol, 'https:', `${node.id} ${u}`);
       assert.ok(official(url.hostname), `${node.id} 공식 출처가 아님: ${u}`);
+      assert.equal(classifySource(u, 'restaurant')?.kind, 'official', `${node.id} 출처 정책(식당은 커뮤니티 없음): ${u}`);
       assert.doesNotMatch(u, /namu\.wiki|wikipedia|blog|tistory|inven|cafe\.naver/, u);
     }
     assert.match(node.verifiedAt, /^\d{4}-\d{2}-\d{2}$/, node.id);

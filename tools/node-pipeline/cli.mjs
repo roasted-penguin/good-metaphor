@@ -146,7 +146,7 @@ async function cmdCheck() {
   const draft = readJson(batchFile(n, '.draft.json'));
   const graph = loadInterestGraph(interest);
   const fetcher = flag('no-probe') ? null : politeFetcher({ log });
-  const probe = fetcher ? sourceProber(fetcher, cfg.allowHost) : null;
+  const probe = fetcher ? sourceProber(fetcher, cfg) : null;
   // 이름 핵심 낱말 신호(T-205): T-205 전 초안의 조문 꼴 후보는 페이지를 다시 가져와 잰다(LLM 없음). --no-probe·--no-reground면 건너뜀
   let candidates = draft.candidates;
   if (fetcher && !flag('no-reground') && cfg.articleHosts?.length) {
