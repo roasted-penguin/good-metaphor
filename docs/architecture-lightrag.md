@@ -189,6 +189,8 @@ IFBench는 Artificial Analysis 값(API, 풀 정밀도 기준). 로컬 Q4는 이�
 
 **thinking은 실험으로 정한다.** LightRAG는 추출 역할의 thinking을 기본으로 끄고(`EXTRACT_OLLAMA_LLM_THINK=false`), JSON 출력 모드(`ENTITY_EXTRACTION_USE_JSON=true`)를 제공한다. 청크 20개로 네 조합(모델 2 × thinking 켬/끔)을 돌려 파싱 실패율, 청크당 트리플 수, 추상구조 연결 수, 청크당 시간을 비교한다.
 
+**T-413 중간 결과(2026-11-22, `docs/EVAL_LOG.md` "추출 A/B").** thinking 끔 두 조합 모두 관문 미달(연결률 gemma 19%, qwen 6%, 파싱 실패 5%·0%)이라 기본값은 그대로 `gemma4:12b`, thinking 끔이다. thinking 켬은 2/20청크만 쟀고(청크당 약 523초) 나머지는 밤 시간창에 돌려 다시 본다. 맥에 받은 두 모델은 Ollama MLX 러너(nvfp4)라 JSON 모드(`format: json`)를 못 해 501로 답한다. 워커는 그때 format 없이 다시 보내고 파서가 코드 펜스를 견딘다. 문법 제약이 없으니 GGUF 태그(JSON 모드 가능)도 다음 비교 후보다.
+
 ```bash
 # Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다(T-411, infra/mac/)
 # 환경 변수는 launchd 에이전트 plist의 EnvironmentVariables에만 둔다(전역 launchctl setenv 안 씀)

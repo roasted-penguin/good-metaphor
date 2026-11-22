@@ -595,6 +595,12 @@
       </tbody>
     </table></div>
     <p class="note">IFBench는 Artificial Analysis 값(API, 풀 정밀도)이라 로컬 Q4는 이보다 낮아요. thinking은 청크 20개로 네 조합(모델 2 × 켬/끔)을 돌려 파싱 실패율, 트리플 수, 추상구조 연결 수, 청크당 시간을 비교해 정해요. LightRAG의 JSON 출력 모드를 켜면 형식 위반이 줄어 thinking을 꺼도 될 수 있어요.</p>
+    <p class="note"><strong>T-413 중간 결과(2026-11-22).</strong> thinking 끔 두 조합 모두 관문 미달(연결률 gemma 19%, qwen 6%, 파싱 실패 5%·0%)이라 기본값은 그대로 <code>gemma4:12b</code>, thinking 끔이에요. thinking 켬은 2/20청크만 쟀고(청크당 약 523초) 나머지는 밤 시간창에 돌려 다시 봐요. 맥에 받은 두 모델은 Ollama MLX 러너(nvfp4)라 JSON 모드를 못 해 501로 답해요. 워커는 그때 format 없이 다시 보내고 파서가 코드 펜스를 견뎌요. GGUF 태그(JSON 모드 가능)도 다음 비교 후보예요.</p>
+    <pre class="code"><code># Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다
+launchctl setenv OLLAMA_HOST 127.0.0.1:11434
+launchctl setenv OLLAMA_NUM_PARALLEL 1      # 동시 요청 1개
+launchctl setenv OLLAMA_KEEP_ALIVE 5m       # 끝나면 5분 뒤 메모리에서 내림
+launchctl setenv OLLAMA_CONTEXT_LENGTH 16384
     <pre class="code"><code># Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다(T-411, infra/mac/)
 # 환경 변수는 launchd 에이전트 plist의 EnvironmentVariables에만 둔다(전역 launchctl setenv 안 씀)
 #   OLLAMA_HOST=127.0.0.1:11434  OLLAMA_NUM_PARALLEL=1(동시 요청 1개)
