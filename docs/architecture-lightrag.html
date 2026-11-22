@@ -246,7 +246,7 @@
     <div class="facts3">
       <div><b>커뮤니티 요약이 없다</b><span>패치로 문서가 바뀌어도 새 문서만 추출해 합치면 돼요. 느린 로컬 모델로 추출해도 감당되는 이유예요.</span></div>
       <div><b>질의 비용이 작다</b><span>키워드 생성 LLM 1회와 벡터 검색뿐이라, 호버당 비용이 지금 PoC와 비슷해요.</span></div>
-      <div><b>high-level 키워드 = 추상 태그</b><span>관계의 주제 키워드를 통제 어휘 18개로 고정하면, 구조가 같은 비유 검색이 LightRAG의 global 검색 그 자체가 돼요.</span></div>
+      <div><b>high-level 키워드 = 추상 태그</b><span>관계의 주제 키워드를 통제 어휘 21개로 고정하면, 구조가 같은 비유 검색이 LightRAG의 global 검색 그 자체가 돼요.</span></div>
     </div>
   </section>
 
@@ -465,7 +465,7 @@
     </div>
     <ol class="steps">
       <li><b>확장 → <code>POST /v1/analogy</code></b><span>문장, 커서 단어, 앞 문장, 설치 토큰(로그인 시 JWT). 서버는 먼저 결과 캐시(문장 해시 + 워크스페이스 버전)를 봐요.</span></li>
-      <li><b>키워드 (Gemini Flash-Lite)</b><span>한 번의 호출로 <code>ll_keywords</code>(구체 개념)와 <code>hl_keywords</code>(추상 구조)를 뽑아요. <code>hl_keywords</code>는 통제 어휘 18개 중에서만 고르고, 맞는 게 없으면 빈 배열이에요.</span></li>
+      <li><b>키워드 (Gemini Flash-Lite)</b><span>한 번의 호출로 <code>ll_keywords</code>(구체 개념)와 <code>hl_keywords</code>(추상 구조)를 뽑아요. <code>hl_keywords</code>는 통제 어휘 21개 중에서만 고르고, 맞는 게 없으면 빈 배열이에요.</span></li>
       <li><b>검색 (LightRAG)</b><span><code>QueryParam(mode="hybrid", hl_keywords, ll_keywords, only_need_context=True)</code>로 공통·내 워크스페이스를 동시에 검색해요. 키워드를 직접 넘기므로 LightRAG는 키워드 LLM을 부르지 않고 컨텍스트만 돌려줘요.</span></li>
       <li><b>병합</b><span>내 워크스페이스 결과를 앞에 두고 후보 3개를 골라요. 오버레이 설정(숨김, 가중치, <code>useCommon</code>)을 여기서 적용해요.</span></li>
       <li><b>비유 (Gemini Flash)</b><span>기존 <code>buildAnalogyPrompt</code>와 같은 규칙으로 한 번 호출해요.</span></li>
@@ -504,7 +504,7 @@
         <rect x="528" y="110" width="208" height="60" rx="8" class="i-core"/>
         <text x="544" y="132" class="i-name" style="font-size:13px">맥: 엔티티·관계 추출</text>
         <text x="544" y="150" class="i-sub" style="fill:var(--ink)">gemma4:12b · JSON 모드</text>
-        <text x="544" y="165" class="i-sub">통제 어휘 18개 포함</text>
+        <text x="544" y="165" class="i-sub">통제 어휘 21개 포함</text>
         <rect x="356" y="200" width="150" height="44" rx="8" class="i-box"/>
         <text x="431" y="226" text-anchor="middle" class="i-sub" style="fill:var(--ink)">다음 시간창까지 대기</text>
         <rect x="560" y="280" width="176" height="72" rx="8" class="i-core"/>
@@ -545,7 +545,7 @@
     <div class="layers">
       <div class="layer">
         <h3><span class="badge common">공통</span><code class="mono">common_maplestory</code></h3>
-        <ul><li>추상구조 18개 + 가이드 문서에서 추출한 그래프</li><li>운영자만 쓰기 (추출 큐)</li><li>상시 로드</li><li>식당은 <code class="mono">common_restaurant</code>로 따로, 같은 추상구조 목록 (D-4)</li></ul>
+        <ul><li>추상구조 21개 + 가이드 문서에서 추출한 그래프</li><li>운영자만 쓰기 (추출 큐)</li><li>상시 로드</li><li>식당은 <code class="mono">common_restaurant</code>로 따로, 같은 추상구조 목록 (D-4)</li></ul>
       </div>
       <div class="layer mine">
         <h3><span class="badge mine">내 것</span><code class="mono">u_&lt;사용자id&gt;</code></h3>
@@ -596,11 +596,6 @@
     </table></div>
     <p class="note">IFBench는 Artificial Analysis 값(API, 풀 정밀도)이라 로컬 Q4는 이보다 낮아요. thinking은 청크 20개로 네 조합(모델 2 × 켬/끔)을 돌려 파싱 실패율, 트리플 수, 추상구조 연결 수, 청크당 시간을 비교해 정해요. LightRAG의 JSON 출력 모드를 켜면 형식 위반이 줄어 thinking을 꺼도 될 수 있어요.</p>
     <p class="note"><strong>T-413 중간 결과(2026-11-22).</strong> thinking 끔 두 조합 모두 관문 미달(연결률 gemma 19%, qwen 6%, 파싱 실패 5%·0%)이라 기본값은 그대로 <code>gemma4:12b</code>, thinking 끔이에요. thinking 켬은 2/20청크만 쟀고(청크당 약 523초) 나머지는 밤 시간창에 돌려 다시 봐요. 맥에 받은 두 모델은 Ollama MLX 러너(nvfp4)라 JSON 모드를 못 해 501로 답해요. 워커는 그때 format 없이 다시 보내고 파서가 코드 펜스를 견뎌요. GGUF 태그(JSON 모드 가능)도 다음 비교 후보예요.</p>
-    <pre class="code"><code># Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다
-launchctl setenv OLLAMA_HOST 127.0.0.1:11434
-launchctl setenv OLLAMA_NUM_PARALLEL 1      # 동시 요청 1개
-launchctl setenv OLLAMA_KEEP_ALIVE 5m       # 끝나면 5분 뒤 메모리에서 내림
-launchctl setenv OLLAMA_CONTEXT_LENGTH 16384
     <pre class="code"><code># Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다(T-411, infra/mac/)
 # 환경 변수는 launchd 에이전트 plist의 EnvironmentVariables에만 둔다(전역 launchctl setenv 안 씀)
 #   OLLAMA_HOST=127.0.0.1:11434  OLLAMA_NUM_PARALLEL=1(동시 요청 1개)

@@ -29,36 +29,43 @@
 - 워커는 설계대로 `analogy-api` 프로세스 안의 백그라운드 태스크로 돈다. `EXTRACT_OLLAMA_URL`이 있을 때만 켜지고, 작업 디렉터리의 `worker.lock`으로 워커는 하나만 돈다(이미 잡혀 있으면 서버는 워커 없이 뜬다).
 - 큐는 워크스페이스마다 JSON 파일 하나(`extract-queue.json`)이고, 읽고-고치고-쓰는 동안 `extract-queue.lock`을 flock으로 쥔다. 청크 id는 내용 기준이다. `seed --reset`은 큐를 보존해 `done`을 `pending`으로 되돌린다.
 - 클라우드 대체(`EXTRACT_FALLBACK=cloud`)는 사용자 워크스페이스에만, 하루 상한(`EXTRACT_CLOUD_DAILY_CAP`)까지 쓴다. 공통 워크스페이스는 늘 맥만 쓴다.
+- 맥 쪽(T-411, 2026-11-22): launchd 사용자 에이전트 둘(시간창 시작·끝, `infra/mac/`, 시간창은 `window.conf` 한 곳), 환경 변수는 plist에만(`OLLAMA_HOST=127.0.0.1:11434`), 테일넷 노출은 `tailscale serve --tcp 11434`. 정책 `infra/tailscale-policy.json`은 맥 11434를 `tag:rag-server`에만 연다(설계 초안의 내 계정 → 맥 11434 길은 뺐다). 절차는 `infra/README.md`.
 
 ## L1 A/B 중간 결과 (2026-11-22, T-413)
 - thinking 끔 두 조합 모두 관문(파싱 실패 ≤ 5%, 추상구조 연결률 ≥ 70%) 미달: gemma4:12b 5%·19%, qwen3.5:9b 0%·6%. 기본값은 그대로 `gemma4:12b`, thinking 끔. thinking 켬은 2/20청크만 쟀고 나머지는 밤 시간창에 돌린 뒤 다시 정한다(`docs/EVAL_LOG.md` "추출 A/B").
 - 맥에 받은 모델은 Ollama MLX 러너라 JSON 모드를 못 한다(501). 워커는 format 없이 다시 보내고 파서가 펜스를 견딘다. 문법 제약이 없어 형식 오류가 남을 수 있다.
 - 연결률 70%는 아이템·지역까지 분모에 넣으면 지금 프롬프트(예시 자체가 2/5)로는 닿기 어렵다. 지표 정의(게임시스템만, 또는 청크 단위)와 프롬프트 예시를 함께 다시 본다.
-- 맥 쪽(T-411, 2026-11-22): launchd 사용자 에이전트 둘(시간창 시작·끝, `infra/mac/`, 시간창은 `window.conf` 한 곳), 환경 변수는 plist에만(`OLLAMA_HOST=127.0.0.1:11434`), 테일넷 노출은 `tailscale serve --tcp 11434`. 정책 `infra/tailscale-policy.json`은 맥 11434를 `tag:rag-server`에만 연다(설계 초안의 내 계정 → 맥 11434 길은 뺐다). 절차는 `infra/README.md`.
+
 ## 관문 측정 (2026-11-22, T-142) — 미달, 상태는 제안 그대로
 EC2(T-401)가 없어 **이 맥의 로컬 Ollama `bge-m3`(127.0.0.1:11434)**로 시드한 서버를 127.0.0.1:8770에 띄워 쟀다. 브라우저 쪽은 같은 시각 실제 크롬 확장(e5-base q8). 자세한 수치는 `docs/EVAL_LOG.md` 2026-11-22 T-142 두 줄.
+
 | 셋 | 브라우저 hit@1 · hit@3 | 서버 hit@1 · hit@3 |
 | --- | --- | --- |
 | 평가셋 44 (관문) | **41/44** · 43/44 | **26/44** · 41/44 |
 | 검증셋 14 | 13/14 · 14/14 | 7/14 · 13/14 |
 | 홀드아웃 32 | 21/32 · 27/32 | 21/32 · **32/32** |
 | 가드(`--guard`) | 회귀 없음 | 회귀 18 |
+
 관문 줄: `관문: 서버 hit@1 26/44 (ollama:bge-m3) vs 브라우저 41/44 (Xenova/multilingual-e5-base@q8 · 브라우저) → 미달`.
+
 **원인(코드와 문장별 결과로 본 것)**
 1. 서버 순위에는 점수가 없다. `context_to_candidates`가 LightRAG hybrid 맥락의 개체 등장 순서로 1.0, 0.9, 0.8을 매긴다. 정답이 3위 안에 드는 비율은 서버가 더 높은데(홀드아웃 32/32) 1위가 자주 틀린다 → 1위 정렬이 약점이다.
 2. 검색 질의가 문장이 아니라 키워드 LLM(`gemini-3.5-flash-lite`)의 hl·ll이다. ll이 "버스 기사, 손님"처럼 표면 낱말이면 구조가 아니라 주제로 끌린다. LLM 출력이라 실행마다 조금씩 다를 수 있다(이번 수치는 서버 결과 캐시로 고정된 한 번).
 3. 브라우저 쪽 조정이 서버에는 없다. 시드는 태그 `desc`와 노드 `facts`만 넣고 태그 예문(`examples`), 경제 태그 감점(`tagPenalty`), 별칭 부스트(`aliasBoost`)를 쓰지 않는다. 브라우저는 이 셋으로 평가셋을 맞춰 왔다(T-113~T-180).
 4. 그래서 평가셋 격차(15문장)의 대부분은 평가셋 맞춤의 몫으로 보인다. 조정에 안 쓴 홀드아웃에서는 동률(서버만 틀림 8, 브라우저만 틀림 8)이다.
 5. T-167에서 늘어난 노드(`mvp_membership`·`equipment_transfer`·`trade_fee`·`boss_reward_split`·`world_trade_group`)가 서버 1위를 자주 가져간다. 사실 문장에 "등급·수수료·분배" 같은 넓은 낱말이 있어 키워드와 표면으로 맞는다.
+
 **문장별(서버가 진 곳·이긴 곳)**
 - 평가셋 서버만 틀림 16: API 분당 상한(→union_link), 한정판 운동화(→weekly_boss), 근력 운동(→sol_erda), 마이크로서비스(→boss_reward_split), 뽑기형 상품(→starforce), 누진세(→equipment_transfer), 주차장(→hunting), 아파트 호가(→trade_fee), 마라톤(→mvp_membership), 엘리베이터 버튼(→cube), rerolling(→party), gym 동반(→party), surgery(→boss_reward_split), airline miles(→starforce_event), "세금 내고 메소 바닥"(→meso), "17성에서 터져서"(→equipment_transfer). 브라우저만 틀림 1: 본사 품질 인증(서버는 union_link로 맞힘). 둘 다 틀림 2: 대장간 검, Learning to code.
 - 검증셋 서버만 틀림 6: 주식 신용거래, 전기 요금, 무료 번역 API, 악기 연습, 랜덤 박스, 경력 이직. 둘 다 틀림 1: 콘서트 티켓.
 - 홀드아웃 서버만 틀림 8: 헬스장 PT, 은행 이체 한도, 문자 인증번호, 게임 계정 등급, Collectors, pharmacist, 마일리지 합산, 택배 무료 반품. 브라우저만 틀림 8: 수영 강습, 투자 수익, airline 48-hour sale, film set, 시중 현금 두 배, 굿즈 되팔기, pizza shop, 주유소 할인. 둘 다 틀림 3.
+
 **다음 수단(순서대로, 하나씩 관문 다시)**
 1. 서버 후보 다시 정렬: LightRAG 맥락에서 후보를 넓게(예: 10개) 받고, 같은 bge-m3로 문장 ↔ 노드·태그 코사인을 계산해 브라우저와 같은 공식(직접 × w1 + 태그 × w2 + 부스트)으로 1위를 고른다. hit@3이 높아 효과가 가장 클 것으로 본다.
 2. 시드에 태그 예문을 태그 엔티티 설명으로 넣고, 서버에도 `tagPenalty`·`aliasBoost`를 같은 `admin.json` 값으로 적용(규칙 9의 로더 한 곳 원칙 유지).
 3. 키워드 LLM 흔들림 측정: 같은 셋을 캐시 없이 2~3번 돌려 hit@1 폭을 잰다. 크면 ll에 원문 문장을 항상 함께 넣는다.
-4. 관문 기준 재검토(사용자 결정): 평가셋은 브라우저 조정에 쓰인 문장이라 서버에 불리하다. 홀드아웃도 관문에 넣을지 정한다.
+4. 관문 기준: 평가셋은 브라우저 조정에 쓰인 문장이라 서버에 불리하다. **판정 2026-11-22**: 관문은 정의대로 평가셋, 홀드아웃은 나란히 적어 참고한다(T-183).
+
 **주의**
 - EC2가 아니라 맥에서 쟀다. 같은 Ollama `bge-m3` 모델 파일이면 임베딩은 CPU(arm64 Graviton)·Apple Silicon 사이 부동소수 오차 수준만 달라 순위에는 거의 영향이 없다고 본다. EC2에서 다시 잴 때 몇 문장 확인한다.
 - 해시 임베딩(`EMBEDDING_PROVIDER=hash`) 인덱스로 잰 수치는 의미가 없다. 이번 인덱스는 `seed-meta.json`의 임베딩이 `ollama/bge-m3/1024차원`이고, 응답 `debug.embedderId`도 `ollama:bge-m3`였다.
