@@ -220,7 +220,7 @@ def chunk_metrics(text: str, entities: list[Mapping[str, Any]], relationships: l
         "rawRelationships": len(relationships),
         "typeOther": sum(t == "other" for t in raw_types),
         "typeOutside": sum(t not in allowed_types for t in raw_types),  # Other 포함
-        "abstractDropped": len(entities) - len(kept_e),
+        "dropped": len(entities) - len(kept_e),  # 목록 밖 추상구조 + 목록 밖 유형
         "gameEntities": len(game),
         "linkedGame": len(linked),
         "tags": len(tags),
@@ -257,7 +257,7 @@ def summarize(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
         "chunksWithLink": sum(1 for x in m if x["linkedGame"] > 0),
         "typeOtherRate": total("typeOther") / total("rawEntities") if m and total("rawEntities") else 0.0,
         "typeOutsideRate": total("typeOutside") / total("rawEntities") if m and total("rawEntities") else 0.0,
-        "abstractDropped": total("abstractDropped"),
+        "dropped": total("dropped"),
         "copiedExamples": sum(len(x["copiedExamples"]) for x in m),
         "ungroundedGameRate": total("ungroundedGame") / game if game else 0.0,
         "secondsPerChunk": sum(secs) / len(secs) if secs else 0.0,
@@ -277,6 +277,17 @@ def choose_default(summaries: Mapping[str, Mapping[str, Any]]) -> str | None:
     if not ok:
         return None
     return sorted(ok, key=lambda kv: (-kv[1]["linkRate"], kv[1]["secondsPerChunk"]))[0][0]
+
+
+def pending_chunks(chunks: list[Mapping[str, Any]], rows: Iterable[Mapping[str, Any]], key: str) -> list[Mapping[str, Any]]:
+    """이어 돌리기: 이 조합(key)으로 이미 결과 줄이 있는 청크는 빼고 남은 청크만(고정본 순서)."""
+    done = {r["chunk"] for r in rows if r.get("combo") == key}
+    return [c for c in chunks if c["id"] not in done]
+
+
+def hopeless(fails: int, limit: int, max_fail: float = MAX_PARSE_FAIL) -> bool:
+    """실패가 허용 수(limit × max_fail, 내림)를 넘어 남은 청크가 모두 성공해도 관문을 못 넘는지."""
+    return fails > int(limit * max_fail + 1e-9)
 
 
 def combo_key(model: str, think: bool) -> str:
@@ -379,7 +390,10 @@ def _load_rows(path: Path) -> list[dict]:
     return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
-def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: Path, base: str = OLLAMA) -> None:
+def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: Path, base: str = OLLAMA,
+           early_stop: bool = True) -> None:
+    """조합마다 청크를 차례로. early_stop이면 파싱 실패가 허용 수를 넘는 순간 그 조합을 멈춘다(관문 탈락 확정).
+    느린 맥에서 청크마다 600초 타임아웃을 다 기다리지 않으려고 둔다(T-413)."""
     from app.config import Settings
 
     graph = Settings.from_env().common_graph()
@@ -389,7 +403,6 @@ def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: P
     chunks = json.loads(FIXTURE.read_text(encoding="utf-8"))["chunks"][:limit]
     out_dir.mkdir(parents=True, exist_ok=True)
     rows_path, mem_path = out_dir / "rows.jsonl", out_dir / "memory.json"
-    done = {(r["combo"], r["chunk"]) for r in _load_rows(rows_path)}
     memory = json.loads(mem_path.read_text()) if mem_path.exists() else {}
     models = list(models)
     for model in models:
@@ -398,8 +411,9 @@ def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: P
                 unload(other, base)
         for think in thinks:
             key = combo_key(model, think)
-            todo = [c for c in chunks if (key, c["id"]) not in done]
-            if not todo:
+            todo = pending_chunks(chunks, _load_rows(rows_path), key)
+            fails = sum(1 for r in _load_rows(rows_path) if r["combo"] == key and r.get("error"))
+            if not todo or (early_stop and hopeless(fails, limit)):
                 continue
             chat = make_ollama_chat(base, model, system, think)
             with MemorySampler(base) as mem:
@@ -413,6 +427,10 @@ def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: P
                         f.write(json.dumps(row, ensure_ascii=False) + "\n")
                     print(f"[{key}] {c['id']}: {r['seconds']:.1f}초 "
                           f"{'실패 ' + r['error'] if r.get('error') else 'ok'}", flush=True)
+                    fails += bool(r.get("error"))
+                    if early_stop and hopeless(fails, limit):
+                        print(f"[{key}] 파싱 실패 {fails}개로 관문 탈락이 확정돼 이 조합을 멈춰요.", flush=True)
+                        break
             prev = memory.get(key) or {}
             memory[key] = {"psSize": max(mem.ps_max, prev.get("psSize", 0)), "rss": max(mem.rss_max, prev.get("rss", 0))}
             mem_path.write_text(json.dumps(memory, indent=2))
@@ -450,6 +468,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--models", default=",".join(MODELS))
     ap.add_argument("--think", default="off,on", help="off,on 중에서")
     ap.add_argument("--limit", type=int, default=20)
+    ap.add_argument("--full", action="store_true", help="관문 탈락이 확정돼도 끝까지 돌린다(조기 중단 끔)")
     ap.add_argument("--out", default=str(OUT_DIR))
     ap.add_argument("--ollama", default=OLLAMA, help="맥 로컬 Ollama 주소(127.0.0.1만, 규칙 10)")
     args = ap.parse_args(argv)
@@ -460,7 +479,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not args.report_only:
         thinks = [{"off": False, "on": True}[t.strip()] for t in args.think.split(",") if t.strip()]
-        run_ab([m.strip() for m in args.models.split(",") if m.strip()], thinks, args.limit, out_dir, args.ollama)
+        run_ab([m.strip() for m in args.models.split(",") if m.strip()], thinks, args.limit, out_dir, args.ollama,
+               early_stop=not args.full)
     table, _, best = report(out_dir, args.limit)
     print(table)
     print(f"기본값 후보: {best or '없음(관문을 넘은 조합 없음, 지금 기본값 유지)'}")

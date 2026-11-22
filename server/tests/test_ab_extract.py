@@ -48,8 +48,8 @@ def test_chunk_metrics_link_rate_types_and_example_copy(vocab):
         {"name": "메소", "type": "재화"},
         {"name": "결정석", "type": "아이템"},  # 원문에 없는 예시 엔티티(베낌)
         {"name": "기간당 한도", "type": "추상구조"},
-        {"name": "목록밖구조", "type": "추상구조"},  # 후처리가 버림
-        {"name": "입장권", "type": "Other"},
+        {"name": "목록밖구조", "type": "추상구조"},  # 후처리가 버림(목록 밖 추상구조)
+        {"name": "입장권", "type": "Other"},  # 후처리가 버림(목록 밖 유형, T-413)
         {"name": "사냥", "type": "활동"},
     ]
     rels = [
@@ -59,7 +59,7 @@ def test_chunk_metrics_link_rate_types_and_example_copy(vocab):
     ]
     m = ab.chunk_metrics(text, ents, rels, vocab, seed_labels=["몬스터 파크", "메소"],
                          example_names=ab.example_entity_names())
-    assert m["rawEntities"] == 7 and m["entities"] == 6 and m["abstractDropped"] == 1
+    assert m["rawEntities"] == 7 and m["entities"] == 4 and m["dropped"] == 3  # 목록밖구조·Other·활동
     assert m["relationships"] == 2
     assert m["typeOther"] == 1 and m["typeOutside"] == 2
     # 게임 개념 = 몬스터파크·메소·결정석(Other·활동은 목록 밖이라 뺌), 연결 = 몬스터파크·결정석
@@ -80,7 +80,7 @@ def test_chunk_metrics_relationship_direction_and_type_normalized(vocab):
 def _row(game, linked, ents=4, rels=2, secs=10.0, other=0, outside=0, raw=4, copied=()):
     return {"seconds": secs, "promptTokens": 3000, "outputTokens": 500, "metrics": {
         "entities": ents, "relationships": rels, "rawEntities": raw, "rawRelationships": rels,
-        "typeOther": other, "typeOutside": outside, "abstractDropped": 0, "gameEntities": game,
+        "typeOther": other, "typeOutside": outside, "dropped": 0, "gameEntities": game,
         "linkedGame": linked, "tags": 1, "copiedExamples": list(copied), "ungroundedGame": 0, "seedNameHits": []}}
 
 
@@ -123,3 +123,20 @@ def test_fixture_is_official_sources_only_and_chunk_sized():
     for c in chunks:
         assert c["url"].startswith("https://maplestory.nexon.com/")  # D-5: 공식 출처만
         assert 0 < len(c["text"]) <= 1200  # 운영 청크 크기(chunk_text)
+
+
+def test_hopeless_when_failures_exceed_allowed():
+    # 20청크 × 5% = 1개까지 허용
+    assert not ab.hopeless(1, 20) and ab.hopeless(2, 20)
+    assert ab.hopeless(1, 10)  # 10청크면 0개 허용
+
+
+def test_pending_chunks_skips_rows_already_recorded_for_that_combo():
+    chunks = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+    on, off = ab.combo_key("gemma4:12b", True), ab.combo_key("gemma4:12b", False)
+    rows = [{"combo": on, "chunk": "a"}, {"combo": on, "chunk": "c", "error": "ReadTimeout"},
+            {"combo": off, "chunk": "b"}]
+    # 실패 줄도 기록된 것이라 다시 돌리지 않는다(결과를 덮지 않게). 다른 조합 줄은 상관없다
+    assert [c["id"] for c in ab.pending_chunks(chunks, rows, on)] == ["b"]
+    assert [c["id"] for c in ab.pending_chunks(chunks, rows, off)] == ["a", "c"]
+    assert ab.pending_chunks(chunks, [], ab.combo_key("qwen3.5:9b", True)) == chunks
