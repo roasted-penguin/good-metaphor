@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.23-1",
+  "version": "2026.11.23-2",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -1157,6 +1157,38 @@
         "https://www.mafra.go.kr/bbs/home/792/576535/artclView.do"
       ],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "franchise_escrow",
+      "label": "가맹금 예치",
+      "facts": [
+        "가맹금은 본부에 바로 주지 않고 은행 같은 예치기관에 맡겨 두며, 가맹점이 영업을 시작하거나 정해진 기간이 지난 뒤에야 본부가 찾아갈 수 있다.",
+        "가맹점이 가맹금을 돌려받으려고 소송이나 조정을 신청하면 결과가 확정될 때까지 예치기관이 지급을 보류한다.",
+        "본부가 가맹점 피해보상보험에 들었다면 가맹금을 예치하지 않아도 된다."
+      ],
+      "tags": [
+        "progression_gate"
+      ],
+      "sources": [
+        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제6조의5&mode=11"
+      ],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "fire_liability_insurance",
+      "label": "화재배상책임보험",
+      "facts": [
+        "일정 넓이 이상인 음식점은 불이 나 손님이나 이웃이 다치거나 재산을 잃었을 때 주인 대신 배상금을 내 줄 화재배상책임보험에 반드시 가입해야 한다.",
+        "출입구가 바깥 땅과 바로 이어진 지상층 가게처럼 대피가 쉬운 곳은 가입 대상에서 빠진다.",
+        "보험에 들지 않은 음식점 주인은 과태료를 낸다."
+      ],
+      "tags": [
+        "loss_risk"
+      ],
+      "sources": [
+        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=3&cciNo=1&cnpClsNo=1"
+      ],
+      "verifiedAt": "2026-11-22"
     }
   ],
   "edges": [
@@ -1444,6 +1476,21 @@
       "from": "business_hours_limit",
       "to": "youth_alcohol",
       "rel": "함께 영업 질서를 지키는 규칙"
+    },
+    {
+      "from": "franchise_escrow",
+      "to": "franchise_fee",
+      "rel": "낸 가맹금을 영업 시작 전까지 맡겨 둠"
+    },
+    {
+      "from": "fire_liability_insurance",
+      "to": "lost_item_liability",
+      "rel": "함께 손님 피해를 물어 주는 책임"
+    },
+    {
+      "from": "industrial_accident",
+      "to": "fire_liability_insurance",
+      "rel": "함께 사고 배상을 보험으로 덜어 줌"
     }
   ]
 }
