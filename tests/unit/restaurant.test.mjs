@@ -56,9 +56,6 @@ test('식당 그래프는 검증을 통과하고 태그는 공통 tags.json 그�
 test('식당 노드: 12~1,000개(T-168에서 늘림, T-196 파이프라인 묶음·ADR 0015 목표 1,000), facts 2~3개(숫자·영문 없음, "다."로 끝), tags 1~3개, aliases 없음', () => {
   const n = restaurant.nodes.length;
   assert.ok(n >= 12 && n <= 1000, `노드 ${n}개`);
-test('식당 노드: 12~100개(T-168·T-192에서 늘림), facts 2~3개(숫자·영문 없음, "다."로 끝), tags 1~3개, aliases 없음', () => {
-  const n = restaurant.nodes.length;
-  assert.ok(n >= 12 && n <= 100, `노드 ${n}개`);
   for (const node of restaurant.nodes) {
     assert.match(node.id, /^[a-z][a-z0-9_]*$/, node.id);
     assert.ok(node.facts.length >= 2 && node.facts.length <= 3, `${node.id} facts ${node.facts.length}개`);

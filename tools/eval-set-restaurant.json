@@ -16,7 +16,7 @@
   { "sentence": "학원을 열려면 교육청에 먼저 등록해야 하고, 등록하지 않고 수업하면 폐쇄 명령을 받는다.", "expectNodes": ["open_prep"], "expectTag": "compliance_procedure", "since": "T-206" },
   { "sentence": "스타포스 이벤트 기간에는 강화 비용이 할인돼 유저들이 그때 몰아서 강화한다.", "expectNodes": ["happy_hour"], "expectTag": "temporary_multiplier", "group": "maple" },
   { "sentence": "메소 시세가 떨어져서 같은 아이템을 사려면 메소가 훨씬 더 든다.", "expectNodes": ["ingredient_cost"], "expectTag": "inflation", "group": "maple" },
-  { "sentence": "보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.", "expectNodes": ["kitchen_division", "meal_staff_roles"], "expectTag": "role_division", "group": "maple" },
+  { "sentence": "보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.", "expectNodes": ["kitchen_division"], "expectTag": "role_division", "group": "maple" },
   { "sentence": "경매장에서 아이템이 팔리면 판매 대금에서 수수료가 빠진다.", "expectNodes": ["delivery_fee", "card_fee"], "expectTag": "brokerage_fee", "group": "maple" },
   { "sentence": "주간 보스 결정석은 한 주에 팔 수 있는 개수가 정해져 있다.", "expectNodes": ["limited_menu", "lunch_peak"], "expectTag": "periodic_cap", "group": "maple" },
   { "sentence": "Airlines overbook flights because some passengers never show up and their seats would fly empty.", "expectNodes": ["no_show"], "expectTag": "loss_risk", "group": "en" },

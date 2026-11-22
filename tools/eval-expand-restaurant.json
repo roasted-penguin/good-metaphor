@@ -1,6 +1,5 @@
 [
   {"sentence": "중고차를 사면 앞 차주가 안 낸 과태료까지 떠안을 수 있어서 계약 전에 미납 내역을 확인한다.", "expectNodes": ["business_succession"], "expectTag": "loss_risk", "since": "T-192", "why": "넘겨받으면 앞 주인의 불이익까지 이어받는다 = 영업자 지위 승계"},
-  {"sentence": "수영장 안전요원은 일을 시작하기 전에 인명구조 자격을 따야 하고, 몇 년마다 다시 보수교육을 받아야 자격이 유지된다.", "expectNodes": ["health_check"], "expectTag": "progression_gate", "since": "T-192", "why": "시작 전에 확인받고 주기마다 다시 받아야 계속 할 수 있다 = 건강진단"},
   {"sentence": "원동기 면허로는 오토바이만 몰 수 있고, 승용차를 몰려면 다른 종류의 면허를 따로 따야 한다.", "expectNodes": ["restaurant_category"], "expectTag": "progression_gate", "since": "T-192", "why": "어떤 종류로 등록했느냐에 따라 할 수 있는 일이 정해진다 = 휴게음식점과 일반음식점"},
   {"sentence": "회사가 파산하면 담보를 먼저 잡아 둔 채권자부터 순서대로 돈을 돌려받는다.", "expectNodes": ["fixed_date"], "expectTag": "loss_risk", "since": "T-192", "why": "먼저 날짜를 받아 둔 쪽이 먼저 돌려받는다 = 확정일자와 우선변제"},
   {"sentence": "휴대폰 데이터는 한 달 정해진 양을 다 쓰면 다음 달이 될 때까지 더 쓸 수 없다.", "expectNodes": ["weekly_hour_cap"], "expectTag": "periodic_cap", "since": "T-192", "why": "기간마다 쓸 수 있는 양에 상한이 있고 다음 기간에 다시 찬다 = 주당 근로시간 한도"},
@@ -16,7 +15,6 @@
   {"sentence": "호텔 프런트에 맡긴 짐이 없어지면 호텔이 물어 줘야 하지만, 귀중품은 미리 알리고 맡겨야 보상받는다.", "expectNodes": ["lost_item_liability"], "expectTag": "loss_risk", "since": "T-192", "why": "맡은 물건이 없어지면 배상하고 귀중품은 알려야 한다 = 손님 물건 보관 책임"},
   {"sentence": "마트는 수입 소고기와 국산 소고기를 구분해 어느 나라에서 왔는지 진열대에 적어 둔다.", "expectNodes": ["origin_label"], "expectTag": "threshold_req", "since": "T-192", "why": "재료가 어디서 왔는지 손님에게 밝힌다 = 원산지 표시"},
   {"sentence": "공유 오피스는 회의실과 복합기를 여러 회사가 함께 써서 각자 사무실을 따로 차리지 않아도 된다.", "expectNodes": ["shared_kitchen"], "expectTag": "fixed_cost_leverage", "since": "T-192", "why": "시설을 여럿이 함께 써 각자 갖추지 않아도 된다 = 공유주방"},
-  {"sentence": "병원에서는 의사가 진단과 처방을 맡고 간호사는 투약과 환자 관리를 맡아 일을 나눈다.", "expectNodes": ["meal_staff_roles"], "expectTag": "role_division", "since": "T-192", "why": "두 전문 인력이 일을 나눠 맡는다 = 급식소의 조리사와 영양사"},
   {"sentence": "통신 약정은 만료 전에 해지 의사를 밝히지 않으면 같은 조건으로 자동 연장된다.", "expectNodes": ["franchise_renewal"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "기간 안에 알리지 않으면 같은 조건으로 다시 계약한 것으로 본다 = 가맹계약 갱신요구권"},
   {"sentence": "아파트 단지에서 주민 돈을 쓰는 공사는 정해진 비율 이상의 주민이 동의해야 하고, 쓴 내역을 공개해야 한다.", "expectNodes": ["franchise_ad_cost"], "expectTag": "vendor_lock_in", "since": "T-192", "why": "구성원 돈이 드는 일은 일정 비율 동의와 집행 내역 공개가 필요하다 = 가맹점 부담 광고·판촉"},
   {"sentence": "장기 근속 표창은 한 회사에서 오랜 세월 일한 사람만 받을 수 있다.", "expectNodes": ["century_store"], "expectTag": "daily_accumulation", "since": "T-192", "why": "오랜 세월을 쌓아야 받는 인정 = 백년가게"},

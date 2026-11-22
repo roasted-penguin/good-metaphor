@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.23-2",
+  "version": "2026.11.23-3",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -593,22 +593,6 @@
       "verifiedAt": "2026-11-22"
     },
     {
-      "id": "health_check",
-      "label": "건강진단(보건증)",
-      "facts": [
-        "음식을 만들고 다루는 사람은 일을 시작하기 전에 건강진단을 받아야 하고, 그 뒤에도 정해진 주기마다 다시 받아야 계속 그 일을 할 수 있다.",
-        "검진에서 남에게 옮길 수 있는 병이 확인되면 나을 때까지 음식 다루는 일을 할 수 없다.",
-        "영업자는 건강진단을 받지 않은 사람을 음식 만드는 일에 쓰지 못한다."
-      ],
-      "tags": [
-        "progression_gate"
-      ],
-      "sources": [
-        "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=839&ccfNo=4&cciNo=1&cnpClsNo=1"
-      ],
-      "verifiedAt": "2026-11-22"
-    },
-    {
       "id": "restaurant_category",
       "label": "휴게음식점과 일반음식점",
       "facts": [
@@ -850,22 +834,6 @@
       ],
       "sources": [
         "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제36조&mode=11"
-      ],
-      "verifiedAt": "2026-11-22"
-    },
-    {
-      "id": "meal_staff_roles",
-      "label": "급식소의 조리사와 영양사",
-      "facts": [
-        "집단급식소에서는 조리사가 재료 손질부터 조리와 배식까지 맡고, 영양사는 식단을 짜고 맛을 보며 배식과 위생을 관리해 일을 나눈다.",
-        "집단급식소 운영자는 조리사와 영양사를 함께 둬야 한다.",
-        "운영자가 직접 조리사나 영양사로 일하거나 한 사람이 두 면허를 함께 가진 작은 급식소는 따로 두지 않아도 된다."
-      ],
-      "tags": [
-        "role_division"
-      ],
-      "sources": [
-        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제51조&mode=11"
       ],
       "verifiedAt": "2026-11-22"
     },
@@ -1282,11 +1250,6 @@
       "rel": "가게를 넘겨받을 때 함께 따짐"
     },
     {
-      "from": "health_check",
-      "to": "open_prep",
-      "rel": "영업 시작 전에 함께 갖춤"
-    },
-    {
       "from": "restaurant_category",
       "to": "open_prep",
       "rel": "어떤 업종으로 신고할지 정함"
@@ -1360,11 +1323,6 @@
       "from": "shared_kitchen",
       "to": "fixed_variable_cost",
       "rel": "주방 시설을 여럿이 나눠 씀"
-    },
-    {
-      "from": "meal_staff_roles",
-      "to": "kitchen_division",
-      "rel": "급식소에서 일을 나눠 맡는 방식"
     },
     {
       "from": "franchise_renewal",

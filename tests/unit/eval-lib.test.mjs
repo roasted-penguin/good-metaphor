@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { scoreCases, mixedSetting, regressions } from '../../tools/eval-lib.mjs';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
-import { commonInterest } from '../../extension/lib/graph.js';
 
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
 const common = loadCommonGraphFromDisk();
@@ -334,12 +333,6 @@ test('eval-expand-maplestory.json: 정답 노드가 그래프에 있고 다른 �
     assert.ok(c.expectNodes?.length && c.expectNodes.every(id => ids.has(id)), `정답 노드가 그래프에 없어요: ${c.sentence}`);
     assert.ok(!others.has(c.sentence), `다른 셋과 겹쳐요: ${c.sentence}`);
   }
-test('pickSets: --set 파일 셋(custom)이 있으면 그 셋 하나만, 가드 대상 아님 (T-192)', () => {
-  const e = [{ sentence: 'e' }], x = [{ sentence: 'x' }];
-  const custom = { name: '셋 tools/eval-expand-restaurant.json', cases: x };
-  const got = pickSets(['--set', 'f'], { evalSet: e, validation: e, holdout: e, interestSet: e, custom }, commonInterest('restaurant'));
-  assert.deepEqual(got.map(s => [s.name, s.cases, s.guarded]), [[custom.name, x, false]]);
-  assert.equal(pickSets(['--set', 'f'], { evalSet: e, validation: e, holdout: e, custom }).length, 1);
 });
 
 // 홀드아웃(tools/eval-unseen.json): 예문을 고를 때 보지 않는 문장. 평가셋·검증셋·가드와 겹치지 않아야 의미가 있다
