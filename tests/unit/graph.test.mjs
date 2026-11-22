@@ -194,7 +194,7 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
     world_trade_group: ['관세'], item_binding: ['가위'], balance_patch: ['하향', '상향'],
     challengers_world: ['리프'], equipment_transfer: ['전승'], boss_reward_split: ['분배']
   });
-  assert.equal(common.version, '2026.11.22-3'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가, T-172 quick_pass, T-174 사냥 룬 사실, T-177 주간 보스 사실 순서
+  assert.equal(common.version, '2026.11.22-4'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가, T-172 quick_pass, T-174 사냥 룬 사실, T-177 주간 보스 사실 순서, T-176 trade_fee 태그
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {
