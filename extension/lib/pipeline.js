@@ -53,15 +53,17 @@ export async function runAnalogy({ sentence, word, context, pageTitle, graph, ca
     answer = parseJSONLoose(raw);
     if (!answer) throw new Error('모델 응답을 해석하지 못했어요: ' + raw.slice(0, 120));
 
-    // 끝맺음 검사(T-122). 다시 부를 때는 뜻 먼저(onText)를 다시 보내지 않는다(이미 말풍선에 있음)
-    const issues = endingIssues(answer);
+    // 끝맺음 검사(T-122). 다시 부를 때는 뜻 먼저(onText)를 다시 보내지 않는다(이미 말풍선에 있음).
+    // 규칙 1로 어차피 숨겨질 비유(후보 밖 nodeId)는 보지 않는다(헛 호출을 막는다)
+    const shown = a => endingIssues(a).filter(i => i.field !== 'analogy' || candidates.some(c => c.id === a.nodeId));
+    const issues = shown(answer);
     ending = { ok: !issues.length, retried: false, issues };
     if (issues.length && endingRetry) {
       ending.retried = true;
       try {
         const fixed = parseJSONLoose(await ask(p.system, p.user + endingRetryNote(issues, answer), { json: true }));
         if (fixed) {
-          const again = endingIssues(fixed);
+          const again = shown(fixed);
           answer = fixed;
           ending.ok = !again.length;
           if (again.length) ending.issues = again;

@@ -94,7 +94,9 @@ class AnalogyPipeline:
 
         # 끝맺음 검사(T-122): 표시만 한다. 확장은 다시 한 번 부르지만, 서버는 확장의 서버 마감(analogyServer.timeoutMs,
         # 4초)을 넘기면 확장이 로컬로 처음부터 다시 하므로 호출을 늘리지 않는다
-        issues = ending_issues(answer)
+        # 규칙 1로 숨겨질 비유(후보 밖 nodeId)의 끝맺음은 보지 않는다(확장과 같다)
+        in_candidates = any(c.id == answer.get("nodeId") for c in candidates)
+        issues = [i for i in ending_issues(answer) if i["field"] != "analogy" or in_candidates]
         ending = {"ok": not issues, "retried": False, "issues": issues}
 
         # 4) 근거 검증(규칙 1): 후보에 없는 노드를 댔으면 비유를 버린다
