@@ -2,7 +2,7 @@
 // 노드 파이프라인(T-194) 명령줄. 사용법은 같은 폴더 README.md.
 //   node tools/node-pipeline/cli.mjs index  --interest maplestory [--pages 1] [--probe-seeds]
 //   node tools/node-pipeline/cli.mjs draft  --interest maplestory [--limit 10] [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
-//   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-near-dup] [--dup-embedder e5|fallback] [--no-tag-fit] [--max-calls 14] [--provider gemini]
+//   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-reground] [--no-near-dup] [--dup-embedder e5|fallback] [--no-tag-fit] [--max-calls 14] [--provider gemini]
 //   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]]
 //   node tools/node-pipeline/cli.mjs accept-alt <대안 표 .alt-*.json> [--dir tools] [--all]
 //   node tools/node-pipeline/cli.mjs apply  --interest maplestory --batch N|all --approve ids.json [--gate browser|fallback|none] [--out 경로] [--write-real]
@@ -14,7 +14,8 @@ import { PROVIDERS, complete as providerComplete } from '../../extension/lib/pro
 import { loadInterestGraph, commonGraphPath } from '../load-graph.mjs';
 import { interestConfig } from './sources.mjs';
 import { politeFetcher } from './web.mjs';
-import { buildIndex, pickPages, draftPages, indexKey, probeSeeds, markProbes } from './run.mjs';
+import { buildIndex, pickPages, draftPages, indexKey, probeSeeds, markProbes, regroundLabels } from './run.mjs';
+import { resolveCrossBatch, describeGroups } from './dedupe.mjs';
 import { checkBatch, sourceProber, renderSheet, summarize } from './check.mjs';
 import { buildPatch, applyPatch, today } from './apply.mjs';
 import { loadGateCases, memoEmbedder, scoreGraph, gateCandidates, altRows, buildAltExplainPrompt, parseAltExplain, altPendingRefusals, applyAltToText, altTargetFiles, renderAltTable } from './gate.mjs';
@@ -131,8 +132,16 @@ async function cmdCheck() {
   const n = batchArg();
   const draft = readJson(batchFile(n, '.draft.json'));
   const graph = loadInterestGraph(interest);
-  const probe = flag('no-probe') ? null : sourceProber(politeFetcher({ log }), cfg.allowHost);
-  const results = await checkBatch(draft.candidates, { cfg, graph, tags: graph.tags, blockTerms: blockTerms(), probe });
+  const fetcher = flag('no-probe') ? null : politeFetcher({ log });
+  const probe = fetcher ? sourceProber(fetcher, cfg.allowHost) : null;
+  // 이름 핵심 낱말 신호(T-205): T-205 전 초안의 조문 꼴 후보는 페이지를 다시 가져와 잰다(LLM 없음). --no-probe·--no-reground면 건너뜀
+  let candidates = draft.candidates;
+  if (fetcher && !flag('no-reground') && cfg.articleHosts?.length) {
+    const rg = await regroundLabels({ cfg, candidates, fetcher, log });
+    candidates = rg.candidates;
+    if (rg.regrounded || rg.failed.length) console.log(`[check] 이름 신호 다시 잼(조문 꼴): 후보 ${rg.regrounded} · 못 가져온 쪽 ${rg.failed.length}`);
+  }
+  let results = await checkBatch(candidates, { cfg, graph, tags: graph.tags, blockTerms: blockTerms(), probe });
   // 앞 묶음에서 실패 안 한 후보(근접 중복·태그 밀도 비교용, 같은 개념이 다른 묶음에 또 나오는 일이 있다)
   const prior = batches().filter(b => b < n && existsSync(batchFile(b, '.json'))).flatMap(b => readJson(batchFile(b, '.json')).results.filter(r => r.status !== 'fail').map(r => r.node));
   // 근접 중복(T-197, ADR 0015 제안 2): LLM 전에(실패 후보에는 태그 적합성을 묻지 않아 한도를 아낀다)
@@ -156,9 +165,15 @@ async function cmdCheck() {
   const density = applyTagDensity(results, { graphNodes: graph.nodes, prior });
   const dense = density.counts.filter(c => c[2] > density.cap);
   console.log(`[check] 태그 밀도: 상한 ${density.cap}(노드 ${density.total}) · 넘는 태그 ${dense.map(c => `${c[0]} ${c[1]}→${c[2]}`).join(', ') || '없음'}`);
+  // 묶음 사이 중복(T-205): 다른 묶음(앞·뒤 모두)에 같은 id·이름이 있으면 하나만 남긴다(dedupe.mjs 판정 순서)
+  const others = batches().filter(b => b !== n && existsSync(batchFile(b, '.json'))).map(b => ({ batch: b, results: readJson(batchFile(b, '.json')).results }));
+  const cross = resolveCrossBatch([...others, { batch: n, results }]);
+  results = cross.batches.at(-1).results;
+  const crossBatch = cross.groups.filter(g => g.keep.batch === n || g.drop.some(d => d.batch === n));
+  if (crossBatch.length) { console.log(`[check] 묶음 사이 중복 ${crossBatch.length}무리:`); for (const l of describeGroups(crossBatch)) console.log('  ' + l); }
   const sum = summarize(results);
   const pagesOk = draft.pages.filter(p => p.status === 'ok').length;
-  writeJson(batchFile(n, '.json'), { interest, batch: n, checkedAt: new Date().toISOString(), graphVersion: graph.version, probed: !!probe, nearDup, density, tagFit, summary: sum, pages: draft.pages, dropped: draft.dropped || [], results });
+  writeJson(batchFile(n, '.json'), { interest, batch: n, checkedAt: new Date().toISOString(), graphVersion: graph.version, probed: !!probe, nearDup, density, tagFit, crossBatch, summary: sum, pages: draft.pages, dropped: draft.dropped || [], results });
   writeFileSync(batchFile(n, '.md'), renderSheet({ interest, batch: n, results, pages: pagesOk, generatedAt: new Date().toISOString(), nearDup, density }));
   const nd = (draft.dropped || []).length;
   console.log(`[check] 묶음 ${n}: 후보 ${sum.total} (통과 ${sum.pass} · 확인 ${sum.warn} · 실패 ${sum.fail}) · 초안에서 태그 없음으로 버림 ${nd} · 페이지당 ${(sum.total / Math.max(1, pagesOk)).toFixed(1)}개`);
@@ -200,9 +215,14 @@ async function nearDupEmbedder(kind) {
 
 // 묶음 번호 또는 all(그 관심사 묶음을 모두 합침) → 검사 결과
 const batchSel = () => (arg('batch') === 'all' ? 'all' : batchArg());
-const loadResults = n => (n === 'all'
-  ? batches().filter(b => existsSync(batchFile(b, '.json'))).flatMap(b => readJson(batchFile(b, '.json')).results)
-  : readJson(batchFile(n, '.json')).results);
+// all이면 묶음 사이 중복(T-205)을 다시 판정해 남길 후보 하나만 실패 아닌 채로 둔다(묶음마다 따로 check한 결과가 겹칠 수 있다)
+function loadResults(n) {
+  if (n !== 'all') return readJson(batchFile(n, '.json')).results;
+  const all = batches().filter(b => existsSync(batchFile(b, '.json'))).map(b => ({ batch: b, results: readJson(batchFile(b, '.json')).results }));
+  const { batches: out, groups } = resolveCrossBatch(all);
+  if (groups.length) { console.log(`  묶음 사이 중복 ${groups.length}무리(하나만 남김):`); for (const l of describeGroups(groups)) console.log('    ' + l); }
+  return out.flatMap(b => b.results);
+}
 
 async function cmdApply() {
   const n = batchSel();

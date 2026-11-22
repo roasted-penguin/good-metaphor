@@ -125,6 +125,8 @@ export const INTERESTS = {
     ],
     // 껍데기 페이지 → 실제 본문 주소(T-198). host가 같으면 resolve(html)를 불러 본문을 한 번 더 가져온다
     bodyFrom: [{ host: 'www.law.go.kr', resolve: lawBodyUrl }],
+    // 조문 꼴 본문(T-205): 이름이 본문에 그대로 안 나와도 이름 핵심 낱말이 조문·장·조 제목에 있으면 "이름이 본문에 없음" 경고를 안 띄운다
+    articleHosts: ['www.law.go.kr'],
     kindOrder: ['law', 'local', 'agency', 'press'],
     // 절 나누기(T-195): 본문 표지가 없는 공공 페이지는 메뉴·만족도 조사 제목도 절이 된다(농식품부 보도자료 5쪽에서 호출 10번 → 후보 0)
     // T-198: 지자체 누리집 꼬리(컨텐츠 정보·담당자), 법령 벌칙·부칙
@@ -170,4 +172,9 @@ export function bodyUrlFor(cfg, url, html) {
 // 색인 항목(JSON이라 정규식이 없음) → 같은 주소의 씨앗 설정(keep·keepSub·maxSections). 없으면 null
 export function seedFor(cfg, url) {
   return (cfg.seeds || []).find(s => s.url === url) || null;
+}
+
+// 조문 꼴 출처(cfg.articleHosts, 식당 = 국가법령정보센터)인가 (T-205)
+export function isArticleSource(url, cfg) {
+  try { return (cfg?.articleHosts || []).includes(new URL(url).hostname); } catch { return false; }
 }

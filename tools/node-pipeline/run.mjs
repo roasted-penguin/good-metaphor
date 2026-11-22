@@ -1,8 +1,8 @@
 // 노드 파이프라인(T-194) 실행 층: index(목록 → 페이지 색인), draft(페이지 → LLM 후보).
 // 네트워크·LLM은 주입받는다(fetcher = web.mjs politeFetcher, complete = (system, user) → 글). 파일 입출력은 cli.mjs가 한다.
 import { extractLinks, htmlToText, extractTitle, contentHash, HEADING_MARK } from './web.mjs';
-import { contentMarkers, bodyUrlFor, seedFor } from './sources.mjs';
-import { buildPageDraftPrompt, draftCandidates, splitSections } from './draft.mjs';
+import { contentMarkers, bodyUrlFor, seedFor, isArticleSource } from './sources.mjs';
+import { buildPageDraftPrompt, draftCandidates, splitSections, labelSignals } from './draft.mjs';
 
 // 색인 키: 메이플 공식 사이트는 경로 대소문자를 가리지 않아(/Guide·/guide) 소문자로 같은 글을 한 번만
 export const indexKey = url => {
@@ -176,4 +176,39 @@ export function markProbes(entries, probes) {
     const p = by.get(indexKey(e.url));
     return p ? { ...e, probe: { ok: p.ok, status: p.status, ...(p.body ? { body: p.body.status } : {}), ...(p.blocked ? { blocked: p.blocked } : {}), at: p.at } } : e;
   });
+}
+
+/**
+ * 이름 핵심 낱말 신호 다시 재기(T-205). T-205 전 초안에는 grounding.labelNouns가 없다. 조문 꼴 출처(cfg.articleHosts) 후보만
+ * 페이지를 다시 가져와(초안과 같은 본문 주소·절 나누기) 그 후보의 절에서 신호를 잰다. LLM은 부르지 않고, 본문은 메모리에서만 쓴다(D-5)
+ * @param {{ cfg, candidates, fetcher, log? }} p
+ * @returns {Promise<{ candidates, regrounded:number, failed:string[] }>} 후보는 새 객체(grounding.labelNouns·regrounded 추가)
+ */
+export async function regroundLabels({ cfg, candidates, fetcher, log = () => {} }) {
+  const need = candidates.filter(c => !c.grounding?.labelNouns && isArticleSource(c.sources?.[0], cfg));
+  const byUrl = new Map();
+  const failed = [];
+  for (const url of new Set(need.map(c => c.sources[0]))) {
+    let r = await fetcher.get(url);
+    if (!r.ok) { failed.push(url); continue; }
+    const bodyUrl = bodyUrlFor(cfg, url, r.html);
+    if (bodyUrl) { r = await fetcher.get(bodyUrl); if (!r.ok) { failed.push(url); continue; } }
+    const seed = seedFor(cfg, url);
+    const seedOpts = seed ? Object.fromEntries(['keep', 'keepSub', 'maxSections'].filter(k => seed[k] != null).map(k => [k, seed[k]])) : {};
+    const text = htmlToText(r.html, { ...contentMarkers(cfg, bodyUrl || url), headings: true, max: Infinity });
+    const { sections } = splitSections(text, { mark: HEADING_MARK, skip: cfg.sectionSkip || null, ...seedOpts });
+    byUrl.set(url, { text, sections });
+  }
+  let regrounded = 0;
+  const out = candidates.map(c => {
+    const page = need.includes(c) && byUrl.get(c.sources[0]);
+    if (!page) return c;
+    // 초안 때 그 절(제목이 같은 절), 못 찾으면 페이지 전체
+    const sec = page.sections.find(s => (s.title || '') === (c.section || '')) || null;
+    regrounded++;
+    return { ...c, grounding: { ...(c.grounding || {}), labelNouns: labelSignals(c.label, sec ? sec.text : page.text, sec ? sec.title : (c.section || '')), regrounded: sec ? 'section' : 'page' } };
+  });
+  byUrl.clear();
+  if (failed.length) log(`이름 신호 다시 재기 실패: ${failed.length}쪽`);
+  return { candidates: out, regrounded, failed };
 }

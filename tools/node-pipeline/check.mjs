@@ -5,6 +5,7 @@
 import { findBlocked } from '../../extension/lib/blocklist.js';
 import { hashEmbed } from '../../extension/lib/fallback-embed.js';
 import { PAGE_DRAFT_LIMITS } from './draft.mjs';
+import { isArticleSource } from './sources.mjs';
 
 // 대체 임베더(글자 n-그램) 코사인. 기존 그래프의 서로 다른 노드끼리 최고값은 메이플 0.47·식당 0.40(2026-11-22 측정)
 export const DUP_WARN = 0.5;   // 이 이상이면 "비슷한 노드가 있어요"(사람이 보고 판단)
@@ -53,8 +54,33 @@ export const REASONS = {
   nearDup: '기존 노드(또는 앞선 후보)와 기존 노드끼리 가장 가까운 쌍보다 더 가까워요(근접 중복).',
   nearDupClose: '기존 노드와 꽤 가까워요(근접 중복 바닥 − 0.03 이상). 다른 개념인지 봐 주세요.',
   factReused: '기존 노드(또는 앞선 후보)의 사실 문장을 그대로 다시 썼어요.',
-  tagDense: '이 태그를 단 노드가 상한(노드 수의 10%, 최소 5)을 넘어요(ADR 0015 제안 3, 경고).'
+  tagDense: '이 태그를 단 노드가 상한(노드 수의 10%, 최소 5)을 넘어요(ADR 0015 제안 3, 경고).',
+  // 묶음 사이 중복(T-205, dedupe.mjs)
+  dupCross: '같은 id나 이름이 다른 묶음에도 있어 그쪽 하나만 남겨요(묶음 사이 중복).'
 };
+
+/* ───── 조문 꼴 출처의 이름 근거 (T-205) ───── */
+
+export { isArticleSource };
+
+/**
+ * 조문 꼴 본문에서 "이름이 본문에 없음"을 풀어 줄 근거. 이름 핵심 낱말 신호(draft labelSignals)로 판정한다(직접 정함, T-205):
+ *   - body: 핵심 낱말이 모두 본문(조문·제목 포함)에 있음
+ *   - titles: 장·조 제목에 하나 이상 있고, 본문에 2/3 이상 있음
+ *   - article: 조 제목 하나가 핵심 낱말 절반 이상을 담음(그 조를 가리키는 이름)
+ *   - cites: 후보 이름·사실이 "제N조"를 직접 가리킴
+ * 낱말이 하나도 없거나(이름이 한 글자 낱말뿐) 신호가 없으면(예전 초안, --no-probe) null = 경고 그대로
+ * @returns {string|null}
+ */
+export function lawLabelGrounded(sig, { label = '', facts = [] } = {}) {
+  if (/제\s*\d+\s*조/.test([label, ...facts].join(' '))) return 'cites';
+  if (!sig || !sig.nouns) return null;
+  if (sig.inPage >= sig.nouns) return 'body';
+  if (sig.inTitles >= 1 && sig.inPage >= Math.ceil(sig.nouns * 2 / 3)) return 'titles';
+  if (sig.article && sig.articleHits >= Math.ceil(sig.nouns / 2)) return 'article';
+  return null;
+}
+const LAW_WHY = { body: '핵심 낱말이 모두 조문에 있음', titles: '핵심 낱말이 장·조 제목과 조문에 있음', article: '조 제목과 맞음', cites: '조를 직접 가리킴' };
 
 /* ───── 수치(규칙 2) ───── */
 
@@ -210,7 +236,12 @@ export async function checkCandidate(c, ctx) {
   // 페이지 근거 지표(draft가 본문 없이 숫자로 남김)
   const g = c.grounding;
   if (g) {
-    if (!g.labelInPage) warns.add('labelNotInPage');
+    if (!g.labelInPage) {
+      // 조문 꼴 출처는 이름 핵심 낱말이 본문·제목에 있거나 조를 가리키면 경고 없이 근거만 적는다(T-205)
+      const why = isArticleSource(sources[0], cfg) ? lawLabelGrounded(g.labelNouns, { label, facts }) : null;
+      if (why) notes.push(`이름 근거(조문): ${LAW_WHY[why]}${g.labelNouns?.article ? ` · ${g.labelNouns.article}` : ''} (낱말 ${g.labelNouns?.inPage ?? '-'}/${g.labelNouns?.nouns ?? '-'})`);
+      else warns.add('labelNotInPage');
+    }
     if ((g.factOverlap || []).some(x => x < OVERLAP_WARN)) warns.add('weakGrounding');
     const run = Math.max(0, ...(g.copiedRun || []));
     if (run >= COPY_FAIL) fails.add('copiedHeavy');
