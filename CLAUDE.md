@@ -47,6 +47,7 @@ npm run eval -- --holdout         # 평가셋 대신 홀드아웃(tools/eval-uns
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
 npm run eval -- --interest restaurant  # 식당 관심사 평가셋(tools/eval-set-restaurant.json)을 식당 그래프로 채점(T-302). --guard는 tools/eval-guard-restaurant.json, --holdout은 tools/eval-unseen-restaurant.json(T-156). --server·--margin-guard는 메이플만
 npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
+npm run eval -- --judge gemini-choice  # 판정기에 문장 → 추상 태그를 물어 태그 top-1·대신/함께 hit@1·회귀·지연(T-120, ADR 0014). 결과는 .tmp 캐시, --rpm 10, --judge-weight 0.05. 호버에는 안 씀
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
 npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내기를 평가셋·검증셋·가드와 대조(베낀 예문 후보를 거름). 반영 절차는 /approve-corrections
 ```
@@ -69,6 +70,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/retrieval.js           점수 = 직접 유사도 × w1 + 최고 태그 유사도 × w2 + boost. 감점은 `retrievalFor(admin.retrieval, graph)`: 관심사 그래프 `tagPenalty`(선택)가 admin 값을 태그별로 덮어씀(T-156, 메이플 그래프엔 없음)
   lib/pipeline.js            비유 생성 핵심(추상화·프롬프트·호출·규칙 1·근거 검사), 확장과 eval:gen이 같이 씀 (T-104)
   lib/grounding.js           근거 검사: usedFact가 고른 노드 facts와 맞는지 + 비유 숫자가 facts·라벨·원문에 있는지 (T-123)
+  lib/judges.js              판정기 레지스트리(gemini-choice, jev 자리): 선택지·확률로만 답함. 평가 도구 전용, 호버 경로 미연결 (T-120, ADR 0014)
   lib/feedback.js            말풍선 피드백 층: 문장별 👎 제외·고른 개념 고정, 500건, 캐시 지문 (ADR 0010). `feedbackForGraph`로 지금 그래프에 없는 노드(다른 관심사) 기록은 빼고 쓴다 (T-302)
   lib/corrections.js         교정 → 예문 후보(가림·금칙어·중복·길이), 내 태그 examples 반영(로그인만, 태그당 5개), 운영자 내보내기 JSON (T-131)
   lib/embed-each.js          임베딩은 항상 한 문장씩 (q8 묶음 차이, ADR 0011)
