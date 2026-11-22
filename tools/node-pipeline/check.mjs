@@ -44,7 +44,16 @@ export const REASONS = {
   weakGrounding: '페이지 글과 겹침이 적은 사실이 있어요(페이지 밖 지식일 수 있어요).',
   copied: '페이지 문장을 거의 그대로 옮긴 사실이 있어요(D-5: 우리 말로).',
   copiedHeavy: '페이지 문장을 길게 그대로 옮겼어요(D-5).',
-  edgeDropped: '없는 노드를 가리키는 엣지를 뺐어요.'
+  edgeDropped: '없는 노드를 가리키는 엣지를 뺐어요.',
+  // 태그 적합성(T-197, tag-fit.mjs)
+  tagFitDropped: '사실이 태그 구조를 드러내지 않아(LLM no) 그 태그를 뺐어요.',
+  tagFitNone: '사실이 드러내는 태그가 하나도 없어요(LLM 태그 적합성 모두 no).',
+  tagFitPending: '태그 적합성 검사를 아직 못 했어요(호출 상한·오류, 다시 돌리면 캐시로 이어 가요).',
+  // 근접 중복·태그 밀도(T-197, ADR 0015 제안 2·3, near-dup.mjs)
+  nearDup: '기존 노드(또는 앞선 후보)와 기존 노드끼리 가장 가까운 쌍보다 더 가까워요(근접 중복).',
+  nearDupClose: '기존 노드와 꽤 가까워요(근접 중복 바닥 − 0.03 이상). 다른 개념인지 봐 주세요.',
+  factReused: '기존 노드(또는 앞선 후보)의 사실 문장을 그대로 다시 썼어요.',
+  tagDense: '이 태그를 단 노드가 상한(노드 수의 10%, 최소 5)을 넘어요(ADR 0015 제안 3, 경고).'
 };
 
 /* ───── 수치(규칙 2) ───── */
@@ -258,7 +267,7 @@ export function summarize(results) {
 const esc = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 const mark = { pass: '통과', warn: '확인', fail: '실패' };
 
-export function renderSheet({ interest, batch, results, pages, generatedAt }) {
+export function renderSheet({ interest, batch, results, pages, generatedAt, nearDup = null, density = null }) {
   const sum = summarize(results);
   const lines = [
     `# 노드 후보 리뷰 시트: ${interest} 묶음 ${batch}`,
@@ -271,6 +280,8 @@ export function renderSheet({ interest, batch, results, pages, generatedAt }) {
     '',
     ...(sum.reasons.length ? sum.reasons.map(([k, n]) => `- ${k.startsWith('fail:') ? '실패' : '확인'} ${n}건: ${REASONS[k.split(':')[1]] || k}`) : ['- 없음']),
     '',
+    ...(nearDup ? ['## 근접 중복 관문', '', `임베더 ${nearDup.embedderId} · 바닥(기존 노드끼리 가장 가까운 쌍) ${nearDup.floor.score} (${nearDup.floor.a} ~ ${nearDup.floor.b}) · 실패 ${nearDup.failed} · 가까움 ${nearDup.close} · 같은 사실 ${nearDup.reused}`, ''] : []),
+    ...(density ? ['## 태그 밀도', '', `상한 ${density.cap} (노드 ${density.total}개의 10%, 최소 5) · 넘는 태그: ${density.counts.filter(c => c[2] > density.cap).map(c => `${c[0]} ${c[1]}→${c[2]}`).join(', ') || '없음'}`, ''] : []),
     '## 후보',
     '',
     '| 판정 | id | 이름 | 태그 | 가장 비슷한 노드 | 사유 |',
@@ -285,6 +296,9 @@ export function renderSheet({ interest, batch, results, pages, generatedAt }) {
     lines.push(`- 출처: ${r.source}${r.pageTitle ? ` (${esc(r.pageTitle)})` : ''}`);
     if (r.node.aliases?.length) lines.push(`- 별칭(검토): ${r.node.aliases.join(', ')}`);
     lines.push(`- 태그: ${r.node.tags.join(', ') || '(없음)'}`);
+    if (r.nearDup) lines.push(`- 근접 중복: 가장 가까운 ${r.nearDup.best.id} ${r.nearDup.best.score} (바닥 ${r.nearDup.floor.score}, ${r.nearDup.embedderId})${r.nearDup.reusedFrom ? ` · 같은 사실: ${r.nearDup.reusedFrom.join(', ')}` : ''}`);
+    if (r.tagFit?.status === 'done') for (const v of r.tagFit.verdicts) lines.push(`- 태그 적합성 ${v.id}: ${v.verdict === 'yes' ? 'yes' : v.verdict === 'no' ? 'no(뺌)' : '답 없음'}${v.reason ? ` — ${esc(v.reason)}` : ''}`);
+    else if (r.tagFit?.status === 'pending') lines.push(`- 태그 적합성: 못 함(${r.tagFit.note || ''})`);
     r.node.facts.forEach((f, i) => lines.push(`- 사실 ${i + 1}: ${f}${r.grounding ? ` (겹침 ${r.grounding.factOverlap?.[i] ?? '-'}, 최장 복사 ${r.grounding.copiedRun?.[i] ?? '-'}자)` : ''}`));
     if (r.edges?.length) lines.push(`- 엣지: ${r.edges.map(e => `→ ${e.to} (${e.rel})`).join(', ')}`);
     lines.push('');

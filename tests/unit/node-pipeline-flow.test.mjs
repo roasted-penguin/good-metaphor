@@ -170,10 +170,12 @@ test('compareScores 대안 정답(T-195): 1위를 가져간 후보가 expectTag�
   assert.equal(compareScores(TBASE, byOld, TCASES, { candidateIds: ['N'], candidateTags: new Map([['B', ['loss_risk']]]) })[0].kind, 'rank1');
 });
 
-test('compareScores 대안 정답: 여유 규칙은 그대로 — 대안 노드가 경쟁자로 얇은 선 아래로 밀면 margin', () => {
-  const cur = new Map([...TBASE, ['t1', S('hit', 'A', { hit1: true, margin: 0.004, rival: 'N' })], ['t2', S('hit', 'B', { hit1: true, margin: 0.02, rival: 'N' })]]);
-  const issues = compareScores(TBASE, cur, TCASES, { candidateIds: ['N'], candidateTags: TAGS });
-  assert.deepEqual(issues.map(i => [i.sentence, i.kind, i.culprit]), [['t1', 'margin', 'N']]);
+test('compareScores 대안 정답: expectTag 없는 경쟁자가 얇은 선 아래로 밀면 margin, 있으면 2위 대안 정답(T-197)', () => {
+  const cur = new Map([...TBASE, ['t1', S('hit', 'A', { hit1: true, margin: 0.004, rival: 'M' })], ['t2', S('hit', 'B', { hit1: true, margin: 0.02, rival: 'N' })]]);
+  const issues = compareScores(TBASE, cur, TCASES, { candidateIds: ['N', 'M'], candidateTags: TAGS });
+  assert.deepEqual(issues.map(i => [i.sentence, i.kind, i.culprit]), [['t1', 'margin', 'M']]);
+  const viaN = new Map([...cur, ['t1', S('hit', 'A', { hit1: true, margin: 0.004, rival: 'N' })]]);
+  assert.deepEqual(compareScores(TBASE, viaN, TCASES, { candidateIds: ['N'], candidateTags: TAGS }).map(i => [i.sentence, i.kind, i.via]), [['t1', 'alt', 'margin']]);
 });
 
 test('gateCandidates 대안 정답: alt만 있는 후보는 채택하고 altPending·alternatives로, 회귀 후보는 뺀다', async () => {
@@ -202,7 +204,7 @@ test('altReason·altRows: 공유 태그 뜻과 문장에 가장 가까운 사실
   const rows = altRows([{ sentence: 's', culprit: 'n1', before: 'A', expectTag: 'loss_risk', guarded: true }], { interest: 'maplestory', nodes: [node], cases: [{ sentence: 's', expectNodes: ['A', 'B'], sets: ['eval', 'holdout'] }], tags: [tag] });
   assert.deepEqual([rows[0].oldExpected, rows[0].newNode, rows[0].newLabel, rows[0].sets, rows[0].approve, rows[0].guarded], [['A', 'B'], 'n1', '잠재 강화', ['eval', 'holdout'], false, true]);
   const md = renderAltTable(rows, { interest: 'maplestory', batch: 3, embedderId: 'fallback' });
-  assert.match(md, /\| 1 \| s \(가드\) \| eval\+holdout \| A, B \| n1 잠재 강화 \| loss_risk \|/);
+  assert.match(md, /\| 1 \| s \(가드\) \| eval\+holdout \| A, B \| n1 잠재 강화 \| 1위 \| loss_risk \|/);
   assert.match(md, /accept-alt/);
 });
 
