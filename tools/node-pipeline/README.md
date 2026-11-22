@@ -1,4 +1,4 @@
-# 반자동 노드 파이프라인 (T-194, 수확·대안 정답 T-195)
+# 반자동 노드 파이프라인 (T-194, 수확·대안 정답 T-195, 태그 적합성·2위 대안 정답 T-197)
 
 관심사마다 노드 1,000개를 손으로 고르기는 어렵다. 이 도구는 공식·공공 페이지에서 후보 개념을 뽑고, 자동 검사와 회귀 관문을 거친 것만 공통 그래프 패치로 만든다. 사람(또는 메인 세션)은 리뷰 시트를 보고 승인만 한다.
 
@@ -29,7 +29,8 @@ npm run node-pipeline:index -- --interest maplestory [--pages 3] [--probe-seeds]
 npm run node-pipeline:draft -- --interest maplestory --limit 10 [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
 
 # 3. 자동 검사 → 리뷰 시트 .tmp/node-pipeline/<관심사>-batch-N.md (+ .json)
-npm run node-pipeline:check -- --interest maplestory [--batch N] [--no-probe]
+#    태그 적합성(T-197)이 후보마다 LLM을 한 번 부른다(캐시). --max-calls 14로 나눠 돌리고, 못 한 후보는 다시 돌리면 이어 가요. --no-tag-fit이면 건너뜀
+npm run node-pipeline:check -- --interest maplestory [--batch N] [--no-probe] [--max-calls 14] [--no-tag-fit]
 
 # 4. 회귀 관문: 후보를 그래프 사본에 넣어 평가 문장(평가셋·검증셋·홀드아웃·가드)으로 잰다. --batch all이면 그 관심사 묶음을 모두 합쳐
 npm run node-pipeline:gate -- --interest maplestory --batch N [--approve ids.json] [--explain]          # 대체 임베더(거름)
@@ -68,6 +69,10 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 | 실패 | id 꼴(영문 소문자·숫자·밑줄), 그래프·묶음 안 id·이름 중복, 사실 2~3개 아님, 200자 넘음, "다."로 안 끝남, 수치, 금칙어, 목록 안 태그 없음, 출처가 허용 밖·https 아님·200 아님·허용 밖으로 넘어감, 기존 노드와 거의 같음(대체 임베더 코사인 0.75 이상), 원문을 40자 넘게 그대로 옮김, 식당은 영문·이름 숫자 |
 | 확인 | 목록 밖 태그를 뺌, 별칭(은어)은 사람이 확인, 식당 별칭은 뺌, 첫 사실이 구조보다 정의에 가까움, 비슷한 노드 있음(0.5 이상 또는 이름 포함), 이름이 본문에 없음, 사실과 본문 겹침이 적음(페이지 밖 지식 의심), 원문 25자 이상 그대로, 없는 노드를 가리키는 엣지를 뺌 |
 
+| 태그 적합성(T-197, `tag-fit.mjs`) | 실패: 태그가 하나도 안 남음(`tagFitNone`). 확인: LLM no 태그를 뺌(`tagFitDropped`), 못 물음·답 빠짐(`tagFitPending`) |
+
+**태그 적합성(T-197).** T-195 관문 대안 정답 후보 17줄 중 14줄이 LLM no였다(예: 염색 개편 → random_reroll). 억지 태그가 관문까지 가면 같은 태그 문장의 1위·여유를 흔든다. 그래서 check에서 후보마다 LLM을 한 번 불러(태그 여러 개를 한 번에) 태그마다 "이 개념의 사실이 그 태그 구조를 실제로 드러내는가" yes/no와 한 문장 이유를 받는다. 기준 자료는 `tags.json`의 desc와 예문(다른 분야)이다. no 태그는 빼고, 남은 태그가 없으면 실패다. 이미 실패한 후보는 묻지 않는다. 판정과 이유는 리뷰 시트 "후보 자세히"와 `.json` `tagFit`에 남는다. 호출 상한(`--max-calls`)·429·키 없음이면 그 뒤 후보는 태그를 그대로 두고 `tagFitPending`이다.
+
 기준값은 `check.mjs` 맨 위 상수다. 코사인 기준은 기존 그래프의 서로 다른 노드끼리 최고값(메이플 0.47, 식당 0.40)보다 위로 잡았다.
 
 ## 회귀 관문 (gate)
@@ -79,8 +84,9 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 - **1위 회귀:** 맞던 문장이 틀림 → 그 문장 1위를 차지한 후보가 범인
 - **음성 실패:** 음성 문장(forbidNodes)이 통과하다 실패
 - **여유 악화:** 1위는 맞지만 여유가 줄어 얇은 선(`--margin`, 기본 0.005)보다 작아짐. `eval --margin-guard`의 "새로 얇아졌거나 바닥보다 더 얇아짐"과 같은 뜻이고, 가드 문장뿐 아니라 모든 문장에 건다. `--strict-margin`이면 가드 문장은 조금만 줄어도 실패
-- **비유 없음 침범(T-195):** 비유 없음 문장(`expectNodes: []`, 음성 문장 포함)의 1위를 후보가 차지함. 메인 판정(2026-11-22) "음성 문장(맞는 비유 없음)에 노드가 붙으면 그대로 회귀"
-- **대안 정답 후보(T-195, 회귀 아님):** 맞던 문장의 1위를 후보가 가져갔지만 그 후보 태그에 문장의 `expectTag`가 있으면 막지 않고 따로 표(`<관심사>-batch-N.alt-<임베더>.md`·`.json`)로 낸다. 사용자 판정(2026-11-22) "한 문장에 대해 비유가 다양하게 나올 수도 있잖아". 줄마다 문장·셋·원래 정답·새 노드·expectTag·이유(휴리스틱: 공유 태그 뜻 + 문장에 가장 가까운 사실, `--explain`이면 LLM yes/no와 한 문장 이유)가 있고 모두 메인 확인 대상이다. 메인이 맞는 줄의 `approve`를 true로 바꾸고 `accept-alt`를 돌리면 그 관심사 평가 파일(평가셋·검증셋·홀드아웃, 가드는 문장 목록이라 그대로) `expectNodes`에 새 노드를 더한다. 그 전에는 apply가 그 노드를 받지 않는다. `expectTag`가 없는 후보가 1위를 가져가면 그대로 1위 회귀이고, 여유 규칙은 바뀌지 않는다
+- **비유 없음 침범(T-195):** 비유 없음 문장(`expectNodes: []`, 음성 문장 포함)의 1위를 후보가 차지함. 메인 판정(2026-11-22) "음성 문장(맞는 비유 없음)에 노드가 붙으면 그대로 회귀". 단 T-195 판정 (2)(T-197 구현): 대체 임베더 관문은 잡음이 커서(한 문장에 9개) 막지 않고 "실제 관문에서 판정"(`deferred`·`deferredIds`)으로만 표시해 다음 단계로 넘기고, 실제 확장 관문(`--embedder browser`)에서는 그대로 회귀
+- **대안 정답 후보(T-195, 회귀 아님):** 맞던 문장의 1위를 후보가 가져갔지만 그 후보 태그에 문장의 `expectTag`가 있으면 막지 않고 따로 표(`<관심사>-batch-N.alt-<임베더>.md`·`.json`)로 낸다. 사용자 판정(2026-11-22) "한 문장에 대해 비유가 다양하게 나올 수도 있잖아". 줄마다 문장·셋·원래 정답·새 노드·expectTag·이유(휴리스틱: 공유 태그 뜻 + 문장에 가장 가까운 사실, `--explain`이면 LLM yes/no와 한 문장 이유)가 있고 모두 메인 확인 대상이다. 메인이 맞는 줄의 `approve`를 true로 바꾸고 `accept-alt`를 돌리면 그 관심사 평가 파일(평가셋·검증셋·홀드아웃, 가드는 문장 목록이라 그대로) `expectNodes`에 새 노드를 더한다. 그 전에는 apply가 그 노드를 받지 않는다. `expectTag`가 없는 후보가 1위를 가져가면 그대로 1위 회귀다
+- **2위 대안 정답(T-195 판정 (1), T-197):** 새 노드가 정답 바로 밑(기대 밖 최고 경쟁자)에 들어와 여유를 0.005 아래로(또는 기록된 바닥보다 더) 얇게 만들어도, 그 노드에 문장의 `expectTag`가 있으면 여유 악화가 아니라 대안 정답 후보다(표의 "들어온 자리" 칸 `2위(여유 전→후)`, 같은 확인·accept-alt 절차). 1위가 그 노드로 바뀌어도 맞는 비유라 정확도 손상이 아니고, accept-alt로 `expectNodes`에 들어가면 여유도 원래대로 돌아온다. `expectTag`가 없는 노드가 여유를 깎으면 그대로 여유 악화
 - `--cases-dir <폴더>`면 평가 파일을 `tools/` 대신 그 폴더에서 읽는다(accept-alt를 사본에 시연할 때)
 
 절차는 두 단계다. ① 후보를 하나씩 넣어 걸리는 후보를 뺀다. ② 남은 후보를 한꺼번에 넣어 다시 재고, 걸리면 범인만 빼고 다시 잰다(범인을 못 짚으면 문제 문장 상위 3에 든 후보를 뺀다). 결과는 `<관심사>-batch-N.gate-<임베더>.json`(사유), `<관심사>-batch-N.accepted-<임베더>.json`(채택 id)이다.
@@ -96,8 +102,9 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 | `run.mjs` | index(목록 → 색인), draft(페이지 → 후보), 씨앗 확인(`probeSeeds`·`markProbes`) |
 | `draft.mjs` | 페이지 초안 프롬프트(T-301 `buildDraftPrompt` 꼴), 답 파싱·태그 없음 버림, 근거 지표(겹침·최장 복사), 절 나누기 |
 | `check.mjs` | 자동 검사, 리뷰 시트 |
+| `tag-fit.mjs` | 태그 적합성 LLM 검사(프롬프트·답 파싱·결과 반영, T-197) |
 | `gate.mjs` | 회귀 관문, 대안 정답 후보 표·이유, accept-alt(평가 파일 한 줄 꼴 그대로 고치기) |
 | `apply.mjs` | 패치 만들기, 판본 올리기, 검증 |
 | `cli.mjs` | 명령줄 |
 
-단위 테스트: `tests/unit/node-pipeline.test.mjs`, `tests/unit/node-pipeline-flow.test.mjs`(가짜 fetch·LLM·평가), `tests/unit/node-pipeline-sources.test.mjs`(법령 본문·남길 장·씨앗 확인, T-198).
+단위 테스트: `tests/unit/node-pipeline.test.mjs`, `tests/unit/node-pipeline-flow.test.mjs`(가짜 fetch·LLM·평가), `tests/unit/node-pipeline-sources.test.mjs`(법령 본문·남길 장·씨앗 확인, T-198), `tests/unit/node-pipeline-tagfit.test.mjs`(태그 적합성·2위 대안 정답·비유 없음 미루기, T-197).
