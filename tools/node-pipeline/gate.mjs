@@ -21,7 +21,10 @@
 //   alt     대안 정답 후보(회귀 아님, 막지 않음): 맞던 문장의 1위를 후보가 가져갔지만 그 후보 태그에 문장의 expectTag가 있다.
 //           사용자 판정(2026-11-22) "한 문장에 대해 비유가 다양하게 나올 수도 있잖아". 이유 칸(altReason, 휴리스틱 또는 LLM)을
 //           붙여 따로 표로 내고, 메인이 한 줄씩 확인하면 accept-alt가 expectNodes에 더한다. expectTag가 없는 후보가 1위를
-//           가져가면 그대로 rank1 회귀다. 여유 규칙은 그대로(대안 후보가 경쟁자로 여유를 얇게 만들면 margin)
+//           가져가면 그대로 rank1 회귀다. 2위로 들어와 여유를 얇게 만든 경쟁자도 그 문장 expectTag를 가진 새 노드면 margin 대신
+//           alt(via 'margin', T-195 판정 (1)·T-197). expectTag가 없는 경쟁자가 여유를 깎으면 그대로 margin
+// 비유 없음 침범(noMatch)은 대체 임베더 잡음이 커서(T-195: 한 문장에 9개) deferNoMatch(cli: --embedder fallback)면 막지 않고
+// deferred("실제 관문에서 판정")로 남긴다. 실제 확장 관문(browser)에서는 그대로 회귀(T-195 판정 (2))
 // 범인: 그 문장의 지금 순위에서 기대 노드를 밀어낸 후보(rank1·negative·noMatch·alt = 1위, margin = 기대 밖 최고 경쟁자).
 // 절차: ① 후보 하나씩 넣어 걸리는 후보를 뺀다 ② 남은 후보를 함께 넣어 다시 재고, 걸리면 범인만 빼고 다시 잰다(반복).
 //       alt는 거르는 사유가 아니다. 마지막(깨끗한) 함께 평가에서 남은 alt를 대안 정답 후보 표로 낸다.
@@ -140,12 +143,19 @@ export function compareScores(base, cur, cases, { candidateIds = [], candidateTa
     }
     if (b.hit1 && a.hit1 && b.margin !== null && a.margin !== null && a.margin < b.margin - MARGIN_EPS) {
       const counts = (c.guarded && strictGuard) || a.margin < threshold;
-      if (counts) issues.push({ sentence: c.sentence, kind: 'margin', before: round(b.margin), after: round(a.margin), culprit: blame(a.rival), guarded: c.guarded });
+      if (!counts) continue;
+      // T-195 판정 (1)(T-197): 여유를 깎은 경쟁자가 그 문장 expectTag를 가진 새 노드면 회귀 대신 대안 정답 후보(via 'margin').
+      // 1위가 그 노드로 바뀌어도 맞는 비유라 정확도 손상이 아니다. accept-alt로 expectNodes에 들어가면 여유도 원래대로 돌아온다
+      const tags = candidateTags.get(a.rival) || [];
+      const alt = cand.has(a.rival) && c.expectTag && tags.includes(c.expectTag);
+      if (alt) issues.push({ sentence: c.sentence, kind: 'alt', via: 'margin', before: b.top1, after: a.top1, marginBefore: round(b.margin), marginAfter: round(a.margin), culprit: a.rival, guarded: c.guarded, expectTag: c.expectTag });
+      else issues.push({ sentence: c.sentence, kind: 'margin', before: round(b.margin), after: round(a.margin), culprit: blame(a.rival), guarded: c.guarded });
     }
   }
   return issues;
 }
-export const blocking = issues => issues.filter(i => i.kind !== 'alt');
+// 막는 사유만. alt는 늘 막지 않고, deferNoMatch(대체 임베더 관문, T-195 판정 (2))면 비유 없음 침범도 "실제 관문에서 판정"으로 미룬다
+export const blocking = (issues, { deferNoMatch = false } = {}) => issues.filter(i => i.kind !== 'alt' && !(deferNoMatch && i.kind === 'noMatch'));
 const round = x => Math.round(x * 10000) / 10000;
 
 const withNodes = (raw, nodes) => ({ ...raw, nodes: [...raw.nodes, ...nodes] });
@@ -154,11 +164,12 @@ const withNodes = (raw, nodes) => ({ ...raw, nodes: [...raw.nodes, ...nodes] });
  * 회귀 관문.
  * @param {{ rawGraph, nodes, evaluate: (raw) => Promise<Map>, cases, threshold?, strictGuard?, maxRounds?, log? }} p
  *   nodes = 후보 노드(패치 꼴), evaluate = 그래프 사본 → scoreGraph 결과(테스트는 가짜)
- * @returns {Promise<{ accepted: string[], rejected: Array<{ id, stage: 'solo'|'joint', issues }>, alternatives: Array, altPending: string[], rounds: number, evaluations: number }>}
+ * @returns {Promise<{ accepted: string[], rejected: Array<{ id, stage: 'solo'|'joint', issues }>, alternatives: Array, altPending: string[], deferred: Array, deferredIds: string[], rounds: number, evaluations: number }>}
+ *   deferred = deferNoMatch일 때 마지막 함께 평가에서 채택 후보가 비유 없음 문장 1위를 차지한 줄(실제 관문에서 판정)
  *   alternatives = 마지막 함께 평가에서 채택 후보가 가져간 문장(대안 정답 후보, 회귀 아님). altPending = 그런 문장이 있는 채택 id
  *   (메인이 accept-alt로 expectNodes에 더하기 전까지 apply가 받지 않는다)
  */
-export async function gateCandidates({ rawGraph, nodes, evaluate, cases, threshold = 0.005, strictGuard = false, maxRounds = 20, log = () => {} }) {
+export async function gateCandidates({ rawGraph, nodes, evaluate, cases, threshold = 0.005, strictGuard = false, deferNoMatch = false, maxRounds = 20, log = () => {} }) {
   let evaluations = 0;
   const ev = async raw => { evaluations++; return evaluate(raw); };
   const candidateTags = new Map(nodes.map(n => [n.id, n.tags || []]));
@@ -170,20 +181,20 @@ export async function gateCandidates({ rawGraph, nodes, evaluate, cases, thresho
   let survivors = [];
   for (const n of nodes) {
     const issues = compareScores(base, await ev(withNodes(rawGraph, [n])), cases, opts([n.id]));
-    const bad = blocking(issues);
+    const bad = blocking(issues, { deferNoMatch });
     if (bad.length) { rejected.push({ id: n.id, stage: 'solo', issues: bad }); log(`혼자 넣어 걸림: ${n.id} (${bad.length}문장)`); }
     else survivors.push(n);
   }
 
   // ② 함께: 혼자서는 괜찮던 후보끼리 겹쳐 생기는 문제(서로 기대 노드를 밀어냄 등). 범인만 빼고 다시 잰다
-  let rounds = 0, alternatives = [];
+  let rounds = 0, alternatives = [], deferred = [];
   while (survivors.length && rounds < maxRounds) {
     rounds++;
     const ids = survivors.map(n => n.id);
     const joint = await ev(withNodes(rawGraph, survivors));
     const all = compareScores(base, joint, cases, opts(ids));
-    const issues = blocking(all);
-    if (!issues.length) { alternatives = all.filter(i => i.kind === 'alt'); break; }
+    const issues = blocking(all, { deferNoMatch });
+    if (!issues.length) { alternatives = all.filter(i => i.kind === 'alt'); deferred = deferNoMatch ? all.filter(i => i.kind === 'noMatch') : []; break; }
     let culprits = new Set(issues.map(i => i.culprit).filter(Boolean));
     // 범인을 못 짚으면(후보가 기대 노드를 직접 밀어낸 게 아님) 문제 문장 상위 3에 든 후보, 그것도 없으면 전부(보수적으로)
     if (!culprits.size) {
@@ -202,7 +213,8 @@ export async function gateCandidates({ rawGraph, nodes, evaluate, cases, thresho
   }
   const accepted = survivors.map(n => n.id);
   alternatives = alternatives.filter(a => accepted.includes(a.culprit));
-  return { accepted, rejected, alternatives, altPending: [...new Set(alternatives.map(a => a.culprit))], rounds, evaluations };
+  deferred = deferred.filter(d => accepted.includes(d.culprit));
+  return { accepted, rejected, alternatives, altPending: [...new Set(alternatives.map(a => a.culprit))], deferred, deferredIds: [...new Set(deferred.map(d => d.culprit))], rounds, evaluations };
 }
 
 /* ───── 대안 정답 후보 (T-195) ───── */
@@ -240,6 +252,7 @@ export function altRows(alternatives, { interest, nodes, cases, tags = [] }) {
     return {
       interest, sentence: a.sentence, sets: c.sets || [], guarded: !!a.guarded,
       oldExpected: c.expectNodes || [], oldTop1: a.before, newNode: a.culprit, newLabel: node.label || '',
+      via: a.via || 'rank1', ...(a.via === 'margin' ? { marginBefore: a.marginBefore, marginAfter: a.marginAfter } : {}),
       expectTag: a.expectTag, newTags: node.tags || [],
       reason: altReason({ sentence: a.sentence, expectTag: a.expectTag, node, tag: tagById.get(a.expectTag) }),
       approve: false
@@ -340,11 +353,11 @@ export function renderAltTable(rows, { interest, batch, embedderId }) {
   return [
     `# 대안 정답 후보: ${interest} 묶음 ${batch} (${embedderId})`,
     '',
-    '새 노드가 기존 문장의 1위를 가져갔지만 그 문장의 expectTag를 가진 경우예요(회귀 아님, 사용자 판정 2026-11-22). 줄마다 "새 노드 사실만으로 문장 구조가 설명되는가"를 확인하고, 맞으면 같은 이름의 .json에서 그 줄 `approve`를 true로 바꾼 뒤 `npm run node-pipeline:accept-alt -- <.json>`.',
+    '새 노드가 기존 문장의 1위를 가져갔거나(1위) 정답 바로 밑에 붙어 여유를 얇게 만들었지만(2위, T-197) 그 문장의 expectTag를 가진 경우예요(회귀 아님, 사용자 판정 2026-11-22·T-195 판정 (1)). 줄마다 "새 노드 사실만으로 문장 구조가 설명되는가"를 확인하고, 맞으면 같은 이름의 .json에서 그 줄 `approve`를 true로 바꾼 뒤 `npm run node-pipeline:accept-alt -- <.json>`.',
     '',
-    `| # | 문장 | 셋 | 원래 정답 | 새 노드 | expectTag | 이유(확인 필요) |`,
-    '| --- | --- | --- | --- | --- | --- | --- |',
-    ...rows.map((r, i) => `| ${i + 1} | ${escMd(r.sentence)}${r.guarded ? ' (가드)' : ''} | ${r.sets.join('+')} | ${r.oldExpected.join(', ')} | ${r.newNode} ${escMd(r.newLabel)} | ${r.expectTag} | ${escMd(r.reason.text)}${r.llm ? ` / LLM ${r.llm.verdict}: ${escMd(r.llm.reason)}` : ''} |`),
+    `| # | 문장 | 셋 | 원래 정답 | 새 노드 | 들어온 자리 | expectTag | 이유(확인 필요) |`,
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...rows.map((r, i) => `| ${i + 1} | ${escMd(r.sentence)}${r.guarded ? ' (가드)' : ''} | ${r.sets.join('+')} | ${r.oldExpected.join(', ')} | ${r.newNode} ${escMd(r.newLabel)} | ${r.via === 'margin' ? `2위(여유 ${r.marginBefore}→${r.marginAfter})` : '1위'} | ${r.expectTag} | ${escMd(r.reason.text)}${r.llm ? ` / LLM ${r.llm.verdict}: ${escMd(r.llm.reason)}` : ''} |`),
     ''
   ].join('\n');
 }

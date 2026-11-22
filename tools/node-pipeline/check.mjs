@@ -44,7 +44,11 @@ export const REASONS = {
   weakGrounding: '페이지 글과 겹침이 적은 사실이 있어요(페이지 밖 지식일 수 있어요).',
   copied: '페이지 문장을 거의 그대로 옮긴 사실이 있어요(D-5: 우리 말로).',
   copiedHeavy: '페이지 문장을 길게 그대로 옮겼어요(D-5).',
-  edgeDropped: '없는 노드를 가리키는 엣지를 뺐어요.'
+  edgeDropped: '없는 노드를 가리키는 엣지를 뺐어요.',
+  // 태그 적합성(T-197, tag-fit.mjs)
+  tagFitDropped: '사실이 태그 구조를 드러내지 않아(LLM no) 그 태그를 뺐어요.',
+  tagFitNone: '사실이 드러내는 태그가 하나도 없어요(LLM 태그 적합성 모두 no).',
+  tagFitPending: '태그 적합성 검사를 아직 못 했어요(호출 상한·오류, 다시 돌리면 캐시로 이어 가요).'
 };
 
 /* ───── 수치(규칙 2) ───── */
@@ -285,6 +289,8 @@ export function renderSheet({ interest, batch, results, pages, generatedAt }) {
     lines.push(`- 출처: ${r.source}${r.pageTitle ? ` (${esc(r.pageTitle)})` : ''}`);
     if (r.node.aliases?.length) lines.push(`- 별칭(검토): ${r.node.aliases.join(', ')}`);
     lines.push(`- 태그: ${r.node.tags.join(', ') || '(없음)'}`);
+    if (r.tagFit?.status === 'done') for (const v of r.tagFit.verdicts) lines.push(`- 태그 적합성 ${v.id}: ${v.verdict === 'yes' ? 'yes' : v.verdict === 'no' ? 'no(뺌)' : '답 없음'}${v.reason ? ` — ${esc(v.reason)}` : ''}`);
+    else if (r.tagFit?.status === 'pending') lines.push(`- 태그 적합성: 못 함(${r.tagFit.note || ''})`);
     r.node.facts.forEach((f, i) => lines.push(`- 사실 ${i + 1}: ${f}${r.grounding ? ` (겹침 ${r.grounding.factOverlap?.[i] ?? '-'}, 최장 복사 ${r.grounding.copiedRun?.[i] ?? '-'}자)` : ''}`));
     if (r.edges?.length) lines.push(`- 엣지: ${r.edges.map(e => `→ ${e.to} (${e.rel})`).join(', ')}`);
     lines.push('');

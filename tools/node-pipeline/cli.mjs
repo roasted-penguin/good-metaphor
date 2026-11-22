@@ -2,7 +2,7 @@
 // 노드 파이프라인(T-194) 명령줄. 사용법은 같은 폴더 README.md.
 //   node tools/node-pipeline/cli.mjs index  --interest maplestory [--pages 1] [--probe-seeds]
 //   node tools/node-pipeline/cli.mjs draft  --interest maplestory [--limit 10] [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
-//   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe]
+//   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-tag-fit] [--max-calls 14] [--provider gemini]
 //   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]]
 //   node tools/node-pipeline/cli.mjs accept-alt <대안 표 .alt-*.json> [--dir tools] [--all]
 //   node tools/node-pipeline/cli.mjs apply  --interest maplestory --batch N|all --approve ids.json [--gate browser|fallback|none] [--out 경로] [--write-real]
@@ -18,6 +18,7 @@ import { buildIndex, pickPages, draftPages, indexKey, probeSeeds, markProbes } f
 import { checkBatch, sourceProber, renderSheet, summarize } from './check.mjs';
 import { buildPatch, applyPatch, today } from './apply.mjs';
 import { loadGateCases, memoEmbedder, scoreGraph, gateCandidates, altRows, buildAltExplainPrompt, parseAltExplain, altPendingRefusals, applyAltToText, altTargetFiles, renderAltTable } from './gate.mjs';
+import { applyTagFit, BudgetError } from './tag-fit.mjs';
 import { createHash } from 'node:crypto';
 import { hashEmbed } from '../../extension/lib/fallback-embed.js';
 
@@ -67,13 +68,15 @@ async function cmdIndex() {
 }
 
 // LLM 답 캐시(T-195): 같은 (제공자, 모델, 프롬프트)는 다시 부르지 않는다. 저장하는 것은 LLM 답(우리 문장)뿐, 본문은 해시 키로만(D-5)
-function cachedComplete(p, { json = true } = {}) {
+// maxCalls(T-197): 상한을 넘는 새 호출은 BudgetError(캐시 적중은 상한과 무관)
+function cachedComplete(p, { json = true, maxCalls = Infinity } = {}) {
   const dir = join(WORK, 'cache');
   let calls = 0, hits = 0;
   const fn = async (system, user) => {
     const key = createHash('sha256').update([p.id, p.model, system, user].join('\u0000')).digest('hex').slice(0, 32);
     const file = join(dir, `llm-${key}.json`);
     if (existsSync(file)) { hits++; return readJson(file).answer; }
+    if (calls >= maxCalls) throw new BudgetError();
     calls++;
     const answer = await providerComplete(p, system, user, { json, timeoutMs: 90_000 });
     writeJson(file, { provider: p.id, model: p.model, at: new Date().toISOString(), answer });
@@ -129,9 +132,19 @@ async function cmdCheck() {
   const graph = loadInterestGraph(interest);
   const probe = flag('no-probe') ? null : sourceProber(politeFetcher({ log }), cfg.allowHost);
   const results = await checkBatch(draft.candidates, { cfg, graph, tags: graph.tags, blockTerms: blockTerms(), probe });
+  // 태그 적합성(T-197): 후보마다 LLM 한 번(캐시). --no-tag-fit이면 건너뜀, 키가 없으면 모두 tagFitPending
+  let tagFit = null;
+  if (!flag('no-tag-fit')) {
+    let p = null;
+    try { p = provider(); } catch (e) { console.log(`[check] 태그 적합성 건너뜀: ${e.message}`); }
+    const complete = p ? cachedComplete(p, { maxCalls: Number(arg('max-calls', Infinity)) }) : async () => { throw new BudgetError(); };
+    const stat = await applyTagFit(results, { complete, tags: graph.tags, model: p?.model || '', log });
+    tagFit = { ...stat, model: p?.model || null, calls: p ? complete.calls() : 0, cacheHits: p ? complete.hits() : 0 };
+    console.log(`[check] 태그 적합성: 물은 후보 ${stat.asked} · 태그 yes ${stat.yes} · no ${stat.no} · 태그 다 빠져 실패 ${stat.failed} · 못 함 ${stat.pending} (LLM 호출 ${tagFit.calls}번, 캐시 ${tagFit.cacheHits}번)`);
+  }
   const sum = summarize(results);
   const pagesOk = draft.pages.filter(p => p.status === 'ok').length;
-  writeJson(batchFile(n, '.json'), { interest, batch: n, checkedAt: new Date().toISOString(), graphVersion: graph.version, probed: !!probe, summary: sum, pages: draft.pages, dropped: draft.dropped || [], results });
+  writeJson(batchFile(n, '.json'), { interest, batch: n, checkedAt: new Date().toISOString(), graphVersion: graph.version, probed: !!probe, tagFit, summary: sum, pages: draft.pages, dropped: draft.dropped || [], results });
   writeFileSync(batchFile(n, '.md'), renderSheet({ interest, batch: n, results, pages: pagesOk, generatedAt: new Date().toISOString() }));
   const nd = (draft.dropped || []).length;
   console.log(`[check] 묶음 ${n}: 후보 ${sum.total} (통과 ${sum.pass} · 확인 ${sum.warn} · 실패 ${sum.fail}) · 초안에서 태그 없음으로 버림 ${nd} · 페이지당 ${(sum.total / Math.max(1, pagesOk)).toFixed(1)}개`);
@@ -226,20 +239,22 @@ async function cmdGate() {
     res = await gateCandidates({
       rawGraph, nodes: patch.nodes, cases, log,
       evaluate: raw => scoreGraph(raw, { tagsFile, cases, admin, embedder }),
-      threshold: Number(arg('margin', 0.005)), strictGuard: flag('strict-margin')
+      threshold: Number(arg('margin', 0.005)), strictGuard: flag('strict-margin'),
+      // T-195 판정 (2): 비유 없음 침범은 대체 임베더 잡음이 커서 실제 확장 관문에서만 회귀로 판정
+      deferNoMatch: embedderId !== 'browser'
     });
   } finally { await close(); }
   // 대안 정답 후보 표(회귀 아님, 메인 확인). --explain이면 LLM이 이유 칸을 한 번 더 채운다(캐시)
   const rows = altRows(res.alternatives, { interest, nodes: patch.nodes, cases, tags: tagsFile.tags || [] });
   if (flag('explain') && rows.length) {
     const p = provider();
-    const complete = cachedComplete(p);
-    const max = Number(arg('explain-max', 30));
-    for (const r of rows.slice(0, max)) {
+    // --explain-max = 이번 실행 새 호출 상한(T-197: 캐시 적중은 세지 않음, 전에는 줄 수였다)
+    const complete = cachedComplete(p, { maxCalls: Number(arg('explain-max', 30)) });
+    for (const r of rows) {
       const node = patch.nodes.find(x => x.id === r.newNode);
       const { system, user } = buildAltExplainPrompt({ sentence: r.sentence, expectTag: r.expectTag, tag: (tagsFile.tags || []).find(t => t.id === r.expectTag), node });
       try { const v = parseAltExplain(await complete(system, user)); if (v) r.llm = { ...v, model: p.model }; }
-      catch (e) { console.log(`  이유 LLM 실패: ${String(e.message || e).slice(0, 80)}`); if (e.status === 429) break; }
+      catch (e) { if (e.budget) break; console.log(`  이유 LLM 실패: ${String(e.message || e).slice(0, 80)}`); if (e.status === 429) break; }
     }
     console.log(`[gate] 대안 이유 LLM 호출 ${complete.calls()}번(캐시 ${complete.hits()}번)`);
   }
@@ -251,7 +266,8 @@ async function cmdGate() {
   writeJson(altPath, { interest, batch: n, embedder: embedderId, note: '대안 정답 후보(회귀 아님). 메인이 줄마다 확인해 approve를 true로 바꾸고 npm run node-pipeline:accept-alt -- <이 파일>', rows });
   writeFileSync(altPath.replace(/\.json$/, '.md'), renderAltTable(rows, { interest, batch: n, embedderId }));
   const kinds = res.rejected.flatMap(r => r.issues.map(i => i.kind)).reduce((m, k) => ({ ...m, [k]: (m[k] || 0) + 1 }), {});
-  console.log(`[gate] 채택 ${res.accepted.length}(그중 대안 정답 확인 필요 ${res.altPending.length}) · 뺌 ${res.rejected.length} (혼자 ${res.rejected.filter(r => r.stage === 'solo').length} · 함께 ${res.rejected.filter(r => r.stage === 'joint').length}) · 뺀 사유 문장 ${JSON.stringify(kinds)} · 대안 정답 후보 ${rows.length}줄 · 평가 ${res.evaluations}번`);
+  if (res.deferred.length) console.log(`[gate] 비유 없음 침범 ${res.deferred.length}줄(노드 ${res.deferredIds.length}개)은 실제 관문에서 판정: ${res.deferredIds.join(', ')}`);
+  console.log(`[gate] 채택 ${res.accepted.length}(그중 대안 정답 확인 필요 ${res.altPending.length}, 실제 관문에서 판정 ${res.deferredIds.length}) · 뺌 ${res.rejected.length} (혼자 ${res.rejected.filter(r => r.stage === 'solo').length} · 함께 ${res.rejected.filter(r => r.stage === 'joint').length}) · 뺀 사유 문장 ${JSON.stringify(kinds)} · 대안 정답 후보 ${rows.length}줄(2위 ${rows.filter(r => r.via === 'margin').length}) · 평가 ${res.evaluations}번`);
   for (const r of res.rejected) console.log(`  뺌 ${r.id}: ${r.issues.slice(0, 2).map(i => `${i.kind} "${i.sentence.slice(0, 24)}…" ${i.before ?? ''}→${i.after ?? ''}`).join(' / ')}`);
   console.log(`[gate] 채택 목록 → ${acceptedPath}${embedderId === 'fallback' ? ' (다음: --embedder browser --approve 이 파일)' : ' (다음: apply --approve 이 파일)'}`);
   console.log(`[gate] 대안 정답 후보 표 → ${altPath.replace(/\.json$/, '.md')}`);
