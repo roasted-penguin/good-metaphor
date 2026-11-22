@@ -43,7 +43,7 @@ npm run check:embed              # 실제 모델 로드 시간·호버 시간, �
 npm run eval:fallback            # 모델 없이 같은 평가
 npm run eval:fallback -- --baseline  # 대체 임베더 기준선(tools/eval-fallback-baseline.json, 5개 셋 문장별 1위)과 비교: 새로 틀림·맞음·1위 바뀜·상위 3. 맞던 문장이 1위에서 틀리면 실패(CI `test` 잡). 받아들이면 `--write-baseline`으로 다시 써 같은 PR에 커밋 (T-179)
 npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장이 하나라도 틀리면 실패. 검색을 바꾸는 PR은 항상 돌린다
-npm run eval -- --holdout         # 평가셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점. 출력 끝에 여유(1·2위 점수 차) < --margin(기본 0.005) 문장 목록, -v면 문장별 여유. --margin-guard면 가드 문장의 작은 여유도 실패(T-150)
+npm run eval -- --holdout         # 평가셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점. 출력 끝에 여유(1·2위 점수 차) < --margin(기본 0.005) 문장 목록, -v면 문장별 여유. --margin-guard면 가드 문장의 작은 여유도 실패(T-150). 이미 얇은 가드 문장은 `tools/eval-margin-known.json` 바닥 기준선이라 새로 얇아지거나 바닥보다 얇아질 때만 실패, 받아들이면 `--write-margin-known`(T-188)
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
 npm run eval -- --interest restaurant  # 식당 관심사 평가셋(tools/eval-set-restaurant.json)을 식당 그래프로 채점(T-302). --guard는 tools/eval-guard-restaurant.json, --holdout은 tools/eval-unseen-restaurant.json(T-156). --server·--margin-guard는 메이플만
 npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
