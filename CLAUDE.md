@@ -49,6 +49,7 @@ npm run eval -- --interest restaurant  # 식당 관심사 평가셋(tools/eval-s
 npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
 npm run eval -- --judge gemini-choice  # 판정기에 문장 → 추상 태그를 물어 태그 top-1·대신/함께 hit@1·회귀·지연(T-120, ADR 0014). 결과는 .tmp 캐시, --rpm 10, --judge-weight 0.05. 호버에는 안 씀
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
+npm run eval:ci -- <프리셋>       # 실제 크롬 평가 묶음(guard·full·precomputed·precise-judge-offline·custom, tools/eval-ci-lib.mjs). 로그 .tmp/eval-ci, 하나라도 실패면 실패. 맥 없이는 Actions 탭 → eval → Run workflow(같은 프리셋, 키 없음, 모델 캐시, 요약·로그·벡터는 아티팩트, CI는 커밋 안 함) 또는 `eval/` 브랜치 push(guard) (T-200)
 npm run build:vectors            # 공통 그래프 노드·태그 벡터를 실제 확장(크롬, q8, 한 문장씩)으로 미리 계산해 extension/data/vectors/<관심사>.json에 쓴다. 그래프·태그 예문·admin.retrieval 텍스트 방식을 바꾼 PR은 다시 돌려 같은 PR에 커밋(T-193, ADR 0015). -- --verify 다시 임베딩해 비트 동일 확인, -- --interest <id> 한 관심사
 npm run check:vectors            # 크롬 없이(CI): 벡터 파일 형식·embedderId·접두어가 admin.json과 맞는지(틀리면 실패), 그래프와 어긋난 항목은 경고만(-- --strict면 실패)
 npm run eval -- --precomputed     # 그래프 벡터를 동봉 파일에서 꺼내 채점, 런타임과 비트 동일 수 출력(T-193)
