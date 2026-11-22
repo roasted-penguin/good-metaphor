@@ -315,6 +315,12 @@ test('pickSets: 기본은 평가셋·검증셋, --holdout이면 홀드아웃만 
   assert.deepEqual(ho.map(s => [s.name, s.cases, s.guarded]), [['홀드아웃', h, false]]);
 });
 
+test('pickSets: --set이면 그 파일 문장 하나만(가드 대상 아님), 관심사와 무관 (T-191)', () => {
+  const e = [{ sentence: 'e' }], x = [{ sentence: 'x', expectNodes: ['guild'] }];
+  const s = pickSets(['--set', 'tools/eval-expand-maplestory.json'], { evalSet: e, validation: e, holdout: e, extraSet: x, extraName: 'eval-expand-maplestory.json' });
+  assert.deepEqual(s.map(z => [z.name, z.cases, z.guarded]), [['추가 셋 eval-expand-maplestory.json', x, false]]);
+});
+
 // 홀드아웃(tools/eval-unseen.json): 예문을 고를 때 보지 않는 문장. 평가셋·검증셋·가드와 겹치지 않아야 의미가 있다
 const unseen = read('tools/eval-unseen.json');
 
