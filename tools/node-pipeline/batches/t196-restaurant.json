@@ -1,0 +1,178 @@
+{
+  "interest": "restaurant",
+  "note": "T-196 실제 확장 관문 입력: 대체 임베더 관문 채택 후보(우리 말로 쓴 사실·출처 주소만, 원문 없음, D-5). npm run node-pipeline:gate -- --interest restaurant --results 이 파일 --embedder browser",
+  "results": [
+    {
+      "batch": 3,
+      "status": "warn",
+      "node": {
+        "id": "small_amount_exemption",
+        "label": "소액부징수와 과세최저한",
+        "facts": [
+          "세액이나 소득금액이 일정 기준에 못 미치면 징수를 면제하는 방식으로 행정 비용을 줄인다.",
+          "일부 소득은 기준치보다 적어도 예외적으로 징수해야 하는 규칙이 존재한다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=2289&cntntsId=7701"
+        ]
+      },
+      "edges": [
+        {
+          "to": "withholding_tax",
+          "rel": "면제 기준 적용"
+        }
+      ]
+    },
+    {
+      "batch": 3,
+      "status": "warn",
+      "node": {
+        "id": "youth_startup_tax_reduction",
+        "label": "청년 창업기업 세액감면",
+        "facts": [
+          "음식점업 등 감면대상 업종의 중소기업을 창업하면 일정 기간 동안 세액 감면 혜택을 받을 수 있다.",
+          "창업 당시 대표자의 연령 요건을 충족하고 지역별 기준에 따라 감면율과 적용 여부가 달라진다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=41127&cntntsId=239082"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 3,
+      "status": "warn",
+      "node": {
+        "id": "tax_payment_fee_reduction",
+        "label": "국세 납부대행수수료 인하",
+        "facts": [
+          "카드 납부에 적용되는 대행수수료율이 일괄적으로 인하되며 영세사업자의 특정 세목에는 더 낮은 수수료율이 적용된다.",
+          "연간 총수입금액이 일정 규모 이상인 납세자는 수수료율 인하 대상에서 제외된다."
+        ],
+        "tags": [
+          "brokerage_fee"
+        ],
+        "sources": [
+          "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=41130&cntntsId=239085"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 5,
+      "status": "warn",
+      "node": {
+        "id": "health_certificate_rule",
+        "label": "건강진단과 종사 자격 제한",
+        "facts": [
+          "영업자와 종업원은 건강진단을 받아야 하며 타인에게 위해를 끼칠 우려가 있는 질병이 인정되면 해당 영업에 종사하지 못한다.",
+          "영업자는 건강진단을 받지 않거나 유해 질병이 있는 자를 영업에 종사시키지 못한다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EC%8B%9D%ED%92%88%EC%9C%84%EC%83%9D%EB%B2%95"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 5,
+      "status": "warn",
+      "node": {
+        "id": "chef_and_nutritionist_deployment",
+        "label": "조리사와 영양사 배치 의무",
+        "facts": [
+          "일정 규모 이상의 집단급식소와 식품접객업자는 자격을 갖춘 조리사나 영양사를 두어야 한다.",
+          "운영자 본인이 직접 조리나 지도를 하거나 일정 규모 미만인 경우에는 배치 의무가 면제된다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EC%8B%9D%ED%92%88%EC%9C%84%EC%83%9D%EB%B2%95"
+        ]
+      },
+      "edges": [
+        {
+          "to": "health_certificate_rule",
+          "rel": "자격 요건 관련"
+        }
+      ]
+    },
+    {
+      "batch": 5,
+      "status": "pass",
+      "node": {
+        "id": "franchise_dispute_mediation",
+        "label": "가맹사업 분쟁조정협의회",
+        "facts": [
+          "가맹사업거래와 관련된 마찰을 원만하게 해결하기 위해 공익, 가맹본부, 가맹점사업자를 대표하는 위원들로 구성된 협의회에 조정을 신청할 수 있다.",
+          "조정 신청이 접수되면 협의회는 사실관계를 확인하고 합의를 권고하거나 조정안을 마련하며, 합의가 성립되면 재판상 화해와 동일한 효력을 갖는 조서가 작성된다."
+        ],
+        "tags": [
+          "role_division"
+        ],
+        "sources": [
+          "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EA%B0%80%EB%A7%B9%EC%82%AC%EC%97%85%EA%B1%B0%EB%9E%98%EC%9D%98%EA%B3%B5%EC%A0%95%ED%99%94%EC%97%90%EA%B4%80%ED%95%9C%EB%B2%95%EB%A5%A0"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 6,
+      "status": "warn",
+      "node": {
+        "id": "sanitation_facilities",
+        "label": "조리장 위생 설비",
+        "facts": [
+          "조리장 안에는 음식을 다루기 위한 조리, 세척, 폐기물 보관 및 손 씻기 시설을 각각 갖추어야 한다.",
+          "식기류를 위생적으로 관리하기 위해 살균소독기나 열탕세척소독시설 중 하나 이상을 설치해야 한다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://www.ddm.go.kr/health/contents.do?key=1305"
+        ]
+      },
+      "edges": [
+        {
+          "to": "hygiene_inspection",
+          "rel": "관련"
+        }
+      ]
+    },
+    {
+      "batch": 8,
+      "status": "warn",
+      "node": {
+        "id": "unfair_franchise_control",
+        "label": "부당한 가맹 영업통제",
+        "facts": [
+          "가맹본부가 점포환경개선을 부당하게 강요하거나 영업시간과 영업지역을 구속하는 행위는 금지된다.",
+          "법 위반 행위가 발생하면 시정조치나 과징금 처분 또는 형사벌이 부과될 수 있다."
+        ],
+        "tags": [
+          "vendor_lock_in"
+        ],
+        "sources": [
+          "https://www.ftc.go.kr/www/contents.do?key=706"
+        ]
+      },
+      "edges": [
+        {
+          "to": "franchise_disclosure",
+          "rel": "규율"
+        }
+      ]
+    }
+  ]
+}

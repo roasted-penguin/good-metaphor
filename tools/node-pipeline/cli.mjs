@@ -3,7 +3,7 @@
 //   node tools/node-pipeline/cli.mjs index  --interest maplestory [--pages 1] [--probe-seeds]
 //   node tools/node-pipeline/cli.mjs draft  --interest maplestory [--limit 10] [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
 //   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-reground] [--no-near-dup] [--dup-embedder e5|fallback] [--no-tag-fit] [--max-calls 14] [--provider gemini]
-//   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]]
+//   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]] [--results 입력.json]
 //   node tools/node-pipeline/cli.mjs accept-alt <대안 표 .alt-*.json> [--dir tools] [--all]
 //   node tools/node-pipeline/cli.mjs apply  --interest maplestory --batch N|all --approve ids.json [--gate browser|fallback|none] [--out 경로] [--write-real]
 // 작업 파일은 모두 .tmp/node-pipeline/(커밋 안 함). 페이지 본문은 어디에도 쓰지 않는다(D-5).
@@ -279,8 +279,11 @@ function casesIo() {
 // 회귀 관문: 승인 후보(없으면 실패 아닌 후보 전부)를 그래프 사본에 넣어 1위 회귀 0·여유 악화 0인 것만 채택 목록으로.
 // --batch all이면 그 관심사 묶음을 모두 합쳐 잰다(결과 파일 이름은 batch-all)
 async function cmdGate() {
-  const n = batchSel();
-  const results = loadResults(n);
+  // --results(T-196): .tmp 묶음 대신 커밋한 최소 입력(tools/node-pipeline/batches/*.json, { interest, results: [{ status, node, edges }] })에서 읽는다.
+  // CI(eval 워크플로 gate_args)에서 .tmp 없이 실제 확장 관문을 돌리려고. 결과 파일 이름은 --batch(기본 all)
+  const resultsFile = arg('results');
+  const n = resultsFile ? arg('batch', 'all') : batchSel();
+  const results = resultsFile ? gateInputResults(readJson(resultsFile)) : loadResults(n);
   const embedderId = arg('embedder', 'fallback');
   const ids = arg('approve') ? readJson(arg('approve')) : results.filter(r => r.status !== 'fail').map(r => r.node.id);
   const day = arg('day', today());
@@ -337,6 +340,13 @@ async function cmdGate() {
   for (const r of res.rejected) console.log(`  뺌 ${r.id}: ${r.issues.slice(0, 2).map(i => `${i.kind} "${i.sentence.slice(0, 24)}…" ${i.before ?? ''}→${i.after ?? ''}`).join(' / ')}`);
   console.log(`[gate] 채택 목록 → ${acceptedPath}${embedderId === 'fallback' ? ' (다음: --embedder browser --approve 이 파일)' : ' (다음: apply --approve 이 파일)'}`);
   console.log(`[gate] 대안 정답 후보 표 → ${altPath.replace(/\.json$/, '.md')}`);
+}
+
+// 최소 입력 → 검사 결과 꼴. 관심사가 다르면 멈춘다(엉뚱한 그래프에 넣지 않게)
+function gateInputResults(input) {
+  if (input.interest && input.interest !== interest) throw new Error(`입력 관심사(${input.interest})와 --interest(${interest})가 달라요.`);
+  if (!Array.isArray(input.results)) throw new Error('입력에 results 배열이 없어요.');
+  return input.results.map(r => ({ status: r.status || 'warn', fails: r.fails || [], node: r.node, edges: r.edges || [] }));
 }
 
 // 승인한 대안 정답을 평가 파일 expectNodes에 더한다(두 관심사 파일 모두 본다). --dir로 사본 폴더, --all이면 approve 무시하고 모두(시연용)

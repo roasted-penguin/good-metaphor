@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       suites:
-        description: '프리셋. guard=가드+여유 가드, full=메이플 가드·여유 가드·홀드아웃+식당 가드·홀드아웃, precomputed=동봉 벡터로 가드, precise-judge-offline=정밀 판정 캐시만, custom=아래 args 그대로'
+        description: '프리셋. guard=가드+여유 가드, full=메이플 가드·여유 가드·홀드아웃+식당 가드·홀드아웃, precomputed=동봉 벡터로 가드, precise-judge-offline=정밀 판정 캐시만, custom=아래 args 그대로, none=평가 없이(gate_args·build_vectors만)'
         type: choice
         default: guard
         options:
@@ -18,6 +18,7 @@ on:
           - precomputed
           - precise-judge-offline
           - custom
+          - none
       args:
         description: 'custom일 때 npm run eval -- 뒤에 붙일 인자'
         type: string
@@ -34,6 +35,10 @@ on:
         description: '다시 만든 extension/data/vectors를 아티팩트(vectors)로 올린다'
         type: boolean
         default: false
+      gate_args:
+        description: '노드 관문(T-196): ;로 나눈 node-pipeline:gate 인자 묶음(예 --interest maplestory --results tools/node-pipeline/batches/t196-maplestory.json). 실제 확장(--embedder browser)으로 돌리고 결과를 아티팩트 node-gate로. 비우면 건너뜀'
+        type: string
+        default: ''
       judge_cache_run:
         description: '정밀 판정 캐시(.tmp/judge-*.json)를 받을 이전 실행 번호(run id). 그 실행의 아티팩트 judge-cache를 내려받는다. 비우면 건너뜀'
         type: string
@@ -58,6 +63,7 @@ jobs:
       SUITES: ${{ inputs.suites || 'guard' }}
       ARGS: ${{ inputs.args }}
       EXTRA_ARGS: ${{ inputs.extra_args }}
+      GATE_ARGS: ${{ inputs.gate_args }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -108,7 +114,12 @@ jobs:
             echo "EVAL_CI_EXTRA=**벡터 다시 만들기:** build:vectors 스크립트가 없어 건너뜀" >> "$GITHUB_ENV"
           fi
 
+      - name: 노드 관문(실제 확장)
+        if: inputs.gate_args
+        run: node tools/eval-ci.mjs --gate "$GATE_ARGS"
+
       - name: 실제 크롬 평가
+        if: env.SUITES != 'none'
         run: |
           if [ "$SUITES" = custom ]; then a="$ARGS"; else a="$EXTRA_ARGS"; fi
           node tools/eval-ci.mjs "$SUITES" --args-string "$a"
@@ -136,6 +147,15 @@ jobs:
           path: |
             .tmp/eval-ci/
             .tmp/build-vectors.log
+          if-no-files-found: ignore
+      - name: 노드 관문 결과 올리기
+        if: always() && inputs.gate_args
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-gate
+          path: |
+            .tmp/node-pipeline/*-browser.json
+            .tmp/node-pipeline/*-browser.md
           if-no-files-found: ignore
       - name: 정밀 판정 캐시 올리기
         if: always()
