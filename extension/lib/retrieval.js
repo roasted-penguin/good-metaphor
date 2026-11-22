@@ -185,6 +185,18 @@ export function retrievalFor(retrieval, graph) {
 }
 
 /**
+ * 태그 하나의 점수 (T-120). 판정기(lib/judges.js) 확률 p를 태그 유사도 대신 또는 함께 쓴다.
+ *   mode 없음   sim − penalty (지금과 같다)
+ *   'replace'   p만(없으면 0). 감점은 임베딩 쏠림 보정이라 빼고 쓴다
+ *   'combine'   sim − penalty + weight·p (weight 0이면 지금과 같다)
+ */
+export function combineTagSim({ sim, penalty = 0, p, mode = null, weight = 0 }) {
+  if (mode === 'replace') return p ?? 0;
+  if (mode === 'combine') return sim - penalty + weight * (p ?? 0);
+  return sim - penalty;
+}
+
+/**
  * @param {number[]} q        질의 벡터
  * @param {object} graph      mergeGraphs 결과
  * @param {Map} vecs          'tag:<id>' | 'tag:<id>#<n>'(예문 벡터, T-154) | 'node:<id>' -> 벡터
@@ -197,11 +209,13 @@ export function retrievalFor(retrieval, graph) {
  *   aliasText   별칭(게임 은어) 판정에 쓰는 원문. 없으면 별칭 가산 없음 (T-114)
  *   aliasBoost  aliasText에 노드 별칭이 낱말로 있으면 그 노드 점수에 더할 값. 기본 0(영향 없음)
  *               약한 별칭(weakAliases, 일상어와 겹치는 은어)은 mapleCue가 참일 때만 더한다. 한 노드에 한 번만 (T-149)
+ *   tagJudge    { p, mode: 'replace'|'combine', weight } 판정기 태그 확률(T-120, combineTagSim). p는 {id: 확률} | Map | [{id,p}].
+ *               없으면(기본) 결과가 이전과 같다. 지금은 평가 도구만 쓴다(ADR 0014)
  */
 export function retrieve(q, graph, vecs, {
   topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {},
   feedbackMemory = [], feedbackQuery = null, feedbackSim = 0.92, feedbackMax = 0.1,
-  aliasText = '', aliasBoost = 0
+  aliasText = '', aliasBoost = 0, tagJudge = null
 } = {}) {
   // 약한 별칭 단서는 필요할 때 한 번만 계산한다(약한 별칭이 맞은 노드가 없으면 계산하지 않음)
   let cue;
@@ -213,12 +227,15 @@ export function retrieve(q, graph, vecs, {
     if (s !== undefined) tagSim.set(t.id, s);
   }
 
+  const jp = tagJudge ? judgeProbs(tagJudge.p) : null;
+  const adjOf = id => combineTagSim({ sim: tagSim.get(id) ?? 0, penalty: tagPenalty[id] || 0, p: jp?.get(id), mode: tagJudge?.mode, weight: tagJudge?.weight || 0 });
+
   const scored = graph.nodes.map(n => {
     const v = vecs.get('node:' + n.id);
     const direct = v ? cosine(q, v) : 0;
     // 감점 뒤 점수로 태그 순위를 매기고, 결과에는 감점 전 유사도를 남긴다
     const ranked = n.tags
-      .map(id => ({ id, sim: tagSim.get(id) ?? 0, adj: (tagSim.get(id) ?? 0) - (tagPenalty[id] || 0) }))
+      .map(id => ({ id, sim: tagSim.get(id) ?? 0, adj: adjOf(id) }))
       .sort((a, b) => b.adj - a.adj);
     const top = ranked.slice(0, tagAgg === 'top2mean' ? 2 : 1);
     const tagScore = top.length ? Math.max(0, top.reduce((sum, t) => sum + t.adj, 0) / top.length) : 0;
@@ -256,6 +273,13 @@ export function retrieve(q, graph, vecs, {
         return { label: nodeById.get(otherId)?.label, rel: e.rel, dir: e.from === c.node.id ? 'out' : 'in' };
       })
   }));
+}
+
+// 판정 확률을 Map으로: {id: p} | Map | [{id, p}]
+function judgeProbs(p) {
+  if (p instanceof Map) return p;
+  if (Array.isArray(p)) return new Map(p.map(x => [x.id, x.p]));
+  return new Map(Object.entries(p || {}));
 }
 
 // 피드백 가감이 있을 때만 결과에 feedback 필드를 둔다(없으면 결과 모양이 이전과 같다)
