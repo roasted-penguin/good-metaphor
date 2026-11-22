@@ -362,6 +362,17 @@ def test_no_structured_output_retries_without_format_then_keeps_off(tmp_path, ol
     assert [e["name"] for e in ents] == ["스타포스 강화", "확률형 강화"]  # 펜스 안 JSON을 읽고 후처리까지
 
 
+def test_chat_reports_json_mode(ollama):
+    """A/B 하네스가 줄마다 JSON 모드였는지 적는다(T-209): 501을 받기 전엔 True, 받은 뒤엔 False."""
+    chat = ew.make_ollama_chat(ollama.url, "gemma4:12b", "system")
+    asyncio.run(chat("글"))
+    assert chat.json_mode() is True
+    ollama.no_structured_output = True
+    ollama.fenced = True
+    asyncio.run(chat("글"))
+    assert chat.json_mode() is False
+
+
 def test_other_501_is_still_connection_error(tmp_path, ollama):
     s = make_settings(tmp_path)
     enqueue_n(s, COMMON_WS, 1)
