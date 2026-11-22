@@ -1,8 +1,8 @@
 // T-194 반자동 노드 파이프라인: robots·HTML·초안 파싱·자동 검사(수치·금칙어·태그·중복·출처·구조)·리뷰 시트
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRobots, robotsAllows, htmlToText, extractLinks, extractTitle, contentHash, politeFetcher } from '../../tools/node-pipeline/web.mjs';
-import { buildPageDraftPrompt, parsePageDraft, draftCandidates, longestCommonRun, bigramOverlap } from '../../tools/node-pipeline/draft.mjs';
+import { parseRobots, robotsAllows, htmlToText, extractLinks, extractTitle, contentHash, politeFetcher, HEADING_MARK } from '../../tools/node-pipeline/web.mjs';
+import { buildPageDraftPrompt, parsePageDraft, draftCandidates, longestCommonRun, bigramOverlap, splitSections } from '../../tools/node-pipeline/draft.mjs';
 import { changingNumbers, structureFirst, dupIndex, checkBatch, summarize, renderSheet, sourceProber, sourceAllowed, DUP_WARN } from '../../tools/node-pipeline/check.mjs';
 import { INTERESTS, contentMarkers } from '../../tools/node-pipeline/sources.mjs';
 import { loadInterestGraph } from '../../tools/load-graph.mjs';
@@ -111,6 +111,50 @@ test('parsePageDraft·draftCandidates: 코드블록·앞뒤 설명을 걷고, �
   assert.ok(c.grounding.copiedRun[0] >= 15);
   assert.equal(JSON.stringify(c).includes('장비다'), false, '페이지 본문 조각을 후보에 남기지 않는다');
   assert.equal(draftCandidates('엉망', { page, pageText }).error, 'parse');
+});
+
+test('draftCandidates(T-195): 목록 안 태그가 없는 후보는 초안에서 버리고 사유를 남긴다, 절 이름을 붙인다', () => {
+  const page = { url: 'https://maplestory.nexon.com/news/update/1', title: '업데이트', section: '어빌리티 개편' };
+  const text = JSON.stringify({ nodes: [
+    { id: 'ok_node', label: '좋음', facts: ['a다.', 'b다.'], tags: ['loss_risk', 'made_up'] },
+    { id: 'no_tag', label: '태그없음', facts: ['a다.', 'b다.'], tags: ['made_up'] },
+    { id: 'empty_tag', label: '빈태그', facts: ['a다.', 'b다.'], tags: [] }
+  ] });
+  const { candidates, dropped } = draftCandidates(text, { page, pageText: '본문', tagIds: new Set(['loss_risk']) });
+  assert.deepEqual(candidates.map(c => [c.id, c.section]), [['ok_node', '어빌리티 개편']]);
+  assert.deepEqual(candidates[0].tags, ['loss_risk', 'made_up'], '목록 밖 태그 하나는 check가 빼고 확인 표시(여기서는 그대로)');
+  assert.deepEqual(dropped.map(d => [d.id, d.reason, d.source, d.section]), [['no_tag', 'noTags', page.url, '어빌리티 개편'], ['empty_tag', 'noTags', page.url, '어빌리티 개편']]);
+  assert.deepEqual(draftCandidates(text, { page, pageText: '본문' }).dropped, [], 'tagIds가 없으면 버리지 않는다(T-194 동작)');
+  assert.match(buildPageDraftPrompt({ domain: '메이플', page: { title: '업데이트', section: '어빌리티 개편', text: '본문' }, tags: [], rules: maple.rules }).user, /\[페이지\] 업데이트 — \[절\] 어빌리티 개편\n본문$/);
+  assert.match(buildPageDraftPrompt({ domain: '메이플', page: { text: '' }, tags: [], rules: maple.rules }).system, /빠뜨리지 말고 각각 따로/);
+});
+
+test('htmlToText headings(T-195): h1~h3 제목을 표지 줄로 남기고, 끄면 예전과 같다', () => {
+  const html = '<div class="b"><h1>어빌리티 <b>개편</b></h1><p>내용 하나</p><h2></h2><h4>작은 제목</h4><p>내용 둘</p></div>';
+  assert.equal(htmlToText(html, { headings: true }), `${HEADING_MARK}어빌리티 개편\n내용 하나\n작은 제목\n내용 둘`);
+  assert.equal(htmlToText(html), '어빌리티 개편\n내용 하나\n작은 제목\n내용 둘');
+  assert.equal(htmlToText('<p>' + 'x'.repeat(20) + '</p>', { max: Infinity }).length, 20);
+});
+
+test('splitSections(T-195): 제목으로 절 나누기, 건너뛸 절 빼기, 작은 절 합치기, 큰 절 자르기, 개수 상한', () => {
+  const M = HEADING_MARK;
+  const big = Array.from({ length: 30 }, (_, i) => `줄${i} ` + 'ㄱ'.repeat(40)).join('\n'); // 약 1,300자
+  const text = ['머리말', `${M}가을 이벤트`, '이벤트 내용', `${M}어빌리티 개편`, '어빌리티 설명', `${M}주문서 강화 개편`, big, `${M}오류 수정`, '버그', `${M}마일리지 개편`, '마일리지 설명'].join('\n');
+  const r = splitSections(text, { skip: maple.sectionSkip, minChars: 50, maxChars: 600 });
+  assert.deepEqual(r.skipped, ['가을 이벤트', '오류 수정']);
+  const titles = r.sections.map(s => s.title);
+  assert.equal(titles[0], '어빌리티 개편', '머리말(10자 미만 짧은 절)은 다음 절과 합쳐 하나');
+  assert.ok(r.sections[0].text.startsWith('머리말\n■ 어빌리티 개편\n어빌리티 설명'));
+  assert.ok(titles.some(t => t.startsWith('주문서 강화 개편 (1)')) && titles.some(t => t.includes('주문서 강화 개편 (2)')), '큰 절은 줄 단위로 나눈다');
+  assert.ok(r.sections.every(s => s.text.length <= 600));
+  assert.ok(titles.at(-1).includes('마일리지 개편'), '마지막 작은 절은 앞과 합친다');
+  assert.equal(r.sections.some(s => s.text.includes('이벤트 내용') || s.text.includes('버그')), false);
+  const capped = splitSections(text, { minChars: 1, maxChars: 600, maxSections: 2 });
+  assert.equal(capped.sections.length, 2);
+  assert.ok(capped.overflow > 0);
+  const plain = splitSections('제목 없는 짧은 글');
+  assert.deepEqual(plain.sections, [{ title: '', text: '제목 없는 짧은 글' }]);
+  assert.deepEqual(splitSections('').sections, []);
 });
 
 test('longestCommonRun·bigramOverlap: 공백 무시 최장 복사 길이, 2그램 겹침 비율', () => {
