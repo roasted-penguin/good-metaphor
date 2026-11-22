@@ -99,8 +99,17 @@ T-113 이후 남은 오답 대부분은 임베딩이 "단어가 비슷한 쪽"�
   - **(a) `combine-best`**(`retrieve` `tagJudge.mode`, 판정 가산을 노드의 임베딩 1위 태그에만 준다): **기각.** 지금 방식 대비 1위 회귀 2(평가셋 "대학원 최소 학점" `sixth_job` → `mvp_membership`, 검증 "은행 OTP" `weekly_boss` → `arcane_symbol`)에 개선 0이다. 명절 사과도 못 고친다. `meso_inflation`도 임베딩 1위 태그가 `market_price`라서(inflation 감점 0.03이 더 큼) 가산을 그대로 받기 때문이다. 코드는 평가 후보로 남겼다(`--judge-candidate`).
   - **(b) `meso_inflation`에서 `market_price` 빼기**: 정밀+판정만 보면 회귀 0, 개선 3(명절 사과·이사철·귤)이고 홀드아웃이 34/39에서 37/39로 오른다. 하지만 **일반 모드(임베딩만)에 검증셋 가드 회귀 1**이 있다("정부가 국채를…" → `auction`, 여유 −0.006). 판정 없는 정밀 모드에도 홀드아웃 회귀 1이 있다("central bank flooded" → `auction`). 함께 푸는 방법도 셋 시험했다. `inflation` 예문을 하나 더하는 두 가지는 국채 문장을 고치지만 평가셋 회귀 2를 만든다("동네 아파트 매물" → `meso`, 음성 "메소포타미아" → `arcane_symbol`). `meso`가 inflation·market_price를 둘 다 가져서 값이 오르는 문장이 `meso`로 끌려간다. `inflation` 감점을 0.03에서 0.02로 낮춰도 여유가 −0.0057로 거의 그대로다. **기각**, 그래프·태그·설정은 그대로다.
   - **(c) 그대로 둠.** 지금 정밀+판정은 정밀(판정 없음) 대비 회귀 0을 유지한다(새 홀드아웃 포함 홀드아웃 회귀 0, 개선 4).
-- 남은 일(메인 결정 후보): (b)를 정밀 모드 이득(+3) 때문에 받을지 정한다. 받으면 일반 모드 가드 1문장(국채)이 틀린다. 근본 해법 후보는 `meso`·`meso_inflation` 노드 글을 구조 먼저 다시 쓰는 것이다. 이건 공통 그래프 사실을 바꾸는 일이라 `/add-common-node`·검수 절차를 따라야 한다(규칙 2).
+- **판정(메인 세션): (b)는 받지 않는다.** 일반 모드가 기본이고 가드는 일반 모드를 지키는 선이라, 정밀 모드 +3을 위해 가드 문장을 깨지 않는다. 근본 해법 후보는 `meso`·`meso_inflation` 노드 글을 구조 먼저 다시 쓰는 것이다. 이건 공통 그래프 사실을 바꾸는 일이라 `/add-common-node`·검수 절차를 따른다(규칙 2). T-187로 올린다.
 
 ### 2부: Groq 합친 JSON 스모크
 - `npm run smoke:providers -- --precise-judge [N]`(워크플로 입력 `precise_judge`, 환경변수 `PRECISE_JUDGE`). 확장과 같은 `buildAbstractJudgePrompt` + `parseAbstractJudge` + `judgeTagProbs`(하한 `admin.preciseTagJudge.floor`)로 고정 8문장(구조 6, 일상 2)을 키 있는 제공자마다 보낸다. 요약 줄에는 **JSON 파싱 성공 수, 추상 구조 있음, 목록 밖 id 수, 없음 우세(일상·구조 문장 따로), 기대 태그 1위, 지연 중앙·p90**이 나온다. 형식을 어겨도 확장은 예전 정밀 모드로 돌아가므로 스모크 실패로 세지 않는다(`tools/smoke-precise.mjs`, 단위 테스트는 가짜 fetch).
 - 이 맥에서 잰 결과(3문장, 형식 확인용): Gemini `gemini-3.5-flash-lite`는 JSON 3/3, 목록 밖 id 0, 기대 태그 3/3, 지연 중앙 2.1초. NVIDIA `nemotron-3.5-super-vl`도 3/3, 0, 3/3, 중앙 0.66초. Groq 키는 Actions 비밀값에만 있어서 메인 세션이 smoke 워크플로를 `precise_judge: true`로 돌려 받는다.
+- **Actions smoke 결과**(2026-11-22, [run 45012155475](https://github.com/roasted-penguin/good-metaphor/actions/runs/45012155475), 고정 8문장):
+
+  | 제공자 | JSON | 목록 밖 id | 일상 문장 없음 우세 | 구조 문장 없음 우세 | 기대 태그 1위 | 지연 중앙·p90 |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | **groq `openai/gpt-oss-120b`**(정밀 모드 첫 순위) | **8/8** | 0 | 2/2 | 0/6 | **6/6** | **547ms · 866ms** |
+  | gemini `gemini-3.5-flash-lite` | 8/8 | 0 | 2/2 | 0/6 | 6/6 | 2259ms · 8395ms |
+  | nvidia `nemotron-3.5-super-vl` | 7/8 | 0 | 2/2 | 0/6 | 5/6 | 681ms · 783ms (502 한 번, 형식 문제 아님) |
+
+  Groq가 합친 JSON을 지키고 Gemini보다 4배 빠르다. 정밀 모드 기본 켬(T-184 판정)을 유지한다. 같은 실행에서 원래 있던 비유 생성 검사 2건이 실패했다(이번 변경과 무관, T-188).
