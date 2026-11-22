@@ -44,7 +44,8 @@
 	<string>__LOG_DIR__/ollama.log</string>
 	<key>StandardErrorPath</key>
 	<string>__LOG_DIR__/ollama.log</string>
+	<!-- Background는 CPU·입출력을 깎아 추출이 느려진다. 추출 성능이 그대로 나오게 Standard -->
 	<key>ProcessType</key>
-	<string>Background</string>
+	<string>Standard</string>
 </dict>
 </plist>
