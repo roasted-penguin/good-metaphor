@@ -6,6 +6,7 @@
   "description": "관심사 그래프 기반 비유 설명 크롬 확장 (PoC)",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:vectors": "node tools/build-vectors.mjs",
     "build:store": "node scripts/build-store.mjs",
     "store:screenshots": "node scripts/prepare-e2e.mjs && node scripts/store-screenshots.mjs",
     "test": "npm run test:unit && npm run test:e2e",
@@ -23,7 +24,8 @@
     "node-pipeline:check": "node tools/node-pipeline/cli.mjs check",
     "node-pipeline:gate": "node tools/node-pipeline/cli.mjs gate",
     "node-pipeline:apply": "node tools/node-pipeline/cli.mjs apply",
-    "node-pipeline:accept-alt": "node tools/node-pipeline/cli.mjs accept-alt"
+    "node-pipeline:accept-alt": "node tools/node-pipeline/cli.mjs accept-alt",
+    "check:vectors": "node tools/build-vectors.mjs --check"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"

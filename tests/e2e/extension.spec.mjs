@@ -45,6 +45,8 @@ const test = base.extend({
 
 // 서버 모드 시험(T-404·T-141)과 서버 요청 0을 함께 보는 개인정보 시험(T-107·T-111·T-144·T-147·T-148)
 const serverTest = test.extend({ extPath: async ({}, use) => { await use(EXT_SERVER); } });
+// 미리 계산 벡터 사본(T-193): 대체 임베더 id로 만든 data/vectors 파일이 있다
+const vectorsTest = test.extend({ extPath: async ({}, use) => { await use(path.resolve('.tmp/ext-e2e-vectors')); } });
 
 let stop;
 test.beforeAll(async () => { stop = await startServers(); });
@@ -142,6 +144,42 @@ test('벡터 캐시 정리(T-110): 다른 임베더 키는 지워지고, 바뀐 
   expect(r2.data.vectors).toBe(r.data.vectors);
   await ext.page.waitForTimeout(300);
   expect(await ext.page.evaluate(() => window.__vecWrites)).toBe(0);
+});
+
+// 미리 계산 벡터(T-193): 사본에 대체 임베더 id로 만든 data/vectors/<관심사>.json 이 있다(scripts/prepare-e2e.mjs).
+// 메이플 파일에서 한 항목을 뺐으므로 그 하나만 오프스크린에서 임베딩하고, 나머지는 파일에서 꺼내 vecCache에 넣지 않는다
+vectorsTest('미리 계산 벡터(T-193): 맞는 텍스트는 오프스크린 임베딩 없이 쓰고, 파일에 없는 것만 임베딩, 호버는 그대로', async ({ context, ext }) => {
+  const getCache = () => ext.page.evaluate(async () => (await chrome.storage.local.get('vecCache')).vecCache || {});
+  const r = await ext.send({ type: 'embed:warmup' });
+  expect(r.ok).toBe(true);
+  expect(r.data.status).toBe('fallback');
+  const total = r.data.vectors;
+  expect(r.data.vectorSources).toEqual({ precomputed: total - 1, cached: 0, embedded: 1 });
+  await expect.poll(async () => Object.keys(await getCache()).length).toBe(1); // 빠진 한 항목만 저장
+
+  // 다시: 파일 + vecCache로 모두 덮여 새로 임베딩하는 것이 없다
+  const r2 = await ext.send({ type: 'embed:warmup' });
+  expect(r2.data.vectorSources).toEqual({ precomputed: total - 1, cached: 1, embedded: 0 });
+
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플스토리로 보면');
+  const ex = await ext.send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(ex.ok).toBe(true);
+  expect(ex.data.debug.vectorSources.embedded).toBe(0);
+  expect(ex.data.debug.candidates.length).toBeGreaterThan(0);
+
+  // 식당으로 바꾸면 식당 파일(빠진 항목 없음)만으로 덮인다
+  await ext.setSettings({ interest: 'restaurant' });
+  const r3 = await ext.send({ type: 'embed:warmup' });
+  expect(r3.data.vectorSources).toEqual({ precomputed: r3.data.vectors, cached: 0, embedded: 0 });
+});
+
+test('미리 계산 벡터(T-193): 동봉 파일은 실제 모델 id라 대체 임베더에서는 쓰지 않는다(대체 경로 그대로)', async ({ ext }) => {
+  const r = await ext.send({ type: 'embed:warmup' });
+  expect(r.data.status).toBe('fallback');
+  expect(r.data.vectorSources.precomputed).toBe(0);
 });
 
 test('Alt+호버: 문장 강조, 메이플 테마 말풍선, Esc 닫기, 캐시', async ({ context, ext }) => {

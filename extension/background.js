@@ -10,6 +10,7 @@ import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPatte
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked, activeTerms } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
+import { precomputedIndex, precomputedPath } from './lib/precomputed-vectors.js';
 import { syncCorrectionExamples, buildCorrectionsExport } from './lib/corrections.js';
 import { makeGroundingEntry, addGroundingEntry, bumpGroundingCount, flagGroundingEntry, summarizeGrounding } from './lib/grounding-log.js';
 import { buildDraftPrompt } from './lib/prompt.js';
@@ -84,6 +85,23 @@ async function saveVecCache() {
   await chrome.storage.local.set({ vecCache: Object.fromEntries(vecMem) });
 }
 
+// 미리 계산한 그래프 벡터(T-193, ADR 0015). 관심사별 확장 동봉 데이터 파일, 서비스 워커가 살아 있는 동안 메모리에 둔다.
+// embedderId·passagePrefix가 다르면 빈 조회표(대체 임베더 포함, 지금처럼 런타임 임베딩). 파일이 없거나 못 읽어도 빈 조회표
+const preMem = new Map(); // `${interestId}|${embedderId}|${prefix}` -> Map(hash -> number[])
+async function loadPrecomputed(interestId, embedderId, passagePrefix) {
+  const k = `${interestId}|${embedderId}|${passagePrefix}`;
+  if (preMem.has(k)) return preMem.get(k);
+  let idx = new Map();
+  try {
+    const res = await fetch(chrome.runtime.getURL(precomputedPath(interestId)));
+    if (res.ok) idx = precomputedIndex(await res.json(), { embedderId, passagePrefix });
+  } catch (e) {
+    console.warn('[vectors] 미리 계산 벡터를 못 읽어서 런타임 임베딩만 써요', e);
+  }
+  preMem.set(k, idx);
+  return idx;
+}
+
 async function ensureGraphVectors(graph) {
   const init = await keepAlive(offscreen('init'));
   // fallbackOnError false면 대체 검색으로 넘어가지 않고 여기서 멈춘다(원인은 짧은 한국어로)
@@ -91,26 +109,39 @@ async function ensureGraphVectors(graph) {
   const embedderId = init.embedderId;
   const cache = await loadVecCache();
   const admin = await getAdminConfig();
+  const { interest } = await getSettings();
+  const pre = await loadPrecomputed(commonInterest(interest)?.id || DEFAULT_INTEREST, embedderId, admin.embedding?.passagePrefix ?? '');
   // 노드 텍스트·태그 벡터 방식은 admin.retrieval(nodeTextMode·tagVectorMode)을 따른다. 평가 도구와 같은 함수 (T-154)
   const items = embedItems(graph, admin.retrieval);
-  for (const it of items) it.cacheKey = `${embedderId}|${await sha1(it.text)}`;
-  const missing = items.filter(it => !cache.has(it.cacheKey));
+  for (const it of items) {
+    it.hash = await sha1(it.text);
+    it.cacheKey = `${embedderId}|${it.hash}`;
+  }
+  // 미리 계산 벡터가 있으면 그것을 쓰고 vecCache에는 넣지 않는다(저장 공간은 오버레이·바뀐 텍스트 몫으로)
+  const fromPre = items.filter(it => pre.has(it.hash));
+  const rest = items.filter(it => !pre.has(it.hash));
+  const missing = rest.filter(it => !cache.has(it.cacheKey));
   if (missing.length) {
     const { vectors } = await keepAlive(offscreen('embed', { texts: missing.map(m => m.text), kind: 'passage' }));
     missing.forEach((m, i) => cache.set(m.cacheKey, vectors[i]));
   }
-  // 정리(T-110): 이번 키를 최근 사용으로 옮기고, 다른 임베더 항목과 상한 초과분을 지운다(이번 키는 지키고)
-  const used = items.map(it => it.cacheKey);
+  // 정리(T-110): 이번 키를 최근 사용으로 옮기고, 다른 임베더 항목과 상한 초과분을 지운다(이번 키는 지키고).
+  // 미리 계산으로 덮인 키는 예전 vecCache에서 지운다(같은 벡터를 두 번 저장하지 않게)
+  const used = rest.map(it => it.cacheKey);
+  let dropped = 0;
+  for (const it of fromPre) if (cache.delete(it.cacheKey)) dropped++;
   touch(cache, used);
   const { cache: pruned, removed } = pruneVecCache(cache, { embedderId, max: admin.vecCacheMax ?? VEC_CACHE_MAX, keep: new Set(used) });
   // 임베딩을 기다리는 사이 "캐시 지우기"나 다른 호출이 vecMem을 바꿨으면 덮어쓰지 않는다(이번 결과 vecs는 그대로 쓴다)
   if (vecMem === cache) {
     vecMem = pruned;
     // 추가·삭제가 있을 때만 저장한다. touch만으로는 저장하지 않는다(호버마다 쓰지 않게, 저장 순서는 LRU 근사로 충분)
-    if (missing.length || removed) await saveVecCache();
+    if (missing.length || removed || dropped) await saveVecCache();
   }
-  const vecs = new Map(items.map(it => [it.key, pruned.get(it.cacheKey)]));
-  return { vecs, embedderId, embedderStatus: init.status, loadError: init.loadError || null };
+  const vecs = new Map(items.map(it => [it.key, pre.get(it.hash) || pruned.get(it.cacheKey)]));
+  // 벡터 출처 수(T-193): 미리 계산 / vecCache / 이번에 임베딩. 설정 화면·e2e·측정이 본다
+  const vectorSources = { precomputed: fromPre.length, cached: rest.length - missing.length, embedded: missing.length };
+  return { vecs, embedderId, embedderStatus: init.status, loadError: init.loadError || null, vectorSources };
 }
 
 /* ───────────── 설명 파이프라인 ───────────── */
@@ -272,7 +303,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   }
 
   onStage('model');
-  const { vecs, embedderId, embedderStatus } = await ensureGraphVectors(graph);
+  const { vecs, embedderId, embedderStatus, vectorSources } = await ensureGraphVectors(graph);
 
   const llmStats = { retries: 0 };
   // 사용자가 고른 제공자 → 관리자 fallbackChain 순서로 부른다(T-124). 실제로 답한 모델을 debug 에 남긴다
@@ -365,6 +396,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       tagJudge: judge ? { probs: judge.probs, none: judge.answers?.find(a => a.id === 'none')?.p ?? null, structureless: judge.none } : null,
       embedderId,
       embedderStatus,
+      vectorSources,
       provider: `${answered.id}/${answered.model}`,
       fallbacks,
       llmRetries: llmStats.retries,
@@ -580,7 +612,7 @@ const handlers = {
   async 'embed:warmup'() {
     const { graph } = await getMergedGraph();
     const r = await ensureGraphVectors(graph);
-    return { embedderId: r.embedderId, status: r.embedderStatus, vectors: r.vecs.size, loadError: r.loadError };
+    return { embedderId: r.embedderId, status: r.embedderStatus, vectors: r.vecs.size, loadError: r.loadError, vectorSources: r.vectorSources };
   },
   async 'embed:status'() {
     const ctx = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });

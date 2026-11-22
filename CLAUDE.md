@@ -49,6 +49,10 @@ npm run eval -- --interest restaurant  # 식당 관심사 평가셋(tools/eval-s
 npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
 npm run eval -- --judge gemini-choice  # 판정기에 문장 → 추상 태그를 물어 태그 top-1·대신/함께 hit@1·회귀·지연(T-120, ADR 0014). 결과는 .tmp 캐시, --rpm 10, --judge-weight 0.05. 호버에는 안 씀
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
+npm run build:vectors            # 공통 그래프 노드·태그 벡터를 실제 확장(크롬, q8, 한 문장씩)으로 미리 계산해 extension/data/vectors/<관심사>.json에 쓴다. 그래프·태그 예문·admin.retrieval 텍스트 방식을 바꾼 PR은 다시 돌려 같은 PR에 커밋(T-193, ADR 0015). -- --verify 다시 임베딩해 비트 동일 확인, -- --interest <id> 한 관심사
+npm run check:vectors            # 크롬 없이(CI): 벡터 파일 형식·embedderId·접두어가 admin.json과 맞는지(틀리면 실패), 그래프와 어긋난 항목은 경고만(-- --strict면 실패)
+npm run eval -- --precomputed     # 그래프 벡터를 동봉 파일에서 꺼내 채점, 런타임과 비트 동일 수 출력(T-193)
+node tools/scale-bench.mjs        # 합성 1,000노드 그래프(.tmp/scale에만)로 첫 로드·호버·vecCache·여유를 실제 크롬에서 측정(T-193, 30분 안팎)
 npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내기를 평가셋·검증셋·가드와 대조(베낀 예문 후보를 거름). 반영 절차는 /approve-corrections
 npm run node-pipeline:index|draft|check|gate|apply|accept-alt -- --interest <id>  # 반자동 노드 파이프라인(T-194·T-195): 공식 페이지 색인 → 절 단위 LLM 후보(캐시·--max-calls) → 자동 검사 시트 → 회귀 관문(대체 → 실제 확장, 대안 정답 후보 표) → 패치. 원문 저장 안 함, 실제 그래프는 --write-real + 관문 browser만. tools/node-pipeline/README.md
 ```
@@ -79,7 +83,8 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/place.js               말풍선 배치: 호버한 줄(인덱스) 아래, 넘치면 위. 고른 범위는 마지막 줄 아래, 넘치면 첫 줄 위(`placeBoxSpan`) (클래식 스크립트, T-109·T-182)
   lib/selection.js           고른 범위 순수 함수: 공백 접기·2자 미만 거름·400자 문장 경계 자르기·커서가 범위 위인지 (클래식 스크립트, T-182)
   lib/shadow.js              열린 shadow root 모으기·shadow 경계 블록·`composedParent` (클래식 스크립트, T-111)
-  lib/vec-cache.js           그래프 벡터 캐시 정리: 다른 임베더 삭제, 2,000개 LRU (T-110)
+  lib/vec-cache.js           그래프 벡터 캐시 정리: 다른 임베더 삭제, 2,000개 LRU (T-110). 미리 계산 벡터로 덮인 텍스트는 넣지 않는다(T-193)
+  lib/precomputed-vectors.js 미리 계산 벡터 파일(f32le-base64, 런타임과 비트 동일) 형식·조회: embedderId·passagePrefix·sha1(텍스트)가 맞을 때만 쓰고 아니면 런타임 임베딩 (T-193, ADR 0015)
   lib/blocklist.js           금칙어 필터(`applyBlocklist`): 출력 직전·스트리밍 뜻·서버 결과·정밀 모드 추상화까지. 확장·서버 같은 규칙 (T-114)
   lib/grounding-log.js       근거 검사로 숨긴 비유를 이 기기에 기록(가린 문장, 금칙어 제외, 300건)·7일 집계·오탐 표시, 보내기 동의 시 운영자 내보내기에 샘플 (T-146)
   lib/prompt.js              프롬프트, 데모 응답, 조사 처리
@@ -88,6 +93,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   data/common/tags.json     추상 태그 21개(통제 어휘, 규칙 9)의 원본. 새 태그는 맨 뒤에만(T-171: fixed_cost_leverage·vendor_lock_in, T-176: brokerage_fee). 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
   data/common/maplestory.json 공통 저장소 그래프 (노드 30, 엣지 26, 태그는 id만, T-172). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114)
   data/common/restaurant.json 두 번째 공통 관심사 "식당" 그래프 (노드 27, 엣지 17, 공통 태그 id만(T-168·T-171), 수치 없음, 중립 테마, `noMatchText`). 팝업·설정 "관심사"(설정 `interest`)로 로그인 없이 고른다. 서버는 메이플만 알아 식당이면 로컬 (T-302)
+  data/vectors/<관심사>.json  미리 계산한 공통 그래프 벡터(데이터, 규칙 4). `npm run build:vectors`가 만든다. 직접 고치지 말 것 (T-193)
   data/common/blocklist.json  금칙어 용어 카드(ADR 0007 형식, `승인`만 필터에 씀). 확장·서버가 같이 읽음 (T-114)
 src/offscreen-src.js         오프스크린 원본 (transformers.js 번들 입력)
 tools/eval.mjs, eval-set.json 검색 품질 평가
@@ -98,7 +104,7 @@ tests/e2e/                   Playwright: 가짜 LLM(:8765) + 테스트 페이지
 scripts/                     build, prepare-e2e
 ```
 
-호버 한 번의 흐름: content.js가 문장(커서가 고른 범위 위면 고른 글, 단어는 빈 값, T-182)·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 근거 검사(usedFact·숫자) → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
+호버 한 번의 흐름: content.js가 문장(커서가 고른 범위 위면 고른 글, 단어는 빈 값, T-182)·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 미리 계산 벡터(동봉 파일, T-193)·벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 근거 검사(usedFact·숫자) → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
 
 ## 지켜야 할 규칙
 

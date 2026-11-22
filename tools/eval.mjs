@@ -33,6 +33,7 @@
 //        [--judge-sweep]               # 하한 후보별 한 줄 요약(하한은 검증셋·가드로 고른다, 홀드아웃으로 고르지 않는다)
 //        [--judge-offline]             # 새로 묻지 않고 캐시만(한도 소진 때). 캐시 없는 문장은 "판정 빠짐"으로 원문 질의
 //        [--judge-candidate combine-best] # 결합 방식 후보를 지금 방식(admin.preciseTagJudge.mode)과 문장별 1위로 비교(T-186)
+//   [--precomputed]                    # 그래프 벡터를 동봉 파일(extension/data/vectors)에서 꺼내 채점, 런타임과 비트 동일 수 출력 (T-193)
 //   [--dump-top1 <파일>]               # 셋·줄별 문장 1위를 JSON으로 저장(다른 실행과 비교용, T-186). 정밀은 임베딩만·정밀·정밀+판정·후보
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
@@ -169,6 +170,7 @@ if (judgeId && !serverOnly) {
   }
 }
 let embed, embedderLabel, closeEmbedder = async () => {};
+let browserEmbedderId = null; // 실제 확장 평가일 때만(--precomputed, T-193)
 if (serverOnly) {
   // 브라우저 평가 생략
 } else if (useFallback) {
@@ -180,6 +182,7 @@ if (serverOnly) {
   embed = be.embed;
   closeEmbedder = be.close;
   embedderLabel = `${be.embedderId} · 브라우저`;
+  browserEmbedderId = be.embedderId;
 } else {
   const { pipeline } = await import('@huggingface/transformers');
   const cfg = admin.embedding;
@@ -198,6 +201,24 @@ const embedStart = Date.now();
 const vs = serverOnly ? [] : await embed(items.map(it => it.text), 'passage');
 if (!serverOnly) console.log(`그래프 벡터 ${items.length}개 임베딩 ${Date.now() - embedStart}ms`);
 const vecs = new Map(items.map((it, i) => [it.key, vs[i]]));
+// --precomputed (T-193): 그래프 벡터를 확장 동봉 파일(extension/data/vectors/<관심사>.json)에서 꺼내 채점한다(런타임과 같은 조회 규칙).
+// 런타임 임베딩과 비트 단위로 같은지도 센다. 실제 확장(크롬) 평가에서만
+if (process.argv.includes('--precomputed')) {
+  if (!browserEmbedderId) throw new Error('--precomputed는 실제 확장(크롬) 평가에서만 써요(--node·대체 임베더 불가)');
+  const { precomputedIndex, precomputedPath } = await import('../extension/lib/precomputed-vectors.js');
+  const { createHash } = await import('node:crypto');
+  const fileUrl = new URL(`../extension/${precomputedPath(interest.id)}`, here);
+  const pre = fs.existsSync(fileUrl) ? precomputedIndex(JSON.parse(fs.readFileSync(fileUrl)), { embedderId: browserEmbedderId, passagePrefix: admin.embedding.passagePrefix ?? '' }) : new Map();
+  let used = 0, same = 0;
+  items.forEach((it, i) => {
+    const v = pre.get(createHash('sha1').update(it.text, 'utf8').digest('hex'));
+    if (!v) return;
+    used++;
+    if (v.length === vs[i].length && v.every((x, k) => x === vs[i][k])) same++;
+    vecs.set(it.key, v);
+  });
+  console.log(`미리 계산 벡터 ${used}/${items.length}개 사용, 그중 런타임 임베딩과 비트 동일 ${same}개`);
+}
 const settings = [
   { name: '노드 직접 비교만', directWeight: 1, tagWeight: 0 },
   { name: '태그 경유만 (그래프 홉)', directWeight: 0, tagWeight: 1 },
