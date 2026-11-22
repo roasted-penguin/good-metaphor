@@ -178,3 +178,60 @@ test('altRows·renderAltTable·altPendingRefusals(T-197): 2위 대안 정답 줄
   assert.deepEqual([...altPendingRefusals({ alternatives: alts }, CASES).keys()], ['N']);
   assert.equal(altPendingRefusals({ alternatives: alts }, [{ sentence: 'm1', expectNodes: ['A', 'N'] }]).size, 0);
 });
+
+/* ───── 근접 중복·태그 밀도 (ADR 0015 제안 2·3) ───── */
+import { applyNearDup, applyTagDensity, nearDupFloor, factKey, conceptText, TAG_DENSITY_MIN } from '../../tools/node-pipeline/near-dup.mjs';
+
+// 가짜 임베더: 글 → 미리 정한 2차원 단위 벡터(각도로 거리 조절)
+const unit = deg => [Math.cos(deg * Math.PI / 180), Math.sin(deg * Math.PI / 180)];
+const fakeEmbed = angles => async texts => texts.map(t => unit(angles[t.split('.')[0]] ?? 90));
+const N = (id, label, facts, tags = ['loss_risk']) => ({ id, label, facts, tags });
+
+test('nearDupFloor·factKey·conceptText: 기존 노드끼리 가장 가까운 쌍, 공백·문장부호 무시, 이름. 사실', () => {
+  const nodes = [N('a', 'A', []), N('b', 'B', []), N('c', 'C', [])];
+  const f = nearDupFloor(nodes, [unit(0), unit(30), unit(80)]);
+  assert.deepEqual([f.a, f.b, f.score], ['a', 'b', Math.round(Math.cos(Math.PI / 6) * 1000) / 1000]);
+  assert.equal(factKey('보스를  잡으면, 보상이 생긴다.'), factKey('보스를 잡으면 보상이 생긴다'));
+  assert.equal(conceptText(N('x', '큐브', ['돌린다.', '바뀐다.'])), '큐브. 돌린다. 바뀐다.');
+});
+
+test('applyNearDup: 바닥보다 가까우면 실패, 바닥 − 0.03 이상이면 확인, 같은 사실 재사용은 실패, 앞선 후보·앞 묶음과도 비교', async () => {
+  const existing = [N('a', 'A', ['가 사실이다.']), N('b', 'B', ['나 사실이다.'])];   // 0°·40° → 바닥 cos40 ≈ 0.766
+  const prior = [N('p', 'P', ['앞 묶음 사실이다.'])];                              // 200°
+  const results = [
+    R('dup', ['loss_risk']), R('close', ['loss_risk']), R('far', ['loss_risk']), R('twin', ['loss_risk']), R('reuse', ['loss_risk']), R('nearPrior', ['loss_risk']), R('failed', ['loss_risk'], 'fail')
+  ];
+  results.forEach(r => { r.node.label = r.node.id.toUpperCase(); r.node.facts = [`${r.node.id} 고유 사실이다.`]; });
+  results[4].node.facts = ['가  사실이다', '새 사실이다.'];
+  const angles = { A: 0, B: 40, P: 200, DUP: 20, CLOSE: 82, FAR: 140, TWIN: 141, REUSE: 300, NEARPRIOR: 205, FAILED: 1 };
+  const stat = await applyNearDup(results, { existing, prior, embed: fakeEmbed(angles), embedderId: 'fake' });
+  assert.equal(stat.floor.a + stat.floor.b, 'ab');
+  const by = Object.fromEntries(results.map(r => [r.node.id, r]));
+  assert.ok(by.dup.fails.includes('nearDup'), '기존 노드 A와 20°(cos 0.94) > 바닥 0.766');
+  assert.equal(by.dup.nearDup.best.id, 'a');
+  assert.ok(by.close.warns.includes('nearDupClose') && by.close.status !== 'fail', 'B와 42°(cos 0.743): 바닥 − 0.03 안');
+  assert.equal(by.far.status, 'warn');
+  assert.ok(by.twin.fails.includes('nearDup'), '앞선 후보 far와 1° → 같은 묶음 안 중복');
+  assert.equal(by.twin.nearDup.best.id, 'far');
+  assert.ok(by.reuse.fails.includes('factReused'));
+  assert.deepEqual(by.reuse.nearDup.reusedFrom, ['a']);
+  assert.ok(by.nearPrior.fails.includes('nearDup'), '앞 묶음 후보 P와 5°');
+  assert.equal(by.failed.nearDup, undefined, '이미 실패한 후보는 건너뜀');
+  assert.deepEqual([stat.failed, stat.reused, stat.close], [3, 1, 1]);
+});
+
+test('applyTagDensity: 상한 = max(ceil(10% × 노드 수), 5), 넘긴 후보만 경고(거르지 않음), 실패 후보는 안 셈', () => {
+  const graphNodes = Array.from({ length: 20 }, (_, i) => N('g' + i, 'G', [], i < 5 ? ['loss_risk'] : ['market_price']));
+  const results = [R('one', ['loss_risk']), R('two', ['prob_upgrade']), R('bad', ['loss_risk'], 'fail')];
+  const d = applyTagDensity(results, { graphNodes });
+  assert.equal(d.cap, TAG_DENSITY_MIN, '22개의 10%는 3 → 최소 5');
+  assert.ok(results[0].warns.includes('tagDense') && results[0].status === 'warn');
+  assert.match(results[0].notes.at(-1), /loss_risk 6\/5/);
+  assert.equal(results[1].warns.includes('tagDense'), false);
+  assert.deepEqual(d.counts.find(c => c[0] === 'loss_risk'), ['loss_risk', 5, 6]);
+  assert.deepEqual(d.counts.find(c => c[0] === 'market_price'), ['market_price', 15, 15], '이미 넘은 태그는 표에 보이지만 새 후보가 없으면 경고 없음');
+  const big = Array.from({ length: 100 }, (_, i) => N('h' + i, 'H', [], i < 10 ? ['loss_risk'] : ['market_price']));
+  const rs = [R('x', ['loss_risk'])];
+  assert.equal(applyTagDensity(rs, { graphNodes: big }).cap, 11, '101개의 10% → 11');
+  assert.equal(rs[0].warns.includes('tagDense'), false, '11/11은 상한 안');
+});
