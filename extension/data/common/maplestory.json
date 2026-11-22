@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-5",
+  "version": "2026.11.22-6",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -33,12 +33,12 @@
       "id": "cube", "label": "잠재능력 재설정(큐브)", "aliases": ["잡옵"],
       "facts": [
         "큐브나 메소로 잠재능력을 재설정하면 장비의 잠재능력 옵션이 무작위로 다시 정해진다.",
-        "원하는 옵션 조합이 나올 때까지 여러 번 돌리는 경우가 많다.",
-        "옵션별 등장 확률이 공개되어 있어 평균 몇 개가 드는지 계산하기도 한다."
+        "옵션별 등장 확률이 공개되어 있어 평균 몇 개가 드는지 계산하기도 한다.",
+        "원하는 옵션 조합이 나올 때까지 여러 번 돌리는 경우가 많다."
       ],
       "tags": ["random_reroll", "expected_value", "prob_upgrade"],
       "sources": ["https://maplestory.nexon.com/News/Update/799", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/413", "https://maplestory.nexon.com/Guide/OtherProbability/cube/black", "https://maplestory.nexon.com/News/Notice/Notice/133316"],
-      "verifiedAt": "2026-10-11"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "arcane_symbol", "label": "아케인 심볼", "weakAliases": ["세금"],
@@ -64,12 +64,12 @@
     {
       "id": "boss_entry", "label": "보스 입장 조건과 난이도", "aliases": ["데카", "풀데카", "최소컷"],
       "facts": [
-        "보스마다 입장할 수 있는 최소 레벨이 정해져 있다.",
-        "같은 보스라도 난이도에 따라 필요한 스펙과 받는 보상이 다르다."
+        "같은 보스라도 난이도에 따라 필요한 스펙과 받는 보상이 다르다.",
+        "보스마다 입장할 수 있는 최소 레벨이 정해져 있다."
       ],
       "tags": ["threshold_req", "progression_gate"],
       "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/459", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/458"],
-      "verifiedAt": "2026-11-08"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "weekly_boss", "label": "주간 보스와 결정석", "aliases": ["메요일"],
@@ -250,13 +250,13 @@
     {
       "id": "mvp_membership", "label": "MVP 등급",
       "facts": [
-        "MVP 등급은 메이플ID에서 최근 일정 기간 동안 쓴 캐시 금액의 합으로 주 단위로 정해진다.",
         "등급이 높을수록 매주 받는 보상과 상시 혜택이 커지고, 최근 구매 금액이 기준에 못 미치면 등급이 내려간다.",
+        "MVP 등급은 메이플ID에서 최근 일정 기간 동안 쓴 캐시 금액의 합으로 주 단위로 정해진다.",
         "최고 등급 기준을 넘겨 쓴 금액은 정해진 한도까지 이월되어, 다음 등급 갱신 때 모자란 만큼 자동으로 쓰인다."
       ],
       "tags": ["threshold_req"],
       "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/425"],
-      "verifiedAt": "2026-11-21"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "burning_field", "label": "버닝 필드",
