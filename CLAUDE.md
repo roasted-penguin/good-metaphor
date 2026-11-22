@@ -50,6 +50,7 @@ npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 �
 npm run eval -- --judge gemini-choice  # 판정기에 문장 → 추상 태그를 물어 태그 top-1·대신/함께 hit@1·회귀·지연(T-120, ADR 0014). 결과는 .tmp 캐시, --rpm 10, --judge-weight 0.05. 호버에는 안 씀
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
 npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내기를 평가셋·검증셋·가드와 대조(베낀 예문 후보를 거름). 반영 절차는 /approve-corrections
+npm run node-pipeline:index|draft|check|gate|apply -- --interest <id>  # 반자동 노드 파이프라인(T-194): 공식 페이지 색인 → LLM 후보 → 자동 검사 시트 → 회귀 관문(대체 → 실제 확장) → 패치. 원문 저장 안 함, 실제 그래프는 --write-real + 관문 browser만. tools/node-pipeline/README.md
 ```
 
 확장 수동 실행: `chrome://extensions` → 개발자 모드 → 압축해제된 확장 로드 → `extension/`. 코드를 고치면 확장 카드의 새로고침 버튼 + 페이지 새로고침.
