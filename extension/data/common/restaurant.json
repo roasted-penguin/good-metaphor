@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.22-6",
+  "version": "2026.11.22-7",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -189,7 +189,8 @@
         "고기 메뉴는 정해진 무게당 가격으로 적어야 한다."
       ],
       "tags": [
-        "threshold_req"
+        "threshold_req",
+        "compliance_procedure"
       ],
       "sources": [
         "https://easylaw.go.kr/CSP/OnhunqueansInfoRetrieve.laf?onhunqnaAstSeq=91&onhunqueSeq=4361",
@@ -242,7 +243,8 @@
         "영업을 시작한 뒤에도 영업자는 해마다 위생교육을 받아야 한다."
       ],
       "tags": [
-        "progression_gate"
+        "progression_gate",
+        "compliance_procedure"
       ],
       "sources": [
         "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=839&ccfNo=5&cciNo=1&cnpClsNo=1",
