@@ -27,6 +27,7 @@ test('buildTagFitPrompt: 사실만 근거, 태그마다 desc와 예문(다른 �
 test('parseTagFit: 물은 태그만, yes/no만, 코드 울타리 허용, 꼴이 틀리면 null', () => {
   const m = parseTagFit('```json\n{"tags":[{"id":"a","verdict":"yes","reason":"맞아요"},{"id":"b","verdict":"no","reason":"억지"},{"id":"z","verdict":"yes"},{"id":"c","verdict":"maybe"}]}\n```', ['a', 'b', 'c']);
   assert.deepEqual([...m.entries()], [['a', { verdict: 'yes', reason: '맞아요' }], ['b', { verdict: 'no', reason: '억지' }]]);
+  assert.deepEqual([...parseTagFit('[{"id":"a","verdict":"no","reason":"r"}]', ['a']).keys()], ['a'], '배열만 낸 답도 받는다');
   assert.equal(parseTagFit('아무 말', ['a']), null);
   assert.equal(parseTagFit('{"verdict":"yes"}', ['a']), null);
 });

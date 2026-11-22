@@ -43,9 +43,10 @@ export function buildTagFitPrompt({ node, tags }) {
  */
 export function parseTagFit(text, ids) {
   try {
-    const t = String(text || '').replace(/```(?:json)?/gi, '');
-    const v = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1));
-    const list = Array.isArray(v.tags) ? v.tags : null;
+    const t = String(text || '').replace(/```(?:json)?/gi, '').trim();
+    // 모델이 {"tags": [...]} 대신 배열만 내는 일이 있다(2026-11-22 gemini-3.5-flash-lite 3번). 배열도 받는다
+    const v = t.startsWith('[') ? JSON.parse(t.slice(0, t.lastIndexOf(']') + 1)) : JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1));
+    const list = Array.isArray(v) ? v : Array.isArray(v.tags) ? v.tags : null;
     if (!list) return null;
     const want = new Set(ids);
     const out = new Map();
