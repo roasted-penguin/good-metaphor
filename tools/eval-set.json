@@ -1,5 +1,5 @@
 [
-  { "sentence": "API 서버는 분당 요청 수에 상한을 두어 한 사용자가 자원을 독점하지 못하게 한다.", "expectNodes": ["weekly_boss", "arcane_symbol", "profession", "monster_park", "party_quest", "mystery_barrier", "guild_contribution"], "expectTag": "periodic_cap" },
+  { "sentence": "API 서버는 분당 요청 수에 상한을 두어 한 사용자가 자원을 독점하지 못하게 한다.", "expectNodes": ["weekly_boss", "arcane_symbol", "profession", "monster_park", "party_quest", "mystery_barrier", "guild_contribution", "training_ground_replay"], "expectTag": "periodic_cap" },
   { "sentence": "레버리지는 이익과 손실을 모두 키워서 작은 가격 하락에도 원금을 잃을 수 있다.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "finance" },
   { "sentence": "중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.", "expectNodes": ["meso_inflation", "meso"], "expectTag": "inflation" },
   { "sentence": "한정판 운동화는 구하기 어려워 되팔 때 가격이 크게 오른다.", "expectNodes": ["auction"], "expectTag": "scarcity_value" },
