@@ -73,8 +73,13 @@ export function marginsOf(cases, rank) {
   const out = [];
   cases.forEach((c, i) => {
     if (c.forbidNodes?.length || !c.expectNodes?.length) return;
-    const margin = marginOf(rank(c, i), c.expectNodes);
-    if (margin !== null) out.push({ sentence: c.sentence, margin });
+    const ranked = rank(c, i);
+    const margin = marginOf(ranked, c.expectNodes);
+    if (margin === null) return;
+    // 경쟁자(T-192): 맞혔으면 기대 밖 최고 노드, 틀렸으면 1위 노드. 노드를 더할 때 누가 여유를 깎는지 보려고
+    const isExp = x => c.expectNodes.includes(x.id);
+    const rival = isExp(ranked[0]) ? ranked.find(x => !isExp(x))?.id : ranked[0].id;
+    out.push({ sentence: c.sentence, margin, rival });
   });
   return out;
 }
@@ -168,6 +173,9 @@ export function interestArgError(argv, interest) {
 export function pickSets(argv, { evalSet, validation, holdout, interestSet, extraSet = null, extraName = '' }, interest = null) {
   // --set <파일>(T-191·T-192): 그 파일 문장만 채점(관심사 무관, 가드 대상 아님). 확장 노드가 실제로 쓰이는지 보는 셋
   if (argv.includes('--set')) return [{ name: `추가 셋 ${extraName}`.trim(), cases: extraSet || [], guarded: false }];
+// custom = --set <파일>로 고른 셋(T-191·T-192 확장 노드 확인용). 있으면 그 셋 하나만(가드 대상 아님)
+export function pickSets(argv, { evalSet, validation, holdout, interestSet, custom }, interest = null) {
+  if (custom) return [{ name: custom.name, cases: custom.cases || [], guarded: false }];
   if (interest && interest.id !== 'maplestory') {
     if (argv.includes('--holdout')) return [{ name: `${interest.label} 홀드아웃`, cases: holdout || [], guarded: false }];
     return [{ name: `${interest.label} 평가셋`, cases: interestSet || [], guarded: true }];

@@ -35,6 +35,7 @@
 //        [--judge-candidate combine-best] # 결합 방식 후보를 지금 방식(admin.preciseTagJudge.mode)과 문장별 1위로 비교(T-186)
 //   [--precomputed]                    # 그래프 벡터를 동봉 파일(extension/data/vectors)에서 꺼내 채점, 런타임과 비트 동일 수 출력 (T-193)
 //   npm run eval -- --set tools/eval-expand-maplestory.json  # 그 파일 문장만 채점(가드 대상 아님, --interest와 같이 쓰면 그 관심사 그래프로, T-191)
+//   npm run eval -- --set tools/eval-expand-restaurant.json --interest restaurant  # 평가셋 대신 그 파일만 채점(가드 대상 아님, T-192)
 //   [--dump-top1 <파일>]               # 셋·줄별 문장 1위를 JSON으로 저장(다른 실행과 비교용, T-186). 정밀은 임베딩만·정밀·정밀+판정·후보
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
@@ -81,13 +82,22 @@ const setAt = process.argv.indexOf('--set');
 const extraPath = setAt > 0 ? process.argv[setAt + 1] : null;
 if (setAt > 0 && (!extraPath || extraPath.startsWith('--'))) throw new Error('--set 뒤에 평가 파일 경로를 주세요: --set tools/eval-expand-maplestory.json');
 if (setAt > 0 && (process.argv.includes('--holdout') || process.argv.includes('--write-margin-known'))) throw new Error('--set은 --holdout·--write-margin-known과 같이 쓰지 않아요');
+// --set <파일>: 평가셋 대신 그 파일(eval-set과 같은 형식, 프로젝트 루트 기준 경로)만 채점 (T-191·T-192)
+function customSet() {
+  const i = process.argv.indexOf('--set');
+  if (i < 0) return null;
+  const f = process.argv[i + 1];
+  if (!f || f.startsWith('--')) throw new Error('--set 뒤에 파일 경로를 써요: --set tools/eval-expand-restaurant.json');
+  return { name: `셋 ${f}`, cases: JSON.parse(fs.readFileSync(f, 'utf8')) };
+}
 const sets = pickSets(process.argv, {
   extraSet: extraPath ? JSON.parse(fs.readFileSync(new URL(`../${extraPath}`, here))) : null,
   extraName: extraPath ? extraPath.split('/').pop() : '',
   evalSet: isDefaultInterest ? readSet('./eval-set.json') : [],
   validation: isDefaultInterest ? readSet('./eval-holdout.json') : [],
   holdout: process.argv.includes('--holdout') ? readSet(`./${files.holdout}`) : [],
-  interestSet: isDefaultInterest ? [] : readSet(`./${files.evalSet}`)
+  interestSet: isDefaultInterest ? [] : readSet(`./${files.evalSet}`),
+  custom: customSet()
 }, interest);
 const useFallback = process.argv.includes('--fallback');
 const verbose = process.argv.includes('-v');
@@ -356,7 +366,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
       mixedResult = r;
       dumpTop1(name, mode ? `혼합 · ${modeName}` : '혼합', cases, cases.map((c, i) => rank(c, i)[0]?.id));
       margins = marginsOf(cases, rank);
-      if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…`);
+      if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…${m.rival ? `  (경쟁 ${m.rival})` : ''}`);
       // 음성 문장(T-149): 1위가 금지 노드가 아니면 통과. hit@1 분모와 따로
       if (r.negative.n) {
         console.log(`  alias-negative ${r.negative.pass}/${r.negative.n}`);
