@@ -95,12 +95,76 @@ export function bigramOverlap(fact, pageText) {
   return all ? Math.round((hit / all) * 100) / 100 : 0;
 }
 
+/* ───── 이름 핵심 낱말 (T-205, 조문 꼴 본문) ───── */
+
+// 법령 본문은 "제40조(건강진단)"처럼 짧은 조 제목 + 조문이라, LLM이 지은 이름("건강진단과 종사 자격 제한")이 그대로 나오는 일이
+// 거의 없다(T-198 법령 후보 38개 중 30개가 "이름이 본문에 없음"). 그래서 이름을 핵심 낱말로 쪼개 본문·장 제목·조 제목에서 따로 찾는다.
+// 끝 조사는 이름에 흔한 것만 뗀다(과·와·의·및·을·를·에서·으로). 이·가·은·는·로·에는 낱말 끝(평가·회의·경로)과 헷갈려 두지 않는다
+const LABEL_PARTICLE = /(과|와|의|을|를|에서|으로)$/;
+// "의"·"과"로 끝나는 흔한 낱말(심의·협의·부과·초과…)은 조사가 아니다
+const LABEL_KEEP_END = /(심의|협의|회의|합의|동의|주의|정의|논의|건의|이의|결의|부과|통과|초과|경과|결과|효과|성과|마을)$/;
+const LABEL_STOP = new Set(['및', '등', '또는', '그', '이', '저']);
+export function labelNouns(label) {
+  const toks = String(label ?? '').normalize('NFKC').split(/[\s·・,，/()（）[\]「」'"“”]+/).filter(Boolean);
+  const out = [];
+  for (let t of toks) {
+    if (t.length >= 3 && !LABEL_KEEP_END.test(t)) t = t.replace(LABEL_PARTICLE, '');
+    if (t.length < 2 || LABEL_STOP.has(t) || out.includes(t)) continue;
+    out.push(t);
+  }
+  return out;
+}
+
+// 낱말이 글에 있는가(공백 무시). 붙여 쓴 긴 낱말(4자 이상)은 앞뒤 반쪽이 모두 있으면 있다고 본다("갱신요구권" ↔ "계약갱신 요구권")
+export function nounIn(noun, normText) {
+  const n = norm(noun);
+  if (!n) return false;
+  if (normText.includes(n)) return true;
+  if (n.length < 4) return false;
+  const h = Math.floor(n.length / 2);
+  return normText.includes(n.slice(0, h)) && normText.includes(n.slice(h));
+}
+
+// 조 제목: "제40조(건강진단)", "제12조의2 (영업지역의 보호)" → [{ no: '제40조', title: '건강진단' }]
+const ARTICLE_RE = /제\s*(\d+)\s*조(?:\s*의\s*(\d+))?\s*[(（]([^)）]{1,40})[)）]/g;
+export function articleTitles(text) {
+  const out = [];
+  for (const m of String(text ?? '').normalize('NFKC').matchAll(ARTICLE_RE)) out.push({ no: `제${m[1]}조${m[2] ? '의' + m[2] : ''}`, title: m[3].trim() });
+  return out;
+}
+
+/**
+ * 이름 핵심 낱말이 본문·제목(절·장 제목 + 조 제목)에 얼마나 있는가. 숫자와 조 번호만 남긴다(D-5)
+ * @returns {{ nouns:number, inPage:number, inTitles:number, article:string|null, articleHits:number }}
+ *   article = 이름 낱말을 가장 많이 담은 조 제목의 조 번호(1개 이상일 때), articleHits = 그 조 제목에 든 낱말 수
+ */
+export function labelSignals(label, pageText, sectionTitle = '') {
+  const nouns = labelNouns(label);
+  const body = norm(pageText);
+  const arts = articleTitles(pageText);
+  const titles = norm([sectionTitle, ...arts.map(a => a.title)].join(' '));
+  let article = null, articleHits = 0;
+  for (const a of arts) {
+    const t = norm(a.title);
+    const hits = nouns.filter(n => nounIn(n, t)).length;
+    if (hits > articleHits) { article = a.no; articleHits = hits; }
+  }
+  return {
+    nouns: nouns.length,
+    inPage: nouns.filter(n => nounIn(n, body)).length,
+    inTitles: nouns.filter(n => nounIn(n, titles)).length,
+    article,
+    articleHits
+  };
+}
+
 // 후보 하나의 근거 지표. 본문 없이도 check가 판단할 수 있게 숫자만 담는다
-export function groundingSignals(item, pageText) {
+export function groundingSignals(item, pageText, sectionTitle = '') {
   const label = String(item?.label ?? '');
   const facts = Array.isArray(item?.facts) ? item.facts.filter(f => typeof f === 'string') : [];
   return {
     labelInPage: !!label && norm(pageText).includes(norm(label)),
+    labelNouns: labelSignals(label, pageText, sectionTitle),
     factOverlap: facts.map(f => bigramOverlap(f, pageText)),
     copiedRun: facts.map(f => longestCommonRun(f, pageText))
   };
@@ -126,7 +190,7 @@ export function draftCandidates(text, { page, pageText, tagIds = null }) {
     sources: [page.url],
     pageTitle: page.title || '',
     ...(page.section ? { section: page.section } : {}),
-    grounding: groundingSignals(x, pageText)
+    grounding: groundingSignals(x, pageText, page.section || '')
   }));
   // 맞는 태그 없음(T-194 실패 사유 1위)은 check까지 가지 않고 여기서 버린다. 사유는 기록(T-195)
   if (!tagIds) return { candidates, dropped: [] };
