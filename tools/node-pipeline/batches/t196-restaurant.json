@@ -1,6 +1,6 @@
 {
   "interest": "restaurant",
-  "note": "T-196 실제 확장 관문 입력: 대체 임베더 관문 채택 후보(우리 말로 쓴 사실·출처 주소만, 원문 없음, D-5). npm run node-pipeline:gate -- --interest restaurant --results 이 파일 --embedder browser",
+  "note": "T-196 실제 확장 관문 입력: 메인 판정(2026-11-23) 뒤 남은 후보(우리 말로 쓴 사실·출처 주소만, 원문 없음, D-5). npm run node-pipeline:gate -- --interest restaurant --results 이 파일 --embedder browser",
   "results": [
     {
       "batch": 3,
@@ -46,25 +46,6 @@
       "edges": []
     },
     {
-      "batch": 3,
-      "status": "warn",
-      "node": {
-        "id": "tax_payment_fee_reduction",
-        "label": "국세 납부대행수수료 인하",
-        "facts": [
-          "카드 납부에 적용되는 대행수수료율이 일괄적으로 인하되며 영세사업자의 특정 세목에는 더 낮은 수수료율이 적용된다.",
-          "연간 총수입금액이 일정 규모 이상인 납세자는 수수료율 인하 대상에서 제외된다."
-        ],
-        "tags": [
-          "brokerage_fee"
-        ],
-        "sources": [
-          "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=41130&cntntsId=239085"
-        ]
-      },
-      "edges": []
-    },
-    {
       "batch": 5,
       "status": "warn",
       "node": {
@@ -104,49 +85,6 @@
         {
           "to": "health_certificate_rule",
           "rel": "자격 요건 관련"
-        }
-      ]
-    },
-    {
-      "batch": 5,
-      "status": "pass",
-      "node": {
-        "id": "franchise_dispute_mediation",
-        "label": "가맹사업 분쟁조정협의회",
-        "facts": [
-          "가맹사업거래와 관련된 마찰을 원만하게 해결하기 위해 공익, 가맹본부, 가맹점사업자를 대표하는 위원들로 구성된 협의회에 조정을 신청할 수 있다.",
-          "조정 신청이 접수되면 협의회는 사실관계를 확인하고 합의를 권고하거나 조정안을 마련하며, 합의가 성립되면 재판상 화해와 동일한 효력을 갖는 조서가 작성된다."
-        ],
-        "tags": [
-          "role_division"
-        ],
-        "sources": [
-          "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EA%B0%80%EB%A7%B9%EC%82%AC%EC%97%85%EA%B1%B0%EB%9E%98%EC%9D%98%EA%B3%B5%EC%A0%95%ED%99%94%EC%97%90%EA%B4%80%ED%95%9C%EB%B2%95%EB%A5%A0"
-        ]
-      },
-      "edges": []
-    },
-    {
-      "batch": 6,
-      "status": "warn",
-      "node": {
-        "id": "sanitation_facilities",
-        "label": "조리장 위생 설비",
-        "facts": [
-          "조리장 안에는 음식을 다루기 위한 조리, 세척, 폐기물 보관 및 손 씻기 시설을 각각 갖추어야 한다.",
-          "식기류를 위생적으로 관리하기 위해 살균소독기나 열탕세척소독시설 중 하나 이상을 설치해야 한다."
-        ],
-        "tags": [
-          "threshold_req"
-        ],
-        "sources": [
-          "https://www.ddm.go.kr/health/contents.do?key=1305"
-        ]
-      },
-      "edges": [
-        {
-          "to": "hygiene_inspection",
-          "rel": "관련"
         }
       ]
     },
