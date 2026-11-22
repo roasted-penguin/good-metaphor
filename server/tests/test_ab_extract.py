@@ -226,3 +226,18 @@ def test_pending_chunks_skips_rows_already_recorded_for_that_combo():
     assert [c["id"] for c in ab.pending_chunks(chunks, rows, on)] == ["b"]
     assert [c["id"] for c in ab.pending_chunks(chunks, rows, off)] == ["a", "c"]
     assert ab.pending_chunks(chunks, [], ab.combo_key("qwen3.5:9b", True)) == chunks
+
+
+def test_run_one_records_json_mode_from_chat():
+    async def chat(text):
+        return {"message": {"content": '{"entities": [], "relationships": []}'}, "eval_count": 3}
+
+    chat.json_mode = lambda: True
+    r = ab.run_one(chat, "글")
+    assert r["jsonMode"] is True and r["entitiesRaw"] == [] and "error" not in r
+
+    async def plain(text):
+        return {"message": {"content": "아님"}}
+
+    r = ab.run_one(plain, "글")
+    assert r["jsonMode"] is None and r["error"].startswith("parse")
