@@ -45,6 +45,7 @@ export const REASONS = {
   communityWeak: '사실과 겹치는 출처 페이지가 2곳이 안 돼요. 두 출처가 정말 같은 사실을 말하는지 봐 주세요.',
   copiedSource: '출처 페이지 문장을 거의 그대로 옮긴 사실이 있어요(D-5·D-8: 우리 말로).',
   copiedSourceHeavy: '출처 페이지 문장을 길게 그대로 옮겼어요(D-5·D-8).',
+  storeNameReview: '커뮤니티·블로그·뉴스에서 온 식당 사실이에요. 특정 가게·브랜드 이름이 없는지 봐 주세요(ADR 0016).',
   dupNear: '거의 같은 노드가 그래프에 있어요.',
   dupSimilar: '비슷한 노드가 있어요. 같은 개념인지 봐 주세요.',
   structure: '첫 사실이 구조(무엇에 따라 어떻게 바뀌는가)보다 정의에 가까워요.',
@@ -270,6 +271,7 @@ export async function checkCandidate(c, ctx) {
       if (sourceKind === 'community' && sourceChecks.filter(x => x.overlap >= OVERLAP_WARN).length < 2) warns.add('communityWeak');
     } else if (sourceKind === 'community') fails.add('communityUnprobed');
   }
+  if (sourceKind === 'community' && rules.storeNameReview) warns.add('storeNameReview');
 
   // 중복
   const near = dups.nearest({ label, facts });

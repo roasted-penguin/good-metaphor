@@ -17,7 +17,7 @@ const INVEN = 'https://www.inven.co.kr/board/maple/5974/123';
 
 /* ───── 분류 ───── */
 
-test('classifySource: 공식·커뮤니티(허용 경로만)·https만, 식당은 커뮤니티 없음', () => {
+test('classifySource: 공식·커뮤니티(허용 경로만)·https만', () => {
   assert.deepEqual(classifySource(OFF, 'maplestory'), { kind: 'official', site: 'official' });
   assert.deepEqual(classifySource(NAMU, 'maplestory'), { kind: 'community', site: 'namuwiki' });
   assert.deepEqual(classifySource(INVEN, 'maplestory'), { kind: 'community', site: 'inven' });
@@ -32,9 +32,25 @@ test('classifySource: 공식·커뮤니티(허용 경로만)·https만, 식당�
     'https://blog.naver.com/x',
     '아무거나'
   ]) assert.equal(classifySource(u, 'maplestory'), null, u);
-  assert.equal(classifySource(NAMU, 'restaurant'), null, '식당은 커뮤니티 출처를 받지 않는다(D-8은 메이플만)');
   assert.equal(classifySource('https://www.mafra.go.kr/x', 'restaurant').kind, 'official');
   assert.throws(() => classifySource(OFF, 'nope'), /출처 정책에 없는 관심사/);
+});
+
+test('classifySource 식당(2026-11-23 확대): 나무위키·티스토리·브런치·다음 뉴스는 커뮤니티, 네이버 블로그·뉴스·인벤은 밖, 표준국어대사전은 공공', () => {
+  const k = u => classifySource(u, 'restaurant');
+  assert.deepEqual(k(NAMU), { kind: 'community', site: 'namuwiki' });
+  assert.deepEqual(k('https://someone.tistory.com/123'), { kind: 'community', site: 'tistory' });
+  assert.deepEqual(k('https://brunch.co.kr/@writer/12'), { kind: 'community', site: 'brunch' });
+  assert.deepEqual(k('https://v.daum.net/v/20261101000000000'), { kind: 'community', site: 'daumnews' });
+  assert.deepEqual(k('https://stdict.korean.go.kr/search/searchView.do?word_no=1'), { kind: 'official', site: 'official' });
+  for (const u of [
+    'https://blog.naver.com/someone/1',        // robots: RAG 목적 봇 접근 금지 명시
+    'https://n.news.naver.com/article/001/1',  // robots: Disallow /
+    'https://cafe.naver.com/x/1',
+    'https://brunch.co.kr/search?q=x',         // 글 주소(/@)만
+    'https://tistory.com/x',                   // 플랫폼 첫 화면은 블로그 글이 아님
+    INVEN                                      // 메이플 전용
+  ]) assert.equal(k(u), null, u);
 });
 
 test('isOfficialHost: 목록·초안은 공식만(커뮤니티는 수집하지 않음)', () => {
@@ -51,7 +67,7 @@ test('정책 파일: 커뮤니티 항목마다 사이트 id·호스트·경로�
     assert.ok(p.official.length >= 1, id);
     const sites = p.community.map(c => c.site);
     assert.equal(new Set(sites).size, sites.length, id);
-    for (const c of p.community) assert.ok(c.site && c.host && c.paths?.length, JSON.stringify(c));
+    for (const c of p.community) assert.ok(c.site && (c.host || c.suffix?.startsWith('.')), JSON.stringify(c));
   }
 });
 
@@ -65,6 +81,10 @@ test('corroboration: 공식만 → official, 커뮤니티 + 공식 또는 서로
   assert.equal(c([NAMU, OFF]).corroborated, true);
   assert.equal(c([NAMU, INVEN]).corroborated, true);
   assert.equal(c([NAMU, NAMU2]).corroborated, false, '나무위키 두 쪽은 독립 출처가 아니다');
+  const r = urls => corroboration(urls.map(u => classifySource(u, 'restaurant')));
+  assert.equal(r(['https://a.tistory.com/1', 'https://b.tistory.com/2']).corroborated, false, '티스토리 두 블로그도 한 플랫폼 = 한 곳(보수적 판정)');
+  assert.equal(r(['https://a.tistory.com/1', 'https://brunch.co.kr/@w/1']).corroborated, true);
+  assert.equal(r(['https://www.korea.kr/x', NAMU]).corroborated, true);
   assert.equal(c([]).corroborated, false);
 });
 
@@ -81,7 +101,8 @@ test('checkNodeSources: 허용 밖·교차 확인 없음·sourceKind 표시 누�
   assert.deepEqual(checkNodeSources(n([OFF], { sourceKind: 'wiki' }), 'maplestory'), ['sourceKindInvalid']);
   assert.deepEqual(checkNodeSources(n([OFF, 'https://blog.example/x']), 'maplestory'), ['sourceNotAllowed:https://blog.example/x']);
   assert.deepEqual(checkNodeSources(n([]), 'maplestory'), ['sourceMissing']);
-  assert.deepEqual(checkNodeSources(n(['https://www.korea.kr/a', NAMU], { sourceKind: 'community' }), 'restaurant'), [`sourceNotAllowed:${NAMU}`]);
+  assert.deepEqual(checkNodeSources(n(['https://www.korea.kr/a', NAMU], { sourceKind: 'community' }), 'restaurant'), []);
+  assert.deepEqual(checkNodeSources(n(['https://www.korea.kr/a', 'https://blog.naver.com/x/1']), 'restaurant'), ['sourceNotAllowed:https://blog.naver.com/x/1']);
 });
 
 /* ───── 그래프 검증 ───── */
@@ -198,4 +219,19 @@ test('apply: sourceKind를 노드에 남기고(sources 뒤), 출처 정책을 �
   assert.deepEqual(applyPatch(raw, patch, { tagsFile, day: '2026-11-23' }).errors, []);
   const bad = buildPatch([r('comm_bad', [NAMU], 'community')], ['comm_bad'], { day: '2026-11-23' });
   assert.match(applyPatch(raw, bad, { tagsFile, day: '2026-11-23' }).errors.join(), /comm_bad 출처 정책: communityUncorroborated/);
+});
+
+test('check 식당: 블로그 + 커뮤니티 교차 확인은 통과(sourceKind community), 가게 이름 확인 경고, 블로그 하나만은 실패', async () => {
+  const rest = INTERESTS.restaurant;
+  const rg = loadInterestGraph('restaurant');
+  const BLOG = 'https://someone.tistory.com/12', BR = 'https://brunch.co.kr/@w/3';
+  const facts = ['점심 손님이 한꺼번에 몰리면 자리가 비기를 기다리는 줄이 생긴다.', '자리가 빨리 비면 같은 시간에 더 많은 손님을 받는다.'];
+  const page = `<p>점심때 손님이 한꺼번에 몰리면 자리가 비기를 기다리는 줄이 길어진다. 자리가 빨리 비면 같은 시간에 손님을 더 받는다.</p>`;
+  const probe = sourceProber(fakeFetcher({ [BLOG]: page, [BR]: page }), rest);
+  const c = (id, sources) => ({ id, label: id === 'lunch_wait' ? '점심 대기 줄' : '점심 대기 줄 둘', facts, tags: ['efficiency_metric'], aliases: [], edges: [], sources });
+  const [ok, solo] = await checkBatch([c('lunch_wait', [BLOG, BR]), c('lunch_wait_b', [BLOG])], { cfg: rest, graph: rg, tags: rg.tags, blockTerms: [], probe });
+  assert.equal(ok.fails.includes('communityUncorroborated'), false, ok.fails);
+  assert.equal(ok.node.sourceKind, 'community');
+  assert.ok(ok.warns.includes('storeNameReview'), ok.warns);
+  assert.ok(solo.fails.includes('communityUncorroborated'), solo.fails);
 });

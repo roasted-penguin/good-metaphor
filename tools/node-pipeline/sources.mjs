@@ -1,4 +1,4 @@
-// 노드 파이프라인(T-194) 관심사별 출처 설정. 목록·초안은 공식·공공 출처만 돈다(D-5). 커뮤니티(나무위키·인벤, D-8·ADR 0016)는
+// 노드 파이프라인(T-194) 관심사별 출처 설정. 목록·초안은 공식·공공 출처만 돈다(D-5). 커뮤니티(메이플 나무위키·인벤, 식당 나무위키·블로그·뉴스, D-8·ADR 0016)는
 // 수집하지 않고, 사람·에이전트가 읽고 우리 문장으로 쓴 후보의 확인용 출처로만 받는다(check가 교차 확인·베낌 검사).
 // 호스트 목록 원본은 tools/source-policy.json(그래프 테스트와 같은 기준)
 // - allowHost(host): 공식 호스트(index가 목록 링크를 거를 때)
@@ -79,7 +79,8 @@ export const INTERESTS = {
   restaurant: {
     id: 'restaurant',
     domain: '식당',
-    // 공공·공식 자료만(restaurant.test.mjs와 같은 기준): *.go.kr, 정책브리핑, 소상공인시장진흥공단. 커뮤니티 출처 없음(D-8은 메이플만)
+    // 목록·초안은 공공·공식 자료만: *.go.kr(표준국어대사전 포함), 정책브리핑, 소상공인시장진흥공단.
+    // 커뮤니티·블로그·뉴스(나무위키·티스토리·브런치·다음 뉴스, ADR 0016)는 수집하지 않고 확인용 출처로만(allowSource)
     allowHost: h => isOfficialHost(h, 'restaurant'),
     allowSource: url => classifySource(url, 'restaurant'),
     listings: [
@@ -164,7 +165,8 @@ export const INTERESTS = {
       allowAliases: false, // 식당 그래프는 별칭이 없다(restaurant.test.mjs). apply가 뺀다
       allowLatin: false,   // 영문은 브랜드일 수 있어 실패
       labelNoDigits: true, // 이름에도 숫자 없음(restaurant.test.mjs)
-      numberAllow: []      // 숫자는 하나도 안 된다
+      numberAllow: [],     // 숫자는 하나도 안 된다
+      storeNameReview: true // 커뮤니티 출처 후보는 특정 가게 이름 확인(ADR 0016, 경고)
     }
   }
 };
