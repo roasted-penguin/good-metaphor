@@ -1,9 +1,9 @@
-# 반자동 노드 파이프라인 (T-194)
+# 반자동 노드 파이프라인 (T-194, 수확·대안 정답 T-195)
 
 관심사마다 노드 1,000개를 손으로 고르기는 어렵다. 이 도구는 공식·공공 페이지에서 후보 개념을 뽑고, 자동 검사와 회귀 관문을 거친 것만 공통 그래프 패치로 만든다. 사람(또는 메인 세션)은 리뷰 시트를 보고 승인만 한다.
 
 ```
-index → draft → check → (승인 id 고르기) → gate(fallback) → gate(browser) → apply
+index → draft → check → (승인 id 고르기) → gate(fallback) → gate(browser) → (대안 정답 확인 → accept-alt) → apply
 ```
 
 작업 파일은 모두 `.tmp/node-pipeline/`에 둔다(커밋하지 않음).
@@ -22,23 +22,34 @@ index → draft → check → (승인 id 고르기) → gate(fallback) → gate(
 # 1. 색인: 목록 페이지 → 상세 페이지 URL·제목 (본문은 읽지 않음)
 npm run node-pipeline:index -- --interest maplestory [--pages 3]
 
-# 2. 초안: 색인에서 아직 안 한 페이지 N개 → 페이지마다 LLM 1번 → 후보 (묶음 번호 자동)
-#    키는 GEMINI_API_KEY 등 환경 변수(값은 출력하지 않음). Gemini 무료 한도는 하루 500번을 다른 작업과 나눠 쓴다
-npm run node-pipeline:draft -- --interest maplestory --limit 10 [--kind guide,update] [--provider gemini] [--model ...]
+# 2. 초안: 색인에서 아직 안 한 페이지 N개 → 절마다 LLM 1번 → 후보 (묶음 번호 자동)
+#    키는 GEMINI_API_KEY 등 환경 변수(값은 출력하지 않음). Gemini 무료 한도는 하루 500번을 다른 작업과 나눠 쓴다.
+#    --max-calls로 이번 실행 호출 상한(캐시 적중은 안 셈). 상한에 걸린 페이지는 다음 실행에 다시(이미 한 절은 캐시로 공짜)
+npm run node-pipeline:draft -- --interest maplestory --limit 10 [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
 
 # 3. 자동 검사 → 리뷰 시트 .tmp/node-pipeline/<관심사>-batch-N.md (+ .json)
 npm run node-pipeline:check -- --interest maplestory [--batch N] [--no-probe]
 
-# 4. 회귀 관문: 후보를 그래프 사본에 넣어 평가 문장(평가셋·검증셋·홀드아웃·가드)으로 잰다
-npm run node-pipeline:gate -- --interest maplestory --batch N [--approve ids.json]                    # 대체 임베더(거름)
+# 4. 회귀 관문: 후보를 그래프 사본에 넣어 평가 문장(평가셋·검증셋·홀드아웃·가드)으로 잰다. --batch all이면 그 관심사 묶음을 모두 합쳐
+npm run node-pipeline:gate -- --interest maplestory --batch N [--approve ids.json] [--explain]          # 대체 임베더(거름)
 npm run node-pipeline:gate -- --interest maplestory --batch N --approve .tmp/node-pipeline/maplestory-batch-N.accepted-fallback.json --embedder browser   # 실제 확장(최종)
 
-# 5. 반영: 승인 id 중 관문을 통과한 것만 패치. 기본 출력은 .tmp 사본
+# 4-1. 대안 정답 확인: .alt-<임베더>.md 표를 보고, 맞는 줄은 같은 이름 .json에서 approve를 true로 → 평가 파일 expectNodes에 더함
+npm run node-pipeline:accept-alt -- .tmp/node-pipeline/maplestory-batch-N.alt-browser.json [--dir tools]
+
+# 5. 반영: 승인 id 중 관문을 통과한 것만 패치(대안 정답이 남은 노드는 accept-alt 뒤에만). 기본 출력은 .tmp 사본
 npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.json [--gate browser|fallback|none] [--out 경로]
 npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.json --write-real          # 실제 그래프(관문 browser 필수)
 ```
 
 승인 파일은 id 문자열 JSON 배열이다(`["guild_castle", "daily_gift"]`). 실패 후보는 apply가 받지 않는다.
+
+## 초안 수확 (T-195)
+
+- **절 단위 초안.** 본문을 h1~h3 제목으로 나눠(`draft.mjs` `splitSections`) 절마다 LLM을 한 번 부른다. 예전에는 12,000자에서 잘려 긴 패치 노트는 목차·이벤트만 보였다. 건너뛸 절(`sources.mjs` `sectionSkip`: 메이플 이벤트·버닝·패스·오류 수정·댓글 등, 식당 메뉴·만족도 조사)과 너무 짧은 절은 부르지 않고, 1,500자보다 작은 절은 이웃과 합치고, 12,000자를 넘는 절은 줄 단위로 자르고, 페이지당 10덩어리까지. 건너뛸 페이지 제목은 `pageSkip`(메이플 "스킬 조정" 패치).
+- **한 절에 여러 후보.** 프롬프트가 시스템·규칙·재화·제약을 빠짐없이 따로(보통 2~5개) 고르게 한다. 같은 페이지 앞 절에서 나온 개념은 다음 절의 [이미 있는 개념]에 들어간다.
+- **맞는 태그 없음은 초안에서 버림.** 목록 안 태그가 하나도 없는 후보는 check에 넘기지 않고 초안 파일 `dropped`(사유 `noTags`, 출처·절)에 남긴다.
+- **LLM 답 캐시.** `.tmp/node-pipeline/cache/llm-<해시>.json`(제공자·모델·프롬프트 해시 → LLM 답). 저장하는 것은 LLM이 우리 말로 쓴 답뿐이고 본문은 해시 키로만 쓴다(D-5).
 
 ## 자동 검사 (check)
 
@@ -58,7 +69,9 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 - **1위 회귀:** 맞던 문장이 틀림 → 그 문장 1위를 차지한 후보가 범인
 - **음성 실패:** 음성 문장(forbidNodes)이 통과하다 실패
 - **여유 악화:** 1위는 맞지만 여유가 줄어 얇은 선(`--margin`, 기본 0.005)보다 작아짐. `eval --margin-guard`의 "새로 얇아졌거나 바닥보다 더 얇아짐"과 같은 뜻이고, 가드 문장뿐 아니라 모든 문장에 건다. `--strict-margin`이면 가드 문장은 조금만 줄어도 실패
-- 비유 없음 문장은 eval처럼 정보로만 본다
+- **비유 없음 침범(T-195):** 비유 없음 문장(`expectNodes: []`, 음성 문장 포함)의 1위를 후보가 차지함. 메인 판정(2026-11-22) "음성 문장(맞는 비유 없음)에 노드가 붙으면 그대로 회귀"
+- **대안 정답 후보(T-195, 회귀 아님):** 맞던 문장의 1위를 후보가 가져갔지만 그 후보 태그에 문장의 `expectTag`가 있으면 막지 않고 따로 표(`<관심사>-batch-N.alt-<임베더>.md`·`.json`)로 낸다. 사용자 판정(2026-11-22) "한 문장에 대해 비유가 다양하게 나올 수도 있잖아". 줄마다 문장·셋·원래 정답·새 노드·expectTag·이유(휴리스틱: 공유 태그 뜻 + 문장에 가장 가까운 사실, `--explain`이면 LLM yes/no와 한 문장 이유)가 있고 모두 메인 확인 대상이다. 메인이 맞는 줄의 `approve`를 true로 바꾸고 `accept-alt`를 돌리면 그 관심사 평가 파일(평가셋·검증셋·홀드아웃, 가드는 문장 목록이라 그대로) `expectNodes`에 새 노드를 더한다. 그 전에는 apply가 그 노드를 받지 않는다. `expectTag`가 없는 후보가 1위를 가져가면 그대로 1위 회귀이고, 여유 규칙은 바뀌지 않는다
+- `--cases-dir <폴더>`면 평가 파일을 `tools/` 대신 그 폴더에서 읽는다(accept-alt를 사본에 시연할 때)
 
 절차는 두 단계다. ① 후보를 하나씩 넣어 걸리는 후보를 뺀다. ② 남은 후보를 한꺼번에 넣어 다시 재고, 걸리면 범인만 빼고 다시 잰다(범인을 못 짚으면 문제 문장 상위 3에 든 후보를 뺀다). 결과는 `<관심사>-batch-N.gate-<임베더>.json`(사유), `<관심사>-batch-N.accepted-<임베더>.json`(채택 id)이다.
 
@@ -71,9 +84,9 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 | `sources.mjs` | 관심사별 허용 호스트·목록·씨앗·본문 표지·검사 규칙 |
 | `web.mjs` | robots.txt, 예의 바른 fetch, HTML → 글·링크·제목, 해시 |
 | `run.mjs` | index(목록 → 색인), draft(페이지 → 후보) |
-| `draft.mjs` | 페이지 초안 프롬프트(T-301 `buildDraftPrompt` 꼴), 답 파싱, 근거 지표(겹침·최장 복사) |
+| `draft.mjs` | 페이지 초안 프롬프트(T-301 `buildDraftPrompt` 꼴), 답 파싱·태그 없음 버림, 근거 지표(겹침·최장 복사), 절 나누기 |
 | `check.mjs` | 자동 검사, 리뷰 시트 |
-| `gate.mjs` | 회귀 관문 |
+| `gate.mjs` | 회귀 관문, 대안 정답 후보 표·이유, accept-alt(평가 파일 한 줄 꼴 그대로 고치기) |
 | `apply.mjs` | 패치 만들기, 판본 올리기, 검증 |
 | `cli.mjs` | 명령줄 |
 
