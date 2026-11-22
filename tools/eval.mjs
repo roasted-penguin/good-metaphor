@@ -18,7 +18,10 @@
 //   npm run eval -- --interest restaurant  # 다른 공통 관심사 그래프로 그 관심사 평가셋(tools/eval-set-<id>.json)만 채점 (T-302)
 //        [--guard]                     # 그 관심사 가드(tools/eval-guard-<id>.json)로 회귀 검사 (T-156)
 //        [--holdout]                   # 그 관심사 홀드아웃(tools/eval-unseen-<id>.json)만 (T-156). --margin-guard·--server는 메이플 전용(오류)
-//   [--margin-guard]                   # 가드 문장 중 여유가 --margin 미만이면 종료 코드 1 (선택, 여유 경고는 기본으로 실패가 아님)
+//   [--margin-guard]                   # 가드 문장 중 여유가 --margin 미만이면 종료 코드 1 (선택, 여유 경고는 기본으로 실패가 아님).
+//                                      # 단 tools/eval-margin-known.json(아는 얇은 문장, T-188)에 있고 여유가 그 바닥 이상이면 통과(래칫)
+//   [--write-margin-known]             # 지금 얇은 가드 문장으로 eval-margin-known.json 다시 쓰기(바닥 = 여유 넷째 자리 내림, task 이어받음).
+//                                      # 더 얇아진 것을 받아들일 때만, 그 PR에 EVAL_LOG 한 줄과 함께. 실제 확장(크롬) 평가로만 쓴다
 //   npm run eval -- --judge gemini-choice  # 판정기(lib/judges.js)에 문장 → 추상 태그(다중 선택)를 묻고 (T-120, ADR 0014)
 //                                      # 판정 태그 top-1, 태그 유사도 대신(replace)·함께(combine) 쓴 노드 hit@1/@3, 1위 회귀(혼합 대비), 판정 지연을 출력.
 //        [--judge-weight 0.05]         # 함께(combine)의 가중치: 태그 점수 = 유사도 − 감점 + w·p
@@ -39,7 +42,7 @@ import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { embedEach } from '../extension/lib/embed-each.js';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
-import { scoreCases, mixedSetting, regressions, latencyStats, rank1Regressions, rank1Gains, rank1Changes, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
+import { scoreCases, mixedSetting, regressions, latencyStats, rank1Regressions, rank1Gains, rank1Changes, marginsOf, lowMargins, marginGuardFails, judgeMarginGuard, knownFromFails, marginGuardLines, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
 import { loadJudgeResults, loadPreciseJudgeResults } from './eval-judge.mjs';
@@ -90,8 +93,15 @@ const guard = fs.existsSync(guardUrl) ? JSON.parse(fs.readFileSync(guardUrl)) : 
 let regressed = 0;
 // 여유(T-150): 정보용 경고. --margin-guard일 때만 가드 문장의 작은 여유를 실패로 친다
 const marginMin = marginThreshold(process.argv);
-const failMarginGuard = process.argv.includes('--margin-guard');
+const writeMarginKnown = process.argv.includes('--write-margin-known');
+const failMarginGuard = process.argv.includes('--margin-guard') || writeMarginKnown;
 let marginGuardFailed = [];
+// 아는 얇은 가드 문장(T-188). 바닥은 실제 확장(크롬) 여유라 Node·대체 임베더로 쓰지 않는다
+const marginKnownUrl = new URL('eval-margin-known.json', here);
+const marginKnown = fs.existsSync(marginKnownUrl) ? JSON.parse(fs.readFileSync(marginKnownUrl)) : { sentences: [] };
+if (writeMarginKnown && (process.argv.includes('--holdout') || process.argv.includes('--node') || useFallback)) {
+  throw new Error('--write-margin-known은 실제 확장(크롬) 평가셋·검증셋으로만 써요(--holdout·--node·대체 임베더 불가).');
+}
 
 // 서버 모드 (T-405). 토큰은 평가용 무작위 문자열이고 출력하지 않는다
 const argAfter = flag => { const i = process.argv.indexOf(flag); return i > 0 ? process.argv[i + 1] : null; };
@@ -371,9 +381,16 @@ if (serverUrl) {
   const realBrowser = !useFallback && !process.argv.includes('--node');
   console.log(`\n${gateLine(serverHit1, serverOnly ? null : browserHit1, serverN, { server: serverEmbedderLabel(serverEmbedders), browser: embedderLabel, browserReal: realBrowser })}`);
 }
-if (failMarginGuard && marginGuardFailed.length) {
-  console.log(`\n여유 가드: 가드 문장 ${marginGuardFailed.length}개가 여유 < ${marginMin}`);
-  for (const s of marginGuardFailed) console.log(`  ${s}`);
+// 여유 가드(T-150·T-188): 아는 얇은 문장은 바닥 이상이면 통과, 새로 얇아졌거나 바닥보다 더 얇아지면 실패
+let marginJudge = null;
+if (failMarginGuard) {
+  marginJudge = judgeMarginGuard(marginGuardFailed, marginKnown.sentences);
+  console.log('\n' + marginGuardLines(marginJudge, marginMin).join('\n'));
+  if (writeMarginKnown) {
+    const sentences = knownFromFails(marginGuardFailed, marginKnown.sentences);
+    fs.writeFileSync(marginKnownUrl, JSON.stringify({ ...marginKnown, updated: new Date().toISOString().slice(0, 10), threshold: marginMin, sentences }, null, 2) + '\n');
+    console.log(`아는 얇은 문장 ${sentences.length}개를 tools/eval-margin-known.json에 썼어요`);
+  }
 }
 if (failGuard && regressed) { console.log(`\n회귀 ${regressed}건`); process.exit(1); }
-if (failMarginGuard && marginGuardFailed.length) process.exit(1);
+if (failMarginGuard && !writeMarginKnown && marginJudge.fail.length) process.exit(1);
