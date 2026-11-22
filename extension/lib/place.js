@@ -37,11 +37,22 @@
     return { left, top, flipped };
   }
 
+  // 고른 범위(T-182): 마지막 줄 아래에 두고, 넘치면 첫 줄 위로(고른 글을 가리지 않게).
+  // 위도 모자라면(화면보다 긴 범위) 마지막 줄 기준 원래 방식(placeBox)으로
+  function placeBoxSpan({ first, last, mouseX, bw, bh, vw, vh, pad = 10, gap = 8 }) {
+    const below = last.bottom + gap;
+    const left = Math.min(Math.max(pad, mouseX - bw / 2), vw - bw - pad);
+    if (below + bh <= vh - pad) return { left, top: below, flipped: false };
+    const above = first.top - bh - gap;
+    if (above >= pad) return { left, top: above, flipped: true };
+    return placeBox({ rect: last, mouseX, bw, bh, vw, vh, pad, gap });
+  }
+
   // 작은 서브프레임(광고·위젯, T-147): 말풍선이 잘리므로 띄우지도, 요청을 보내지도 않는다. 최상위는 창이 작아도 해당 없음
   const MIN_FRAME_W = 260, MIN_FRAME_H = 160;
   function tinyFrame({ isTop, vw, vh }) {
     return !isTop && (vw < MIN_FRAME_W || vh < MIN_FRAME_H);
   }
 
-  globalThis.AnalogyPlace = Object.freeze({ lineRects, pickLineIndex, pickLineRect, placeBox, tinyFrame });
+  globalThis.AnalogyPlace = Object.freeze({ lineRects, pickLineIndex, pickLineRect, placeBox, placeBoxSpan, tinyFrame });
 })();
