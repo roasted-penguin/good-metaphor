@@ -238,5 +238,149 @@
   ],
   "expectTag": "threshold_req",
   "since": "T-191"
+ },
+ {
+  "sentence": "이 학원은 매주 금요일부터 일요일까지 모의고사 가산점을 주고, 우수 회원은 평일에도 가산점을 받는다.",
+  "expectNodes": [
+   "scroll_fever"
+  ],
+  "expectTag": "temporary_multiplier",
+  "since": "T-191"
+ },
+ {
+  "sentence": "보안 문자 입력을 여러 번 틀리면 기록이 남고, 그런 기록이 쌓이면 계정이 정지될 수 있다.",
+  "expectNodes": [
+   "macro_detection"
+  ],
+  "expectTag": "threshold_req",
+  "since": "T-191"
+ },
+ {
+  "sentence": "동호회 게시판에서 다른 지역 사람들과도 팀을 꾸려 대회에 나갈 수 있고, 정원이 차면 모집이 끝난다.",
+  "expectNodes": [
+   "boss_party_board"
+  ],
+  "expectTag": "role_division",
+  "since": "T-191"
+ },
+ {
+  "sentence": "회사에서 지급한 교육용 노트북은 단계별 과제를 마칠 때마다 사양이 올라가지만, 정해진 날짜까지만 쓸 수 있다.",
+  "expectNodes": [
+   "item_burning"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "내비게이션 앱은 내 수준에 맞는 등산 코스를 추천하고, 완주한 코스는 다음부터 바로 길 안내를 시작할 수 있다.",
+  "expectNodes": [
+   "maple_guide"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "API 토큰은 하루마다 자동으로 충전되지만 버킷이 가득 차 있으면 더 쌓이지 않는다.",
+  "expectNodes": [
+   "mystery_barrier"
+  ],
+  "expectTag": "periodic_cap",
+  "since": "T-191"
+ },
+ {
+  "sentence": "고급 과정에 들어가야 새 기술을 배울 수 있고, 수업에서 받은 포인트로 기술을 하나씩 강화하며 돈을 내면 포인트를 다시 나눌 수 있다.",
+  "expectNodes": [
+   "v_matrix"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "이직할 때 쌓은 연차를 새 회사로 옮길 수는 있지만 일부만 인정되고 직급은 처음부터 다시 시작한다.",
+  "expectNodes": [
+   "symbol_catalyst"
+  ],
+  "expectTag": "shared_bonus",
+  "since": "T-191"
+ },
+ {
+  "sentence": "시즌 한정 특별 강좌는 한 주에 계정당 한 번만 들을 수 있고, 일반 수강 횟수 제한과는 따로 센다.",
+  "expectNodes": [
+   "season_boss"
+  ],
+  "expectTag": "periodic_cap",
+  "since": "T-191"
+ },
+ {
+  "sentence": "하루 이용권을 끊으면 그 시간 안에는 몇 번이고 다시 들어갈 수 있지만 다른 할인은 같이 쓸 수 없다.",
+  "expectNodes": [
+   "blueberry_farm"
+  ],
+  "expectTag": "temporary_multiplier",
+  "since": "T-191"
+ },
+ {
+  "sentence": "이 체험 프로그램은 앞 과정을 마쳐야 열리고, 일주일에 한 번만 참여할 수 있으며 매주 목요일에 초기화된다.",
+  "expectNodes": [
+   "arcane_weekly"
+  ],
+  "expectTag": "periodic_cap",
+  "since": "T-191"
+ },
+ {
+  "sentence": "이 복권형 강화권은 능력치 여러 개를 각각 무작위로 올리거나 내리는데, 상위 강화권은 내려가지 않는다.",
+  "expectNodes": [
+   "chaos_scroll"
+  ],
+  "expectTag": "prob_upgrade",
+  "since": "T-191"
+ },
+ {
+  "sentence": "이 카페는 일요일마다 행사를 여는데, 주마다 할인 품목이 바뀌어 붙는다.",
+  "expectNodes": [
+   "sunday_maple"
+  ],
+  "expectTag": "temporary_multiplier",
+  "since": "T-191"
+ },
+ {
+  "sentence": "할인 쿠폰과 적립 혜택을 함께 쓰면 크게 아끼지만, 같은 종류 쿠폰끼리는 겹쳐 쓸 수 없다.",
+  "expectNodes": [
+   "buff_stacking"
+  ],
+  "expectTag": "temporary_multiplier",
+  "since": "T-191"
+ },
+ {
+  "sentence": "기본 보험에 가입해 있어야 특약을 추가로 붙일 수 있고, 특약은 따로 갱신한다.",
+  "expectNodes": [
+   "additional_potential"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "이 동아리는 같은 학교에 일정 학년 이상 회원이 여럿 있어야 만들 수 있고, 활동 등급이 오르면 추가 혜택이 하나씩 열린다.",
+  "expectNodes": [
+   "union_start"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "전용 작업실은 일정 경력을 쌓고 교육을 마쳐야 받을 수 있다.",
+  "expectNodes": [
+   "maple_home"
+  ],
+  "expectTag": "progression_gate",
+  "since": "T-191"
+ },
+ {
+  "sentence": "등급에 따라 매주 라운지 이용 시간이 쌓이고, 최고 등급은 시간을 두 배로 쓰는 대신 혜택도 두 배로 받는다.",
+  "expectNodes": [
+   "mvp_resort"
+  ],
+  "expectTag": "temporary_multiplier",
+  "since": "T-191"
  }
 ]

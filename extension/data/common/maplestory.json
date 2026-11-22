@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-8",
+  "version": "2026.11.22-9",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -645,6 +645,158 @@
       "verifiedAt": "2026-11-22"
     },
     {
+      "id": "scroll_fever", "label": "주문의 흔적 피버 타임",
+      "facts": [
+        "주문의 흔적 피버 타임은 매주 금요일부터 일요일까지 주문의 흔적으로 하는 주문서 강화의 성공 확률을 올려 주는 기간이다.",
+        "프리미엄 PC방에서 접속하거나 MVP 등급이 높으면 피버 타임 효과가 상시 적용된다.",
+        "메소로 하는 주문서 강화에는 피버 타임이 적용되지 않는다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/374", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/444", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/425"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "macro_detection", "label": "매크로 단속과 거짓말 탐지기",
+      "facts": [
+        "운영진은 운영정책에 따라 매크로와 불법 프로그램 사용을 단속하고, 거짓말 탐지기 같은 보안 시스템을 반복해서 통과하지 못한 기록도 단속 근거로 삼는다.",
+        "거짓말 탐지기에 실패하면 진실의 방으로 옮겨지고, 그 기록이 일정 횟수 이상 쌓이면 단속될 수 있다.",
+        "입력을 반복해 주는 키보드·마우스 기능은 쓰는 것만으로 막지는 않지만, 그 때문에 정상 범위를 넘는 기록이 감지되면 단속될 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/452"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "boss_party_board", "label": "보스 파티 모집",
+      "facts": [
+        "보스 파티 모집 게시판에서는 다른 월드의 플레이어와도 파티를 꾸려 높은 난이도 보스에 도전할 수 있다.",
+        "모집은 정원이 차거나 파티장이 마감하거나 일정 시간이 지나면 끝난다.",
+        "보스 입장 맵으로 옮긴 뒤 보스가 입장하면 모집 파티가 정식 파티로 바뀌고, 파티원끼리 준비 확인을 한다."
+      ],
+      "tags": ["role_division"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/458"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "item_burning", "label": "아이템 버닝",
+      "facts": [
+        "아이템 버닝은 이벤트로 받은 도전자의 장비를 미션 단계마다 성장시키는 이벤트로, 단계마다 목표 레벨과 보스 혼자 격파 미션이 있다.",
+        "다음 단계 미션을 미리 달성해도 이전 미션을 모두 끝내야 다음 단계로 성장할 수 있다.",
+        "명의당 한 캐릭터로만 시작할 수 있고, 지급된 장비는 정해진 기간까지만 쓸 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "maple_guide", "label": "메이플 길라잡이",
+      "facts": [
+        "메이플 길라잡이는 캐릭터 레벨에 맞는 퀘스트·테마던전·사냥터를 추천해 주는 안내 시스템이다.",
+        "추천 퀘스트를 끝내면 그 지역의 도장을 얻고, 도장을 얻은 지역은 길라잡이에서 바로 이동할 수 있다.",
+        "길라잡이의 빠른 이동은 한 번 쓰면 잠깐의 재사용 대기시간이 지나야 다시 쓸 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/441"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "mystery_barrier", "label": "의문의 결계",
+      "facts": [
+        "의문의 결계는 챌린저스 월드 이벤트로, 결계 제어봉을 써서 결계를 풀면 정해진 확률에 따라 희귀도가 다른 결계의 핵을 얻는다.",
+        "결계 제어봉은 접속하지 않아도 매일 자동으로 지급되지만, 보유 한도에 차 있으면 더 쌓이지 않는다.",
+        "챌린저스 월드 티어가 높을수록 더 큰 결계를 풀 수 있고, 좋은 결계의 핵이 나올 확률이 높아진다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "v_matrix", "label": "V 매트릭스",
+      "facts": [
+        "V 매트릭스는 5차 전직을 마친 캐릭터가 V 코어로 5차 스킬을 얻고 기존 스킬을 강화하는 시스템이다.",
+        "코어 젬스톤으로 얻은 V 포인트로 코어를 활성화하고 강화하며, 메소를 내면 강화에 쓴 V 포인트를 초기화할 수 있다.",
+        "특수 코어는 장착한 뒤 정해진 기간이 지나면 사라지고, 기간을 연장할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/404"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "symbol_catalyst", "label": "심볼 카탈리스트",
+      "facts": [
+        "카탈리스트를 쓰면 키운 아케인심볼이나 어센틱심볼을 같은 월드의 내 다른 캐릭터로 옮길 수 있다.",
+        "옮길 때 지금까지 성장에 쓴 심볼의 일부를 잃고 심볼 레벨이 처음으로 돌아가 다시 강화해야 한다.",
+        "한 번 쓰면 되돌릴 수 없고, 받을 캐릭터가 그 심볼의 획득 퀘스트를 끝냈어야 한다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/396"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "season_boss", "label": "시즌 보스",
+      "facts": [
+        "시즌 보스는 챌린저스 월드에서만 정해진 시즌 동안 도전할 수 있는 보스로, 일반 보스보다 강력한 보상을 준다.",
+        "메이플ID마다 한 주에 한 번만 클리어할 수 있고, 주간 보스 처치 제한에는 포함되지 않는다.",
+        "처치해도 강렬한 힘의 결정은 얻을 수 없다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "blueberry_farm", "label": "블루베리 농장",
+      "facts": [
+        "블루베리 농장은 입장권을 쓰면 정해진 시간 동안 들어가 블루베리 몬스터를 잡고 레벨에 맞는 경험치를 받는 컨텐츠이다.",
+        "입장권을 쓴 뒤 정해진 시간 안에서는 수확을 마치기 전까지 자유롭게 다시 들어갈 수 있다.",
+        "농장 안에서는 다른 추가 경험치 효과가 적용되지 않는다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "arcane_weekly", "label": "아케인리버 스페셜 컨텐츠",
+      "facts": [
+        "아케인리버 지역마다 있는 스페셜 컨텐츠는 그 지역 스토리 퀘스트를 끝내야 열리고, 클리어하면 아케인심볼을 준다.",
+        "스페셜 컨텐츠 가운데 에르다 스펙트럼은 일주일에 한 번만 클리어할 수 있고 매주 목요일 자정에 횟수가 초기화된다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/465"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "sunday_maple", "label": "썬데이 메이플",
+      "facts": [
+        "썬데이 메이플은 일요일 하루 동안 열리는 이벤트로, 주마다 잠재능력 등급을 올리기 좋은 미라클 타임이나 스타포스 강화 혜택처럼 붙는 혜택이 바뀐다.",
+        "콤보킬 구슬 경험치 증가처럼 사냥 혜택이 붙는 주도 있다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/News/Event/823", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/453"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "buff_stacking", "label": "버프 중첩",
+      "facts": [
+        "버프는 여러 종류를 한꺼번에 쓸 수 있어, 스킬과 소비 아이템 버프가 쌓이면 같은 장비로도 능력치가 크게 오른다.",
+        "다만 물약과 알약처럼 같은 종류로 묶인 버프끼리는 겹쳐 쓸 수 없는 것이 있다.",
+        "대부분의 소비 아이템 버프는 정해진 시간 동안만 유지된다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/451", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/418"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "additional_potential", "label": "에디셔널 잠재능력",
+      "facts": [
+        "에디셔널 잠재능력은 일반 잠재능력이 붙어 있는 장비에만 따로 붙일 수 있는 두 번째 잠재능력이다.",
+        "일반 잠재능력과 따로 재설정하며, 메소로 재설정할 때는 기존 옵션과 새 옵션 중 골라 적용할 수 있다.",
+        "레어·에픽·유니크·레전드리 등급이 있고 재설정할 때 정해진 확률로 등급이 오른다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/413", "https://maplestory.nexon.com/News/Update/746"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
       "id": "memento", "label": "메멘토 각인",
       "facts": [
         "메멘토 브론즈 에디셔널 큐브처럼 메멘토 접두어가 붙은 강화 아이템은 일부 보스를 잡으면 확정으로 주는 보상이다.",
@@ -653,6 +805,48 @@
       ],
       "tags": ["cooldown"],
       "sources": ["https://maplestory.nexon.com/News/Update/799"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "chaos_scroll", "label": "혼돈의 주문서",
+      "facts": [
+        "긍정의 혼돈 주문서는 장비의 공격력·방어력·주스탯 같은 여러 능력치를 정해진 확률에 따라 각각 올리거나 그대로 둔다.",
+        "일반 혼돈의 주문서는 같은 방식이지만 능력치가 내려갈 수도 있다.",
+        "주문서이므로 장비의 주문서 강화 가능 횟수 안에서 쓴다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/374", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/418"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "union_start", "label": "유니온 시작과 확장 스탯",
+      "facts": [
+        "메이플 유니온은 같은 월드에 일정 레벨 이상 캐릭터를 여러 개 키우거나 5차 전직 캐릭터가 있어야 시작할 수 있고, 조건을 채운 뒤 퀘스트까지 끝내야 열린다.",
+        "유니온 레벨이 오르면 크리티컬 데미지·보스 데미지 같은 확장 스탯이 열리고 확장 스탯의 최대 레벨도 단계별로 오른다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/407", "https://maplestory.nexon.com/News/Update/806"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "maple_home", "label": "메이플 홈",
+      "facts": [
+        "메이플 홈은 높은 레벨에서 정해진 스토리를 끝낸 월드에서 퀘스트를 마쳐야 만들 수 있는 집이다.",
+        "메이플 홈은 같은 월드의 내 캐릭터들이 함께 쓰고, 이벤트 보상으로 받은 가구로 꾸민다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "mvp_resort", "label": "MVP 리조트",
+      "facts": [
+        "MVP 리조트는 MVP 등급에 따라 매주 이용 시간이 쌓이고, 그 시간 동안 머물며 레벨에 맞는 경험치를 받는 공간이다.",
+        "쓰지 않은 이용 시간은 사라지지 않지만 쌓아 둘 수 있는 시간에 상한이 있고, 이용 시간은 메이플ID 안의 모든 캐릭터가 함께 쓴다.",
+        "가장 높은 등급은 이용 시간을 두 배 빨리 쓰는 대신 경험치를 두 배로 받는 모드를 쓸 수 있다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/425"],
       "verifiedAt": "2026-11-22"
     }
   ],
@@ -711,6 +905,24 @@
     { "from": "green_pc", "to": "auction", "rel": "보안 등급이 낮으면 거래를 막음" },
     { "from": "hyper_skill", "to": "hyper_stat", "rel": "높은 레벨에서 함께 열림" },
     { "from": "memento", "to": "item_binding", "rel": "일정 기간 교환을 막음" },
-    { "from": "training_ground", "to": "skill_cooldown", "rel": "입장 때 재사용 대기시간을 초기화함" }
+    { "from": "training_ground", "to": "skill_cooldown", "rel": "입장 때 재사용 대기시간을 초기화함" },
+    { "from": "macro_detection", "to": "hunting", "rel": "비정상 사냥 기록을 단속함" },
+    { "from": "boss_party_board", "to": "party", "rel": "다른 월드 플레이어와 파티를 꾸림" },
+    { "from": "item_burning", "to": "challengers_world", "rel": "챌린저스 월드 이벤트로 열림" },
+    { "from": "maple_guide", "to": "level_range", "rel": "레벨에 맞는 사냥터를 추천함" },
+    { "from": "mystery_barrier", "to": "challengers_world", "rel": "챌린저스 월드 이벤트로 열림" },
+    { "from": "sixth_job", "to": "v_matrix", "rel": "5차 다음 단계의 스킬 성장" },
+    { "from": "scroll_fever", "to": "mvp_membership", "rel": "높은 MVP 등급은 피버 효과를 상시 받음" },
+    { "from": "symbol_catalyst", "to": "arcane_symbol", "rel": "키운 심볼을 다른 캐릭터로 옮김" },
+    { "from": "season_boss", "to": "weekly_boss", "rel": "주간 보스 제한과 따로 셈" },
+    { "from": "blueberry_farm", "to": "challengers_world", "rel": "챌린저스 패스 보상으로 입장" },
+    { "from": "arcane_weekly", "to": "arcane_symbol", "rel": "주간 보상으로 심볼을 줌" },
+    { "from": "chaos_scroll", "to": "cube", "rel": "능력치를 무작위로 바꾸는 다른 강화 수단" },
+    { "from": "sunday_maple", "to": "starforce_event", "rel": "샤이닝 스타포스 타임이 열리는 날" },
+    { "from": "buff_stacking", "to": "skill_cooldown", "rel": "버프 스킬을 겹쳐 극딜을 준비함" },
+    { "from": "additional_potential", "to": "cube", "rel": "일반 잠재능력 위에 하나 더 붙음" },
+    { "from": "union_start", "to": "union_link", "rel": "유니온이 열리는 조건" },
+    { "from": "maple_home", "to": "vip_sauna", "rel": "사우나 누적 보상 가구로 꾸밈" },
+    { "from": "mvp_resort", "to": "mvp_membership", "rel": "MVP 등급에 따라 이용 시간을 줌" }
   ]
 }
