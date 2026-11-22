@@ -10,7 +10,8 @@
 //   npm run eval -- --rewrite gemini   # 질의를 LLM으로 추상 구조로 바꿔 함께 비교 (T-113 (4)). <ID>_API_KEY 필요,
 //                                      # 결과는 .tmp/rewrite-<제공자>-<모델>.json 에 캐시(다시 돌려도 호출 안 함)
 //   npm run eval -- --server <url>     # 같은 문장을 analogy-api(POST /v1/analogy)의 debug.candidates 순위로도 채점하고 관문 한 줄 (T-405)
-//        [--server-only]               # 브라우저 평가 생략   [--rpm 20] 분당 요청 수   [--token <값>] 기본은 eval-<무작위>
+//        [--server-only]               # 브라우저 평가 생략(질의 재작성도 건너뜀)   [--rpm 20] 분당 요청 수   [--token <값>] 기본은 eval-<무작위>
+//                                      # 관문 줄에 양쪽 임베더 이름(서버는 debug.embedderId)을 함께 찍는다. --holdout이면 홀드아웃으로 관문 (T-142)
 //   npm run eval -- --holdout          # 평가셋·검증셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점 (T-150)
 //   [--margin 0.005]                   # 여유(1위 − 경쟁자 점수 차)가 이보다 작은 맞힌 문장을 요약 끝에 목록으로 (T-150). -v면 문장별 여유
 //   [--retrieval '{"nodeTextMode":"desc"}']  # admin.retrieval 위에 덮어쓸 설정(JSON). 측정용, 파일은 바꾸지 않는다 (T-154)
@@ -29,7 +30,7 @@ import { openBrowserEmbedder } from './browser-embedder.mjs';
 import { scoreCases, mixedSetting, regressions, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
-import { rankAllViaServer, gateLine, ServerUnavailable } from './eval-server.mjs';
+import { rankAllViaServer, gateLine, serverEmbedderLabel, rewriteIdFromArgv, ServerUnavailable } from './eval-server.mjs';
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
@@ -85,11 +86,12 @@ const serverOnly = !!serverUrl && process.argv.includes('--server-only');
 const serverRpm = Number(argAfter('--rpm')) || 20;
 const serverToken = argAfter('--token') || `eval-${Math.random().toString(36).slice(2, 12)}`;
 if (process.argv.includes('--server-only') && !serverUrl) throw new Error('--server-only는 --server <url>과 함께 써요');
-let browserHit1 = null; // 평가셋 · 원문 · 혼합 hit@1 (관문 비교용)
+let browserHit1 = null; // 첫 셋 · 원문 · 혼합 hit@1 (관문 비교용)
 
 // 질의 재작성 (정밀 모드와 같은 프롬프트). 문장별 결과를 캐시해 무료 한도를 아끼고 결과를 고정한다
-const rwAt = process.argv.indexOf('--rewrite');
-const rewriteId = rwAt > 0 ? process.argv[rwAt + 1] : null;
+// --server-only면 브라우저 평가를 안 하니 재작성도 건너뛴다 (T-142)
+const rewriteId = rewriteIdFromArgv(process.argv);
+if (serverOnly && process.argv.includes('--rewrite')) console.log('--server-only라 질의 재작성은 건너뛰어요');
 let rewrites = null, rewriteCacheFile = null;
 if (rewriteId) {
   const def = PROVIDERS[rewriteId];
@@ -191,7 +193,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
         console.log(`  alias-negative ${r.negative.pass}/${r.negative.n}`);
         if (verbose) for (const f of r.negative.fails) console.log(`  ✗ ${f.sentence.slice(0, 32)}… → 1위 ${f.top} (금지: ${f.forbid.join('/')})`);
       }
-      if (name === '평가셋' && !mode) browserHit1 = r.hit1;
+      if (name === sets[0].name && !mode) browserHit1 = r.hit1; // 관문은 첫 셋(평가셋, --holdout이면 홀드아웃)으로
       printGuardAndNew(cases, r, rank, guarded);
       // 비유가 없어야 하는 문장의 1위 점수 vs 맞힌 문장의 1위 점수 (임계값 근거)
       if (r.noMatch.length) {
@@ -213,26 +215,29 @@ await closeEmbedder();
 
 if (serverUrl) {
   let serverHit1 = null, serverN = 0;
+  const serverEmbedders = new Set(); // 서버 응답 debug.embedderId (T-142)
+  const onDebug = d => serverEmbedders.add(d?.embedderId);
   try {
     for (const { name, cases, guarded } of sets) {
       const onProgress = process.stdout.isTTY ? (i, n) => process.stdout.write(`\r  서버 요청 ${i}/${n}`) : undefined;
-      const ranked = await rankAllViaServer({ url: serverUrl, token: serverToken, cases, rpm: serverRpm, onProgress });
+      const ranked = await rankAllViaServer({ url: serverUrl, token: serverToken, cases, rpm: serverRpm, onProgress, onDebug });
       if (onProgress) process.stdout.write('\r\x1b[K');
       const rank = (c, i) => ranked[i];
       const r = scoreCases(cases, rank);
-      console.log(`\n[${name} · 서버] 문장 ${cases.length}개 · 서버: ${serverUrl} (분당 ${serverRpm}회)\n`);
+      console.log(`\n[${name} · 서버] 문장 ${cases.length}개 · 서버: ${serverUrl} (분당 ${serverRpm}회) · 임베더: ${serverEmbedderLabel(serverEmbedders)}\n`);
       console.log(pctLine('서버', r));
       if (verbose) for (const m of r.misses) console.log(missLine(m));
       printGuardAndNew(cases, r, rank, guarded);
       if (r.noMatch.length) console.log(`  비유 없음 ${r.noMatch.length}문장 1위 후보 ${r.noMatch.map(m => m.top ?? '-').join(' ')}`);
-      if (name === '평가셋') { serverHit1 = r.hit1; serverN = r.n; }
+      if (name === sets[0].name) { serverHit1 = r.hit1; serverN = r.n; }
     }
   } catch (e) {
     if (process.stdout.isTTY) process.stdout.write('\r\x1b[K');
     console.log(`\n${e instanceof ServerUnavailable ? '서버 평가를 멈췄어요' : '서버 평가 실패'}: ${e.message}`);
     process.exit(1);
   }
-  console.log(`\n${gateLine(serverHit1, serverOnly ? null : browserHit1, serverN)}`);
+  const realBrowser = !useFallback && !process.argv.includes('--node');
+  console.log(`\n${gateLine(serverHit1, serverOnly ? null : browserHit1, serverN, { server: serverEmbedderLabel(serverEmbedders), browser: embedderLabel, browserReal: realBrowser })}`);
 }
 if (failMarginGuard && marginGuardFailed.length) {
   console.log(`\n여유 가드: 가드 문장 ${marginGuardFailed.length}개가 여유 < ${marginMin}`);

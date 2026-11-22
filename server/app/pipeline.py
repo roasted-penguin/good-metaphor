@@ -43,12 +43,15 @@ class AnalogyRequest:
 
 class AnalogyPipeline:
     def __init__(self, graph: dict[str, Any], keyword_llm: LLM, analogy_llm: LLM, retriever: Retriever,
-                 analogy_model: str, blocklist: list[dict[str, Any]] | None = None) -> None:
+                 analogy_model: str, blocklist: list[dict[str, Any]] | None = None,
+                 embedder_id: str | None = None) -> None:
         self.graph = graph
         self.keyword_llm = keyword_llm
         self.analogy_llm = analogy_llm
         self.retriever = retriever
         self.analogy_model = analogy_model
+        # 검색 인덱스의 임베더("ollama:bge-m3" 등). 평가 도구 관문 줄이 서버 쪽 임베더 이름으로 찍는다(T-142)
+        self.embedder_id = embedder_id
         # 승인된 금칙어 카드만(없으면 빈 목록)
         self.blocklist = active_terms(blocklist or [])
         self.tags = [t for t in graph.get("tags", []) if t.get("label")]
@@ -167,7 +170,7 @@ class AnalogyPipeline:
                 ],
                 "topTags": [],
                 "abstractText": None,
-                "embedderId": None,
+                "embedderId": self.embedder_id,
                 "embedderStatus": None,
                 "provider": f"server/{self.analogy_model}",
                 "fallbacks": [],
