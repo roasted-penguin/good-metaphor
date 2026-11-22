@@ -46,7 +46,7 @@ def _all_text(config: dict) -> str:
 def test_vocabulary_is_graph_tag_labels_in_file_order(graph):
     vocab = controlled_vocabulary(graph)
     assert vocab == [t["label"] for t in graph["tags"]]
-    assert len(vocab) == 21  # T-176: 태그 21개(맨 뒤 fixed_cost_leverage, vendor_lock_in, brokerage_fee)
+    assert len(vocab) == 22  # T-206: 태그 22개(맨 뒤 fixed_cost_leverage, vendor_lock_in, brokerage_fee, compliance_procedure)
 
 
 def test_vocabulary_matches_keyword_prompt_tag_list(graph):

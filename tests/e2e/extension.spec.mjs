@@ -116,7 +116,7 @@ test('평가 도구(browser-embedder): 같은 프로필을 다시 써도 바뀐 
       expect(await be.embed(['첫 문장', '두 번째 문장'], 'query')).toHaveLength(2);
       const info = await be.send('graph:info');
       expect(info.ok).toBe(true);
-      expect(info.data.common.tags).toBe(21); // tags.json 전체(T-176에서 21개)
+      expect(info.data.common.tags).toBe(22); // tags.json 전체(T-206에서 22개)
     } finally {
       await be.close();
     }

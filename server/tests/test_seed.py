@@ -39,7 +39,7 @@ def test_shape_matches_insert_custom_kg_keys(kg):
 
 def test_entity_count_is_tags_plus_nodes_without_duplicates(graph, kg):
     names = [e["entity_name"] for e in kg["entities"]]
-    assert len(names) == len(graph["tags"]) + len(graph["nodes"]) == 102  # 태그 21(T-176) + 노드 81(T-191)
+    assert len(names) == len(graph["tags"]) + len(graph["nodes"]) == 103  # 태그 22(T-206) + 노드 81(T-191)
     assert len(set(names)) == len(names)
 
 
@@ -203,7 +203,7 @@ def test_unknown_node_tag_is_dropped():
 
 def test_seed_counts(graph, kg):
     expected_rels = sum(len(n["tags"]) for n in graph["nodes"]) + len(graph["edges"])
-    assert seed_counts(kg) == {"entities": 102, "relationships": expected_rels}
+    assert seed_counts(kg) == {"entities": 103, "relationships": expected_rels}
 
 
 def test_self_loop_edge_is_dropped():
