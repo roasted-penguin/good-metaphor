@@ -12,7 +12,7 @@
   { "sentence": "뽑기형 상품은 원하는 결과가 나올 때까지 돈을 내고 다시 뽑게 만든다.", "expectNodes": ["cube", "royal_style"], "expectTag": "random_reroll" },
   { "sentence": "복권의 평균 기대 수익은 구매 비용보다 낮아서 많이 살수록 손해다.", "expectNodes": ["cube", "starforce", "starforce_event"], "expectTag": "expected_value", "group": "finance" },
   { "sentence": "공장 라인은 시간당 생산량으로 효율을 비교한다.", "expectNodes": ["hunting", "weekly_boss", "theme_dungeon"], "expectTag": "efficiency_metric" },
-  { "sentence": "자격증을 따야 다음 단계의 업무를 맡을 수 있다.", "expectNodes": ["sixth_job", "boss_entry", "arcane_force", "union_champion", "challengers_pass", "green_pc", "item_burning", "v_matrix", "chronicle_lete", "link_skill_mechanic", "hexa_stat_core_iii"], "expectTag": "progression_gate" },
+  { "sentence": "자격증을 따야 다음 단계의 업무를 맡을 수 있다.", "expectNodes": ["sixth_job", "boss_entry", "arcane_force", "union_champion", "challengers_pass", "green_pc", "item_burning", "v_matrix", "chronicle_lete", "link_skill_mechanic", "hexa_stat_core_iii", "guild_skill_system"], "expectTag": "progression_gate" },
   { "sentence": "누진세는 소득 구간이 높아질수록 세율이 커진다.", "expectNodes": ["starforce", "level_exp"], "expectTag": "escalating_cost", "group": "finance" },
   { "sentence": "Leverage amplifies both gains and losses, so a small price drop can wipe out your margin.", "expectNodes": ["starforce"], "expectTag": "loss_risk", "group": "finance" },
   { "sentence": "검을 대장간에 맡기면 날이 좋아질 수도 있고 그대로일 수도 있는데, 잘될수록 더 비싼 검이 된다.", "expectNodes": ["starforce", "cube"], "expectTag": "prob_upgrade", "since": "T-103" },
