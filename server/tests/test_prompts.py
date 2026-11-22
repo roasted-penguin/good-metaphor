@@ -227,3 +227,27 @@ def test_system_prompt_has_used_fact_rule_and_field_order():
     assert fmt.index('"meaning"') < fmt.index('"usedFact"')
     # 규칙 1은 그대로
     assert "근거에 없는 요리의 수치, 이름, 규칙을 지어내지 않는다." in system
+
+
+# --- 끝맺음 검사(T-122). 확장 prompt.js와 같은 공유 사례 ---
+
+def test_impolite_ending_matches_shared_cases():
+    import json as _j
+    from app.prompts import impolite_ending
+    cases = _j.loads((REPO_ROOT / "tests/fixtures/ending-cases.json").read_text("utf-8"))["cases"]
+    for text, expected in cases:
+        assert impolite_ending(text) == expected, text
+
+
+def test_ending_issues_checks_meaning_and_analogy_only():
+    from app.prompts import ending_issues
+    assert ending_issues({"meaning": "뜻이에요.", "analogy": "비슷해요.", "mapping": "A ↔ B다"}) == []
+    assert ending_issues({"meaning": "잃을 수 있다.", "analogy": "같습니다."}) == [
+        {"field": "meaning", "style": "plain"}, {"field": "analogy", "style": "formal"}]
+    assert ending_issues(None) == []
+
+
+def test_prompt_states_ending_rule_with_example():
+    system, _ = _build()
+    assert "해요체(~요)로 끝낸다" in system
+    assert "끝맺음 예:" in system

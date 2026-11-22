@@ -8,6 +8,7 @@ FakeLLM은 확장 e2e 가짜 LLM(tests/e2e/servers.mjs)과 비슷한 규칙으�
   - 문장에 "Leverage"가 있으면 후보 밖 nodeId(근거 검증 확인용)
   - 문장에 "펭귄"이 있으면 맞는 비유 없음(nodeId null)
   - 문장에 "깨진응답"이 있으면 JSON이 아닌 글
+  - 문장에 "끝맺음테스트"가 있으면 비유를 합쇼체(~입니다)로(끝맺음 표시 확인용, T-122)
 """
 from __future__ import annotations
 
@@ -44,6 +45,8 @@ class FakeLLM:
         analogy = f"메이플로 치면 {label}과 같은 구조예요."
         if "입장횟수테스트" in user:
             analogy = "메이플로 치면 일주일에 7번만 입장할 수 있는 것과 같아요."
+        if "끝맺음테스트" in user:
+            analogy = f"메이플로 치면 {label}과 같은 구조입니다."
         if "사실조작테스트" in user:
             used_fact = "보스는 하루에 세 번까지 입장할 수 있다."
         answer = {"meaning": "테스트 뜻 풀이예요.", "analogy": analogy, "nodeId": node_id,

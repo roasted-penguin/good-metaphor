@@ -143,6 +143,85 @@ test('runAbstract: 추상화 프롬프트로 한 번 부르고 질의 문장을 
   assert.equal(r.queryText, rewriteQueryText('주기마다 한 번만 허용되는 제한', SENTENCE));
 });
 
+// 끝맺음 검사(T-122): 응답을 차례로 돌려주는 가짜 ask
+function seqAsk(...raws) {
+  const calls = [];
+  const ask = async (system, user, opts) => {
+    calls.push({ system, user, opts });
+    const raw = raws[Math.min(calls.length - 1, raws.length - 1)];
+    if (raw instanceof Error) throw raw;
+    if (opts?.onText) opts.onText(raw);
+    return raw;
+  };
+  return { ask, calls };
+}
+const FORMAL = { ...OK_ANSWER, analogy: '메이플로 치면 주간 보스처럼 정해진 주기마다 한 번만 보상을 받는 것과 같습니다.' };
+
+test('끝맺음: 해요체면 다시 부르지 않고 ending.ok', async () => {
+  const { ask, calls } = seqAsk(JSON.stringify(OK_ANSWER));
+  const r = await runAnalogy(base({ ask }));
+  assert.equal(calls.length, 1);
+  assert.deepEqual(r.ending, { ok: true, retried: false, issues: [] });
+});
+
+test('끝맺음: 합쇼체면 교정 문구로 한 번 다시 부르고, 고쳐지면 고친 답을 쓴다', async () => {
+  const { ask, calls } = seqAsk(JSON.stringify(FORMAL), JSON.stringify(OK_ANSWER));
+  const partials = [];
+  const r = await runAnalogy(base({ ask, onPartial: p => partials.push(p) }));
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].system, calls[0].system, '같은 system');
+  assert.ok(calls[1].user.startsWith(calls[0].user), '같은 user 뒤에 교정 문구');
+  assert.ok(calls[1].user.includes(JSON.stringify(FORMAL)), '직전 답을 싣는다');
+  assert.equal(calls[1].opts.json, true);
+  assert.ok(!calls[1].opts.onText, '다시 부를 때는 뜻 먼저를 다시 보내지 않는다');
+  assert.equal(partials.length, 1);
+  assert.equal(r.answer.analogy, OK_ANSWER.analogy);
+  assert.deepEqual(r.ending, { ok: true, retried: true, issues: [{ field: 'analogy', style: 'formal' }] });
+  assert.deepEqual(r.grounding, { ok: true }, '고친 답도 근거 검사를 거친다');
+});
+
+test('끝맺음: 다시 불러도 어기면 결과는 남기고 debug 표시(ending.ok=false)', async () => {
+  const still = { ...FORMAL, meaning: '한 달에 한 번만 넣을 수 있다.' };
+  const { ask, calls } = seqAsk(JSON.stringify(FORMAL), JSON.stringify(still));
+  const r = await runAnalogy(base({ ask }));
+  assert.equal(calls.length, 2, '한 번만 다시 부른다');
+  assert.equal(r.answer.analogy, still.analogy, '결과는 숨기지 않는다');
+  assert.deepEqual(r.ending, { ok: false, retried: true, issues: [{ field: 'meaning', style: 'plain' }, { field: 'analogy', style: 'formal' }] });
+});
+
+test('끝맺음: 다시 부르기가 실패(오류·JSON 아님)하면 첫 답을 남기고 표시', async () => {
+  for (const second of [new Error('429 rate limit'), '해석 못 할 글']) {
+    const { ask, calls } = seqAsk(JSON.stringify(FORMAL), second);
+    const r = await runAnalogy(base({ ask }));
+    assert.equal(calls.length, 2);
+    assert.equal(r.answer.analogy, FORMAL.analogy);
+    assert.equal(r.ending.ok, false);
+    assert.equal(r.ending.retried, true);
+    assert.deepEqual(r.ending.issues, [{ field: 'analogy', style: 'formal' }]);
+  }
+});
+
+test('끝맺음: endingRetry=false면 다시 부르지 않고 표시만', async () => {
+  const { ask, calls } = seqAsk(JSON.stringify(FORMAL));
+  const r = await runAnalogy(base({ ask, endingRetry: false }));
+  assert.equal(calls.length, 1);
+  assert.equal(r.answer.analogy, FORMAL.analogy);
+  assert.deepEqual(r.ending, { ok: false, retried: false, issues: [{ field: 'analogy', style: 'formal' }] });
+});
+
+test('끝맺음: 고친 답이 후보 밖 nodeId면 규칙 1로 숨긴다(검증은 약해지지 않는다)', async () => {
+  const { ask } = seqAsk(JSON.stringify(FORMAL), JSON.stringify({ ...OK_ANSWER, nodeId: 'starforce' }));
+  const r = await runAnalogy(base({ ask }));
+  assert.equal(r.answer.analogy, '');
+  assert.equal(r.rejected, REJECTED_TEXT);
+  assert.equal(r.chosen, null);
+});
+
+test('끝맺음: 데모 제공자는 검사하지 않는다', async () => {
+  const r = await runAnalogy(base({ providerKind: 'demo', ask: async () => '' }));
+  assert.equal(r.ending, null);
+});
+
 // 금칙어 필터(T-114): 실제 금칙어 대신 테스트용 가짜 낱말로 확인한다
 const BL = [
   { term: '금칙테스트말', variants: ['금칙우회말'], meaning: '테스트용', category: 'D', links: [], first_seen: '2026-10-11', sources: [], status: '승인' },
