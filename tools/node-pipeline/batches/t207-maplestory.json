@@ -1,0 +1,580 @@
+{
+  "interest": "maplestory",
+  "note": "T-207 실제 확장 관문 입력: 대체 임베더 관문 채택분(우리 말로 쓴 사실·출처 주소만, 원문 없음, D-5). npm run node-pipeline:gate -- --interest maplestory --results 이 파일 --embedder browser",
+  "results": [
+    {
+      "batch": 7,
+      "status": "warn",
+      "node": {
+        "id": "web_auction",
+        "label": "웹 메이플 옥션",
+        "aliases": [
+          "웹경매장"
+        ],
+        "facts": [
+          "일정 레벨 이상과 보안 인증을 마친 계정에서 게임에 직접 접속하지 않고 홈페이지를 통해 경매장 기능을 이용한다.",
+          "웹 환경에서 아이템 검색, 판매 등록, 가격 수정 등의 작업을 수행하며 일일 횟수 제한과 일부 기능 제약을 받는다."
+        ],
+        "tags": [
+          "threshold_req",
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/394"
+        ]
+      },
+      "edges": [
+        {
+          "to": "auction",
+          "rel": "확장"
+        },
+        {
+          "to": "green_pc",
+          "rel": "요구"
+        }
+      ]
+    },
+    {
+      "batch": 8,
+      "status": "warn",
+      "node": {
+        "id": "boss_crystal_world_cap",
+        "label": "월드 합산 주간 결정석 판매 한도",
+        "facts": [
+          "주간 보스 결정석을 NPC에게 팔 수 있는 수량은 캐릭터마다 따로가 아니라 같은 월드의 캐릭터를 모두 합쳐 한 주 단위로 상한이 정해진다.",
+          "월드 합산 상한에 닿으면 그 주에는 어느 캐릭터로도 결정석을 더 팔 수 없고, 주간 초기화 뒤에 다시 팔 수 있다."
+        ],
+        "tags": [
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/news/update/813"
+        ]
+      },
+      "edges": [
+        {
+          "to": "weekly_boss",
+          "rel": "규정함"
+        }
+      ]
+    },
+    {
+      "batch": 11,
+      "status": "warn",
+      "node": {
+        "id": "crafting_mastery_level",
+        "label": "전문기술 장인 및 명장",
+        "aliases": [
+          "장인",
+          "명장"
+        ],
+        "facts": [
+          "제작 숙련도를 계속 쌓아 장인이나 명장 단계에 도달하면 제작 성공률과 추가 옵션 획득 확률이 대폭 상승한다.",
+          "명장 단계를 달성하면 특정 등급 미만의 최하위 추가 옵션이나 불리한 수치가 나오지 않도록 보장된다."
+        ],
+        "tags": [
+          "prob_upgrade"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/379"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 11,
+      "status": "warn",
+      "node": {
+        "id": "harvesting_farm_entry",
+        "label": "채집 농장 입장 제약",
+        "aliases": [
+          "채농",
+          "마이스터빌 채집장"
+        ],
+        "facts": [
+          "해당 일자에 사냥한 레벨 범위 몬스터 수가 최소 기준을 넘어야 마이스터빌 채집 농장에 입장할 자격이 주어진다.",
+          "캐릭터의 피로도가 소진되어 있거나 보안 인증 등급이 낮은 계정 상태에서는 채집 농장 입장이 제한된다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/379"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 11,
+      "status": "warn",
+      "node": {
+        "id": "guild_noblesse_skill",
+        "label": "노블레스 길드스킬",
+        "aliases": [
+          "노블스킬",
+          "길드스킬"
+        ],
+        "facts": [
+          "길드 활동으로 쌓은 포인트에 따라 스킬 수준이 달라지며 사용 시 전투 관련 스탯이 일시적으로 대폭 향상된다.",
+          "스킬을 사용하면 강력한 버프 효과를 얻지만 사용 후 다시 쓰기까지 정해진 대기 시간이 적용된다."
+        ],
+        "tags": [
+          "temporary_multiplier",
+          "cooldown"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/451"
+        ]
+      },
+      "edges": [
+        {
+          "to": "guild_canal",
+          "rel": "스킬 포인트를 얻기 위한 컨텐츠로 연결됨"
+        }
+      ]
+    },
+    {
+      "batch": 11,
+      "status": "warn",
+      "node": {
+        "id": "extreme_potion",
+        "label": "익스트림 물약",
+        "aliases": [
+          "익스물약",
+          "익스레드",
+          "익스그린"
+        ],
+        "facts": [
+          "몬스터파크 이용을 통해 얻은 화폐로 전용 상점에서 구매하여 능력치를 일시적으로 올릴 수 있다.",
+          "다른 버프 소비 아이템 및 여러 색상의 익스트림 물약을 중복으로 사용하여 혜택을 동시에 누릴 수 있다."
+        ],
+        "tags": [
+          "temporary_multiplier"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/451"
+        ]
+      },
+      "edges": [
+        {
+          "to": "monster_park",
+          "rel": "몬스터파크 참여 보상 주화로 구매함"
+        }
+      ]
+    },
+    {
+      "batch": 11,
+      "status": "warn",
+      "node": {
+        "id": "sparkling_star_potion",
+        "label": "반짝이는 별 물약",
+        "aliases": [
+          "반별",
+          "빨별",
+          "파별"
+        ],
+        "facts": [
+          "보스 처치 시 일정 확률로 드롭되거나 상인에게서 구매하여 보스전 관련 스탯을 일정 시간 동안 향상시킨다.",
+          "동일한 종류의 스탯을 제공하는 전문기술 비약과 중복해서 사용할 수 없다."
+        ],
+        "tags": [
+          "temporary_multiplier"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/451"
+        ]
+      },
+      "edges": [
+        {
+          "to": "alchemy_potion_stacking",
+          "rel": "동일 능력치의 비약 사용 여부에 따라 동시 중복 사용이 제한됨"
+        }
+      ]
+    },
+    {
+      "batch": 11,
+      "status": "warn",
+      "node": {
+        "id": "guild_contribution",
+        "label": "길드 기여도 및 포인트",
+        "aliases": [
+          "길드 기여도",
+          "GP"
+        ],
+        "facts": [
+          "길드원이 출석 체크나 보스 처치 등 활동을 수행하면 길드 기여도가 누적되며, 기여도가 쌓임에 따라 길드 포인트가 부여된다.",
+          "한 명의 길드원이 일주일 동안 쌓을 수 있는 기여도 총량에는 한도가 정해져 있다.",
+          "모인 길드 포인트를 사용하면 길드 인원을 단계적으로 늘리거나 길드 마크를 설정할 수 있다."
+        ],
+        "tags": [
+          "shared_bonus",
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/389"
+        ]
+      },
+      "edges": [
+        {
+          "to": "guild_system",
+          "rel": "길드 내 활동으로 누적되는 기여도 체계"
+        }
+      ]
+    },
+    {
+      "batch": 11,
+      "status": "pass",
+      "node": {
+        "id": "guild_name_change",
+        "label": "길드 이름 변경",
+        "facts": [
+          "길드 마스터가 메이플포인트를 소모하여 길드의 이름을 바꿀 수 있다.",
+          "길드 이름을 변경한 뒤에는 일정 시간 동안 다시 이름을 바꾸지 못하도록 재사용 대기시간이 적용된다."
+        ],
+        "tags": [
+          "cooldown"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/389"
+        ]
+      },
+      "edges": [
+        {
+          "to": "guild_system",
+          "rel": "길드 명칭 수정 기능"
+        }
+      ]
+    },
+    {
+      "batch": 12,
+      "status": "warn",
+      "node": {
+        "id": "spirit_savior",
+        "label": "스피릿 세이비어",
+        "aliases": [
+          "스세",
+          "아르카나 주간"
+        ],
+        "facts": [
+          "맵 곳곳의 대상을 구출해 동행할수록 추격 몬스터가 거대해지고 빨라져 피격 시 동행 대상 전체를 잃는 위험이 커진다.",
+          "한 번에 많은 수의 대상을 구출 지점까지 무사히 이송해 반납할수록 획득하는 점수의 효율이 급격히 높아진다."
+        ],
+        "tags": [
+          "loss_risk"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/465"
+        ]
+      },
+      "edges": [
+        {
+          "to": "arcane_symbol",
+          "rel": "보상으로 연계"
+        }
+      ]
+    },
+    {
+      "batch": 12,
+      "status": "warn",
+      "node": {
+        "id": "enheim_defense",
+        "label": "엔하임 디펜스",
+        "aliases": [
+          "엔디"
+        ],
+        "facts": [
+          "일반 몬스터를 잡아 광마력을 모은 뒤 발사기를 가동하여 직접 공격이 불가능한 보스 몬스터를 물리쳐 클리어한다.",
+          "일주일에 단 한 번만 클리어할 수 있으며 매주 특정 요일에 참여 가능 횟수가 다시 채워진다.",
+          "성공 시 클리어 시간에 상관없이 해당 지역 심볼 교환권과 경험치를 받는다."
+        ],
+        "tags": [
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/465"
+        ]
+      },
+      "edges": [
+        {
+          "to": "arcane_symbol",
+          "rel": "보상으로 지급"
+        }
+      ]
+    },
+    {
+      "batch": 12,
+      "status": "warn",
+      "node": {
+        "id": "training_ground_replay",
+        "label": "잔영의 전당 리플레이",
+        "aliases": [
+          "연무장 리플레이",
+          "잔영의 전당"
+        ],
+        "facts": [
+          "연무장에서 자동으로 측정을 마친 기록을 등록해 다른 유저가 전투 과정과 키 입력 내역을 볼 수 있게 공유한다.",
+          "하루에 등록 및 추천할 수 있는 횟수가 제한되어 있으며 동일한 메이플ID 내에서는 한 직업의 기록만 등록해 둘 수 있다."
+        ],
+        "tags": [
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/144565"
+        ]
+      },
+      "edges": [
+        {
+          "to": "training_ground",
+          "rel": "측정 완료 결과를 전달받음"
+        }
+      ]
+    },
+    {
+      "batch": 12,
+      "status": "warn",
+      "node": {
+        "id": "world_archive",
+        "label": "월드 아카이브",
+        "aliases": [
+          "월드아카이브",
+          "아카이브"
+        ],
+        "facts": [
+          "몬스터를 처치하거나 NPC와 상호작용하여 정보를 수집하면 계정 내 모든 캐릭터가 진행도와 수집 기록을 공유받는다.",
+          "정해진 레벨 기준을 만족하고 선행 퀘스트를 완료해야 도감 기능을 시작할 수 있다.",
+          "수집한 조사 기록의 누적 개수가 일정 목표에 도달할 때마다 계정당 한 번씩 단계별 보상을 받는다."
+        ],
+        "tags": [
+          "threshold_req",
+          "shared_bonus",
+          "progression_gate"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/140877"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 14,
+      "status": "warn",
+      "node": {
+        "id": "extreme_monster_park_momon",
+        "label": "몬스터파크 익스트림 모몽",
+        "facts": [
+          "기념주화를 사용해 구매하며 몬스터 컬렉션에 등록되지 않은 몬스터를 확률적으로 채워준다.",
+          "월드당 구매 수량이 제한되어 있어 매주 정해진 양만 획득 가능하다."
+        ],
+        "tags": [
+          "random_reroll",
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/news/update/806"
+        ]
+      },
+      "edges": [
+        {
+          "to": "monster_collection",
+          "rel": "확률 등록"
+        }
+      ]
+    },
+    {
+      "batch": 14,
+      "status": "warn",
+      "node": {
+        "id": "guild_account_group",
+        "label": "길드 계정 그룹",
+        "facts": [
+          "월드 내 여러 캐릭터를 하나로 묶어 길드에 가입시키면, 길드 기여도나 출석 등 활동 기록이 그룹 단위로 통합되어 관리된다.",
+          "그룹 내 캐릭터들은 길드 스킬 및 노블레스 스킬 혜택을 함께 공유하며, 콘텐츠 참여 시 그룹 내에서 가장 높은 성적을 기준으로 기록된다."
+        ],
+        "tags": [
+          "shared_bonus"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/news/update/806"
+        ]
+      },
+      "edges": [
+        {
+          "to": "guild_canal",
+          "rel": "기록을 통합하는"
+        }
+      ]
+    },
+    {
+      "batch": 14,
+      "status": "warn",
+      "node": {
+        "id": "union_champion_slot",
+        "label": "유니온 챔피언 슬롯 확장",
+        "facts": [
+          "특정 등급 이상의 챔피언을 일정 수 이상 보유하면 추가적인 챔피언 슬롯이 개방된다.",
+          "슬롯이 늘어나면 더 많은 챔피언을 운용하여 전력을 강화할 수 있다."
+        ],
+        "tags": [
+          "progression_gate"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/news/update/806"
+        ]
+      },
+      "edges": [
+        {
+          "to": "union_champion",
+          "rel": "확장하는"
+        }
+      ]
+    },
+    {
+      "batch": 15,
+      "status": "warn",
+      "node": {
+        "id": "maple_guide_teleport",
+        "label": "길라잡이 빠른 이동",
+        "aliases": [
+          "길라잡이",
+          "텔레포트"
+        ],
+        "facts": [
+          "퀘스트를 완료하여 지역별 도장을 획득하면 해당 지역이나 사냥터로 즉시 이동할 수 있다.",
+          "이동 기능을 사용한 후에는 일정 재사용 대기시간이 지나야 다시 사용할 수 있다.",
+          "자주 방문하는 마을이나 필드는 빠른 이동 목록에 직접 등록하여 관리할 수 있다."
+        ],
+        "tags": [
+          "cooldown"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/441"
+        ]
+      },
+      "edges": [
+        {
+          "to": "maple_guide",
+          "rel": "기능 제공"
+        }
+      ]
+    },
+    {
+      "batch": 16,
+      "status": "warn",
+      "node": {
+        "id": "teleport_world_map",
+        "label": "텔레포트 월드맵",
+        "aliases": [
+          "텔월"
+        ],
+        "facts": [
+          "월드맵에서 원하는 지역을 선택하여 즉시 이동하는 편의 기능이다.",
+          "사용 후 일정 시간의 재사용 대기 시간이 발생하며, 전용 아이템을 사용하여 이 시간을 단축할 수 있다."
+        ],
+        "tags": [
+          "cooldown"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/443"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 16,
+      "status": "warn",
+      "node": {
+        "id": "transport_system",
+        "label": "지역 이동 시스템",
+        "aliases": [
+          "이동 수단"
+        ],
+        "facts": [
+          "택시, 포탈, 정거장 등 대륙과 지역을 이동하는 다양한 수단을 제공한다.",
+          "이동 경로에 따라 필요한 메소와 소요 시간이 다르므로 상황에 맞는 효율적인 이동 수단을 선택해야 한다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/443"
+        ]
+      },
+      "edges": []
+    },
+    {
+      "batch": 16,
+      "status": "warn",
+      "node": {
+        "id": "champion_coin",
+        "label": "챔피언 코인",
+        "facts": [
+          "챔피언 레이드에서 거둔 성과를 바탕으로 지급되며, 챔피언의 가호 버프를 유지하는 용도로 쓰인다.",
+          "월드 내 모든 챔피언 캐릭터가 공유하며, 매달 초기화되지만 미사용 잔여분은 일정 기간 이월되어 우선 사용된다."
+        ],
+        "tags": [
+          "shared_bonus"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/409"
+        ]
+      },
+      "edges": [
+        {
+          "to": "champion_raid",
+          "rel": "획득처"
+        }
+      ]
+    },
+    {
+      "batch": 16,
+      "status": "warn",
+      "node": {
+        "id": "invincible_belief",
+        "label": "인빈서블 빌리프",
+        "aliases": [
+          "모전 링크"
+        ],
+        "facts": [
+          "캐릭터의 현재 HP가 최대 HP 대비 일정 비율 이하로 떨어지면 자동으로 발동하여 일정 시간 동안 HP를 회복시킨다.",
+          "스킬 레벨이 오를수록 회복량은 증가하고 재발동 대기시간은 단축되며, 특정 레벨부터는 모험가 전사 직업군의 데미지 증가 패시브 효과가 추가된다."
+        ],
+        "tags": [
+          "cooldown"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/406"
+        ]
+      },
+      "edges": [
+        {
+          "to": "link_skill",
+          "rel": "종류인"
+        }
+      ]
+    },
+    {
+      "batch": 16,
+      "status": "warn",
+      "node": {
+        "id": "link_skill_mechanic",
+        "label": "링크 스킬 레벨과 성장",
+        "facts": [
+          "특정 레벨 도달이나 퀘스트 완료 등 캐릭터의 성장 단계에 따라 링크 스킬의 레벨이 자동으로 상승하거나 해금되는 구조를 가진다.",
+          "일반적인 직업은 정해진 캐릭터 레벨에 도달하면 스킬 레벨이 오르지만, 제로와 같은 일부 직업은 전용 챕터 완료를 통해 스킬 레벨이 단계적으로 해금된다."
+        ],
+        "tags": [
+          "progression_gate"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/406"
+        ]
+      },
+      "edges": [
+        {
+          "to": "link_skill",
+          "rel": "규칙을 정의하는"
+        }
+      ]
+    }
+  ]
+}
