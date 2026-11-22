@@ -22,7 +22,8 @@
     "node-pipeline:draft": "node tools/node-pipeline/cli.mjs draft",
     "node-pipeline:check": "node tools/node-pipeline/cli.mjs check",
     "node-pipeline:gate": "node tools/node-pipeline/cli.mjs gate",
-    "node-pipeline:apply": "node tools/node-pipeline/cli.mjs apply"
+    "node-pipeline:apply": "node tools/node-pipeline/cli.mjs apply",
+    "node-pipeline:accept-alt": "node tools/node-pipeline/cli.mjs accept-alt"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"

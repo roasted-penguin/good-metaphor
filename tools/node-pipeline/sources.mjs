@@ -4,6 +4,7 @@
 //   stripQuery면 링크의 ?page=… 같은 꼬리를 떼고 본다(메이플 뉴스 목록)
 // - seeds: 목록 없이 바로 넣는 상세 페이지(식당: 기존 그래프가 실제로 열어 확인한 공공 자료 + 사전)
 // - content: 본문 구역 표지(경로 정규식 → { start, end }). 없으면 페이지 전체에서 머리·꼬리·메뉴를 뺀 글
+// - sectionSkip: 긴 글을 절로 나눌 때(T-195) 건너뛸 절 제목 정규식(없으면 모두 초안)
 // - rules: 사실 검사 규칙(규칙 2·기존 그래프 단위 테스트와 맞춘다)
 
 const MAPLE = 'https://maplestory.nexon.com';
@@ -35,6 +36,8 @@ export const INTERESTS = {
     seeds: [],
     // 초안 우선순위: 구조 설명이 많은 가이드 → 업데이트(패치 노트) → 공지(점검 안내가 많아 수확이 낮다)
     kindOrder: ['guide', 'update', 'notice'],
+    // 절 나누기(T-195)에서 건너뛸 절 제목: 금방 사라지는 이벤트·일정·보상, 오류 수정 목록, 댓글·메뉴. LLM 호출을 아낀다
+    sectionSkip: /이벤트|버닝|패스|PC방|미니게임|쿠폰|점검|선착순|접속 보상|댓글|오류 수정|^캐시(샵)?$|^뉴스$|일정|기간|보상 안내/,
     content: [
       { path: /^\/guide\//i, start: 'class="cv_main"', end: 'class="cv_footer"' },
       { path: /^\/news\//i, start: 'class="new_board_con"', end: 'id="footer"' }

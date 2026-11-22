@@ -1,8 +1,8 @@
 // 노드 파이프라인(T-194) 실행 층: index(목록 → 페이지 색인), draft(페이지 → LLM 후보).
 // 네트워크·LLM은 주입받는다(fetcher = web.mjs politeFetcher, complete = (system, user) → 글). 파일 입출력은 cli.mjs가 한다.
-import { extractLinks, htmlToText, extractTitle, contentHash } from './web.mjs';
+import { extractLinks, htmlToText, extractTitle, contentHash, HEADING_MARK } from './web.mjs';
 import { contentMarkers } from './sources.mjs';
-import { buildPageDraftPrompt, draftCandidates } from './draft.mjs';
+import { buildPageDraftPrompt, draftCandidates, splitSections } from './draft.mjs';
 
 // 색인 키: 메이플 공식 사이트는 경로 대소문자를 가리지 않아(/Guide·/guide) 소문자로 같은 글을 한 번만
 export const indexKey = url => {
@@ -62,34 +62,61 @@ export function pickPages(entries, { kindOrder = [], limit = 10, only } = {}) {
 }
 
 /**
- * 페이지마다 본문을 가져와(메모리) LLM에 한 번 묻고 후보를 만든다.
- * @param {{ cfg, pages, fetcher, complete, graph, tags, now?, log?, minText? }} p
- * @returns {Promise<{ candidates, pages: Array<{url, title, status, hash?, fetchedAt?, count, error?}> }>}
- *   pages는 색인 갱신용(본문 없음). 본문이 너무 짧으면(minText) LLM을 부르지 않는다(할당량 절약)
+ * 페이지마다 본문을 가져와(메모리) 절로 나누고(T-195), 절마다 LLM에 한 번 묻고 후보를 만든다.
+ * @param {{ cfg, pages, fetcher, complete, graph, tags, now?, log?, minText?, sectionOpts?, maxCalls? }} p
+ *   complete = (system, user) → 글. 캐시를 씌운 함수(cli.mjs cachedComplete)면 complete.calls()가 실제 호출 수다
+ *   maxCalls = 이번 실행 LLM 호출 상한(캐시 적중은 안 셈, complete.calls()로 센다. 없으면 절 수로 센다)
+ * @returns {Promise<{ candidates, dropped, pages: Array<{url, title, status, hash?, fetchedAt?, count, sections?, skipped?, overflow?, dropped?, error?}> }>}
+ *   pages는 색인 갱신용(본문 없음). 본문이 너무 짧으면(minText) LLM을 부르지 않는다(할당량 절약).
+ *   status 'budget'은 호출 상한에 걸려 다 못 한 페이지(다음 실행에 다시, 이미 한 절은 캐시로 공짜)
  */
-export async function draftPages({ cfg, pages, fetcher, complete, graph, tags, now = () => new Date().toISOString(), log = () => {}, minText = 200 }) {
-  const candidates = [], report = [];
+export async function draftPages({ cfg, pages, fetcher, complete, graph, tags, now = () => new Date().toISOString(), log = () => {}, minText = 200, sectionOpts = {}, maxCalls = Infinity }) {
+  const candidates = [], dropped = [], report = [];
   const existing = graph.nodes.map(n => ({ id: n.id, label: n.label }));
+  const tagIds = new Set((tags || []).map(t => t.id));
+  let used = 0;
+  const spent = () => (typeof complete.calls === 'function' ? complete.calls() : used);
+  let stop = false;
   for (const page of pages) {
+    if (stop) break;
+    if (spent() >= maxCalls) { log('호출 상한에 닿아 멈춤'); break; }
     const r = await fetcher.get(page.url);
     if (!r.ok) { report.push({ url: page.url, title: page.title, status: r.blocked ? 'robots' : 'fetch-' + r.status, count: 0 }); log(`가져오기 실패: ${page.url}`); continue; }
-    let text = htmlToText(r.html, contentMarkers(cfg, page.url));
+    let text = htmlToText(r.html, { ...contentMarkers(cfg, page.url), headings: true, max: Infinity });
     const title = page.title || extractTitle(r.html);
+    // 해시는 본문 전체(T-195부터 제목 표지 포함, 잘림 없음)
     const meta = { url: page.url, title, hash: contentHash(text), fetchedAt: now() };
     if (text.length < minText) { report.push({ ...meta, status: 'short', count: 0 }); log(`본문이 짧아 건너뜀(${text.length}자): ${page.url}`); text = null; continue; }
-    const { system, user } = buildPageDraftPrompt({ domain: cfg.domain, page: { url: page.url, title, text }, tags, existing, rules: cfg.rules });
-    let answer;
-    try { answer = await complete(system, user); } catch (e) {
-      report.push({ ...meta, status: 'llm-error', count: 0, error: String(e.message || e).slice(0, 160) });
-      log(`LLM 오류: ${page.url} ${String(e.message || e).slice(0, 120)}`);
-      if (e.status === 429) break; // 할당량이면 더 부르지 않는다
-      continue;
+    let { sections, skipped, overflow } = splitSections(text, { mark: HEADING_MARK, skip: cfg.sectionSkip || null, ...sectionOpts });
+    text = null;
+    const pageRow = { ...meta, status: 'ok', count: 0, sections: sections.length, skipped: skipped.length, overflow, dropped: 0 };
+    if (!sections.length) { report.push({ ...pageRow, status: 'short' }); log(`건너뛸 절만 있음: ${page.url}`); continue; }
+    for (const sec of sections) {
+      if (spent() >= maxCalls) { pageRow.status = 'budget'; log(`호출 상한: ${page.url} 남은 절은 다음에`); stop = true; break; }
+      const section = sections.length > 1 || sec.title ? sec.title : '';
+      const { system, user } = buildPageDraftPrompt({ domain: cfg.domain, page: { url: page.url, title, section, text: sec.text }, tags, existing, rules: cfg.rules });
+      let answer;
+      used++;
+      try { answer = await complete(system, user); } catch (e) {
+        pageRow.status = 'llm-error'; pageRow.error = String(e.message || e).slice(0, 160);
+        log(`LLM 오류: ${page.url} ${String(e.message || e).slice(0, 120)}`);
+        if (e.status === 429) stop = true; // 할당량이면 더 부르지 않는다
+        break;
+      }
+      const res = draftCandidates(answer, { page: { url: page.url, title, section }, pageText: sec.text, tagIds });
+      sec.text = null; // 본문은 여기서 버린다(D-5)
+      if (res.error) pageRow.parseErrors = (pageRow.parseErrors || 0) + 1;
+      candidates.push(...res.candidates);
+      dropped.push(...res.dropped);
+      pageRow.count += res.candidates.length;
+      pageRow.dropped += res.dropped.length;
+      // 같은 페이지 다음 절이 같은 개념을 다시 내지 않게
+      for (const c of res.candidates) if (c.id) existing.push({ id: c.id, label: c.label });
+      log(`초안 ${res.candidates.length}개(버림 ${res.dropped.length}): ${title}${section ? ' — ' + section.slice(0, 40) : ''}`);
     }
-    const { candidates: cs, error } = draftCandidates(answer, { page: { url: page.url, title }, pageText: text });
-    text = null; // 본문은 여기서 버린다(D-5)
-    candidates.push(...cs);
-    report.push({ ...meta, status: error ? 'parse-error' : 'ok', count: cs.length });
-    log(`초안 ${cs.length}개: ${title} (${page.url})`);
+    sections = null;
+    if (pageRow.status === 'ok' && pageRow.parseErrors === pageRow.sections) pageRow.status = 'parse-error';
+    report.push(pageRow);
   }
-  return { candidates, pages: report };
+  return { candidates, dropped, pages: report };
 }
