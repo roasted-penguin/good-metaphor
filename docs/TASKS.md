@@ -12,7 +12,8 @@
 | 2026-10-11 | 상태 | task/T-121-provider-retry | [#4](https://github.com/roasted-penguin/good-metaphor/pull/4) | #1·#2·#3 병합 반영: T-101·T-119 완료. 수동 스모크 첫 실행: Groq 전부 통과(0.4~0.9초), Gemini 503 2건 → T-121로 이어 확인. Groq 존댓말·추상화 문제로 T-122 추가. 노출됐던 Gemini 키 삭제 확인(401). |
 | D-1 | 기본 트리거를 Alt로 둘지 자동으로 둘지 | 결정 | P0 | 완료 | Alt + 첫 실행 선택 |
 | T-119 | 실제 키 스모크를 CI에서 수동 실행 (Actions 비밀값) | 1 품질 | P1 | 완료 | |
-| T-120 | Jev로 추상 태그 판정 실험 ("판정기" 인터페이스) | 1 품질 | P1 | 진행 | Jev 얼리 액세스 |
+| T-120 | Jev로 추상 태그 판정 실험 ("판정기" 인터페이스) | 1 품질 | P1 | 리뷰 | Jev 얼리 액세스 |
+| T-184 | T-120 후속: 태그 판정 질문을 정밀 모드의 추상화 LLM 호출에 합침(호출 수 그대로, 지연 0). T-120 결합(w=0.05) 실측: 메이플 평가셋 41→44, 홀드아웃 21→28, 검증 13→14, 식당 13→15 — 단 홀드아웃·음성·식당(가드 문장) 각 1개 1위 회귀. 회귀 3문장 먼저: (1) "명절 사과 한 상자 값"은 판정기가 맞는 태그(`market_price` 0.99)를 골랐는데 `meso_inflation`이 1위 → 그 노드 태그 점검, (2) "타이어가 펑 하고 터졌다"류 구조 없는 일상 문장에 `loss_risk` 0.7 → '없음' 선택지나 확률 하한(결과를 보고 고르지 않게 검증셋으로 정함). 회귀 0이면 정밀 모드에만 기본 켬 | 1 품질 | P1 | 대기 | T-120 |
 | T-121 | 제공자 일시 오류(503·429) 재시도 | 1 품질 | P0 | 완료 | |
 | T-122 | Groq 응답 품질 다듬기(존댓말 ~요, 추상화에 원문 용어 금지) + 기본 제공자 검토 | 1 품질 | P1 | 완료 | T-121 |
 | T-123 | 비유가 근거 facts 밖 사실을 쓰는지 검사 (nodeId만으로는 못 잡음) | 1 품질 | P1 | 완료 | |
@@ -109,7 +110,7 @@
 | T-179 | T-175 후속: 대체 임베더 v2가 잃은 4문장(평가셋 복권·Leverage·"스타포스 누르다가 장비가 파괴됐다", 검증 콘서트 티켓 — Leverage·스타포스는 충돌이 없을 때도 오답이라 예전엔 운으로 맞음) 확인, 그리고 대체 임베더 전용 기준선 파일(문장별 1위 기록)을 두어 검색 PR이 대체 수치를 손으로만 비교하지 않게(`eval:fallback`에 `--baseline` 같은 비교) | 1 품질 | P3 | 완료 | T-175 |
 | T-405 | [L0] 평가 도구에 서버 모드 추가 (관문 측정은 T-142로 분리) | L 서버 | P0 | 완료 | T-403 |
 | T-142 | [L0] 관문 측정: bge-m3 서버로 `npm run eval -- --server` → 서버 hit@1 ≥ 브라우저면 ADR 0006 채택 (T-405에서 분리) | L 서버 | P0 | 완료 | T-405 |
-| T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 리뷰 | T-401 |
+| T-411 | [L1] 맥 추출 노드: Ollama, tailscale serve, launchd 시간창 | L 서버 | P0 | 완료 | T-401 |
 | T-183 | T-142 후속(관문 미달): 서버 순위를 LightRAG 문맥 순서 대신 점수로 — LightRAG에서 후보를 넓게 받아 bge-m3 유사도로 브라우저와 같은 점수식(직접 × w1 + 태그 × w2 + 별칭 가산, 태그 예문·감점 포함)으로 다시 매김. 질의는 Gemini 키워드 대신 문장 자체도. 다시 `npm run eval -- --server`(맥 Ollama). **판정 2026-11-22**: 관문은 계속 평가셋 기준(정의 그대로), 홀드아웃은 나란히 적어 참고(평가셋은 브라우저 조정에 쓰여 서버에 불리함을 ADR에 명시) | L 서버 | P0 | 대기 | T-142 |
 | T-412 | [L1] 추출 프롬프트: 통제 어휘·용어 사전, JSON 모드 | L 서버 | P0 | 완료 | T-403 |
 | T-413 | [L1] 20청크 A/B 하네스 (모델 × thinking) | L 서버 | P0 | 대기 | T-411, T-412 |
@@ -583,6 +584,7 @@ ADR 0007, [naming-meme.md](naming-meme.md). 주 1회 나무위키·인벤의 용
 
 | 날짜 | ID | 브랜치 | PR | 내용 |
 | --- | --- | --- | --- | --- |
+| 2026-11-22 | T-120 | task/T-120-judge-choice | (PR) | 판정기 인터페이스 `lib/judges.js`(레지스트리: `gemini-choice`, `jev`는 키·공개 API 문서 없어 "키가 필요해요/아직 미지원"), `retrieve`의 `tagJudge` 선택지, `eval --judge`(.tmp 캐시·`--rpm`·503/429 백오프). 실제 크롬(gemini-3.5-flash-lite, 결합 가중치 0.05는 결과 보기 전에 고정): 메이플 평가셋 41→44(대신 42, 회귀 2), 검증 13→14, 홀드아웃 21→28(회귀 1), 식당 13→15(회귀 1, 가드 문장), 식당 홀드아웃 2→4, 음성 6→5, 태그 top-1 평가셋 26→38. 판정 지연 중앙 1.0초·p90 3.3초. ADR 0014: 호버에는 안 넣음(회귀·지연), 오프라인 평가 도구로. **판정**: 이득이 커서 정밀 모드 호출에 합치는 후속 T-184. Opus·medium 서브에이전트. 단위 743·서버 508. |
 | 2026-11-22 | T-411 | task/T-411-mac-extract-node | [#94](https://github.com/roasted-penguin/good-metaphor/pull/94) | 맥 추출 노드(사용자 설치 허락 2026-11-22): Homebrew Ollama를 launchd 사용자 에이전트로(시작·끝 두 개, `OLLAMA_HOST=127.0.0.1:11434`·`NUM_PARALLEL=1`·`KEEP_ALIVE=5m`·`CONTEXT_LENGTH=16384`, `caffeinate -i`), 시간창은 `infra/mac/window.conf` 한 곳(점심 12:10~13:00·밤 23:00~07:00, 서버 `EXTRACT_WINDOW`와 같은 형식), `install.sh`·`uninstall.sh`(sudo 없음, 127.0.0.1 아니면 거절), `ollama-window.sh hold/release/off`, `tailscale-serve.sh`, `infra/tailscale-policy.json`(`tag:rag-server`만 `tag:llm-node:11434`, 주인 기기도 막음), `infra/README.md` 새로. 이 맥에 설치함: 리스너 `127.0.0.1:11434`만, 모델 3개, T-413을 위해 hold 켜 둠. 남은 것(사람): Tailscale 설치·로그인·태그 승인·정책 붙여넣기, EC2에서 curl 확인은 T-401 완료 때. 서버 테스트 `test_mac_infra.py` 27개. Opus·medium 서브에이전트. 단위 717·서버 534. |
 | 2026-11-22 | T-142 | task/T-142-gate-local-bge | [#93](https://github.com/roasted-penguin/good-metaphor/pull/93) | 관문 측정(EC2 대신 맥 로컬 Ollama bge-m3, 127.0.0.1): 서버 hit@1 26/44 vs 브라우저 41/44 → **미달**, ADR 0006은 제안 그대로(원인·문장별·다음 수단 추가). hit@3 41 vs 43, 검증 7 vs 13/14, 홀드아웃 21/32 동률(각 8문장씩 서로 다름, 서버 hit@3 32/32). 원인: 서버가 LightRAG 문맥 순서로 고르고 유사도 점수가 없음, Gemini 키워드로 검색, 시드에 태그 예문·감점·별칭 가산 없음 → T-183. 도구: 관문 줄에 양쪽 임베더 이름, `--server-only`면 질의 재작성 건너뜀, 서버 `debug.embedderId`, 서버 502 재시도(Gemini 503 대비). Opus·medium 서브에이전트. 단위 720·서버 508. |
 | 2026-11-22 | T-122 | task/T-122-groq-quality | [#92](https://github.com/roasted-penguin/good-metaphor/pull/92) | 프롬프트에 해요체 끝맺음 규칙·예시 한 줄, 정밀 모드 추상화 원문 전문용어 금지(확장·서버 같은 문구). 끝맺음 검사: 확장은 어겼을 때만 교정 문구로 한 번 다시(규칙 1로 숨겨질 비유는 안 봄, 다시 받은 답도 규칙 1·근거·금칙어 검사), 서버는 4초 타임아웃 때문에 표시만(`debug.ending`). 스모크가 확장 파이프라인을 그대로 쓰고 존댓말·용어 검사, `--compare N` 비교표(smoke 워크플로 `compare` 입력, 30분). 비교(smoke run 44976158689, 평가셋 12문장, 후보는 대체 임베더): Groq JSON 12/12·규칙 1 12/12·근거 9/9·첫 답 존댓말 12/12·뜻까지 약 0.54초, 비유 없음 문장 2개 모두 정답 / Gemini 3.5 Flash-Lite 0.56초, JSON 하나 잘림·셔츠 문장에 억지 비유 / NVIDIA 첫 답 어김 2(둘 다 규칙 1로 숨겨질 비유). 기본 체인 그대로(Groq → Gemini → NVIDIA → Ollama). 무료 한도 Groq 문서표 30 RPM·1K RPD(Developer 표기라 콘솔 확인 필요), Gemini는 AI Studio에서만. Opus·medium 서브에이전트. 단위 709·e2e 119·서버 507. |
