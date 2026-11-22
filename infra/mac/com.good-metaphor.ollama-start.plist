@@ -30,14 +30,8 @@
 	<!-- 로그인·설치 때 한 번 돈다. 창 밖이면 스크립트가 켜지 않고 바로 끝난다(지금 켜기 표시가 있을 때만 예외) -->
 	<key>RunAtLoad</key>
 	<true/>
-	<!-- 비정상 종료만 다시 띄운다. 끝 에이전트가 끈 것(종료 코드 0)은 다시 띄우지 않는다 -->
-	<key>KeepAlive</key>
-	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
-	</dict>
-	<key>ThrottleInterval</key>
-	<integer>30</integer>
+	<!-- KeepAlive는 두지 않는다. SuccessfulExit 조건을 두면 launchd가 RunAtLoad를 "speculative"로 미뤄 로드 때 켜지지 않았다(2026-11-22 실측).
+	     죽으면 다음 창 시작이나 ollama-window.sh now로 다시 켠다 -->
 	<key>StartCalendarInterval</key>
 	<array/>
 	<key>StandardOutPath</key>

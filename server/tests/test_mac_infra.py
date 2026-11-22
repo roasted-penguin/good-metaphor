@@ -154,3 +154,8 @@ def test_install은_셸_OLLAMA_HOST가_다르면_멈춘다(tmp_path):
     assert r.returncode == 1
     assert "멈춰요" in r.stderr
     assert not (home / "Library").exists()
+
+
+def test_시작_에이전트에_KeepAlive가_없다():
+    # 조건부 KeepAlive(SuccessfulExit)를 두면 launchd가 RunAtLoad를 미뤄 로드 때 켜지지 않았다(2026-11-22)
+    assert "KeepAlive" not in load_plist(LABELS[0])

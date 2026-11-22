@@ -127,6 +127,11 @@ for label in "${LABELS[@]}"; do
   /bin/launchctl bootstrap "$DOMAIN" "$AGENTS_DIR/$label.plist"
 done
 
+# RunAtLoad만 믿지 않고, 켜야 할 때는 바로 kickstart한다(이미 돌고 있으면 아무 일도 안 함)
+if [ "$NOW" -eq 1 ] || /bin/bash "$APP_DIR/ollama-window.sh" in-window >/dev/null 2>&1; then
+  /bin/launchctl kickstart "$DOMAIN/${LABELS[0]}" || true
+fi
+
 echo "설치했어요. 시간창: $OLLAMA_WINDOW"
 echo "  시작 에이전트 시각: $(intervals_json start)"
 echo "  끝 에이전트 시각:   $(intervals_json end)"

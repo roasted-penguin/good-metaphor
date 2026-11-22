@@ -3,7 +3,9 @@
 #   start          시작 에이전트용. 창 안이면(또는 "지금 켜기" 표시가 있으면) ollama serve를 띄우고 기다린다.
 #   stop           끝 에이전트용. 창 밖이면 시작 에이전트의 Ollama를 끈다.
 #   now            창과 상관없이 지금 켠다(다음 창 끝에 꺼진다). T-413 벤치마크 등.
-#   off            창과 상관없이 지금 끈다(노트북을 바로 써야 할 때).
+#   hold           지금 켜고, release·off 전까지 끝 에이전트가 끄지 않게 붙잡는다(벤치마크 등 긴 작업).
+#   release        hold를 푼다(켜진 Ollama는 다음 창 끝에 꺼진다).
+#   off            창과 상관없이 지금 끈다(hold도 푼다, 노트북을 바로 써야 할 때).
 #   in-window [HH:MM]  그 시각(없으면 지금)이 창 안이면 종료 코드 0. 테스트용.
 #   status         launchd 상태와 11434 리스너를 보여 준다.
 # 규칙 10: Ollama는 127.0.0.1에만 연다. 그 외 주소면 켜지 않는다.
@@ -13,6 +15,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONF="$HERE/window.conf"
 START_LABEL="com.good-metaphor.ollama-start"
 FORCE_MARK="$HERE/force-start"
+HOLD_MARK="$HERE/hold"
 DOMAIN="gui/$(id -u)"
 EXPECTED_HOST="127.0.0.1:11434"
 
@@ -91,6 +94,10 @@ cmd_start() {
 }
 
 cmd_stop() {
+  if [ -f "$HOLD_MARK" ]; then
+    log "hold 중이라 끄지 않아요(풀기: ollama-window.sh release)."
+    exit 0
+  fi
   if in_window "$(date +%H:%M)"; then
     log "아직 다른 시간창 안이라 끄지 않아요."
     exit 0
@@ -101,6 +108,10 @@ cmd_stop() {
 }
 
 cmd_now() {
+  if /bin/launchctl print "$DOMAIN/$START_LABEL" 2>/dev/null | grep -q "^\tstate = running"; then
+    echo "이미 켜져 있어요."
+    return 0
+  fi
   touch "$FORCE_MARK"
   if /bin/launchctl print "$DOMAIN/$START_LABEL" >/dev/null 2>&1; then
     /bin/launchctl kickstart "$DOMAIN/$START_LABEL"
@@ -112,14 +123,30 @@ cmd_now() {
   fi
 }
 
+cmd_hold() {
+  touch "$HOLD_MARK"
+  if [ -n "$(listening)" ]; then
+    echo "hold: 이미 켜져 있어요. release·off 전까지 끄지 않아요."
+  else
+    cmd_now
+    echo "hold: release·off 전까지 끄지 않아요."
+  fi
+}
+
+cmd_release() {
+  rm -f "$HOLD_MARK"
+  echo "hold를 풀었어요. 다음 시간창 끝에 꺼져요."
+}
+
 cmd_off() {
-  rm -f "$FORCE_MARK"
+  rm -f "$FORCE_MARK" "$HOLD_MARK"
   /bin/launchctl kill SIGTERM "$DOMAIN/$START_LABEL" 2>/dev/null && echo "껐어요. 다음 시간창 시작에 다시 켜져요." \
     || echo "켜져 있지 않았어요."
 }
 
 cmd_status() {
   echo "시간창: ${OLLAMA_WINDOW:-늘 열림}"
+  [ -f "$HOLD_MARK" ] && echo "hold 중: 끝 에이전트가 끄지 않아요(풀기: release)"
   for label in "$START_LABEL" com.good-metaphor.ollama-stop; do
     if /bin/launchctl print "$DOMAIN/$label" >/dev/null 2>&1; then
       echo "$label: 설치됨, $(/bin/launchctl print "$DOMAIN/$label" | awk -F'= ' '/^\tstate =/{print "state=" $2} /^\tpid =/{print "pid=" $2}' | tr '\n' ' ')"
@@ -136,7 +163,9 @@ case "${1:-}" in
   stop) cmd_stop ;;
   now) cmd_now ;;
   off) cmd_off ;;
+  hold) cmd_hold ;;
+  release) cmd_release ;;
   in-window) in_window "${2:-$(date +%H:%M)}" ;;
   status) cmd_status ;;
-  *) echo "쓰는 법: $0 start|stop|now|off|in-window [HH:MM]|status" >&2; exit 2 ;;
+  *) echo "쓰는 법: $0 start|stop|now|hold|release|off|in-window [HH:MM]|status" >&2; exit 2 ;;
 esac

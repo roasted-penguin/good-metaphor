@@ -25,7 +25,7 @@ M2 Pro 맥(16GB)의 Ollama가 엔티티·관계 추출을 맡는다. 시간창(�
 
 ### 어떻게 도는지
 
-- **시작 에이전트** `com.good-metaphor.ollama-start`: `window.conf`의 각 시작 시각(`StartCalendarInterval`)과 로그인 때(`RunAtLoad`) `ollama-window.sh start`를 부른다. 창 안이면 `ollama serve`를 띄우고 `caffeinate -i -w`로 켜져 있는 동안만 맥이 잠들지 않게 한다. 창 밖이면 아무것도 하지 않고 끝난다. 비정상 종료만 30초 뒤 다시 띄운다(`KeepAlive.SuccessfulExit=false`).
+- **시작 에이전트** `com.good-metaphor.ollama-start`: `window.conf`의 각 시작 시각(`StartCalendarInterval`)과 로그인 때(`RunAtLoad`) `ollama-window.sh start`를 부른다. 창 안이면 `ollama serve`를 띄우고 `caffeinate -i -w`로 켜져 있는 동안만 맥이 잠들지 않게 한다. 창 밖이면 아무것도 하지 않고 끝난다. `KeepAlive`는 두지 않는다(조건부 KeepAlive를 두면 launchd가 로드 때 실행을 미뤘다). 도중에 죽으면 다음 창 시작이나 `now`로 다시 켠다. `install.sh`는 창 안이거나 `--now`면 설치 직후 `launchctl kickstart`로 바로 켠다.
 - **끝 에이전트** `com.good-metaphor.ollama-stop`: 각 끝 시각에 `ollama-window.sh stop`이 시작 에이전트에 SIGTERM을 보낸다(다른 창 안이면 건너뜀).
 - 환경 변수는 plist `EnvironmentVariables`에 넷만: `OLLAMA_HOST=127.0.0.1:11434`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_KEEP_ALIVE=5m`, `OLLAMA_CONTEXT_LENGTH=16384`. `install.sh`와 `ollama-window.sh start`는 `OLLAMA_HOST`가 127.0.0.1이 아니면 멈춘다.
 - 스크립트 사본은 `~/Library/Application Support/good-metaphor/mac/`(launchd가 `~/Desktop` 아래 파일을 못 읽는 일을 피함), 에이전트는 `~/Library/LaunchAgents/`, 로그는 `~/Library/Logs/good-metaphor/ollama.log`·`ollama-stop.log`.
@@ -52,10 +52,14 @@ cd infra/mac
 APP="$HOME/Library/Application Support/good-metaphor/mac"
 "$APP/ollama-window.sh" status   # 에이전트 상태와 11434 리스너
 "$APP/ollama-window.sh" now      # 창 밖에서 지금 켜기(다음 창 끝에 꺼짐)
-"$APP/ollama-window.sh" off      # 노트북을 바로 써야 할 때 끄기(다음 창 시작에 다시 켜짐)
+"$APP/ollama-window.sh" hold     # 지금 켜고 release·off 전까지 끝 에이전트가 끄지 않게(벤치마크 T-413 등)
+"$APP/ollama-window.sh" release  # hold 풀기(다음 창 끝에 꺼짐)
+"$APP/ollama-window.sh" off      # 노트북을 바로 써야 할 때 끄기(hold도 풂, 다음 창 시작에 다시 켜짐)
 tail -f ~/Library/Logs/good-metaphor/ollama.log
 ./uninstall.sh                   # 에이전트 제거(로그·모델은 남김)
 ```
+
+`now`는 창 하나만 넘긴다. 지금이 창 안이면 그 창 끝에 바로 꺼지므로, 긴 작업은 `hold`를 쓴다(표시 파일 `hold`가 있으면 끝 에이전트가 건너뜀). 작업이 끝나면 꼭 `release`.
 
 `now`는 표시 파일(`force-start`)을 만들고 `launchctl kickstart gui/$(id -u)/com.good-metaphor.ollama-start`를 부른다. 시작 스크립트가 표시를 읽고 지운 뒤 창과 상관없이 켠다. `off`로 끄면 워커는 처리 중이던 청크를 실패로 두고 다음 창에 다시 한다.
 
