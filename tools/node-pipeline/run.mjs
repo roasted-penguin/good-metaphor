@@ -28,6 +28,22 @@ export async function buildIndex({ cfg, fetcher, pages = 1, now = () => new Date
   for (const s of cfg.seeds || []) add({ url: s.url, title: s.title || '', kind: s.kind, listedAt: now() });
   let listings = 0;
   for (const l of cfg.listings || []) {
+    // 사이트 자체 JSON 목록(T-208): 메이플 가이드 분류(boardId)마다 POST 한 번이 그 분류 글 전부. 글 번호·제목만 남기고 본문 칸은 버린다(D-5)
+    if (l.json) {
+      const r = await fetcher.postJson(l.url, l.json.body || {});
+      listings++;
+      if (!r.ok) { failures.push({ url: l.url, status: r.status, blocked: r.blocked || null }); log(`목록 실패 ${r.status}${r.blocked ? ' robots' : ''}: ${l.url}`); continue; }
+      let found = 0;
+      for (const link of l.json.links(r.json) || []) {
+        if (!link?.url || !l.linkPattern.test(link.url)) continue;
+        if (l.titleSkip && l.titleSkip.test(link.text || '')) continue;
+        if (!cfg.allowHost(new URL(link.url).hostname)) continue;
+        add({ url: link.url, title: String(link.text || '').slice(0, 120), kind: l.kind, listedAt: now() });
+        found++;
+      }
+      log(`목록(JSON) ${l.url} → ${found}개`);
+      continue;
+    }
     const n = l.paged === false || !l.url.includes('{page}') ? 1 : pages;
     for (let p = 1; p <= n; p++) {
       const url = l.url.replace('{page}', String(p));

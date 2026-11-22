@@ -80,6 +80,26 @@ test('politeFetcher: robots.txt가 HTML(리다이렉트)이거나 404면 규칙 
   assert.equal((await f.get('https://b.example/Disallow/x')).ok, true);
 });
 
+test('politeFetcher.postJson(T-208): robots·간격을 지키고 JSON을 돌려줌, JSON이 아니면 실패', async () => {
+  let clock = 0;
+  const calls = [];
+  const fakeFetch = async (url, init = {}) => {
+    calls.push({ url, method: init.method || 'GET', type: init.headers?.['content-type'], ua: init.headers?.['user-agent'] });
+    if (url.endsWith('/robots.txt')) return new Response('User-agent: *\nDisallow: /secret', { status: 200, headers: { 'content-type': 'text/plain' } });
+    if (url.includes('/html')) return new Response('<p>x</p>', { status: 200 });
+    return new Response(JSON.stringify({ list: [{ articleId: 1 }] }), { status: 200 });
+  };
+  const f = politeFetcher({ fetch: fakeFetch, now: () => clock, sleep: async ms => { clock += ms; }, minIntervalMs: 1000 });
+  const a = await f.postJson('https://a.example/list?boardId=1');
+  assert.deepEqual(a.json, { list: [{ articleId: 1 }] });
+  assert.equal((await f.postJson('https://a.example/secret/list')).blocked, 'robots');
+  assert.equal((await f.postJson('https://a.example/html')).ok, false);
+  const post = calls.find(c => c.method === 'POST');
+  assert.equal(post.type, 'application/json');
+  assert.match(post.ua, /good-metaphor-node-pipeline/);
+  assert.equal(calls.filter(c => c.url.includes('/secret')).length, 0);
+});
+
 /* ───── 초안 ───── */
 
 test('buildPageDraftPrompt: 태그 목록·기존 개념·페이지 근거·수치 금지·관심사별 별칭 규칙', () => {

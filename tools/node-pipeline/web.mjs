@@ -163,11 +163,11 @@ export function politeFetcher({ fetch: f = globalThis.fetch, sleep = ms => new P
     last.set(host, now());
   }
 
-  async function raw(url) {
+  async function raw(url, init = {}) {
     const u = new URL(url);
     await wait(u.host);
     stats.requests++;
-    const res = await f(url, { headers: { 'user-agent': userAgent, accept: 'text/html,text/plain;q=0.9,*/*;q=0.5' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+    const res = await f(url, { ...init, headers: { 'user-agent': userAgent, accept: 'text/html,text/plain;q=0.9,*/*;q=0.5', ...(init.headers || {}) }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
     return res;
   }
 
@@ -202,5 +202,18 @@ export function politeFetcher({ fetch: f = globalThis.fetch, sleep = ms => new P
     }
   }
 
-  return { get, allowed, stats };
+  // 사이트 자체 목록 API(T-208, 메이플 가이드 분류별 글 목록은 POST JSON). robots·간격은 get과 같다. 돌려주는 json은 부른 쪽이 필요한 칸만 남긴다(D-5)
+  async function postJson(url, body = {}) {
+    if (!(await allowed(url))) { stats.robotsBlocked++; return { ok: false, status: 0, url, blocked: 'robots', json: null }; }
+    try {
+      const res = await raw(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(body) });
+      let json = null;
+      if (res.ok) { try { json = JSON.parse(await res.text()); } catch { return { ok: false, status: res.status, url, error: 'not-json', json: null }; } }
+      return { ok: res.ok, status: res.status, url: res.url || url, json };
+    } catch (e) {
+      return { ok: false, status: 0, url, error: e.message, json: null };
+    }
+  }
+
+  return { get, postJson, allowed, stats };
 }

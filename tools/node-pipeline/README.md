@@ -12,7 +12,7 @@ index → draft → check → (승인 id 고르기) → gate(fallback) → gate(
 
 - **원문 저장 금지(D-5).** 페이지 본문은 초안 호출 동안 메모리에만 있다. 디스크에는 URL, 제목, 가져온 시각, 본문 해시, 우리 말로 쓴 사실, 겹침 지표(숫자)만 남는다.
 - **공식 출처만.** 메이플은 `maplestory.nexon.com`, 식당은 `*.go.kr`, `www.korea.kr`, `www.sbiz.or.kr`(`sources.mjs` `allowHost`). 출처 주소는 LLM이 아니라 파이프라인이 붙인다.
-- **예의 바른 수집.** 호스트마다 1초에 1번 이하, robots.txt를 지키고(가장 긴 규칙 우선), UA에 도구 이름을 밝힌다. 메이플 가이드 목록은 스크립트로 그려져서 robots가 허용하는 공식 가이드 검색(`/Guide/N23GameInformation/Articles/Search`)을 주제어로 돌린다.
+- **예의 바른 수집.** 호스트마다 1초에 1번 이하, robots.txt를 지키고(가장 긴 규칙 우선), UA에 도구 이름을 밝힌다. 메이플 가이드 목록은 스크립트로 그려진다. T-207까지는 공식 가이드 검색을 주제어로 돌렸는데 쪽당 5개라 겹침이 많았고, T-208부터는 가이드 첫 화면 분류가 부르는 사이트 자체 목록 API(`POST /guide/n23gameinformation/articles?boardId=…`, robots 허용 경로, `sources.mjs` `MAPLE_GUIDE_BOARDS`)로 분류 9개 × 1번이면 가이드 107글 전부를 얻는다(검색으로 모은 100글을 모두 포함, 2026-11-23). 응답의 본문 칸은 버리고 글 번호·제목만 쓴다(`fetcher.postJson`, 목록 항목 `json.links`).
 - **규칙 2·9·11.** 자주 바뀌는 수치(확률, 판본, 날짜, 가격, 레벨, 횟수)는 실패로 친다(메이플은 `6차` 같은 차수만 허용, 식당은 숫자가 하나라도 있으면 실패). 태그는 `tags.json` 목록 안의 것만 받는다. 금칙어는 `blocklist.json`에서 `승인` 상태인 카드만 쓴다.
 - **회귀 0.** 실제 그래프에는 실제 확장 관문(`gate --embedder browser`)을 통과한 노드만 쓴다(`apply --write-real`은 `--gate browser`일 때만 동작).
 
