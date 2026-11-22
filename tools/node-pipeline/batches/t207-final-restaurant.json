@@ -4,31 +4,6 @@
   "results": [
     {
       "batch": 11,
-      "status": "pass",
-      "node": {
-        "id": "liquor_license_succession",
-        "label": "주류 면허 승계와 상속",
-        "facts": [
-          "사업에 관한 모든 권리와 의무를 포괄적으로 넘겨 법인으로 바꾸거나 영업을 상속받은 자는 관련 요건을 갖추어 관할 세무서장에게 신고해야 한다.",
-          "일정 제한 사유에 해당하지 않으면 신고를 통해 해당 법인이나 상속인이 기존의 주류 제조 또는 판매업 면허를 그대로 받은 것으로 인정받는다."
-        ],
-        "tags": [
-          "compliance_procedure"
-        ],
-        "sources": [
-          "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EC%A3%BC%EB%A5%98%EB%A9%B4%ED%97%88%EB%93%B1%EC%97%90%EA%B4%80%ED%95%9C%EB%B2%95%EB%A5%A0"
-        ],
-        "verifiedAt": "2026-11-23"
-      },
-      "edges": [
-        {
-          "to": "alcohol_manufacturing_license",
-          "rel": "승계"
-        }
-      ]
-    },
-    {
-      "batch": 11,
       "status": "warn",
       "node": {
         "id": "simple_bookkeeping_target",

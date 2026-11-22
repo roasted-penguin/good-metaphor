@@ -9,7 +9,7 @@
   "summary": {
     "maplestory/eval": {
       "n": 44,
-      "hit1": 19,
+      "hit1": 20,
       "hit3": 31,
       "negativePass": "6/6"
     },
@@ -40,7 +40,7 @@
       {"sentence":"레버리지는 이익과 손실을 모두 키워서 작은 가격 하락에도 원금을 잃을 수 있다.","kind":"hit","top3":["starforce","item_burning","chronicle_lete"],"hit1":true,"hit3":true},
       {"sentence":"중앙은행이 돈을 많이 찍어내면 물가가 오르고 화폐 가치가 떨어진다.","kind":"hit","top3":["starforce","cube","crafting_mastery_level"],"hit1":false,"hit3":false},
       {"sentence":"한정판 운동화는 구하기 어려워 되팔 때 가격이 크게 오른다.","kind":"hit","top3":["newname_auction","auction","boss_entry"],"hit1":false,"hit3":true},
-      {"sentence":"대학원에 지원하려면 최소 학점 기준을 넘겨야 한다.","kind":"hit","top3":["world_archive","boss_entry","sixth_job"],"hit1":false,"hit3":true},
+      {"sentence":"대학원에 지원하려면 최소 학점 기준을 넘겨야 한다.","kind":"hit","top3":["world_archive","boss_entry","sixth_job"],"hit1":true,"hit3":true},
       {"sentence":"근력 운동은 초보 때는 빨리 늘지만 숙련될수록 같은 노력 대비 성장이 더뎌진다.","kind":"hit","top3":["level_exp","ignore_defense","starforce"],"hit1":true,"hit3":true},
       {"sentence":"적금은 매달 정해진 금액을 꾸준히 넣어야 목표 금액에 도달한다.","kind":"hit","top3":["arcane_symbol","trait","hyper_burning"],"hit1":true,"hit3":true},
       {"sentence":"백화점 세일 기간에는 사람들이 큰 구매를 몰아서 한다.","kind":"hit","top3":["arcane_symbol","starforce_event","trait"],"hit1":false,"hit3":true},
@@ -164,7 +164,7 @@
       {"sentence":"영화 촬영장에서는 촬영, 조명, 편집 팀이 일을 나눠 맡고 감독이 전체를 지휘한다.","kind":"hit","top3":["kitchen_division","open_prep","price_board"],"hit1":true,"hit3":true},
       {"sentence":"유튜브 채널을 넘길 때는 그동안 쌓은 구독자의 가치까지 값으로 쳐서 받는다.","kind":"hit","top3":["key_money","loyalty_points","market_saturation"],"hit1":true,"hit3":true},
       {"sentence":"주유소는 도로에서 잘 보이도록 기름값을 큰 판에 걸어 둔다.","kind":"hit","top3":["limited_menu","loyalty_points","hygiene_inspection"],"hit1":false,"hit3":false},
-      {"sentence":"학원을 열려면 교육청에 먼저 등록해야 하고, 등록하지 않고 수업하면 폐쇄 명령을 받는다.","kind":"hit","top3":["open_prep","health_certificate_rule","liquor_license_succession"],"hit1":true,"hit3":true},
+      {"sentence":"학원을 열려면 교육청에 먼저 등록해야 하고, 등록하지 않고 수업하면 폐쇄 명령을 받는다.","kind":"hit","top3":["open_prep","health_certificate_rule","price_board"],"hit1":true,"hit3":true},
       {"sentence":"스타포스 이벤트 기간에는 강화 비용이 할인돼 유저들이 그때 몰아서 강화한다.","kind":"hit","top3":["happy_hour","fixed_variable_cost","hygiene_inspection"],"hit1":true,"hit3":true},
       {"sentence":"메소 시세가 떨어져서 같은 아이템을 사려면 메소가 훨씬 더 든다.","kind":"hit","top3":["hygiene_grade","small_amount_exemption","youth_startup_tax_reduction"],"hit1":false,"hit3":false},
       {"sentence":"보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.","kind":"hit","top3":["kitchen_division","open_prep","franchise_disclosure"],"hit1":true,"hit3":true},
