@@ -35,6 +35,5 @@
   {"sentence": "학원은 조례에 따라 밤늦은 시간에는 수업을 할 수 없다.", "expectNodes": ["business_hours_limit"], "expectTag": "periodic_cap", "since": "T-192", "why": "지자체 규칙으로 영업할 수 있는 시간이 제한된다 = 영업시간 제한"},
   {"sentence": "제약회사가 불량 원료로 만든 약을 팔면 피해가 없어도 처벌받고, 다시 걸리면 더 무겁게 처벌받는다.", "expectNodes": ["food_poisoning"], "expectTag": "escalating_cost", "since": "T-192", "why": "해로울 우려만으로 처벌하고 되풀이하면 가중한다 = 상한 식재료와 식중독 책임"},
   {"sentence": "올해 커피 원두 산지에 가뭄이 들어 수확이 줄자 원두 값이 크게 뛰었다.", "expectNodes": ["produce_supply"], "expectTag": "market_price", "since": "T-192", "why": "수확이 줄어 공급이 모자라면 값이 오른다 = 농산물 작황과 식재료 수급"},
-  {"sentence": "자동차를 몰려면 사고로 남에게 입힌 피해를 대신 물어 주는 책임보험에 꼭 들어야 한다.", "expectNodes": ["fire_liability_insurance"], "expectTag": "loss_risk", "since": "T-192", "why": "남에게 입힐 피해를 대신 물어 줄 보험이 의무다 = 화재배상책임보험"},
   {"sentence": "중고거래 안전결제는 구매자가 낸 돈을 중간에서 맡아 두었다가 물건을 받았다고 확인하면 판매자에게 넘긴다.", "expectNodes": ["franchise_escrow"], "expectTag": "progression_gate", "since": "T-192", "why": "낸 돈을 제삼자가 맡았다가 조건이 채워지면 넘긴다 = 가맹금 예치"}
 ]
