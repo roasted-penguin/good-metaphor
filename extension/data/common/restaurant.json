@@ -1249,6 +1249,11 @@
       "from": "signage_permit",
       "to": "open_prep",
       "rel": "문을 열기 전에 갖출 일"
+    },
+    {
+      "from": "lost_item_liability",
+      "to": "no_show",
+      "rel": "손님과 얽힌 손해를 다루는 규칙"
     }
   ]
 }
