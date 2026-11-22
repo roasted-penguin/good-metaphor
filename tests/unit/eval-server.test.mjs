@@ -66,18 +66,20 @@ test('429 네 번: 재시도 3번을 다 쓰면 ServerError', async () => {
   assert.equal(calls.length, 4);
 });
 
-test('502 한 번 뒤 성공, 502 두 번이면 ServerError', async () => {
+test('502는 15·30·45초 기다렸다 최대 3번 다시, 네 번째 502면 ServerError (T-142)', async () => {
+  const e502 = () => res(502, { error: '상류 실패' });
   {
-    const { fetchImpl, calls } = fakeFetch([res(502, { error: '상류 실패' }), ok(['auction'])]);
-    const { sleep } = fakeSleep();
+    const { fetchImpl, calls } = fakeFetch([e502(), e502(), e502(), ok(['auction'])]);
+    const { sleep, waits } = fakeSleep();
     assert.deepEqual(await rankViaServer({ ...base, fetchImpl, sleep }), ['auction']);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 4);
+    assert.deepEqual(waits, [15000, 30000, 45000]);
   }
   {
-    const { fetchImpl, calls } = fakeFetch([res(502, { error: '상류 실패' }), res(502, { error: '상류 실패' })]);
+    const { fetchImpl, calls } = fakeFetch([e502(), e502(), e502(), e502()]);
     const { sleep } = fakeSleep();
     await assert.rejects(rankViaServer({ ...base, fetchImpl, sleep }), e => e instanceof ServerError && e.status === 502);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 4);
   }
 });
 
