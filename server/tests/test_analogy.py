@@ -94,6 +94,14 @@ def test_response_has_extension_shape():
     assert "테스트 페이지" in an_user and "앞 문장이에요." in an_user and "커서가 가리킨 단어: 강화" in an_user
 
 
+def test_debug_embedder_id_names_index_embedder():
+    # 평가 도구 관문 줄이 서버 쪽 임베더 이름을 찍는다(T-142). 해시면 해시 방식 이름까지
+    client, *_ = _client()
+    assert _post(client, "강화 확률이 낮아요.").json()["debug"]["embedderId"] == "hash:hash-ngram-v1"
+    client, *_ = _client(_settings(embedding_provider="ollama", embedding_model="bge-m3"))
+    assert _post(client, "강화 확률이 낮아요.").json()["debug"]["embedderId"] == "ollama:bge-m3"
+
+
 def test_out_of_candidates_node_hides_analogy():
     client, *_ = _client()
     body = _post(client, "Leverage magnifies both gains and losses.").json()

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rankViaServer, rankAllViaServer, gateLine, ServerError, ServerUnavailable } from '../../tools/eval-server.mjs';
+import { rankViaServer, rankAllViaServer, gateLine, serverEmbedderLabel, rewriteIdFromArgv, ServerError, ServerUnavailable } from '../../tools/eval-server.mjs';
 
 // 서버 응답 흉내 (server/app/main.py, pipeline.py)
 const res = (status, body, headers = {}) => ({
@@ -66,18 +66,20 @@ test('429 네 번: 재시도 3번을 다 쓰면 ServerError', async () => {
   assert.equal(calls.length, 4);
 });
 
-test('502 한 번 뒤 성공, 502 두 번이면 ServerError', async () => {
+test('502는 15·30·45초 기다렸다 최대 3번 다시, 네 번째 502면 ServerError (T-142)', async () => {
+  const e502 = () => res(502, { error: '상류 실패' });
   {
-    const { fetchImpl, calls } = fakeFetch([res(502, { error: '상류 실패' }), ok(['auction'])]);
-    const { sleep } = fakeSleep();
+    const { fetchImpl, calls } = fakeFetch([e502(), e502(), e502(), ok(['auction'])]);
+    const { sleep, waits } = fakeSleep();
     assert.deepEqual(await rankViaServer({ ...base, fetchImpl, sleep }), ['auction']);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 4);
+    assert.deepEqual(waits, [15000, 30000, 45000]);
   }
   {
-    const { fetchImpl, calls } = fakeFetch([res(502, { error: '상류 실패' }), res(502, { error: '상류 실패' })]);
+    const { fetchImpl, calls } = fakeFetch([e502(), e502(), e502(), e502()]);
     const { sleep } = fakeSleep();
     await assert.rejects(rankViaServer({ ...base, fetchImpl, sleep }), e => e instanceof ServerError && e.status === 502);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 4);
   }
 });
 
@@ -138,9 +140,38 @@ test('rankAllViaServer: 503이면 거기서 멈추고 ServerUnavailable을 올�
   assert.equal(calls.length, 1);
 });
 
-test('gateLine: 통과·미달·동률(동률은 통과), 브라우저 없음은 비교 생략', () => {
-  assert.equal(gateLine(28, 27, 35), '관문: 서버 hit@1 28/35 vs 브라우저 27/35 → 통과');
-  assert.equal(gateLine(20, 27, 35), '관문: 서버 hit@1 20/35 vs 브라우저 27/35 → 미달');
-  assert.equal(gateLine(27, 27, 35), '관문: 서버 hit@1 27/35 vs 브라우저 27/35 → 통과');
-  assert.equal(gateLine(27, null, 35), '관문: 서버 hit@1 27/35 · 브라우저 비교 생략');
+test('gateLine: 통과·미달·동률(동률은 통과), 브라우저 없음은 비교 생략, 양쪽 임베더 이름 (T-142)', () => {
+  const emb = { server: 'ollama:bge-m3', browser: 'e5-base:q8 · 브라우저' };
+  assert.equal(gateLine(28, 27, 35, emb), '관문: 서버 hit@1 28/35 (ollama:bge-m3) vs 브라우저 27/35 (e5-base:q8 · 브라우저) → 통과');
+  assert.equal(gateLine(20, 27, 35, emb), '관문: 서버 hit@1 20/35 (ollama:bge-m3) vs 브라우저 27/35 (e5-base:q8 · 브라우저) → 미달');
+  assert.equal(gateLine(27, 27, 35, emb), '관문: 서버 hit@1 27/35 (ollama:bge-m3) vs 브라우저 27/35 (e5-base:q8 · 브라우저) → 통과');
+  assert.equal(gateLine(27, null, 35, emb), '관문: 서버 hit@1 27/35 (ollama:bge-m3) · 브라우저 비교 생략');
+  // 이름을 못 받으면 비우지 않고 '임베더 모름'
+  assert.equal(gateLine(27, 26, 35), '관문: 서버 hit@1 27/35 (임베더 모름) vs 브라우저 26/35 (임베더 모름) → 통과');
+  // --fallback·--node: 브라우저 쪽이 실제 확장 임베딩이 아니면 참고용이라고 덧붙인다
+  assert.equal(gateLine(27, 20, 35, { server: 'ollama:bge-m3', browser: 'fallback n-gram', browserReal: false }),
+    '관문: 서버 hit@1 27/35 (ollama:bge-m3) vs 브라우저 20/35 (fallback n-gram) → 통과 (참고용: 브라우저 쪽이 실제 확장 임베딩이 아니에요)');
+});
+
+test('serverEmbedderLabel: debug.embedderId를 모아 한 이름, 없으면 임베더 모름, 여럿이면 / (T-142)', () => {
+  assert.equal(serverEmbedderLabel(new Set(['ollama:bge-m3', 'ollama:bge-m3'])), 'ollama:bge-m3');
+  assert.equal(serverEmbedderLabel(new Set([null, undefined])), '임베더 모름');
+  assert.equal(serverEmbedderLabel([]), '임베더 모름');
+  assert.equal(serverEmbedderLabel(['ollama:bge-m3', 'hash:hash-ngram-v1']), 'ollama:bge-m3/hash:hash-ngram-v1');
+});
+
+test('rankAllViaServer: onDebug로 응답 debug를 넘긴다 (T-142)', async () => {
+  const withEmb = id => res(200, { debug: { embedderId: 'ollama:bge-m3', candidates: [{ id }] } });
+  const { fetchImpl } = fakeFetch([withEmb('meso'), withEmb('auction')]);
+  const { sleep } = fakeSleep();
+  const seen = [];
+  const out = await rankAllViaServer({ url: 'http://srv.test', token: 't', cases: [{ sentence: 'a' }, { sentence: 'b' }], fetchImpl, sleep, onDebug: d => seen.push(d.embedderId) });
+  assert.deepEqual(out, [['meso'], ['auction']]);
+  assert.deepEqual(seen, ['ollama:bge-m3', 'ollama:bge-m3']);
+});
+
+test('rewriteIdFromArgv: --server-only면 질의 재작성을 건너뛴다 (T-142)', () => {
+  assert.equal(rewriteIdFromArgv(['node', 'eval.mjs', '--rewrite', 'gemini']), 'gemini');
+  assert.equal(rewriteIdFromArgv(['node', 'eval.mjs', '--server', 'http://x', '--server-only', '--rewrite', 'gemini']), null);
+  assert.equal(rewriteIdFromArgv(['node', 'eval.mjs', '--server', 'http://x']), null);
 });

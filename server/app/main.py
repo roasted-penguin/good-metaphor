@@ -21,7 +21,7 @@ from .cache import ResultCache, cache_key
 from .config import EXTENSION_ORIGIN_REGEX, Settings, load_common_graph
 from .pipeline import AnalogyPipeline, AnalogyRequest, PipelineError
 from .ratelimit import RateLimiter
-from .seedmeta import index_status
+from .seedmeta import embedding_identity, index_status
 
 log = logging.getLogger(__name__)
 
@@ -160,8 +160,10 @@ def create_app(deps: dict[str, Any] | None = None) -> FastAPI:
             else:
                 # 시드된 인덱스(LIGHTRAG_WORKING_DIR/WORKSPACE)를 첫 검색 때 연다. 없으면 검색 단계에서 503
                 retriever = app.state.owned_retriever = LazyLightRAGRetriever(s, graph)
+        emb = embedding_identity(s)
         app.state.pipeline = AnalogyPipeline(graph, keyword_llm, analogy_llm, retriever, s.analogy_model,
-                                             blocklist=app.state.blocklist)
+                                             blocklist=app.state.blocklist,
+                                             embedder_id=f"{emb['provider']}:{emb['model']}")
         return app.state.pipeline
 
     @app.exception_handler(Exception)
