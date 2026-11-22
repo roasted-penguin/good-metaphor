@@ -96,10 +96,19 @@ export function sliceBetween(html, start, end) {
 }
 
 // HTML → 읽을 글. script·style·nav·header·footer·form을 통째로 빼고 블록 태그는 줄바꿈
-export function htmlToText(html, { start, end, max = MAX_TEXT } = {}) {
+// headings면 h1~h3 제목을 "§§ 제목" 한 줄로 남긴다(T-195: 긴 패치 노트를 절 단위로 나누는 표지, draft.mjs splitSections)
+export const HEADING_MARK = '§§ ';
+export function htmlToText(html, { start, end, max = MAX_TEXT, headings = false } = {}) {
   let s = sliceBetween(html, start, end)
     .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<(script|style|noscript|nav|header|footer|form|select|svg|iframe)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<(script|style|noscript|nav|header|footer|form|select|svg|iframe)\b[\s\S]*?<\/\1>/gi, ' ');
+  if (headings) {
+    s = s.replace(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (m, n, inner) => {
+      const t = decodeEntities(inner.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+      return t ? `\n${HEADING_MARK}${t}\n` : ' ';
+    });
+  }
+  s = s
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|li|tr|h[1-6]|dt|dd|section|article|table|ul|ol)>/gi, '\n')
     .replace(/<[^>]+>/g, ' ');
