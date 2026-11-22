@@ -47,8 +47,9 @@ export function aliasMatch(text, aliases) {
 }
 
 /**
- * 메이플 단서에서 빼는 일반어 (T-149). 공통 노드 라벨 낱말 중 다른 분야 글에도 흔한 것.
+ * 메이플 단서로 쓰면 안 되는 일반어 (T-149). 공통 노드 라벨 낱말 중 다른 분야 글에도 흔한 것.
  * 이 낱말만으로는 "메이플 이야기"라고 볼 수 없어 약한 별칭(세금·펑)의 가산 근거로 쓰지 않는다.
+ * T-199부터 단서는 그래프의 명시 목록(cueWords)이라 런타임에는 쓰지 않고, cueWordProblems(데이터 검증)가 목록과 대조한다.
  * 근거는 낱말마다 주석. 라벨이 바뀌면 단위 테스트가 죽은 항목을 알려 준다.
  */
 export const MAPLE_GENERIC_WORDS = [
@@ -107,32 +108,53 @@ export const MAPLE_GENERIC_WORDS = [
   '보상',       // 손해 보상, 성과 보상
   '분배'        // 이익 분배, 소득 분배
 ];
-const GENERIC = new Set(MAPLE_GENERIC_WORDS);
-
 /**
- * 공통 노드 라벨의 핵심 낱말 (T-149): 괄호 안을 빼고 공백으로 나눈 뒤, 3글자 이상이면 끝의 과·와(이음 조사)를 떼고,
- * 2글자 이상이며 일반어가 아닌 것. 사용자 노드(source 'common'이 아님)는 넣지 않는다.
+ * 관심사 단서 낱말 (T-199): 관심사 그래프의 명시 목록(cueWords). mergeGraphs가 공통 그래프 것만 싣는다(오버레이는 못 더함).
+ * T-149~T-198은 공통 노드 라벨 낱말 전부를 단서로 썼는데, 노드가 늘면 일상어(식당 라벨 "신고" 등)가 단서가 되어
+ * 약한 별칭이 엉뚱하게 가산됐다(T-193 측정). 목록이 없으면 라벨 단서는 없다(강한 별칭만 단서).
  */
-export function labelCueWords(graph) {
-  const out = new Set();
-  for (const n of graph?.nodes || []) {
-    if (n.source !== 'common' || !n.label) continue;
-    for (let w of n.label.replace(/\([^)]*\)/g, ' ').split(/\s+/)) {
-      if (w.length >= 3) w = w.replace(/[과와]$/, '');
-      if (w.length >= 2 && !GENERIC.has(w)) out.add(w);
-    }
-  }
-  return [...out];
+export function cueWords(graph) {
+  return Array.isArray(graph?.cueWords) ? graph.cueWords : [];
 }
 
-// 라벨 단서 낱말 바로 뒤에 올 수 있는 조사 (T-152). 긴 것을 앞에 둔다
+/**
+ * 단서 낱말 목록 데이터 검증 (T-199). 문제 문구 배열(비면 통과). 단위 테스트가 실제 그래프 파일로 돌린다.
+ *   형식       2~20자 문자열
+ *   generic    일반어 목록(MAPLE_GENERIC_WORDS 등)에 있으면 안 된다
+ *   otherGraphs 다른 관심사 그래프의 라벨 낱말·별칭이면 안 된다(그 관심사 글에도 나온다)
+ *   texts      다른 분야 글(태그 설명·예문, 평가셋의 관심사 아닌 문장)에 cueWordMatch로 나오면 안 된다
+ */
+export function cueWordProblems(words, { generic = [], otherGraphs = [], texts = [] } = {}) {
+  const out = [];
+  const gen = new Set(generic);
+  const other = new Set();
+  for (const g of otherGraphs) {
+    for (const n of g?.nodes || []) {
+      for (let w of String(n.label || '').replace(/\([^)]*\)/g, ' ').split(/\s+/)) {
+        if (w.length >= 3) w = w.replace(/[과와]$/, '');
+        if (w) other.add(w);
+      }
+      for (const a of [...(n.aliases || []), ...(n.weakAliases || [])]) other.add(a);
+    }
+  }
+  for (const w of words || []) {
+    if (typeof w !== 'string' || w.trim().length < 2 || w.length > 20) { out.push(`단서 낱말 형식 오류(2~20자): ${JSON.stringify(w)}`); continue; }
+    if (gen.has(w)) out.push(`일반어 목록에 있는 단서 낱말: ${w}`);
+    if (other.has(w)) out.push(`다른 관심사 라벨·별칭 낱말: ${w}`);
+    const hit = texts.find(t => cueWordMatch(t, [w]));
+    if (hit) out.push(`다른 분야 글에 나오는 단서 낱말: ${w} ← ${hit.slice(0, 40)}`);
+  }
+  return out;
+}
+
+// 단서 낱말 바로 뒤에 올 수 있는 조사 (T-152). 긴 것을 앞에 둔다
 const CUE_PARTICLES = ['이랑', '까지', '부터', '에서', '으로', '처럼', '보다', '하고',
   '랑', '은', '는', '이', '가', '을', '를', '의', '에', '로', '와', '과', '도', '만'];
 // 단서 낱말에 바로 붙는 동사 어간 (스타포스하다가, 스타포스했다, 스타포스해서). 뒤는 무엇이든 된다
 const CUE_VERB_STEMS = ['하', '해', '했', '한', '할'];
 
 /**
- * 라벨 단서 낱말이 문장에 낱말로 있는지 (T-152). 앞 경계는 aliasMatch와 같다. 뒤는 셋 중 하나:
+ * 단서 낱말(cueWords)이 문장에 낱말로 있는지 (T-152). 앞 경계는 aliasMatch와 같다. 뒤는 셋 중 하나:
  * 한글이 아님(공백·문장부호·숫자·끝) / 조사 1~2개 뒤 한글이 아님(메소가, 메소에서는) / 동사 어간(스타포스하다가).
  * 메소포타미아·샤이닝스타·아케인과학·메소도시는 다른 낱말이라 아니다.
  * 알려진 한계: 서술격(메소다, 메소였다)은 단서로 안 잡고, 어간 뒤를 보지 않아 "메소한…" 같은 드문 합성어는 잡는다.
@@ -149,13 +171,13 @@ export function cueWordMatch(text, words) {
 }
 
 /**
- * 문장에 메이플 단서가 있는지 (T-149): 어떤 노드의 강한 별칭(aliases)이나 공통 라벨 핵심 낱말이 낱말로 있으면 참.
- * 강한 별칭은 aliasMatch 그대로(앞만 경계, 활용도 붙음: 재획하고), 라벨 낱말은 cueWordMatch(뒤에 조사만, T-152).
+ * 문장에 관심사(메이플) 단서가 있는지 (T-149): 어떤 노드의 강한 별칭(aliases)이나 그래프 단서 낱말(cueWords, T-199)이 낱말로 있으면 참.
+ * 강한 별칭은 aliasMatch 그대로(앞만 경계, 활용도 붙음: 재획하고), 단서 낱말은 cueWordMatch(뒤에 조사만, T-152).
  */
 export function mapleCue(text, graph) {
   if (!text) return false;
   if ((graph?.nodes || []).some(n => aliasMatch(text, n.aliases))) return true;
-  return cueWordMatch(text, labelCueWords(graph));
+  return cueWordMatch(text, cueWords(graph));
 }
 
 /**
