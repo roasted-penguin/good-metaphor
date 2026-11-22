@@ -17,7 +17,12 @@
     "smoke:providers": "node tools/smoke-providers.mjs",
     "check:embed": "node tools/check-real-embed.mjs",
     "sim:feedback": "node tools/feedback-sim.mjs",
-    "check:corrections": "node tools/check-corrections.mjs"
+    "check:corrections": "node tools/check-corrections.mjs",
+    "node-pipeline:index": "node tools/node-pipeline/cli.mjs index",
+    "node-pipeline:draft": "node tools/node-pipeline/cli.mjs draft",
+    "node-pipeline:check": "node tools/node-pipeline/cli.mjs check",
+    "node-pipeline:gate": "node tools/node-pipeline/cli.mjs gate",
+    "node-pipeline:apply": "node tools/node-pipeline/cli.mjs apply"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"
