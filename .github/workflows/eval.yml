@@ -1,0 +1,153 @@
+name: eval
+
+# 실제 크롬 평가(T-200): 실제 확장 안에서 실제 임베딩 모델로 검색 품질·회귀 가드·여유 가드를 잰다(ADR 0011).
+# 맥이 밤에(23:00–07:00) Ollama 작업을 돌려 크롬을 못 띄울 때도 노드 확장 묶음을 판정할 수 있게 한다.
+# 실행 목록은 `npm run eval:ci -- <프리셋>`(tools/eval-ci-lib.mjs)과 같다. API 키는 쓰지 않는다.
+# 모델 파일(약 266MB)은 크롬 프로필(.tmp/ext-eval-profile)의 CacheStorage에 들어가므로 프로필째 캐시한다.
+# CI는 커밋하지 않는다. 다시 만든 벡터는 아티팩트로만 받는다.
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: '프리셋. guard=가드+여유 가드, full=메이플 가드·여유 가드·홀드아웃+식당 가드·홀드아웃, precomputed=동봉 벡터로 가드, precise-judge-offline=정밀 판정 캐시만, custom=아래 args 그대로'
+        type: choice
+        default: guard
+        options:
+          - guard
+          - full
+          - precomputed
+          - precise-judge-offline
+          - custom
+      args:
+        description: 'custom일 때 npm run eval -- 뒤에 붙일 인자'
+        type: string
+        default: '--guard --margin-guard'
+      extra_args:
+        description: '프리셋(custom 아님)의 모든 실행 뒤에 붙일 인자(예 -v)'
+        type: string
+        default: ''
+      build_vectors:
+        description: '평가 전에 npm run build:vectors로 동봉 벡터를 다시 만든다(스크립트가 있을 때만)'
+        type: boolean
+        default: false
+      upload_vectors:
+        description: '다시 만든 extension/data/vectors를 아티팩트(vectors)로 올린다'
+        type: boolean
+        default: false
+      judge_cache_run:
+        description: '정밀 판정 캐시(.tmp/judge-*.json)를 받을 이전 실행 번호(run id). 그 실행의 아티팩트 judge-cache를 내려받는다. 비우면 건너뜀'
+        type: string
+        default: ''
+  # 브랜치 이름이 eval/로 시작하면 push만으로 guard 프리셋을 돌린다(기본 브랜치에 아직 없는 워크플로·묶음 브랜치 확인용)
+  push:
+    branches: ['eval/**']
+
+permissions:
+  contents: read
+  actions: read # 이전 실행의 judge-cache 아티팩트 내려받기
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUITES: ${{ inputs.suites || 'guard' }}
+      ARGS: ${{ inputs.args }}
+      EXTRA_ARGS: ${{ inputs.extra_args }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+
+      # 캐시 열쇠: 모델 id + dtype(q8) + transformers.js 판본 (+ 크롬 판본, 없으면 앞부분만 맞는 캐시로)
+      - name: 모델 캐시 열쇠
+        id: key
+        run: |
+          model=$(node -p "JSON.parse(require('fs').readFileSync('extension/config/admin.json')).embedding.model.replace(/[^A-Za-z0-9._-]/g, '_')")
+          dtype=$(node -p "JSON.parse(require('fs').readFileSync('extension/config/admin.json')).embedding.dtype")
+          tjs=$(node -p "require('./node_modules/@huggingface/transformers/package.json').version")
+          pw=$(npx playwright --version | tr -cd '0-9.')
+          echo "prefix=eval-profile-${model}-${dtype}-tjs${tjs}-" >> "$GITHUB_OUTPUT"
+          echo "key=eval-profile-${model}-${dtype}-tjs${tjs}-pw${pw}" >> "$GITHUB_OUTPUT"
+      - name: 모델 캐시 복원
+        id: model-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .tmp/ext-eval-profile
+          key: ${{ steps.key.outputs.key }}
+          restore-keys: ${{ steps.key.outputs.prefix }}
+
+      - name: 정밀 판정 캐시 받기
+        if: inputs.judge_cache_run
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: judge-cache
+          path: .tmp
+          run-id: ${{ inputs.judge_cache_run }}
+          github-token: ${{ github.token }}
+
+      - name: 벡터 다시 만들기
+        if: inputs.build_vectors
+        run: |
+          mkdir -p .tmp
+          if node -e "process.exit(JSON.parse(require('fs').readFileSync('package.json')).scripts['build:vectors'] ? 0 : 1)"; then
+            npm run build:vectors 2>&1 | tee .tmp/build-vectors.log
+            stat=$(git diff --shortstat -- extension/data/vectors)
+            echo "EVAL_CI_EXTRA=**벡터 다시 만들기:** ${stat:-바뀐 것 없음} (커밋하지 않음, upload_vectors면 아티팩트 vectors)" >> "$GITHUB_ENV"
+          else
+            echo "EVAL_CI_EXTRA=**벡터 다시 만들기:** build:vectors 스크립트가 없어 건너뜀" >> "$GITHUB_ENV"
+          fi
+
+      - name: 실제 크롬 평가
+        run: |
+          if [ "$SUITES" = custom ]; then a="$ARGS"; else a="$EXTRA_ARGS"; fi
+          node tools/eval-ci.mjs "$SUITES" --args-string "$a"
+
+      # 모델을 다 받은 프로필만 저장한다(받다 실패한 프로필을 캐시하면 다음 실행이 계속 다시 받는다)
+      - name: 모델 캐시 저장 여부
+        id: can-save
+        if: always() && steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          mb=$(du -sm .tmp/ext-eval-profile 2>/dev/null | cut -f1)
+          echo "프로필 ${mb:-0}MB"
+          if [ "${mb:-0}" -ge 200 ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - name: 모델 캐시 저장
+        if: always() && steps.can-save.outputs.ok == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .tmp/ext-eval-profile
+          key: ${{ steps.key.outputs.key }}
+
+      - name: 로그 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-logs
+          path: |
+            .tmp/eval-ci/
+            .tmp/build-vectors.log
+          if-no-files-found: ignore
+      - name: 정밀 판정 캐시 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: judge-cache
+          path: .tmp/judge-*.json
+          if-no-files-found: ignore
+      - name: 벡터 올리기
+        if: always() && inputs.build_vectors && inputs.upload_vectors
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectors
+          path: extension/data/vectors/
+          if-no-files-found: ignore
