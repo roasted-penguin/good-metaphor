@@ -43,9 +43,10 @@ async function renderGraph() {
   await initSiteToggle(st.settings);
   const s = st.settings;
   $('#enabled').checked = s.enabled;
+  // 둘째 줄: 여러 줄·여러 문장은 드래그로 고른 뒤 그 위에서(T-182)
   $('#howto').innerHTML = s.triggerMode === 'modifier'
-    ? `<kbd>${KEY[s.modifierKey]}</kbd> 누른 채 모르는 문장에 커서를 올리세요.`
-    : `모르는 문장 위에 커서를 ${(s.dwellMs / 1000).toFixed(1)}초 올려 두세요.`;
+    ? `<kbd>${KEY[s.modifierKey]}</kbd> 누른 채 모르는 문장에 커서를 올리세요.<br>여러 줄은 드래그로 고른 뒤 그 위에서 <kbd>${KEY[s.modifierKey]}</kbd>를 누르면 돼요.`
+    : `모르는 문장 위에 커서를 ${(s.dwellMs / 1000).toFixed(1)}초 올려 두세요.<br>여러 줄은 드래그로 고른 뒤 그 위에 커서를 올려 두면 돼요.`;
   $('#provider').textContent = `${st.providers[st.active.id].label.split(' (')[0]} · ${st.active.model}${st.active.hasKey || st.providers[st.active.id].keyOptional ? '' : ' (키 없음)'}`;
   await renderGraph();
 })().catch(e => { $('#howto').textContent = e.message; });

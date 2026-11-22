@@ -1,4 +1,4 @@
-// 콘텐츠 스크립트: 커서 아래 문장을 찾아 강조하고, 말풍선으로 비유를 보여 준다.
+// 콘텐츠 스크립트: 커서 아래 문장(또는 드래그로 고른 범위, T-182)을 찾아 강조하고, 말풍선으로 비유를 보여 준다.
 (() => {
   if (window.__analogyHelperLoaded) return;
   window.__analogyHelperLoaded = true;
@@ -269,6 +269,79 @@
     };
   }
 
+  /* ───────── 고른 범위 (T-182) ─────────
+     드래그로 고른 글이 있고 커서가 그 위에 있으면, 커서 아래 문장 대신 고른 글 전체를 보낸다.
+     문장 찾기와 같은 거름(입력칸·코드·편집 영역·비밀번호 폼 글자 빼기)을 글자 노드마다 하고, 블록이 바뀌면 한 칸 띄운다.
+     글이 2자 미만이거나 커서가 범위 밖이면 null(문장 모드). 열린 shadow 안 선택은 document 선택에 잡히지 않아 문장 모드로 간다 */
+  const ASel = globalThis.AnalogySelection; // lib/selection.js (manifest에서 먼저 주입)
+  const SEL_NODE_CAP = 3000; // 전체 선택(Ctrl+A) 같은 큰 범위에서 글자 노드를 끝없이 돌지 않게
+  function selectionAt(x, y) {
+    const sel = document.getSelection?.();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+    // 입력칸·textarea 안 선택은 글자 노드가 아니다. 비밀번호 칸 값이 새지 않게 아예 다루지 않는다
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return null;
+    const range = sel.getRangeAt(0);
+    if (!ASel.pointInRects(range.getClientRects(), x, y)) return null;
+
+    const rootNode = range.commonAncestorContainer;
+    const walkRoot = rootNode.nodeType === Node.TEXT_NODE ? rootNode.parentNode : rootNode;
+    if (!walkRoot) return null;
+    const walker = document.createTreeWalker(walkRoot, NodeFilter.SHOW_TEXT);
+    let first = range.startContainer;
+    if (first.nodeType !== Node.TEXT_NODE) first = first.childNodes[range.startOffset] || first;
+    walker.currentNode = first;
+    let n = first.nodeType === Node.TEXT_NODE ? first : walker.nextNode();
+    const pwCache = new Map();
+    const segs = []; // { node, s, rawStart, len } 원문 raw 안 위치
+    let raw = '', visible = 0, more = false, prevBlock = null, seen = 0;
+    for (; n; n = walker.nextNode()) {
+      if (++seen > SEL_NODE_CAP) { more = true; break; }
+      if (!range.intersectsNode(n)) {
+        if (range.comparePoint(n, 0) > 0) break; // 범위 끝을 지남
+        continue;
+      }
+      const value = n.nodeValue || '';
+      const s = n === range.startContainer ? range.startOffset : 0;
+      const e = n === range.endContainer ? range.endOffset : value.length;
+      if (e <= s) continue;
+      if (isSkippable(n) || inPasswordForm(n, pwCache)) continue;
+      const blk = blockOf(n);
+      if (prevBlock && blk !== prevBlock) raw += '\n';
+      prevBlock = blk;
+      const part = value.slice(s, e);
+      segs.push({ node: n, s, rawStart: raw.length, len: part.length });
+      raw += part;
+      visible += part.replace(/\s/g, '').length;
+      if (visible > ASel.MAX_CHARS + 100) { more = true; break; } // 상한만 넘으면 충분(뒤는 잘린다)
+    }
+    const norm = ASel.normalizeText(raw);
+    if (!segs.length || !ASel.usableText(norm)) return null;
+    const { text, truncated } = ASel.clampText(norm);
+
+    // 강조 범위: 잘렸으면 실제로 보낸 앞부분까지만
+    const hl = document.createRange();
+    hl.setStart(segs[0].node, segs[0].s);
+    const rawEnd = truncated ? ASel.rawIndexFor(raw, text.length) : raw.length;
+    const endSeg = segs.findLast(g => g.rawStart < rawEnd) || segs[0];
+    hl.setEnd(endSeg.node, endSeg.s + Math.min(endSeg.len, rawEnd - endSeg.rawStart));
+
+    // 앞 문장: 범위 시작 블록에서 시작 앞 글의 마지막 문장(문장 모드와 같이 300자까지)
+    let context = '';
+    const nodes = textNodesIn(blockOf(segs[0].node));
+    const entry = nodes.find(x => x.node === segs[0].node);
+    if (entry) {
+      const before = nodes.map(x => x.node.nodeValue).join('').slice(0, entry.start + segs[0].s);
+      let last = '';
+      for (const g of sentenceSeg.segment(before)) if (g.segment.trim()) last = g.segment;
+      context = ASel.normalizeText(last).slice(-300);
+    }
+    return {
+      key: text, text, word: '', context, range: hl, selection: true,
+      note: truncated || more ? `앞부분 ${ASel.MAX_CHARS}자까지만 풀었어요.` : ''
+    };
+  }
+
   /* ───────── 강조 ───────── */
   // CSS.highlights 는 문서 전체 레지스트리지만 ::highlight 스타일은 shadow tree 안에 따로 있어야 보인다(T-111).
   // 열린 shadow root 에 처음 강조할 때 우리 규칙 한 줄짜리 시트를 adoptedStyleSheets 에 덧붙인다(기존 시트 보존, root 마다 한 번).
@@ -368,6 +441,7 @@
         .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: s .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
         @keyframes s { to { transform: rotate(360deg); } }
         .err { color: #e5534b; }
+        .note { margin-top: 6px; font-size: 11.5px; }
         /* 피드백 (T-106, ADR 0010): 평소엔 흐리게, 말풍선 위에서 또렷하게. 👎은 중립 회색, 반영은 초록 */
         .fb { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
         .fbtn { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
@@ -418,10 +492,11 @@
     box.style.maxWidth = w + 'px';
     const lines = AP.lineRects(cur.range.getClientRects());
     const rect = lines.length ? lines[Math.min(Math.max(cur.lineIndex, 0), lines.length - 1)] : cur.range.getBoundingClientRect();
-    const { left, top } = AP.placeBox({
-      rect, mouseX: cur.anchorX, bw: box.offsetWidth || 300, bh: box.offsetHeight || 120,
-      vw: window.innerWidth, vh: window.innerHeight, pad
-    });
+    const size = { mouseX: cur.anchorX, bw: box.offsetWidth || 300, bh: box.offsetHeight || 120, vw: window.innerWidth, vh: window.innerHeight, pad };
+    // 고른 범위(T-182)는 마지막 줄 아래, 넘치면 첫 줄 위(고른 글을 가리지 않게). 줄 수가 바뀌어도 늘 마지막 줄
+    const { left, top } = cur.span && lines.length
+      ? AP.placeBoxSpan({ first: lines[0], last: lines.at(-1), ...size })
+      : AP.placeBox({ rect, ...size });
     box.style.left = left + 'px';
     box.style.top = top + 'px';
   }
@@ -510,6 +585,9 @@
     }
   }
 
+  // 고른 글이 상한을 넘어 앞부분만 보냈을 때 한 줄(T-182)
+  const noteHtml = () => (current?.note ? `<div class="muted note">${esc(current.note)}</div>` : '');
+
   function render(state) {
     ensureTooltip();
     if (current) current.awaitTheme = false; // 한 번이라도 그렸으면 더는 테마를 기다리지 않는다(T-148)
@@ -519,6 +597,7 @@
     if (state.loading) {
       if (state.meaning) html += `<div class="row"><span class="label">쉬운 뜻</span>${esc(state.meaning)}</div>`;
       html += `<div class="muted"><span class="spin"></span>${esc(STAGE_TEXT[state.stage] || '준비 중')}…</div>`;
+      html += noteHtml();
     } else if (state.error) {
       html += `<div class="row err">${esc(state.error)}</div>
         <div class="foot"><span></span><button data-act="options">설정 열기</button></div>`;
@@ -552,6 +631,7 @@
       const thumbs = state.thanked
         ? '<span class="thanks">고마워요</span>'
         : `<button class="fbtn up" data-act="up" aria-label="잘 맞아요" title="잘 맞아요">${THUMB}</button>${r.evidence && r.analogy ? `<button class="fbtn down" data-act="down" aria-label="안 맞아요" title="안 맞아요">${THUMB}</button>` : ''}`;
+      html += noteHtml();
       html += `<div class="foot"><span>${esc(r.debug?.provider || '')}${SOURCE_TEXT[r.source] || ''}${r.cached ? ' · 캐시' : ''}</span><span class="fb">${state.busy || !r.analogy ? '' : thumbs}<button data-act="options">설정</button></span></div>`;
     }
     box.innerHTML = html;
@@ -606,17 +686,22 @@
     if (AP.tinyFrame({ isTop, vw: window.innerWidth, vh: window.innerHeight })) return;
     themeWanted = true; // 서브프레임은 여기(처음 보조키를 누르거나 머무른 순간)서 처음 받는다(T-111)
     refreshIfStale(); // 미리 받기가 실패했으면 호버 때 다시(이번 말풍선은 stage theme이 고침)
-    const s = sentenceAt(mouse.x, mouse.y);
+    // 고른 범위 위면 고른 글, 아니면 커서 아래 문장(T-182)
+    const s = selectionAt(mouse.x, mouse.y) || sentenceAt(mouse.x, mouse.y);
     if (!s) return;
     if (current && current.key === s.key) return;
     const reqId = ++reqSeq;
     const payload = { sentence: s.text, word: s.word, context: s.context, pageTitle: document.title.slice(0, 120), topHost };
-    // 줄은 호버한 순간 한 번만 고른다(뷰포트 y는 스크롤하면 다른 줄을 가리킴)
-    const lineIndex = AP.pickLineIndex(s.range.getClientRects(), mouse.y);
+    // 줄은 호버한 순간 한 번만 고른다(뷰포트 y는 스크롤하면 다른 줄을 가리킴).
+    // 고른 범위는 마지막 줄 아래(넘치면 첫 줄 위, place의 span). 가로는 커서 x를 마지막 줄 안으로 당긴다
+    const lines = AP.lineRects(s.range.getClientRects());
+    const lastLine = lines.at(-1);
+    const lineIndex = s.selection ? lines.length - 1 : AP.pickLineIndex(lines, mouse.y);
+    const anchorX = s.selection && lastLine ? Math.min(Math.max(mouse.x, lastLine.left), lastLine.right) : mouse.x;
     // 서브프레임이 테마를 아직 모르면(T-148) 로딩 말풍선을 바로 그리지 않고, graph:info 응답이나 첫 stage(theme 실음)·결과가 오면 그린다.
     // 강조는 바로 한다. 최상위는 시작 때 미리 받으니 지금처럼 바로 그린다(받기 전이면 기본 테마)
     const awaitTheme = !isTop && themeStale;
-    current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX: mouse.x, lineIndex, awaitTheme };
+    current = { key: s.key, range: s.range, reqId, pending: true, payload, anchorX, lineIndex, awaitTheme, span: !!s.selection, note: s.note || '' };
     highlight(s.range);
     if (!awaitTheme) render({ loading: true, stage: 'graph' });
     try {
