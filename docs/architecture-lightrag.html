@@ -595,15 +595,15 @@
       </tbody>
     </table></div>
     <p class="note">IFBench는 Artificial Analysis 값(API, 풀 정밀도)이라 로컬 Q4는 이보다 낮아요. thinking은 청크 20개로 네 조합(모델 2 × 켬/끔)을 돌려 파싱 실패율, 트리플 수, 추상구조 연결 수, 청크당 시간을 비교해 정해요. LightRAG의 JSON 출력 모드를 켜면 형식 위반이 줄어 thinking을 꺼도 될 수 있어요.</p>
-    <pre class="code"><code># Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다
-launchctl setenv OLLAMA_HOST 127.0.0.1:11434
-launchctl setenv OLLAMA_NUM_PARALLEL 1      # 동시 요청 1개
-launchctl setenv OLLAMA_KEEP_ALIVE 5m       # 끝나면 5분 뒤 메모리에서 내림
-launchctl setenv OLLAMA_CONTEXT_LENGTH 16384
+    <pre class="code"><code># Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다(T-411, infra/mac/)
+# 환경 변수는 launchd 에이전트 plist의 EnvironmentVariables에만 둔다(전역 launchctl setenv 안 씀)
+#   OLLAMA_HOST=127.0.0.1:11434  OLLAMA_NUM_PARALLEL=1(동시 요청 1개)
+#   OLLAMA_KEEP_ALIVE=5m(끝나면 5분 뒤 메모리에서 내림)  OLLAMA_CONTEXT_LENGTH=16384
 ollama pull gemma4:12b
-tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
+infra/mac/install.sh            # 시간창 시작·끝 LaunchAgent 둘(window.conf 한 곳)
+infra/mac/tailscale-serve.sh    # tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
     <div class="facts3">
-      <div><b>시간창</b><span>launchd가 점심(12:10~13:00)과 밤(23:00~07:00)에만 Ollama를 켜고 <code>caffeinate -i</code>. 바로 노트북을 써야 하면 Ollama만 끄면 돼요.</span></div>
+      <div><b>시간창</b><span>launchd가 점심(12:10~13:00)과 밤(23:00~07:00)에만 Ollama를 켜고 <code>caffeinate -i</code>. 바로 노트북을 써야 하면 Ollama만 끄면 돼요. 파일은 <code>infra/mac/</code>(시간창은 <code>window.conf</code> 한 곳), 절차는 <code>infra/README.md</code>예요.</span></div>
       <div><b>처리량 (예상)</b><span>청크당 1~2분, 청크 100개에 2~3시간. M2 Pro 칩(메모리 16GB)으로 확인돼서 M2보다 메모리 대역폭이 두 배예요. 첫 실험에서 실측해요.</span></div>
       <div><b>맥이 오래 꺼져 있으면</b><span>관리자 플래그로 추출만 Gemini Flash-Lite로. 하루 청크 상한을 두고 사용자 워크스페이스에만 써요.</span></div>
     </div>
@@ -629,11 +629,14 @@ tailscale serve --bg --tcp 11434 tcp://127.0.0.1:11434</code></pre>
     "tag:llm-node":   ["autogroup:admin"]
   },
   "grants": [
-    { "src": ["tag:rag-server"],  "dst": ["tag:llm-node"],   "ip": ["11434"] },
-    { "src": ["autogroup:admin"], "dst": ["tag:rag-server"], "ip": ["22", "9621"] },
-    { "src": ["autogroup:admin"], "dst": ["tag:llm-node"],   "ip": ["11434"] }
+    { "src": ["tag:rag-server"],  "dst": ["tag:llm-node"],   "ip": ["tcp:11434"] },
+    { "src": ["autogroup:admin"], "dst": ["tag:rag-server"], "ip": ["tcp:22"] }
+  ],
+  "ssh": [
+    { "action": "check", "src": ["autogroup:admin"], "dst": ["tag:rag-server"], "users": ["autogroup:nonroot"] }
   ]
 }</code></pre>
+    <p class="note">전체 정책(주석·<code>tests</code> 포함)은 <code>infra/tailscale-policy.json</code>이에요. 맥 11434로 가는 길은 <code>tag:rag-server</code> 하나뿐이라 내 다른 기기에서도 못 들어가요.</p>
     <p class="note">맥에 태그를 붙이면 그 기기는 내 사용자 신원을 잃어요. 맥에서 다른 테일넷 기기를 쓸 일이 있으면 태그 대신 내 계정 기기를 <code>dst</code>로 두세요. Tailscale 무료 Personal 플랜은 비상업용이라, 유료화하면 상업 플랜으로 옮겨야 해요.</p>
   </section>
 
