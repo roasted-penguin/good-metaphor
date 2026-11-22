@@ -9,7 +9,7 @@
   { "sentence": "편의점 직원은 유통기한이 가까운 우유를 진열대 앞줄로 꺼내 놓는다.", "expectNodes": ["fifo_storage"], "expectTag": "loss_risk" },
   { "sentence": "어린이집은 평가에서 기준 점수를 넘겨야 인증을 받고, 인증 뒤에도 관리 점검을 받는다.", "expectNodes": ["hygiene_grade", "model_restaurant"], "expectTag": "threshold_req" },
   { "sentence": "운전면허 시험은 안전 교육을 먼저 이수해야 응시할 수 있다.", "expectNodes": ["open_prep"], "expectTag": "progression_gate" },
-  { "sentence": "같은 곳에 불법 주차를 거듭할수록 처분이 점점 무거워진다.", "expectNodes": ["hygiene_inspection"], "expectTag": "escalating_cost" },
+  { "sentence": "같은 곳에 불법 주차를 거듭할수록 처분이 점점 무거워진다.", "expectNodes": ["hygiene_inspection", "food_poisoning"], "expectTag": "escalating_cost" },
   { "sentence": "영화 촬영장에서는 촬영, 조명, 편집 팀이 일을 나눠 맡고 감독이 전체를 지휘한다.", "expectNodes": ["kitchen_division"], "expectTag": "role_division" },
   { "sentence": "유튜브 채널을 넘길 때는 그동안 쌓은 구독자의 가치까지 값으로 쳐서 받는다.", "expectNodes": ["key_money"], "expectTag": "shared_bonus" },
   { "sentence": "주유소는 도로에서 잘 보이도록 기름값을 큰 판에 걸어 둔다.", "expectNodes": ["price_board"], "expectTag": "threshold_req" },

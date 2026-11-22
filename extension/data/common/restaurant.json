@@ -1014,22 +1014,6 @@
       "verifiedAt": "2026-11-22"
     },
     {
-      "id": "expected_sales_doc",
-      "label": "예상매출액 산정서",
-      "facts": [
-        "가맹본부가 가맹 희망자에게 장래의 예상 매출이나 수익을 알려 줄 때는 반드시 글로 줘야 하고, 그 숫자를 뽑은 근거 자료를 사무소에 두고 보여 줘야 한다.",
-        "규모가 큰 가맹본부는 계약할 때 예상 매출액의 범위와 산출 근거를 적은 산정서를 따로 건네야 한다.",
-        "사실과 다르거나 부풀린 정보, 계약에 중요한 사실을 숨기는 정보를 주는 것은 금지된다."
-      ],
-      "tags": [
-        "expected_value"
-      ],
-      "sources": [
-        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제9조&mode=11"
-      ],
-      "verifiedAt": "2026-11-22"
-    },
-    {
       "id": "franchise_fee_refund",
       "label": "가맹금 반환",
       "facts": [
@@ -1042,22 +1026,6 @@
       ],
       "sources": [
         "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제10조&mode=11"
-      ],
-      "verifiedAt": "2026-11-22"
-    },
-    {
-      "id": "contract_cooling",
-      "label": "가맹계약 숙려기간",
-      "facts": [
-        "가맹본부는 가맹계약서 내용을 담은 문서를 가맹 희망자에게 건넨 날부터 정해진 숙려기간이 지나기 전에는 가맹금을 받거나 가맹계약을 맺을 수 없다.",
-        "가맹 희망자가 변호사나 가맹거래사의 자문을 받았다면 숙려기간이 줄어든다.",
-        "가맹 희망자가 계약 내용을 미리 이해하고 따져 볼 시간을 주려는 규칙이다."
-      ],
-      "tags": [
-        "cooldown"
-      ],
-      "sources": [
-        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제11조&mode=11"
       ],
       "verifiedAt": "2026-11-22"
     },
@@ -1171,22 +1139,6 @@
       "sources": [
         "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=1&cciNo=2&cnpClsNo=1",
         "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제44조&mode=11"
-      ],
-      "verifiedAt": "2026-11-22"
-    },
-    {
-      "id": "cook_license",
-      "label": "조리사 면허",
-      "facts": [
-        "조리사 면허는 국가기술자격을 딴 사람에게 관청이 내주며, 감염병 환자처럼 결격 사유가 있으면 받을 수 없다.",
-        "집단급식소와 정해진 음식점은 면허를 가진 조리사를 둬야 하고, 주인이 조리사로서 직접 조리하면 따로 두지 않아도 된다.",
-        "식중독 같은 중대한 위생 사고에 책임이 있는 조리사는 면허가 취소되거나 업무정지를 받을 수 있다."
-      ],
-      "tags": [
-        "progression_gate"
-      ],
-      "sources": [
-        "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=식품위생법&joLnkStr=제53조&mode=11"
       ],
       "verifiedAt": "2026-11-22"
     },
@@ -1444,19 +1396,9 @@
       "rel": "문을 열기 전에 갖출 일"
     },
     {
-      "from": "expected_sales_doc",
-      "to": "franchise_disclosure",
-      "rel": "함께 가맹 전에 받아 보는 정보"
-    },
-    {
       "from": "franchise_fee_refund",
       "to": "franchise_fee",
       "rel": "잘못된 정보면 낸 가맹금을 돌려받음"
-    },
-    {
-      "from": "franchise_fee_refund",
-      "to": "expected_sales_doc",
-      "rel": "부풀린 정보가 반환 사유가 됨"
     },
     {
       "from": "franchise_termination",
@@ -1489,16 +1431,6 @@
       "rel": "위생 위반으로 처분을 받음"
     },
     {
-      "from": "food_poisoning",
-      "to": "cook_license",
-      "rel": "책임 있는 조리사의 면허를 잃게 함"
-    },
-    {
-      "from": "cook_license",
-      "to": "meal_staff_roles",
-      "rel": "급식소에 둬야 할 인력"
-    },
-    {
       "from": "produce_supply",
       "to": "ingredient_cost",
       "rel": "식재료 원가를 오르내리게 함"
@@ -1507,11 +1439,6 @@
       "from": "lost_item_liability",
       "to": "no_show",
       "rel": "손님과 얽힌 손해를 다루는 규칙"
-    },
-    {
-      "from": "contract_cooling",
-      "to": "franchise_disclosure",
-      "rel": "받은 문서를 따져 볼 시간을 줌"
     },
     {
       "from": "business_hours_limit",
