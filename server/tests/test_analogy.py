@@ -115,6 +115,24 @@ def test_normal_answer_passes_grounding_check():
     assert "usedFact에 글자 그대로 옮긴다" in an_system
 
 
+def test_ending_is_marked_not_retried():
+    # 끝맺음 검사(T-122): 서버는 표시만 하고 다시 부르지 않는다(확장의 서버 마감 4초)
+    client, _, llm, _ = _client()
+    ok = _post(client, "강화할 때마다 확률이 낮아지는 구조예요.").json()
+    assert ok["debug"]["ending"] == {"ok": True, "retried": False, "issues": []}
+    before = llm.count("analogy")
+    bad = _post(client, "끝맺음테스트 강화할 때마다 확률이 낮아지는 구조예요.").json()
+    assert llm.count("analogy") == before + 1
+    assert bad["analogy"].endswith("구조입니다.")
+    assert bad["debug"]["ending"] == {"ok": False, "retried": False,
+                                      "issues": [{"field": "analogy", "style": "formal"}]}
+    assert bad["debug"]["grounding"] == {"ok": True}
+    # 규칙 1로 숨겨질 비유의 끝맺음은 보지 않는다
+    hidden = _post(client, "끝맺음테스트 Leverage magnifies both gains and losses.").json()
+    assert hidden["rejected"] == REJECTED
+    assert hidden["debug"]["ending"] == {"ok": True, "retried": False, "issues": []}
+
+
 def test_number_outside_facts_hides_analogy():
     client, *_ = _client()
     body = _post(client, "입장횟수테스트 이 적금은 한 달에 한 번만 넣을 수 있다.").json()

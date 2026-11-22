@@ -232,6 +232,28 @@ test('근거 검사(T-123): 프롬프트에 usedFact, 정상은 통과, 숫자·
   expect(fact.data.debug.grounding).toEqual({ ok: false, reason: 'fact-mismatch' });
 });
 
+// 끝맺음 검사(T-122): 합쇼체 답은 교정 문구로 한 번 다시 부르고, 그래도 어기면 결과는 두고 debug 에 표시
+test('끝맺음 검사(T-122): 합쇼체 응답 → 한 번 다시 불러 해요체, 고집하면 표시만', async ({ ext }) => {
+  const before = calls.length;
+  const fixed = await ext.send({ type: 'explain', sentence: '끝맺음교정테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
+  const mine = calls.slice(before).filter(c => c.user.includes('끝맺음교정테스트'));
+  expect(mine.length).toBe(2);
+  expect(mine[1].user).toContain('[고쳐 주세요]');
+  expect(mine[0].system).toContain('해요체(~요)로 끝낸다');
+  expect(fixed.data.analogy).toContain('같은 구조예요');
+  expect(fixed.data.debug.ending).toEqual({ ok: true, retried: true, issues: [{ field: 'analogy', style: 'formal' }] });
+  expect(fixed.data.debug.grounding).toEqual({ ok: true });
+
+  const n = calls.length;
+  const stubborn = await ext.send({ type: 'explain', sentence: '끝맺음고집테스트 이 적금은 한 달에 한 번만 넣을 수 있다.', noCache: true });
+  expect(calls.slice(n).filter(c => c.user.includes('끝맺음고집테스트')).length, '한 번만 다시 부른다').toBe(2);
+  expect(stubborn.data.analogy).toContain('같은 구조입니다');
+  expect(stubborn.data.debug.ending).toEqual({ ok: false, retried: true, issues: [{ field: 'analogy', style: 'formal' }] });
+
+  const ok = await ext.send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(ok.data.debug.ending).toEqual({ ok: true, retried: false, issues: [] });
+});
+
 // 근거 검사 오탐률 기록(T-146): 숨김은 기기 안 groundingLog에 가린 문장·비유로, 통과는 날짜별 개수만
 const P6_SENTENCE = '입장횟수테스트 이 적금은 한 달에 한 번만 넣을 수 있다.';
 const groundingLog = page => page.evaluate(async () => (await chrome.storage.local.get('groundingLog')).groundingLog || []);

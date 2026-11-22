@@ -5,6 +5,7 @@
 // 문장에 "Leverage"가 있으면 후보에 없는 nodeId 로 답한다(근거 검증 확인용)
 // 정상 답에는 usedFact = 후보 [1]의 첫 fact 를 넣는다(T-123). 근거 검사 확인용 표시어:
 //   "입장횟수테스트" → facts·문장에 없는 숫자를 쓴 비유, "사실조작테스트" → facts에 없는 usedFact
+// 끝맺음 검사 확인용(T-122): "끝맺음교정테스트" → 첫 답만 "~입니다", "끝맺음고집테스트" → 다시 불러도 "~입니다"
 // 금칙어 필터 확인용(T-114, 금칙어는 테스트 코드 안에만): "금칙비유테스트" → 비유에 우회 표기한 금칙어,
 //   "금칙뜻테스트" → 뜻(스트리밍으로 먼저 오는 부분)에 금칙어, "금칙추상테스트" → 정밀 모드 추상화 응답에 금칙어
 // 비유 문구는 시스템 프롬프트의 analogyPrefix("4. analogy는 "…" 문구로 시작")를 따른다(T-302, 관심사별 말머리 확인용)
@@ -60,6 +61,8 @@ function mockLLM(req, res) {
       else if (user.includes('입장횟수테스트')) content = answer('메이플로 치면 일주일에 7번만 입장할 수 있는 것과 같아요.');
       else if (user.includes('금칙비유테스트')) content = answer(`메이플로 치면 ${label}과 같은 구조예요. ${BLOCKED_IN_ANALOGY}`);
       else if (user.includes('사실조작테스트')) content = answer('메이플로 치면 보스에 하루 세 번 들어가는 것과 같아요.', '보스는 하루에 세 번까지 입장할 수 있다.');
+      // 끝맺음 검사(T-122): "끝맺음교정테스트"는 첫 답만 합쇼체(교정 문구가 오면 해요체), "끝맺음고집테스트"는 늘 합쇼체
+      else if (user.includes('끝맺음고집테스트') || (user.includes('끝맺음교정테스트') && !user.includes('[고쳐 주세요]'))) content = answer(`${prefix} ${label}과 같은 구조입니다.`);
       else content = answer(`${prefix} ${label}과 같은 구조예요.`);
     }
     const out = () => {

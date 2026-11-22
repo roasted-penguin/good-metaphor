@@ -145,7 +145,7 @@ async function generate(cases) {
     try {
       const r = await runAnalogy({ sentence: c.sentence, word: '', context: '', pageTitle: '', graph, candidates, ask, providerKind: chain[0].def.kind, blocklist });
       const { meaning, analogy, nodeId, usedFact } = r.answer;
-      rows.push({ ...base, answer: { meaning, analogy, nodeId, usedFact }, rejected: r.rejected, grounding: r.grounding, provider: used && modelKey(used), fallbacks, ms: Date.now() - t0 });
+      rows.push({ ...base, answer: { meaning, analogy, nodeId, usedFact }, rejected: r.rejected, grounding: r.grounding, ending: r.ending, provider: used && modelKey(used), fallbacks, ms: Date.now() - t0 });
       console.log(`  ${i + 1}/${cases.length} ${analogy ? `[${nodeId}]` : `(숨김${r.rejected ? ': ' + r.rejected : ''})`} ${c.sentence.slice(0, 28)}… ${Date.now() - t0}ms`);
     } catch (e) {
       rows.push({ ...base, error: e.message.slice(0, 200), provider: used && modelKey(used), ms: Date.now() - t0 });
