@@ -45,7 +45,7 @@ import httpx
 
 from app import seedmeta
 from app.config import Settings
-from app.extract import build_extraction_config, filter_extraction
+from app.extract import DEFAULT_PROMPT, build_extraction_config, filter_extraction
 
 log = logging.getLogger(__name__)
 
@@ -483,9 +483,11 @@ async def health(ollama_url: str, timeout: float = HEALTH_TIMEOUT_S) -> bool:
         return False
 
 
-def extraction_system_prompt(graph: Mapping[str, Any]) -> str:
-    """T-412 추출 설정(유형 안내·통제 어휘·용어 사전·예시)으로 만든 Ollama /api/chat system 프롬프트."""
-    cfg = build_extraction_config(graph)
+def extraction_system_prompt(graph: Mapping[str, Any], prompt: str = DEFAULT_PROMPT) -> str:
+    """T-412 추출 설정(유형 안내·통제 어휘·용어 사전·예시)으로 만든 Ollama /api/chat system 프롬프트.
+
+    prompt는 판본(app.extract.PROMPT_VARIANTS). 운영 워커는 기본 v1, v2는 A/B 하네스에서만 쓴다(T-209)."""
+    cfg = build_extraction_config(graph, prompt)
     examples = "\n\n".join(cfg["prompt_overrides"]["entity_extraction_json_examples"])
     return "\n".join([
         "너는 메이플스토리 문서에서 엔티티와 관계를 뽑는다. 입력에 없는 사실은 지어내지 않는다.",
@@ -594,6 +596,7 @@ def make_ollama_chat(ollama_url: str, model: str, system: str, think: bool = Fal
             raise ExtractParseError("Ollama 응답 JSON 모양이 달라요.") from e
         return data
 
+    chat.json_mode = lambda: state["format"]  # type: ignore[attr-defined]  # A/B 하네스가 JSON 모드였는지 기록(T-209)
     return chat
 
 
