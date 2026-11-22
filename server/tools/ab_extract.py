@@ -19,6 +19,8 @@ Ollama 설정·launchd는 건드리지 않는다. 모델을 바꿀 때만 keep_a
     .venv/bin/python -m tools.ab_extract                        # A/B 실행 → ../.tmp/ab-extract/
     .venv/bin/python -m tools.ab_extract --report-only          # 저장한 결과로 표만 다시
     .venv/bin/python -m tools.ab_extract --models gemma4:12b --think off --prompt v2   # v2 프롬프트(T-209), 이어 돌리기
+    .venv/bin/python -m tools.ab_extract --models gemma4:12b-it-q4_K_M --think off --prompt v1,v2 --until 06:40  # 밤 시간창
+--until이 지나면 새 청크를 시작하지 않고, 맥 연결이 끊기거나 4xx(모델 없음)면 줄을 남기지 않고 멈춘다(이어 돌리기 그대로).
 조합 키는 "모델 think=켬끔"이고 v1이 아닌 프롬프트는 " prompt=v2"가 붙는다. 같은 키로 결과 줄이 있는 청크는 건너뛴다.
 """
 from __future__ import annotations
@@ -30,7 +32,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import date
+from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -358,6 +360,30 @@ def hopeless(fails: int, limit: int, max_fail: float = MAX_PARSE_FAIL) -> bool:
     return fails > int(limit * max_fail + 1e-9)
 
 
+def deadline_from(start: datetime, hhmm: str) -> datetime:
+    """start 다음에 처음 오는 HH:MM(자정을 넘으면 다음 날). 밤 시간창 끝 전에 멈추려고 쓴다(T-209)."""
+    h, m = (int(x) for x in hhmm.split(":"))
+    if not (0 <= h < 24 and 0 <= m < 60):
+        raise ValueError(f"--until 형식은 HH:MM이에요: {hhmm!r}")
+    d = start.replace(hour=h, minute=m, second=0, microsecond=0)
+    return d if d > start else d + timedelta(days=1)
+
+
+def should_abort(err: BaseException) -> bool:
+    """청크 탓이 아닌 오류인지: 맥 Ollama가 꺼졌거나(시간창 끝 등) 연결이 끊김, 또는 4xx(모델을 안 받음 등 설정 오류).
+    이런 청크는 결과 줄을 남기지 않고 실행을 멈춘다(남기면 파싱 실패로 세고 이어 돌리기에서 건너뛴다).
+
+    응답 시간 초과(ReadTimeout)는 모델이 느린 것이라 그 청크 실패로 센다(T-413과 같음)."""
+    import httpx
+
+    from app.extract_worker import ExtractConfigError
+
+    if isinstance(err, ExtractConfigError):
+        return True
+    cause = err.__cause__ or err
+    return isinstance(cause, (httpx.ConnectError, httpx.RemoteProtocolError, ConnectionError))
+
+
 def combo_key(model: str, think: bool, prompt: str = DEFAULT_PROMPT) -> str:
     """조합 키. v1(기본) 프롬프트는 T-413·T-185 결과 줄과 같은 키를 쓰려고 접미사를 붙이지 않는다."""
     key = f"{model} think={'on' if think else 'off'}"
@@ -444,7 +470,10 @@ def run_one(chat: Any, text: str) -> dict[str, Any]:
     try:
         data = asyncio.run(chat(text))
     except Exception as e:  # 타임아웃·HTTP 오류·응답 모양 오류도 그 청크 실패로 센다
-        return {"seconds": time.monotonic() - t0, "error": f"{type(e).__name__}: {e}"[:300]}
+        out = {"seconds": time.monotonic() - t0, "error": f"{type(e).__name__}: {e}"[:300]}
+        if should_abort(e):
+            out["abort"] = True  # run_ab가 줄로 남기지 않고 멈춘다
+        return out
     secs = time.monotonic() - t0
     msg = data.get("message") or {}
     json_mode = getattr(chat, "json_mode", None)
@@ -466,9 +495,13 @@ def _load_rows(path: Path) -> list[dict]:
 
 
 def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: Path, base: str = OLLAMA,
-           early_stop: bool = True, prompts: Iterable[str] = (DEFAULT_PROMPT,)) -> None:
+           early_stop: bool = True, prompts: Iterable[str] = (DEFAULT_PROMPT,),
+           deadline: datetime | None = None) -> None:
     """조합마다 청크를 차례로. early_stop이면 파싱 실패가 허용 수를 넘는 순간 그 조합을 멈춘다(관문 탈락 확정).
-    느린 맥에서 청크마다 600초 타임아웃을 다 기다리지 않으려고 둔다(T-413)."""
+    느린 맥에서 청크마다 600초 타임아웃을 다 기다리지 않으려고 둔다(T-413).
+
+    deadline이 지나면 새 청크를 시작하지 않고, 맥 연결이 끊기면 그 청크 줄을 남기지 않고 멈춘다. 둘 다 다음에
+    같은 명령으로 이어 돌린다(T-209: 시간창 끝 07:00에 Ollama가 꺼져 실패 줄이 쌓이지 않게)."""
     from app.config import Settings
 
     graph = Settings.from_env().common_graph()
@@ -481,6 +514,7 @@ def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: P
     rows_path, mem_path = out_dir / "rows.jsonl", out_dir / "memory.json"
     memory = json.loads(mem_path.read_text()) if mem_path.exists() else {}
     models = list(models)
+    stop = False
     for model in models:
         for other in models:
             if other != model:
@@ -491,13 +525,31 @@ def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: P
             fails = sum(1 for r in _load_rows(rows_path) if r["combo"] == key and r.get("error"))
             if not todo or (early_stop and hopeless(fails, limit)):
                 continue
+            if deadline and datetime.now() >= deadline:
+                print(f"[{key}] 마감 {deadline:%H:%M}이 지나 시작하지 않아요. 같은 명령으로 이어 돌려요.", flush=True)
+                stop = True
+                break
             chat = make_ollama_chat(base, model, systems[prompt], think)
+            stop = False
             with MemorySampler(base) as mem:
                 # 모델 올리기는 청크 시간에서 뺀다(짧은 글로 한 번 데움)
                 warm = run_one(chat, "메소는 메이플스토리의 게임 화폐이다.")
                 print(f"[{key}] 데움 {warm['seconds']:.1f}초(적재 {warm.get('loadSeconds', 0):.1f}초)", flush=True)
-                for c in todo:
+                if warm.get("abort"):
+                    print(f"[{key}] 데우기부터 연결·설정 오류라 멈춰요({warm['error']}). 모델을 받았는지 확인해 주세요.",
+                          flush=True)
+                    stop = True
+                for c in ([] if stop else todo):
+                    if deadline and datetime.now() >= deadline:
+                        print(f"[{key}] 마감 {deadline:%H:%M}이 지나 멈춰요. 같은 명령으로 이어 돌려요.", flush=True)
+                        stop = True
+                        break
                     r = run_one(chat, c["text"])
+                    if r.get("abort"):
+                        print(f"[{key}] {c['id']}: 맥 Ollama 연결·설정 오류라 멈춰요({r['error']}). 줄은 남기지 않았어요.",
+                              flush=True)
+                        stop = True
+                        break
                     row = {"combo": key, "model": model, "think": think, "prompt": prompt, "chunk": c["id"], **r}
                     with rows_path.open("a", encoding="utf-8") as f:
                         f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -510,6 +562,14 @@ def run_ab(models: Iterable[str], thinks: Iterable[bool], limit: int, out_dir: P
             prev = memory.get(key) or {}
             memory[key] = {"psSize": max(mem.ps_max, prev.get("psSize", 0)), "rss": max(mem.rss_max, prev.get("rss", 0))}
             mem_path.write_text(json.dumps(memory, indent=2))
+            if stop:
+                break
+        if stop:
+            try:  # 마감이면 모델을 내려 둔다. 연결이 끊긴 경우엔 실패해도 그냥 둔다
+                unload(model, base)
+            except Exception:
+                pass
+            return
         unload(model, base)
 
 
@@ -548,6 +608,7 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"추출 프롬프트 판본, 쉼표로 여러 개({','.join(PROMPT_VARIANTS)}, T-209)")
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--full", action="store_true", help="관문 탈락이 확정돼도 끝까지 돌린다(조기 중단 끔)")
+    ap.add_argument("--until", default="", help="이 시각(HH:MM, 다음에 오는 것)부터 새 청크를 시작하지 않는다(T-209)")
     ap.add_argument("--out", default=str(OUT_DIR))
     ap.add_argument("--ollama", default=OLLAMA, help="맥 로컬 Ollama 주소(127.0.0.1만, 규칙 10)")
     args = ap.parse_args(argv)
@@ -562,8 +623,12 @@ def main(argv: list[str] | None = None) -> int:
         bad = [p for p in prompts if p not in PROMPT_VARIANTS]
         if bad:
             ap.error(f"--prompt는 {','.join(PROMPT_VARIANTS)} 중에서 골라 주세요: {','.join(bad)}")
+        try:
+            deadline = deadline_from(datetime.now(), args.until) if args.until else None
+        except ValueError as e:
+            ap.error(str(e))
         run_ab([m.strip() for m in args.models.split(",") if m.strip()], thinks, args.limit, out_dir, args.ollama,
-               early_stop=not args.full, prompts=prompts)
+               early_stop=not args.full, prompts=prompts, deadline=deadline)
     table, _, best = report(out_dir, args.limit)
     print(table)
     print(f"기본값 후보: {best or '없음(관문을 넘은 조합 없음, 지금 기본값 유지)'}")

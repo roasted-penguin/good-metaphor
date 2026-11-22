@@ -241,3 +241,68 @@ def test_run_one_records_json_mode_from_chat():
 
     r = ab.run_one(plain, "글")
     assert r["jsonMode"] is None and r["error"].startswith("parse")
+
+
+def test_deadline_from_next_occurrence_crosses_midnight():
+    from datetime import datetime
+
+    assert ab.deadline_from(datetime(2026, 11, 23, 23, 5), "06:40") == datetime(2026, 11, 24, 6, 40)
+    assert ab.deadline_from(datetime(2026, 11, 24, 1, 0), "06:40") == datetime(2026, 11, 24, 6, 40)
+    with pytest.raises(ValueError):
+        ab.deadline_from(datetime(2026, 11, 24, 1, 0), "25:00")
+
+
+def test_should_abort_on_lost_connection_or_config_but_not_timeout():
+    import httpx
+
+    from app.extract_worker import ExtractConfigError, ExtractConnectionError
+
+    def wrapped(cause):
+        try:
+            raise ExtractConnectionError("끊김") from cause
+        except ExtractConnectionError as e:
+            return e
+
+    assert ab.should_abort(wrapped(httpx.ConnectError("refused")))
+    assert ab.should_abort(ExtractConfigError("404 모델 없음"))
+    assert not ab.should_abort(wrapped(httpx.ReadTimeout("느림")))  # 느린 건 그 청크 실패로 센다
+    assert not ab.should_abort(ValueError("parse"))
+
+
+def test_run_one_marks_abort_without_hiding_error():
+    import httpx
+
+    from app.extract_worker import ExtractConnectionError
+
+    async def down(text):
+        raise ExtractConnectionError("맥 Ollama 연결이 끊겼어요") from httpx.ConnectError("refused")
+
+    r = ab.run_one(down, "글")
+    assert r["abort"] is True and "ExtractConnectionError" in r["error"]
+
+
+def test_run_ab_prompts_resume_abort_and_deadline(tmp_path):
+    """가짜 Ollama로 run_ab: 프롬프트별 조합 키·줄, 이어 돌리기, 모델 없음(404)·마감이면 줄 없이 멈춤(T-209)."""
+    from datetime import datetime, timedelta
+
+    from tests.test_extract_worker import FakeOllama
+
+    fake = FakeOllama()
+    fake.start()
+    try:
+        ab.run_ab(["m"], [False], 2, tmp_path, base=fake.url, prompts=["v1", "v2"])
+        rows = ab._load_rows(tmp_path / "rows.jsonl")
+        assert [(r["combo"], r["prompt"]) for r in rows] == [("m think=off", "v1")] * 2 + [("m think=off prompt=v2", "v2")] * 2
+        assert all(r["jsonMode"] is True and not r.get("error") for r in rows)
+        systems = [c["messages"][0]["content"] for c in fake.chat_calls]
+        assert sum("[관계 규칙]" in s for s in systems) == 3  # v2 데움 1 + 청크 2
+        calls = len(fake.chat_calls)
+        ab.run_ab(["m"], [False], 2, tmp_path, base=fake.url, prompts=["v1", "v2"])  # 이어 돌리기: 할 것 없음
+        assert len(fake.chat_calls) == calls
+        ab.run_ab(["p"], [False], 2, tmp_path, base=fake.url, deadline=datetime.now() - timedelta(minutes=1))
+        assert len(fake.chat_calls) == calls  # 마감이 지나 시작하지 않음
+        fake.chat_status = 404  # 모델을 안 받음
+        ab.run_ab(["n"], [False], 2, tmp_path, base=fake.url)
+        assert len(ab._load_rows(tmp_path / "rows.jsonl")) == 4  # 실패 줄을 남기지 않음
+    finally:
+        fake.stop()
