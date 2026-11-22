@@ -1,0 +1,46 @@
+{
+  "interest": "restaurant",
+  "note": "T-207 반영한 노드(메인 판정 뒤) — --regate 입력",
+  "results": [
+    {
+      "batch": 11,
+      "status": "warn",
+      "node": {
+        "id": "simple_bookkeeping_target",
+        "label": "간편장부대상자 기준",
+        "facts": [
+          "음식점업의 경우 직전 과세기간의 수입금액이 일정 기준에 미달해야 간편장부대상자에 해당한다.",
+          "장부를 비치하고 기록하지 않은 간편장부대상자는 산출세액의 일정 비율을 불성실가산세로 부담한다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=2224&cntntsId=7664"
+        ],
+        "verifiedAt": "2026-11-23"
+      },
+      "edges": []
+    },
+    {
+      "batch": 13,
+      "status": "warn",
+      "node": {
+        "id": "faithful_reporting_system",
+        "label": "성실신고확인제도",
+        "facts": [
+          "일정 규모 이상의 수입을 기록하는 개인사업자가 종합소득세를 신고할 때, 세무대리인에게 장부 기장의 정확성을 미리 검증받도록 하는 제도다.",
+          "납세자가 직접 신고하는 기본 틀을 유지하면서, 전문 자격사를 통해 소득 계산과 장부 관리의 신뢰성을 확보하는 방식으로 투명성을 높인다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=2234&cntntsId=7672"
+        ],
+        "verifiedAt": "2026-11-23"
+      },
+      "edges": []
+    }
+  ]
+}

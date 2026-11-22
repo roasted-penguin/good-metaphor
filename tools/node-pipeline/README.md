@@ -27,6 +27,7 @@ npm run node-pipeline:index -- --interest maplestory [--pages 3] [--probe-seeds]
 #    키는 GEMINI_API_KEY 등 환경 변수(값은 출력하지 않음). Gemini 무료 한도는 하루 500번을 다른 작업과 나눠 쓴다.
 #    --max-calls로 이번 실행 호출 상한(캐시 적중은 안 셈). 상한에 걸린 페이지는 다음 실행에 다시(이미 한 절은 캐시로 공짜)
 npm run node-pipeline:draft -- --interest maplestory --limit 10 [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
+#    분당 한도(T-207): --gap-ms 4000(호출 사이 간격)·--retry-429 1(429면 60초 뒤 다시). 하루 한도(quotaId …PerDay…)면 결국 429로 멈춘다. 하루 한도는 모델마다 따로다
 
 # 3. 자동 검사 → 리뷰 시트 .tmp/node-pipeline/<관심사>-batch-N.md (+ .json)
 #    태그 적합성(T-197)이 후보마다 LLM을 한 번 부른다(캐시). --max-calls 14로 나눠 돌리고, 못 한 후보는 다시 돌리면 이어 가요. --no-tag-fit이면 건너뜀
@@ -41,6 +42,8 @@ npm run node-pipeline:gate -- --interest maplestory --batch N --approve .tmp/nod
 #     tools/node-pipeline/batches/<이름>-<관심사>.json = { interest, results: [{ status, node, edges }] }
 gh workflow run eval.yml --ref <브랜치> -f suites=none -f gate_args="--interest maplestory --results tools/node-pipeline/batches/t196-maplestory.json; --interest restaurant --results tools/node-pipeline/batches/t196-restaurant.json"
 gh run download <실행 번호> -n node-gate -D .tmp/node-pipeline    # <관심사>-batch-all.{gate,accepted,alt}-browser.*
+#     CI에는 키가 없어 --explain을 못 한다. 받은 대안 표에 LLM 이유 칸만 나중에 채운다(T-207, 노드 사실은 같은 입력 파일에서)
+npm run node-pipeline:explain-alt -- .tmp/node-pipeline/maplestory-batch-all.alt-browser.json --results tools/node-pipeline/batches/t207-maplestory.json --interest maplestory [--provider gemini]
 #     apply·accept-alt 뒤 다시 잴 때는 --regate(그래프에서 후보를 빼고 기준을 잼): 앞 관문에서 다른 후보에 가려 안 보였던 2위 침범을 찾는다
 
 # 4-1. 대안 정답 확인: .alt-<임베더>.md 표를 보고, 맞는 줄은 같은 이름 .json에서 approve를 true로 → 평가 파일 expectNodes에 더함
@@ -55,6 +58,7 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 
 ## 초안 수확 (T-195)
 
+- **목록별 제목 거름(T-207).** 목록 항목에 `titleFilter`·`titleSkip`을 둘 수 있다. 메이플 공지(`/News/Notice/Notice`)는 점검·오류·이벤트가 대부분이라 운영정책·월드 리프·보안 같은 제도 글만 색인한다. 제목 거름에 다 걸린 쪽은 빈 쪽이 아니라서 다음 쪽도 본다.
 - **절 단위 초안.** 본문을 h1~h3 제목으로 나눠(`draft.mjs` `splitSections`) 절마다 LLM을 한 번 부른다. 예전에는 12,000자에서 잘려 긴 패치 노트는 목차·이벤트만 보였다. 건너뛸 절(`sources.mjs` `sectionSkip`: 메이플 이벤트·버닝·패스·오류 수정·댓글 등, 식당 메뉴·만족도 조사)과 너무 짧은 절은 부르지 않고, 1,500자보다 작은 절은 이웃과 합치고, 12,000자를 넘는 절은 줄 단위로 자르고, 페이지당 10덩어리까지. 건너뛸 페이지 제목은 `pageSkip`(메이플 "스킬 조정" 패치).
 - **한 절에 여러 후보.** 프롬프트가 시스템·규칙·재화·제약을 빠짐없이 따로(보통 2~5개) 고르게 한다. 같은 페이지 앞 절에서 나온 개념은 다음 절의 [이미 있는 개념]에 들어간다.
 - **맞는 태그 없음은 초안에서 버림.** 목록 안 태그가 하나도 없는 후보는 check에 넘기지 않고 초안 파일 `dropped`(사유 `noTags`, 출처·절)에 남긴다.

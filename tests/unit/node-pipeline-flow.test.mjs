@@ -46,6 +46,14 @@ test('buildIndex: 목록 링크 중 패턴·제목 거름에 맞는 것만, ?pag
   for (const e of entries) assert.deepEqual(Object.keys(e).filter(k => /html|text|body/.test(k)), [], '본문 칸 없음(D-5)');
 });
 
+test('buildIndex: 목록별 titleFilter·titleSkip(T-207, 메이플 공지)', async () => {
+  const html = '<a href="/n/1">운영정책 변경 안내</a><a href="/n/2">정기점검 안내</a><a href="/n/3">운영정책 오류 안내</a>';
+  const fetcher = { get: async url => (url.endsWith('p=1') ? { ok: true, status: 200, url, html } : { ok: true, status: 200, url, html: '' }) };
+  const cfg = { allowHost: () => true, seeds: [], listings: [{ kind: 'notice', url: 'https://x.go.kr/l?p={page}', linkPattern: /\/n\/\d+$/, titleFilter: /운영정책|점검/, titleSkip: /오류/ }] };
+  const { entries } = await buildIndex({ cfg, fetcher, pages: 2, now: () => 'T' });
+  assert.deepEqual(entries.map(e => e.title), ['운영정책 변경 안내', '정기점검 안내']);
+});
+
 test('pickPages: 초안 안 한 페이지만, 종류 순서대로, 개수 제한·종류 거름', () => {
   const es = [{ url: 'a', kind: 'notice' }, { url: 'b', kind: 'guide', drafted: 1 }, { url: 'c', kind: 'update' }, { url: 'd', kind: 'guide' }];
   assert.deepEqual(pickPages(es, { kindOrder: ['guide', 'update', 'notice'], limit: 2 }).map(e => e.url), ['d', 'c']);

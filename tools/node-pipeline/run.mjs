@@ -34,17 +34,21 @@ export async function buildIndex({ cfg, fetcher, pages = 1, now = () => new Date
       const r = await fetcher.get(url);
       listings++;
       if (!r.ok) { failures.push({ url, status: r.status, blocked: r.blocked || null }); log(`목록 실패 ${r.status}${r.blocked ? ' robots' : ''}: ${url}`); continue; }
-      let found = 0;
+      let found = 0, matched = 0;
       for (const found0 of extractLinks(r.html, r.url || url)) {
         const link = l.stripQuery ? { ...found0, url: found0.url.split('?')[0] } : found0;
         if (!l.linkPattern.test(link.url)) continue;
+        matched++;
         if (cfg.titleFilter && !cfg.titleFilter.test(link.text)) continue;
+        // 목록별 제목 거름(T-207): 메이플 공지는 점검·오류·이벤트가 대부분이라 운영정책·월드 리프 같은 제도 글만
+        if (l.titleFilter && !l.titleFilter.test(link.text)) continue;
+        if (l.titleSkip && l.titleSkip.test(link.text)) continue;
         if (!cfg.allowHost(new URL(link.url).hostname)) continue;
         add({ url: link.url, title: link.text.slice(0, 120), kind: l.kind, listedAt: now() });
         found++;
       }
       log(`목록 ${url} → ${found}개`);
-      if (!found) break; // 빈 쪽이면 다음 쪽은 보지 않는다
+      if (!matched) break; // 빈 쪽이면 다음 쪽은 보지 않는다(제목 거름에 다 걸린 쪽은 빈 쪽이 아니다, T-207)
     }
   }
   return { entries: [...out.values()], listings, failures };

@@ -5,6 +5,7 @@
 //   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-reground] [--no-near-dup] [--dup-embedder e5|fallback] [--no-tag-fit] [--max-calls 14] [--provider gemini]
 //   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]] [--results 입력.json] [--regate]
 //   node tools/node-pipeline/cli.mjs accept-alt <대안 표 .alt-*.json> [--dir tools] [--all]
+//   node tools/node-pipeline/cli.mjs explain-alt <대안 표 .alt-*.json> --results <관문 입력.json> [--provider gemini] [--explain-max 30]
 //   node tools/node-pipeline/cli.mjs apply  --interest maplestory --batch N|all --approve ids.json [--gate browser|fallback|none] [--out 경로] [--write-real]
 // 작업 파일은 모두 .tmp/node-pipeline/(커밋 안 함). 페이지 본문은 어디에도 쓰지 않는다(D-5).
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
@@ -73,14 +74,26 @@ async function cmdIndex() {
 // maxCalls(T-197): 상한을 넘는 새 호출은 BudgetError(캐시 적중은 상한과 무관)
 function cachedComplete(p, { json = true, maxCalls = Infinity } = {}) {
   const dir = join(WORK, 'cache');
-  let calls = 0, hits = 0;
+  let calls = 0, hits = 0, lastCall = 0;
   const fn = async (system, user) => {
     const key = createHash('sha256').update([p.id, p.model, system, user].join('\u0000')).digest('hex').slice(0, 32);
     const file = join(dir, `llm-${key}.json`);
     if (existsSync(file)) { hits++; return readJson(file).answer; }
     if (calls >= maxCalls) throw new BudgetError();
     calls++;
-    const answer = await providerComplete(p, system, user, { json, timeoutMs: 90_000 });
+    // 분당 한도(T-207): --gap-ms만큼 호출 사이를 띄우고, 429면 --retry-429번까지 기다렸다 다시(하루 한도면 결국 429로 멈춤)
+    const gap = Number(arg('gap-ms', 0));
+    if (gap && lastCall) await new Promise(r => setTimeout(r, Math.max(0, gap - (Date.now() - lastCall))));
+    let answer;
+    for (let tries = Number(arg('retry-429', 0)); ; tries--) {
+      lastCall = Date.now();
+      try { answer = await providerComplete(p, system, user, { json, timeoutMs: 90_000 }); break; }
+      catch (e) {
+        if (e.status !== 429 || tries <= 0) throw e;
+        log('429: 60초 기다렸다 다시 불러요');
+        await new Promise(r => setTimeout(r, 60_000));
+      }
+    }
     writeJson(file, { provider: p.id, model: p.model, at: new Date().toISOString(), answer });
     return answer;
   };
@@ -381,9 +394,31 @@ async function cmdAcceptAlt() {
   for (const r of missing) console.log(`  반영 안 됨(이미 있거나 문장을 못 찾음): "${r.sentence.slice(0, 30)}…" ${r.newNode}`);
 }
 
-const CMDS = { index: cmdIndex, draft: cmdDraft, check: cmdCheck, gate: cmdGate, apply: cmdApply, 'accept-alt': cmdAcceptAlt };
+// 대안 표에 LLM 이유 칸만 채운다(T-207): CI 실제 관문(gate_args)은 키가 없어 --explain을 못 하니, 받은 .alt-browser.json에 나중에 붙인다.
+// 노드 사실은 같은 관문 입력(--results)에서 읽고, 표 .json·.md를 그 자리에서 다시 쓴다(approve 칸은 그대로)
+async function cmdExplainAlt() {
+  const file = argv[1] && !argv[1].startsWith('--') ? argv[1] : arg('file');
+  if (!file || !arg('results')) throw new Error('사용법: explain-alt <대안 표 .alt-*.json> --results <관문 입력.json> [--provider gemini] [--model ...] [--explain-max 30]');
+  const table = readJson(file);
+  const nodes = gateInputResults(readJson(arg('results'))).map(r => r.node);
+  const tags = readJson(join(COMMON, 'tags.json')).tags || [];
+  const p = provider();
+  const complete = cachedComplete(p, { maxCalls: Number(arg('explain-max', 30)) });
+  for (const r of table.rows || []) {
+    const node = nodes.find(x => x.id === r.newNode);
+    if (!node) { console.log(`  입력에 없는 노드: ${r.newNode}`); continue; }
+    const { system, user } = buildAltExplainPrompt({ sentence: r.sentence, expectTag: r.expectTag, tag: tags.find(t => t.id === r.expectTag), node });
+    try { const v = parseAltExplain(await complete(system, user)); if (v) r.llm = { ...v, model: p.model }; }
+    catch (e) { if (e.budget) break; console.log(`  이유 LLM 실패: ${String(e.message || e).slice(0, 80)}`); if (e.status === 429) break; }
+  }
+  writeJson(file, table);
+  writeFileSync(file.replace(/\.json$/, '.md'), renderAltTable(table.rows || [], { interest: table.interest, batch: table.batch, embedderId: table.embedder }));
+  console.log(`[explain-alt] ${(table.rows || []).filter(r => r.llm).length}/${(table.rows || []).length}줄 · LLM 호출 ${complete.calls()}번(캐시 ${complete.hits()}번) → ${file}`);
+}
+
+const CMDS = { index: cmdIndex, draft: cmdDraft, check: cmdCheck, gate: cmdGate, apply: cmdApply, 'accept-alt': cmdAcceptAlt, 'explain-alt': cmdExplainAlt };
 if (!CMDS[cmd]) {
-  console.error('사용법: node tools/node-pipeline/cli.mjs <index|draft|check|gate|apply|accept-alt> --interest <maplestory|restaurant> ... (README.md)');
+  console.error('사용법: node tools/node-pipeline/cli.mjs <index|draft|check|gate|apply|accept-alt|explain-alt> --interest <maplestory|restaurant> ... (README.md)');
   process.exit(2);
 }
 CMDS[cmd]().catch(e => { console.error(`[${cmd}] ${e.message}`); process.exit(1); });
