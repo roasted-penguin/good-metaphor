@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 노드 파이프라인(T-194) 명령줄. 사용법은 같은 폴더 README.md.
-//   node tools/node-pipeline/cli.mjs index  --interest maplestory [--pages 1]
+//   node tools/node-pipeline/cli.mjs index  --interest maplestory [--pages 1] [--probe-seeds]
 //   node tools/node-pipeline/cli.mjs draft  --interest maplestory [--limit 10] [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
 //   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe]
 //   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]]
@@ -14,7 +14,7 @@ import { PROVIDERS, complete as providerComplete } from '../../extension/lib/pro
 import { loadInterestGraph, commonGraphPath } from '../load-graph.mjs';
 import { interestConfig } from './sources.mjs';
 import { politeFetcher } from './web.mjs';
-import { buildIndex, pickPages, draftPages, indexKey } from './run.mjs';
+import { buildIndex, pickPages, draftPages, indexKey, probeSeeds, markProbes } from './run.mjs';
 import { checkBatch, sourceProber, renderSheet, summarize } from './check.mjs';
 import { buildPatch, applyPatch, today } from './apply.mjs';
 import { loadGateCases, memoEmbedder, scoreGraph, gateCandidates, altRows, buildAltExplainPrompt, parseAltExplain, altPendingRefusals, applyAltToText, altTargetFiles, renderAltTable } from './gate.mjs';
@@ -52,7 +52,14 @@ async function cmdIndex() {
   const prev = existsSync(indexPath) ? readJson(indexPath).entries : [];
   const fetcher = politeFetcher({ log });
   console.log(`[index] ${interest}: 목록 ${cfg.listings.length}곳 × ${arg('pages', 1)}쪽 + 씨앗 ${cfg.seeds.length}개 (1초에 1번 이하, robots 준수)`);
-  const { entries, listings, failures } = await buildIndex({ cfg, fetcher, pages: Number(arg('pages', 1)), prev, log });
+  let { entries, listings, failures } = await buildIndex({ cfg, fetcher, pages: Number(arg('pages', 1)), prev, log });
+  // 씨앗 확인(T-198): 응답하지 않는 씨앗은 probe.ok=false로 표시(초안 순서 맨 뒤)
+  if (flag('probe-seeds')) {
+    const probes = await probeSeeds({ cfg, fetcher, log });
+    entries = markProbes(entries, probes);
+    const dead = probes.filter(p => !p.ok);
+    console.log(`[index] 씨앗 확인 ${probes.length}개 · 응답 없음 ${dead.length}${dead.length ? ': ' + dead.map(p => `${p.title || p.url}(${p.body ? '본문 ' + p.body.status : p.status}${p.blocked ? ' robots' : ''})`).join(', ') : ''}`);
+  }
   writeJson(indexPath, { interest, updatedAt: new Date().toISOString(), note: 'URL·제목·시각·본문 해시만(D-5, 본문 저장 금지)', entries });
   const byKind = entries.reduce((m, e) => ({ ...m, [e.kind]: (m[e.kind] || 0) + 1 }), {});
   console.log(`[index] 페이지 ${entries.length}개 ${JSON.stringify(byKind)} · 목록 요청 ${listings} · 실패 ${failures.length} · robots 막힘 ${fetcher.stats.robotsBlocked}`);

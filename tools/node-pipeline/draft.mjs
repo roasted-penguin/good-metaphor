@@ -152,7 +152,9 @@ export const SECTION_LIMITS = { maxChars: 12000, minChars: 1500, maxSections: 10
  * @returns {{ sections: Array<{ title, text }>, skipped: string[], overflow: number }}
  *   skipped = 건너뛴 절 제목, overflow = maxSections를 넘어 버린 덩어리 수
  */
-export function splitSections(text, { mark = '§§ ', maxChars = SECTION_LIMITS.maxChars, minChars = SECTION_LIMITS.minChars, maxSections = SECTION_LIMITS.maxSections, skip = null } = {}) {
+// keep(T-198): 남길 절 제목 정규식(법령처럼 긴 글에서 식당 운영에 닿는 장만). 있으면 제목 없는 앞부분과 맞지 않는 절은 skipped.
+// keepSub: 하위 제목(예: 법령 "제1절") 꼴 — 이 꼴의 절은 바로 앞 상위 절이 남았으면 함께 남는다
+export function splitSections(text, { mark = '§§ ', maxChars = SECTION_LIMITS.maxChars, minChars = SECTION_LIMITS.minChars, maxSections = SECTION_LIMITS.maxSections, skip = null, keep = null, keepSub = null } = {}) {
   const raw = [];
   let cur = { title: '', lines: [] };
   for (const line of String(text || '').split('\n')) {
@@ -162,7 +164,14 @@ export function splitSections(text, { mark = '§§ ', maxChars = SECTION_LIMITS.
   raw.push(cur);
   const skipped = [];
   const kept = [];
+  let parentKept = false;
   for (const r of raw) {
+    if (keep) {
+      const isSub = !!(keepSub && r.title && keepSub.test(r.title));
+      const ok = isSub ? parentKept : !!(r.title && keep.test(r.title));
+      if (!isSub) parentKept = ok;
+      if (!ok) { if (r.lines.join('').trim()) skipped.push(r.title || '(앞부분)'); continue; }
+    }
     const body = r.lines.join('\n').trim();
     if (!body) continue;
     if (skip && r.title && skip.test(r.title)) { skipped.push(r.title); continue; }

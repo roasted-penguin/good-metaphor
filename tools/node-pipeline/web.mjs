@@ -98,10 +98,16 @@ export function sliceBetween(html, start, end) {
 // HTML → 읽을 글. script·style·nav·header·footer·form을 통째로 빼고 블록 태그는 줄바꿈
 // headings면 h1~h3 제목을 "§§ 제목" 한 줄로 남긴다(T-195: 긴 패치 노트를 절 단위로 나누는 표지, draft.mjs splitSections)
 export const HEADING_MARK = '§§ ';
-export function htmlToText(html, { start, end, max = MAX_TEXT, headings = false } = {}) {
+// headingClasses: h 태그 대신 class로 제목을 다는 사이트(T-198: 국가법령정보센터 장 제목 <p class="gtit">)도 같은 표지로
+export function htmlToText(html, { start, end, max = MAX_TEXT, headings = false, headingClasses = [] } = {}) {
   let s = sliceBetween(html, start, end)
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<(script|style|noscript|nav|header|footer|form|select|svg|iframe)\b[\s\S]*?<\/\1>/gi, ' ');
+  if (headings && headingClasses.length) {
+    const cls = headingClasses.map(c => c.replace(/[^\w-]/g, '')).join('|');
+    const re = new RegExp(`<(p|div|span|strong)\\b[^>]*class=["'][^"']*\\b(?:${cls})\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/\\1>`, 'gi');
+    s = s.replace(re, (m, tag, inner) => `<h2>${inner}</h2>`);
+  }
   if (headings) {
     s = s.replace(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (m, n, inner) => {
       const t = decodeEntities(inner.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
