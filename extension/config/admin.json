@@ -61,5 +61,5 @@
   },
 
   "_preciseTagJudgeComment": "정밀 모드 전용 태그 판정(T-184, ADR 0014). 켜면 정밀 모드의 추상화 호출 한 번이 추상 구조와 태그 확률(tags.json 통제 어휘 + 없음)을 함께 돌려주고, retrieve 태그 점수에 더한다(태그 점수 = 유사도 − 감점 + weight·p). 호출 수·지연은 그대로. '없음'이 가장 높으면 판정 없음, floor(확률 하한) 아래 태그는 버린다. 일반 모드에는 영향 없음.",
-  "preciseTagJudge": { "enabled": false, "mode": "combine", "weight": 0.05, "floor": 0 }
+  "preciseTagJudge": { "enabled": false, "mode": "combine", "weight": 0.05, "floor": 0.7 }
 }

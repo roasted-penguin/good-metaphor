@@ -28,6 +28,7 @@
 //                                      # .tmp/judge-precise-<모델>.json에 캐시하고, 임베딩만 / 정밀(판정 없음) / 정밀+판정을 문장별 1위 변화와 함께 비교
 //        [--judge-floor 0.7]           # 판정 확률 하한(기본 admin.preciseTagJudge.floor). --judge-weight 기본은 admin.preciseTagJudge.weight
 //        [--judge-sweep]               # 하한 후보별 한 줄 요약(하한은 검증셋·가드로 고른다, 홀드아웃으로 고르지 않는다)
+//        [--judge-offline]             # 새로 묻지 않고 캐시만(한도 소진 때). 캐시 없는 문장은 "판정 빠짐"으로 원문 질의
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadInterestGraph, interestFromArgv } from './load-graph.mjs';
@@ -140,7 +141,7 @@ let judged = null;
 if (judgeId && !serverOnly) {
   try {
     const args = { cases: sets.flatMap(x => x.cases), graph: mergeGraphs(common, null), admin, rpm: Number(argAfter('--rpm')) || 10 };
-    judged = precise ? await loadPreciseJudgeResults(args) : await loadJudgeResults({ judgeId, ...args });
+    judged = precise ? await loadPreciseJudgeResults({ ...args, offline: process.argv.includes('--judge-offline') }) : await loadJudgeResults({ judgeId, ...args });
   } catch (e) {
     console.log(`판정기 ${judgeId}를 쓸 수 없어요: ${e.message}`);
     process.exit(1);

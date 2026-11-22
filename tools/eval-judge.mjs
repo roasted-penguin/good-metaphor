@@ -65,7 +65,7 @@ export async function loadJudgeResults({ judgeId, cases, graph, admin, rpm = 10,
 /**
  * @returns {Promise<{results: Map<string, {abstract:string, answers:{id,p}[]|null, ms:number|null, error?:string}>, label:string, cacheFile:URL}>}
  */
-export async function loadPreciseJudgeResults({ cases, graph, admin, rpm = 10, log = console.log }) {
+export async function loadPreciseJudgeResults({ cases, graph, admin, rpm = 10, offline = false, log = console.log }) {
   const j = judgeFor('gemini-choice', { env: process.env, admin });
   const pdef = PROVIDERS[j.def.provider];
   const provider = { id: j.def.provider, def: pdef, model: j.model, apiKey: j.apiKey, baseUrl: pdef.baseUrl };
@@ -74,7 +74,9 @@ export async function loadPreciseJudgeResults({ cases, graph, admin, rpm = 10, l
   const cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile)) : {};
   const choices = tagChoices(graph);
   const todo = [...new Set(cases.map(c => c.sentence))].filter(s => !cache[s]);
-  if (todo.length) {
+  // --judge-offline: 한도가 찼을 때 캐시에 있는 문장만 쓴다. 없는 문장은 판정 빠짐(추상 구조도 없음 → 원문 질의)으로 채점된다
+  if (todo.length && offline) log(`${label}: 캐시에 없는 문장 ${todo.length}개는 판정 없이 채점해요(--judge-offline)`);
+  else if (todo.length) {
     log(`${label}: 새로 물을 문장 ${todo.length}개 (캐시 ${Object.keys(cache).length}개) · 키 ${j.apiKey ? '있음' : '없음'} · 분당 ${rpm}회`);
     const gap = Math.ceil(60000 / rpm);
     let last = 0;
