@@ -1,15 +1,41 @@
 // 프롬프트. 핵심 규칙: 관심사 쪽 내용은 [근거]에 있는 사실만 쓴다.
 
+// 추상화 규칙(정밀 모드). 글 응답(buildAbstractPrompt)과 판정 합침(buildAbstractJudgePrompt, T-184)이 같이 쓴다
+const ABSTRACT_RULES = [
+  '너는 문장의 핵심 개념을 분야와 무관한 추상 구조로 바꿔 적는 도우미다.',
+  '고유명사나 전문용어를 쓰지 말고, "무엇이 무엇에 따라 어떻게 변하는가" 같은 구조로 1~2문장 한국어로 적는다.',
+  '원문에 나온 전문용어·외래어(예: 레버리지, 인플레이션, rate limit)는 그대로 옮기지 말고 그 뜻을 쉬운 우리말로 풀어 쓴다.',
+  '예: "인플레이션이 심해지면 같은 돈으로 살 수 있는 물건이 줄어든다" → "전체 가격이 오르면 같은 양의 돈이 가진 가치가 줄어든다"'
+];
+
+const abstractUser = ({ sentence, word, pageTitle }) =>
+  `페이지: ${pageTitle || '(제목 없음)'}\n문장: ${sentence}\n${word ? `커서가 가리킨 단어: ${word}\n` : ''}`;
+
 export function buildAbstractPrompt({ sentence, word, pageTitle }) {
+  const system = [...ABSTRACT_RULES, '설명이나 머리말 없이 그 문장만 출력한다.'].join('\n');
+  return { system, user: abstractUser({ sentence, word, pageTitle }) };
+}
+
+// 판정에서 "맞는 태그 없음"을 뜻하는 예약 선택지(T-184). 태그 파일(tags.json)의 id와 겹치지 않는다
+export const NONE_TAG = { id: 'none', label: '해당 구조 없음', desc: '원리·규칙·인과 구조가 없는 단순한 사건 묘사나 감상이라 위 태그 어느 것도 맞지 않음' };
+
+/**
+ * 정밀 모드 추상화 + 태그 판정을 한 번에 묻는 프롬프트(T-184, ADR 0014). 호출 수는 그대로다.
+ * choices는 tags.json에서 만든 선택지(judges.js tagChoices). 목록·개수를 여기서 정하지 않는다(규칙 9). "없음"은 맨 뒤에 붙인다
+ */
+export function buildAbstractJudgePrompt({ sentence, word, pageTitle, choices = [] }) {
+  const list = [...choices, NONE_TAG].map(c => `- ${c.id}: ${c.label}${c.desc ? ' — ' + c.desc : ''}`).join('\n');
   const system = [
-    '너는 문장의 핵심 개념을 분야와 무관한 추상 구조로 바꿔 적는 도우미다.',
-    '고유명사나 전문용어를 쓰지 말고, "무엇이 무엇에 따라 어떻게 변하는가" 같은 구조로 1~2문장 한국어로 적는다.',
-    '원문에 나온 전문용어·외래어(예: 레버리지, 인플레이션, rate limit)는 그대로 옮기지 말고 그 뜻을 쉬운 우리말로 풀어 쓴다.',
-    '예: "인플레이션이 심해지면 같은 돈으로 살 수 있는 물건이 줄어든다" → "전체 가격이 오르면 같은 양의 돈이 가진 가치가 줄어든다"',
-    '설명이나 머리말 없이 그 문장만 출력한다.'
+    ...ABSTRACT_RULES,
+    '그다음 그 추상 구조가 아래 태그 중 무엇에 해당하는지 판정한다. 문장의 단어나 주제가 아니라 구조로 판단한다.',
+    '해당하는 태그마다 맞을 확률(0~1)을 서로 독립적으로 매기고, 확률이 높은 순으로 최대 5개만 적는다.',
+    `원리·규칙·인과 구조가 없는 단순한 사건 묘사나 감상이라 맞는 태그가 없으면 "${NONE_TAG.id}"에 높은 확률을 준다. 억지로 태그를 고르지 않는다.`,
+    '태그 목록에 없는 id를 만들지 않는다.',
+    '태그:',
+    list,
+    '출력은 JSON 객체 하나만: {"abstract":"<추상 구조 1~2문장>","tags":[{"id":"<태그 id>","p":<0~1>}]}'
   ].join('\n');
-  const user = `페이지: ${pageTitle || '(제목 없음)'}\n문장: ${sentence}\n${word ? `커서가 가리킨 단어: ${word}\n` : ''}`;
-  return { system, user };
+  return { system, user: abstractUser({ sentence, word, pageTitle }) };
 }
 
 // 검색 질의 문자열. 'precise'(정밀 모드) = 추상 구조 + 원문, 'abstract' = 추상 구조만. 추상이 비면 원문
