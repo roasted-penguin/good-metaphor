@@ -19,6 +19,11 @@
 //        [--guard]                     # 그 관심사 가드(tools/eval-guard-<id>.json)로 회귀 검사 (T-156)
 //        [--holdout]                   # 그 관심사 홀드아웃(tools/eval-unseen-<id>.json)만 (T-156). --margin-guard·--server는 메이플 전용(오류)
 //   [--margin-guard]                   # 가드 문장 중 여유가 --margin 미만이면 종료 코드 1 (선택, 여유 경고는 기본으로 실패가 아님)
+//   npm run eval -- --judge gemini-choice  # 판정기(lib/judges.js)에 문장 → 추상 태그(다중 선택)를 묻고 (T-120, ADR 0014)
+//                                      # 판정 태그 top-1, 태그 유사도 대신(replace)·함께(combine) 쓴 노드 hit@1/@3, 1위 회귀(혼합 대비), 판정 지연을 출력.
+//        [--judge-weight 0.05]         # 함께(combine)의 가중치: 태그 점수 = 유사도 − 감점 + w·p
+//        [--rpm 10]                    # 판정 분당 요청 수(새로 물을 때만). 결과는 .tmp/judge-<id>-<모델>.json 캐시(다시 돌려도 호출 안 함)
+//                                      # jev는 키(JEV_API_KEY)와 API 문서가 아직 없어 멈춘다
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadInterestGraph, interestFromArgv } from './load-graph.mjs';
@@ -27,9 +32,11 @@ import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { embedEach } from '../extension/lib/embed-each.js';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
-import { scoreCases, mixedSetting, regressions, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
+import { scoreCases, mixedSetting, regressions, latencyStats, rank1Regressions, rank1Gains, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
+import { loadJudgeResults } from './eval-judge.mjs';
+import { topChoice } from '../extension/lib/judges.js';
 import { rankAllViaServer, gateLine, serverEmbedderLabel, rewriteIdFromArgv, ServerUnavailable } from './eval-server.mjs';
 
 const here = new URL('.', import.meta.url);
@@ -119,6 +126,18 @@ if (rewriteId) {
 }
 const queryModes = rewrites ? [['원문', null], ['정밀(추상+원문)', 'precise'], ['추상만', 'abstract']] : [['원문', null]];
 
+// 판정기 (T-120). 원문 질의에만 쓴다. 캐시가 있으면 호출하지 않는다. 크롬을 띄우기 전에 물어 둔다(긴 대기 중 확장이 잠들지 않게)
+const judgeId = argAfter('--judge');
+const judgeWeight = Number(argAfter('--judge-weight')) || 0.05;
+let judged = null;
+if (judgeId && !serverOnly) {
+  try {
+    judged = await loadJudgeResults({ judgeId, cases: sets.flatMap(x => x.cases), graph: mergeGraphs(common, null), admin, rpm: Number(argAfter('--rpm')) || 10 });
+  } catch (e) {
+    console.log(`판정기 ${judgeId}를 쓸 수 없어요: ${e.message}`);
+    process.exit(1);
+  }
+}
 let embed, embedderLabel, closeEmbedder = async () => {};
 if (serverOnly) {
   // 브라우저 평가 생략
@@ -174,10 +193,39 @@ function printGuardAndNew(cases, r, rank, guarded = true) {
   }
 }
 
+// 판정기 줄 (T-120): 혼합 설정 위에 tagJudge만 얹어 비교한다. 가드 회귀는 정보로만 보여 주고 --guard 종료 코드에는 넣지 않는다
+function printJudge(name, cases, qs, mixedResult, guarded) {
+  const probs = c => judged.results.get(c.sentence)?.answers || [];
+  const mixed = mixedSetting(admin, graph);
+  const { topK, name: _n, ...base } = mixed;
+  console.log(`\n[${name} · 판정기 ${judged.label}]`);
+  const tagged = cases.filter(c => c.expectTag);
+  const jt1 = tagged.filter(c => topChoice(probs(c)) === c.expectTag).length;
+  console.log(`  판정 태그 top-1: ${pct(jt1, tagged.length)}`);
+  for (const [label, tj] of [['판정 대신(replace)', { mode: 'replace' }], [`판정 함께 w=${judgeWeight}`, { mode: 'combine', weight: judgeWeight }]]) {
+    const rank = (c, i) => retrieve(qs[i], graph, vecs, { ...base, topK: graph.nodes.length, aliasText: c.sentence, tagJudge: { ...tj, p: probs(c) } }).map(x => ({ id: x.id, score: x.score }));
+    const r = scoreCases(cases, rank);
+    console.log(pctLine(label, r));
+    if (verbose) for (const m of r.misses) console.log(missLine(m));
+    if (r.negative.n) console.log(`  alias-negative ${r.negative.pass}/${r.negative.n}`);
+    const reg = rank1Regressions(mixedResult, r), gain = rank1Gains(mixedResult, r);
+    console.log(`  혼합 대비 1위 회귀 ${reg.length} · 개선 ${gain.length}`);
+    for (const s of reg) console.log(`    ⚠ 회귀: ${s.slice(0, 40)}…`);
+    for (const s of gain) console.log(`    + 개선: ${s.slice(0, 40)}…`);
+    if (guarded) {
+      const g = regressions(guard, r);
+      console.log(`  가드 놓침 ${g.length}${g.length ? ' (혼합 기준 놓침 ' + regressions(guard, mixedResult).length + ')' : ''}`);
+    }
+  }
+  const st = latencyStats(cases.map(c => judged.results.get(c.sentence)?.ms));
+  const fails = cases.filter(c => judged.results.get(c.sentence)?.error).length;
+  console.log(`  판정 지연 ${st ? `중앙값 ${st.median}ms · p90 ${st.p90}ms (${st.n}문장, 처음 호출 때 잰 값)` : '없음'}${fails ? ` · 판정 실패 ${fails}` : ''}`);
+}
+
 if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, cases, guarded } of sets) {
   const qs = await embed(cases.map(c => mode ? rewriteQueryText(rewrites[c.sentence], c.sentence, mode) : c.sentence), 'query');
   console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${embedderLabel}\n`);
-  let margins = [];
+  let margins = [], mixedResult = null;
   for (const s of settings) {
     const { topK, ...opts } = s;
     // 전체 순위를 받는다: scoreCases는 앞 3개만 보고, 여유는 기대 노드가 아닌 첫 노드까지 봐야 한다(T-150)
@@ -186,6 +234,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
     console.log(pctLine(s.name, r));
     if (verbose) for (const m of r.misses) console.log(missLine(m));
     if (s.name === mixedSetting(admin, graph).name) {
+      mixedResult = r;
       margins = marginsOf(cases, rank);
       if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…`);
       // 음성 문장(T-149): 1위가 금지 노드가 아니면 통과. hit@1 분모와 따로
@@ -207,6 +256,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
   const tagged = cases.filter(c => c.expectTag);
   cases.forEach((c, i) => { if (c.expectTag && topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
   console.log(`\n추상 태그 top-1 정확도: ${pct(t1, tagged.length)}`);
+  if (judged && !mode) printJudge(name, cases, qs, mixedResult, guarded);
   // 여유 작은 맞힌 문장 (혼합 설정, -v와 상관없이). 기존 줄 뒤에 덧붙이기만 한다
   console.log(lowMarginLines(lowMargins(margins, marginMin), marginMin).join('\n'));
   if (guarded && !mode) marginGuardFailed.push(...marginGuardFails(guard, margins, marginMin));

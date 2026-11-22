@@ -173,3 +173,19 @@ test('retrieve: tagJudge.p는 [{id,p}] 배열도 받는다', () => {
   const p = [{ id: 't2', p: 0.9 }, { id: 't1', p: 0.1 }];
   assert.equal(retrieve(q, g, vecs, { topK: 2, tagJudge: { p, mode: 'replace' } })[0].id, 'n2');
 });
+
+// --- 평가 도구 순수 함수 (eval-lib.mjs) ---
+import { latencyStats, rank1Regressions, rank1Gains } from '../../tools/eval-lib.mjs';
+
+test('latencyStats: 중앙값·p90·개수, 비면 null', () => {
+  assert.deepEqual(latencyStats([300, 100, 200, 400, 500, 600, 700, 800, 900, 1000]), { n: 10, median: 550, p90: 910 });
+  assert.equal(latencyStats([]), null);
+  assert.deepEqual(latencyStats([42]), { n: 1, median: 42, p90: 42 });
+});
+
+test('rank1Regressions·Gains: 기준에서 맞던 문장이 틀린 것 / 틀리던 문장이 맞은 것', () => {
+  const base = { misses: [{ sentence: 'x' }, { sentence: 'y' }] };
+  const cur = { misses: [{ sentence: 'y' }, { sentence: 'z' }] };
+  assert.deepEqual(rank1Regressions(base, cur), ['z']);
+  assert.deepEqual(rank1Gains(base, cur), ['x']);
+});
