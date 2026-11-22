@@ -2734,3 +2734,130 @@ test('교정 내보내기(T-157): 지금 고른 관심사만 — 식당이면 in
   expect(m.data.exampleCandidates.map(c => c.nodeId)).toEqual(['meso']);
   expect(JSON.stringify(m.data)).not.toContain('lunch_peak');
 });
+
+/* ───────── 고른 범위 비유 (T-182) ───────── */
+// 두 글자 위치 사이를 선택한다(각 요소의 첫 글자 노드 기준). end는 그 글자 앞까지
+async function selectBetween(page, startSel, startIdx, endSel, endIdx) {
+  await page.evaluate(([a, ai, b, bi]) => {
+    const ta = document.querySelector(a).firstChild, tb = document.querySelector(b).firstChild;
+    const r = document.createRange();
+    r.setStart(ta, ai); r.setEnd(tb, bi ?? tb.nodeValue.length);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }, [startSel, startIdx, endSel, endIdx]);
+}
+const sentOf = c => c.user.match(/설명할 문장: (.+)/)?.[1] ?? '';
+const selHl = page => page.evaluate(() => { const h = CSS.highlights.get('good-metaphor-hl'); return h ? [...h][0].toString().replace(/\s+/g, ' ').trim() : null; });
+
+test('고른 범위(T-182): 두 문단에 걸친 선택 위에서 Alt → 선택 전체를 보내고, 앞 문장·강조·마지막 줄 아래 말풍선', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const p1 = await page.evaluate(() => document.querySelector('#p1').textContent);
+  const start = p1.indexOf('반면');
+  const end = await page.evaluate(() => document.querySelector('#p2').textContent.indexOf('이를'));
+  await selectBetween(page, '#p1', start, '#p2', end);
+  const want = '반면 고정금리는 약정 기간 동안 금리가 바뀌지 않는다. API 서버는 분당 요청 수에 상한을 두어 한 사용자가 자원을 독점하지 못하게 한다.';
+  const before = calls.length;
+  await altHover(page, '#p2', 5);
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  const mine = calls.slice(before).filter(c => sentOf(c));
+  expect(mine.length).toBeGreaterThan(0);
+  expect(sentOf(mine[0])).toBe(want);
+  expect(mine[0].user).toContain('앞 문장: 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  expect(await selHl(page)).toBe(want);
+  expect(await tooltip(page)).not.toContain('자까지만 풀었어요');
+  // 말풍선은 선택의 마지막 줄(#p2 첫 줄) 아래
+  const lastBottom = await page.evaluate(() => { const rs = [...getSelection().getRangeAt(0).getClientRects()].filter(r => r.width && r.height); return rs.at(-1).bottom; });
+  await expect.poll(async () => { const p = await page.evaluate(() => parseFloat(document.getElementById('good-metaphor-host').shadowRoot.querySelector('.box').style.top)); return Math.abs(p - (lastBottom + 8)); }).toBeLessThanOrEqual(3);
+
+  // 같은 선택이면 다시 Alt해도 캐시(캐시 키 = 고른 글 전체)
+  await page.keyboard.press('Escape');
+  await expect.poll(() => tooltip(page)).toBe('');
+  await altHover(page, '#p1', start + 3);
+  await expect.poll(() => tooltip(page)).toContain('캐시');
+
+  // 👎은 고른 글을 문장으로 기록한다(피드백 층이 고른 글 기준으로 동작)
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+  const items = (await ext.send({ type: 'feedback:list' })).data.items;
+  expect(items.map(i => i.sentence)).toContain(want);
+});
+
+test('고른 범위(T-182): 선택이 없거나 커서가 선택 밖이면 지금처럼 커서 아래 문장', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  // 선택 없음
+  let before = calls.length;
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(calls.slice(before).map(sentOf).filter(Boolean)[0]).toBe('변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  await page.keyboard.press('Escape');
+  // #p2 전체를 고르고 #p4 위에서 Alt
+  await selectBetween(page, '#p2', 0, '#p2');
+  before = calls.length;
+  await altHover(page, '#p4', 3);
+  await expect.poll(() => tooltip(page)).toContain('쉬운 뜻');
+  const sent = calls.slice(before).map(sentOf).filter(Boolean);
+  expect(sent[0]).toBe('펭귄은 날지 못하지만 헤엄을 아주 잘 친다.');
+  expect(sent.some(s => s.includes('API 서버'))).toBe(false);
+  expect(await selHl(page)).toBe('펭귄은 날지 못하지만 헤엄을 아주 잘 친다.');
+  // 한 글자만 고르면 문장 모드
+  await page.keyboard.press('Escape');
+  await selectBetween(page, '#p1', 0, '#p1', 1);
+  before = calls.length;
+  await altHover(page, '#p1', 0);
+  await expect.poll(() => calls.slice(before).map(sentOf).filter(Boolean)[0] ?? '').toBe('변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+});
+
+test('고른 범위(T-182): 400자를 넘으면 문장 경계에서 자르고 말풍선에 한 줄, 강조도 보낸 앞부분까지', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  const unit = '긴선택테스트 금리가 오르면 대출 이자 부담이 커진다. ';
+  await page.evaluate(u => {
+    const p = document.createElement('p'); p.id = 'plong'; p.textContent = u.repeat(30).trim();
+    document.querySelector('h1').after(p);
+  }, unit);
+  await selectBetween(page, '#plong', 0, '#plong');
+  const before = calls.length;
+  await altHover(page, '#plong', 3);
+  await expect.poll(() => tooltip(page)).toContain('앞부분 400자까지만 풀었어요.');
+  await expect.poll(() => tooltip(page)).toContain('같은 구조예요');
+  expect(await tooltip(page)).toContain('앞부분 400자까지만 풀었어요.');
+  const s = calls.slice(before).map(sentOf).filter(Boolean)[0];
+  expect(s.length).toBeLessThanOrEqual(400);
+  expect(s.length).toBeGreaterThan(300);
+  expect(s.endsWith('커진다.')).toBe(true);
+  expect(unit.repeat(30).startsWith(s)).toBe(true);
+  expect(await selHl(page)).toBe(s);
+});
+
+serverTest('고른 범위(T-182): 비밀번호 폼 글자는 선택에 들어 있어도 보내지 않는다, 제외 사이트면 아무것도 안 보냄', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  // #p6(폼 밖) ~ #p9(폼 뒤): 사이의 비밀번호 폼 문장(#p7)은 빠져야 한다
+  await selectBetween(page, '#p6', 0, '#p9');
+  let before = calls.length;
+  await altHover(page, '#p6', 3);
+  // 가짜 LLM은 입장횟수테스트 문장에 facts 밖 숫자를 대므로(근거 검사로 숨김) 비유 대신 보낸 글로 확인한다
+  await expect.poll(() => calls.slice(before).map(sentOf).filter(Boolean)[0] ?? '', { timeout: 15_000 }).toContain('로딩지연테스트');
+  const s = calls.slice(before).map(sentOf).filter(Boolean)[0];
+  expect(s).toContain('입장횟수테스트');
+  expect(s).toContain('로딩지연테스트');
+  expect(calls.slice(before).filter(c => c.user.includes('비밀번호폼테스트'))).toEqual([]);
+  // 폼 안 문장만 고르면 보낼 글이 없어 문장 모드 → 폼 안이라 역시 안 보냄
+  await page.keyboard.press('Escape');
+  await selectBetween(page, '#p7', 0, '#p7');
+  before = sentCount();
+  await altHover(page, '#p7', 3);
+  await page.waitForTimeout(1200);
+  expect(sentCount() - before).toBe(0);
+  expect(await tooltip(page)).toBeFalsy();
+  // 제외 사이트
+  await ext.setSettings({ excludedHosts: ['kbstar.com', '127.0.0.1'] });
+  await page.waitForTimeout(300);
+  await selectBetween(page, '#p1', 0, '#p2');
+  before = sentCount();
+  await altHover(page, '#p1', 3);
+  await page.waitForTimeout(1200);
+  expect(sentCount() - before).toBe(0);
+  expect(await tooltip(page)).toBeFalsy();
+});
