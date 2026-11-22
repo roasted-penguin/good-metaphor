@@ -254,3 +254,21 @@ def test_filter_does_not_mutate_inputs():
     relationships = [_rel("a", "지어낸 구조")]
     filter_extraction(entities, relationships, VOCAB)
     assert len(entities) == 1 and len(relationships) == 1
+
+
+def test_filter_drops_types_outside_entity_types_and_their_relationships():
+    """Other·목록 밖 유형은 버린다(T-413). 비튼 유형으로 목록 밖 추상구조가 빠져나가지 않게."""
+    entities = [_ent("스타포스 강화", "게임시스템"), _ent("경험치", "추상structure"), _ent("입장권", "Other"),
+                _ent("사냥", "활동"), _ent("확률형 강화", "추상구조")]
+    relationships = [_rel("스타포스 강화", "경험치"), _rel("입장권", "스타포스 강화"), _rel("스타포스 강화", "확률형 강화")]
+    ents, rels = filter_extraction(entities, relationships, VOCAB)
+    assert [e["entity_name"] for e in ents] == ["스타포스 강화", "확률형 강화"]
+    assert [(r["src_id"], r["tgt_id"]) for r in rels] == [("스타포스 강화", "확률형 강화")]
+
+
+def test_filter_keeps_relationship_when_same_name_also_kept():
+    entities = [_ent("메소", "재화"), _ent("메소", "Other"), _ent("결정석", "아이템")]
+    relationships = [_rel("결정석", "메소")]
+    ents, rels = filter_extraction(entities, relationships, VOCAB)
+    assert [e["entity_type"] for e in ents] == ["재화", "아이템"]
+    assert rels == relationships

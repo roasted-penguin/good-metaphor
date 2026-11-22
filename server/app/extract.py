@@ -179,21 +179,31 @@ def _norm_type(etype: Any) -> str:
 
 def filter_extraction(entities: Iterable[Mapping[str, Any]], relationships: Iterable[Mapping[str, Any]],
                       vocabulary: Iterable[str]) -> tuple[list[Any], list[Any]]:
-    """추상구조인데 이름이 통제 어휘에 없는 엔티티를 버리고, 그 엔티티에 걸린 관계도 버린다.
+    """버릴 엔티티를 버리고, 그 엔티티에 걸린 관계도 버린다.
+
+    버리는 것: (1) 추상구조인데 이름이 통제 어휘에 없는 엔티티(규칙 9), (2) 유형이 ENTITY_TYPES 밖인 엔티티
+    (`Other`, `추상structure` 같은 변형 포함). 지침은 "맞는 유형이 없으면 뽑지 않는다"이고, (2)를 남기면
+    유형 이름만 비틀어 (1)을 빠져나간 목록 밖 추상구조가 그래프에 들어간다(T-413 실측: qwen3.5:9b가 `추상structure`).
 
     엔티티는 LightRAG 모양(entity_name/entity_type)이나 LLM JSON 모양(name/type), 관계는 src_id/tgt_id나
-    source/target 모양을 받는다. 이름·유형은 LightRAG 정규화 뒤 비교한다. 다른 유형은 그대로 둔다. 입력은 바꾸지 않는다.
+    source/target 모양을 받는다. 이름·유형은 LightRAG 정규화 뒤 비교한다. 같은 이름이 남긴 엔티티로도 있으면
+    관계는 버리지 않는다. 입력은 바꾸지 않는다.
     """
     allowed = {_norm_name(v) for v in vocabulary}
     abstract = _norm_type(TAG_ENTITY_TYPE)
+    known_types = {_norm_type(t) for t in ENTITY_TYPES}
     kept: list[Any] = []
+    kept_names: set[str] = set()
     dropped: set[str] = set()
     for e in entities:
         name = _norm_name(_get(e, "entity_name", "name"))
-        if _norm_type(_get(e, "entity_type", "type")) == abstract and name not in allowed:
+        etype = _norm_type(_get(e, "entity_type", "type"))
+        if etype not in known_types or (etype == abstract and name not in allowed):
             dropped.add(name)
         else:
             kept.append(e)
+            kept_names.add(name)
+    dropped -= kept_names
     rels = [
         r for r in relationships
         if _norm_name(_get(r, "src_id", "source")) not in dropped
