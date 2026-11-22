@@ -11,7 +11,7 @@
   { "sentence": "외국어 단어는 하루 스무 개씩 매일 외워야 머리에 남고, 시험 전날 몰아 외우면 금방 잊는다.", "expectNodes": ["arcane_symbol", "sol_erda", "trait"], "expectTag": "daily_accumulation", "since": "T-150" },
   { "sentence": "경품 응모권은 한 장에 오천 원인데 당첨 확률과 상품 값을 곱하면 천 원어치도 안 된다.", "expectNodes": ["cube", "starforce", "starforce_event"], "expectTag": "expected_value", "group": "finance", "since": "T-150" },
   { "sentence": "논문은 투고할 때마다 실릴 수도 떨어질 수도 있지만, 좋은 저널에 실릴수록 경력이 한 단계씩 올라간다.", "expectNodes": ["starforce", "cube"], "expectTag": "prob_upgrade", "since": "T-150" },
-  { "sentence": "한 게임 회사 계정으로 쌓은 등급이 같은 회사의 다른 게임에서도 혜택으로 이어진다.", "expectNodes": ["union_link", "achievement"], "expectTag": "shared_bonus", "since": "T-150" },
+  { "sentence": "한 게임 회사 계정으로 쌓은 등급이 같은 회사의 다른 게임에서도 혜택으로 이어진다.", "expectNodes": ["union_link", "achievement", "quest_story_skip_id"], "expectTag": "shared_bonus", "since": "T-150" },
   { "sentence": "투자자는 같은 돈을 넣었을 때 한 해 수익이 더 많이 나는 상품을 고른다.", "expectNodes": ["hunting", "weekly_boss"], "expectTag": "efficiency_metric", "group": "finance", "since": "T-150" },
   { "sentence": "Collectors pay a fortune for stamps printed with an error, since only a handful of them exist.", "expectNodes": ["auction", "newname_auction"], "expectTag": "scarcity_value", "group": "finance", "since": "T-150" },
   { "sentence": "When the government prints money to cover its deficit, rent and groceries eat a bigger share of every paycheck.", "expectNodes": ["meso_inflation", "meso"], "expectTag": "inflation", "group": "finance", "since": "T-150" },
