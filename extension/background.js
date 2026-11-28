@@ -1,21 +1,26 @@
 // 서비스 워커: 저장소 병합 → 임베딩 → 그래프 검색 → LLM 비유 생성
 import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './lib/config.js';
 import { complete, PROVIDERS } from './lib/providers.js';
-import { buildChain, completeWithFallback } from './lib/fallback.js';
+import { buildChain, completeWithFallback, reorderChain, preferOthers } from './lib/fallback.js';
 import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
-import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
+import { addRecord, removeRecord, setReason, REASONS, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, summarizeAgentFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown, cacheEntryFor, readCacheEntry } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked, activeTerms } from './lib/blocklist.js';
 import { touch, pruneVecCache, VEC_CACHE_MAX } from './lib/vec-cache.js';
+import { precomputedIndex, precomputedPath } from './lib/precomputed-vectors.js';
 import { syncCorrectionExamples, buildCorrectionsExport } from './lib/corrections.js';
 import { makeGroundingEntry, addGroundingEntry, bumpGroundingCount, flagGroundingEntry, summarizeGrounding } from './lib/grounding-log.js';
 import { buildDraftPrompt } from './lib/prompt.js';
 import { parseDraft, validDraftName, draftNameError, demoDraftText, withDeadline, draftError, DRAFT_DEADLINE_MS } from './lib/draft.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 import { loadErrorReason } from './lib/embed-status.js';
+import { takeDailyCall } from './lib/agent.js';
+import { runFollowup, cleanQuestion } from './lib/agent-tools.js';
+import { runDiagnose, diagnoseAction } from './lib/agent-diagnose.js';
+import { newHelperState, runHelper, helperView, mergeHelperDrafts, cleanNotes, HELPER_TEXT } from './lib/interest-helper.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -84,6 +89,23 @@ async function saveVecCache() {
   await chrome.storage.local.set({ vecCache: Object.fromEntries(vecMem) });
 }
 
+// 미리 계산한 그래프 벡터(T-193, ADR 0015). 관심사별 확장 동봉 데이터 파일, 서비스 워커가 살아 있는 동안 메모리에 둔다.
+// embedderId·passagePrefix가 다르면 빈 조회표(대체 임베더 포함, 지금처럼 런타임 임베딩). 파일이 없거나 못 읽어도 빈 조회표
+const preMem = new Map(); // `${interestId}|${embedderId}|${prefix}` -> Map(hash -> number[])
+async function loadPrecomputed(interestId, embedderId, passagePrefix) {
+  const k = `${interestId}|${embedderId}|${passagePrefix}`;
+  if (preMem.has(k)) return preMem.get(k);
+  let idx = new Map();
+  try {
+    const res = await fetch(chrome.runtime.getURL(precomputedPath(interestId)));
+    if (res.ok) idx = precomputedIndex(await res.json(), { embedderId, passagePrefix });
+  } catch (e) {
+    console.warn('[vectors] 미리 계산 벡터를 못 읽어서 런타임 임베딩만 써요', e);
+  }
+  preMem.set(k, idx);
+  return idx;
+}
+
 async function ensureGraphVectors(graph) {
   const init = await keepAlive(offscreen('init'));
   // fallbackOnError false면 대체 검색으로 넘어가지 않고 여기서 멈춘다(원인은 짧은 한국어로)
@@ -91,26 +113,39 @@ async function ensureGraphVectors(graph) {
   const embedderId = init.embedderId;
   const cache = await loadVecCache();
   const admin = await getAdminConfig();
+  const { interest } = await getSettings();
+  const pre = await loadPrecomputed(commonInterest(interest)?.id || DEFAULT_INTEREST, embedderId, admin.embedding?.passagePrefix ?? '');
   // 노드 텍스트·태그 벡터 방식은 admin.retrieval(nodeTextMode·tagVectorMode)을 따른다. 평가 도구와 같은 함수 (T-154)
   const items = embedItems(graph, admin.retrieval);
-  for (const it of items) it.cacheKey = `${embedderId}|${await sha1(it.text)}`;
-  const missing = items.filter(it => !cache.has(it.cacheKey));
+  for (const it of items) {
+    it.hash = await sha1(it.text);
+    it.cacheKey = `${embedderId}|${it.hash}`;
+  }
+  // 미리 계산 벡터가 있으면 그것을 쓰고 vecCache에는 넣지 않는다(저장 공간은 오버레이·바뀐 텍스트 몫으로)
+  const fromPre = items.filter(it => pre.has(it.hash));
+  const rest = items.filter(it => !pre.has(it.hash));
+  const missing = rest.filter(it => !cache.has(it.cacheKey));
   if (missing.length) {
     const { vectors } = await keepAlive(offscreen('embed', { texts: missing.map(m => m.text), kind: 'passage' }));
     missing.forEach((m, i) => cache.set(m.cacheKey, vectors[i]));
   }
-  // 정리(T-110): 이번 키를 최근 사용으로 옮기고, 다른 임베더 항목과 상한 초과분을 지운다(이번 키는 지키고)
-  const used = items.map(it => it.cacheKey);
+  // 정리(T-110): 이번 키를 최근 사용으로 옮기고, 다른 임베더 항목과 상한 초과분을 지운다(이번 키는 지키고).
+  // 미리 계산으로 덮인 키는 예전 vecCache에서 지운다(같은 벡터를 두 번 저장하지 않게)
+  const used = rest.map(it => it.cacheKey);
+  let dropped = 0;
+  for (const it of fromPre) if (cache.delete(it.cacheKey)) dropped++;
   touch(cache, used);
   const { cache: pruned, removed } = pruneVecCache(cache, { embedderId, max: admin.vecCacheMax ?? VEC_CACHE_MAX, keep: new Set(used) });
   // 임베딩을 기다리는 사이 "캐시 지우기"나 다른 호출이 vecMem을 바꿨으면 덮어쓰지 않는다(이번 결과 vecs는 그대로 쓴다)
   if (vecMem === cache) {
     vecMem = pruned;
     // 추가·삭제가 있을 때만 저장한다. touch만으로는 저장하지 않는다(호버마다 쓰지 않게, 저장 순서는 LRU 근사로 충분)
-    if (missing.length || removed) await saveVecCache();
+    if (missing.length || removed || dropped) await saveVecCache();
   }
-  const vecs = new Map(items.map(it => [it.key, pruned.get(it.cacheKey)]));
-  return { vecs, embedderId, embedderStatus: init.status, loadError: init.loadError || null };
+  const vecs = new Map(items.map(it => [it.key, pre.get(it.hash) || pruned.get(it.cacheKey)]));
+  // 벡터 출처 수(T-193): 미리 계산 / vecCache / 이번에 임베딩. 설정 화면·e2e·측정이 본다
+  const vectorSources = { precomputed: fromPre.length, cached: rest.length - missing.length, embedded: missing.length };
+  return { vecs, embedderId, embedderStatus: init.status, loadError: init.loadError || null, vectorSources };
 }
 
 /* ───────────── 설명 파이프라인 ───────────── */
@@ -272,7 +307,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   }
 
   onStage('model');
-  const { vecs, embedderId, embedderStatus } = await ensureGraphVectors(graph);
+  const { vecs, embedderId, embedderStatus, vectorSources } = await ensureGraphVectors(graph);
 
   const llmStats = { retries: 0 };
   // 사용자가 고른 제공자 → 관리자 fallbackChain 순서로 부른다(T-124). 실제로 답한 모델을 debug 에 남긴다
@@ -287,8 +322,12 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   };
   let queryText = sentence;
   let abstractText = null;
+  // 정밀 모드 태그 판정(T-184): 켜져 있으면 추상화 호출 한 번에 태그 확률도 함께 받는다(호출 수 그대로)
+  const ptj = admin.preciseTagJudge;
+  let judge = null;
   if (settings.preciseMode && provider.def.kind !== 'demo') {
-    ({ abstractText, queryText } = await runAbstract({ sentence, word, pageTitle, ask, onStage }));
+    const tagJudge = ptj?.enabled ? { tags: graph.tags, floor: ptj.floor ?? 0 } : null;
+    ({ abstractText, queryText, judge } = await runAbstract({ sentence, word, pageTitle, ask, onStage, tagJudge }));
     // 추상 구조는 검색 질의로만 쓰고, debug 로 보일 때 금칙어가 섞였으면 지운다(T-114)
     if (findBlocked(abstractText, blocklist)) abstractText = '';
   }
@@ -314,8 +353,10 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   }
   // 제보로 빠진 공통 노드는 그 문장 👎처럼 후보에서 뺀 뒤 피드백을 적용한다(고정도 못 한다)
   const unreported = list => list.filter(c => !reported.has(c.id));
+  // 판정 확률은 정밀 모드에서만 태그 점수에 더한다. 판정이 없거나(형식 어김) "없음"이면 예전과 같다
+  const tagJudgeOpt = judge?.probs?.length ? { p: judge.probs, mode: ptj.mode || 'combine', weight: ptj.weight ?? 0.05 } : null;
   // 관심사 그래프의 감점(tagPenalty)을 admin.retrieval 위에 덮어쓴다(T-156, 메이플은 그대로)
-  const fb = applyFeedback(unreported(retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq, aliasText: sentence })), feedbackRecords, sentenceHash, topK);
+  const fb = applyFeedback(unreported(retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: topK + 5, feedbackMemory: memory, feedbackQuery: fq, aliasText: sentence, tagJudge: tagJudgeOpt })), feedbackRecords, sentenceHash, topK);
   const candidates = fb.candidates;
   const similar = memory.length
     ? [...feedbackAdjust(fq, memory, { sim: admin.retrieval?.feedbackSim ?? 0.92, max: admin.retrieval?.feedbackMax ?? 0.1 })]
@@ -324,7 +365,7 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
   // 비슷한 문장 가감이 상위 topK 순서를 바꿨는지는 메모리 없이 한 번 더 뽑아 비교한다(검색은 가볍다)
   let similarChanged = false;
   if (similar.length) {
-    const plain = applyFeedback(unreported(retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: topK + 5, feedbackQuery: fq, aliasText: sentence })), feedbackRecords, sentenceHash, topK);
+    const plain = applyFeedback(unreported(retrieve(q, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK: topK + 5, feedbackQuery: fq, aliasText: sentence, tagJudge: tagJudgeOpt })), feedbackRecords, sentenceHash, topK);
     similarChanged = plain.candidates.map(c => c.id).join() !== candidates.map(c => c.id).join();
   }
   const tags = topTags(q, graph, vecs, 5);
@@ -355,8 +396,11 @@ async function explain({ sentence, context, word, pageTitle, noCache }, onStage 
       candidates: candidates.map(c => ({ id: c.id, label: c.label, score: c.score, direct: c.direct, tag: c.tag?.label, tagId: c.tag?.id, tagSim: c.tag?.sim, source: c.source })),
       topTags: tags,
       abstractText,
+      // 정밀 모드 태그 판정(T-184): 하한·없음 적용 뒤 쓴 확률(probs), 없음 확률, 구조 없음 판정(참이면 원문으로 검색). 꺼져 있으면 null
+      tagJudge: judge ? { probs: judge.probs, none: judge.answers?.find(a => a.id === 'none')?.p ?? null, structureless: judge.none } : null,
       embedderId,
       embedderStatus,
+      vectorSources,
       provider: `${answered.id}/${answered.model}`,
       fallbacks,
       llmRetries: llmStats.retries,
@@ -389,6 +433,172 @@ async function serverPermission(url) {
     catch (e) { console.warn('[server] 권한을 확인하지 못했어요', e); }
   }
   return { granted, key: granted ? 'server-ok' : 'server-denied' };
+}
+
+/* ───────────── 말풍선 이어 묻기 에이전트 (T-216, ADR 0017) ───────────── */
+
+// 에이전트 LLM 호출의 하루 상한(admin agent.dailyCallCap). 호버 체인 한도와 따로 센다(사용자 결정 2026-11-28).
+// 이 기기 chrome.storage.local agentCalls = { day, count }. 동시에 여러 질문이 와도 빠지지 않게 차례로 쓴다
+const AGENT_DAILY_CAP_DEFAULT = 40;
+let agentQueue = Promise.resolve();
+function takeAgentCall(cap) {
+  const job = agentQueue.then(async () => {
+    const { agentCalls } = await chrome.storage.local.get('agentCalls');
+    const r = takeDailyCall(agentCalls || null, localDay(Date.now()), cap);
+    if (r.ok) await chrome.storage.local.set({ agentCalls: r.state });
+    return r.ok;
+  });
+  agentQueue = job.catch(() => {});
+  return job;
+}
+
+const str = (v, n) => String(v ?? '').slice(0, n);
+
+// 에이전트 공통 준비(T-216·T-220): LLM은 explain과 같은 길(사용자 제공자 → fallbackChain, 429 쿨다운 공유, 규칙 7·8),
+// search_graph 도구는 한 문장 임베딩(오프스크린, 한 문장씩) + retrieve. 제보로 빠진 공통 노드(T-118)는 호버처럼 뺀다.
+// 하루 상한은 이어 묻기·교정 진단이 같은 agentCalls를 센다
+async function agentDeps(graph) {
+  const [settings, admin, provider] = await Promise.all([getSettings(), getAdminConfig(), resolveProvider()]);
+  // 에이전트는 JSON 액션 형식을 잘 지키는 순서로(T-222, admin agent.providerOrder). 체인 항목끼리 자리만 바꾼다
+  const chain = reorderChain(buildChain(provider, admin, settings), admin.agent?.providerOrder);
+  const state = { answered: chain[0] || provider, fallbacks: [] };
+  // route.avoid(T-229, 도우미 평가자): 그 제공자를 체인 뒤로 미룬다(preferOthers, 하나뿐이면 같은 쪽)
+  const ask = async (system, user, opts, route) => {
+    const r = await completeWithFallback(preferOthers(chain, route?.avoid), system, user, opts, { cooldowns, cooldown: admin.cooldown });
+    state.answered = r.provider;
+    state.fallbacks.push(...r.fallbacks);
+    return r.text;
+  };
+  const searchGraph = async (text, exclude) => {
+    const { vecs } = await ensureGraphVectors(graph);
+    const { vectors: [v] } = await offscreen('embed', { texts: [text], kind: 'query' });
+    const reported = reportedNodes(feedbackForGraph(await feedbackStore.get(), graph), graph);
+    const topK = (admin.retrieval?.topK ?? 3) + exclude.length + reported.size;
+    return retrieve(v, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK, aliasText: text })
+      .filter(c => !exclude.includes(c.id) && !reported.has(c.id));
+  };
+  const cap = admin.agent?.dailyCallCap ?? AGENT_DAILY_CAP_DEFAULT;
+  const providerText = () => `${state.answered.id}/${state.answered.model}`;
+  return { provider, ask, searchGraph, budget: { take: () => takeAgentCall(cap) }, state, providerText, lastProvider: () => state.answered?.id || null };
+}
+const cleanPayload = payload => ({ sentence: str(payload?.sentence, 1000), word: str(payload?.word, 100), context: str(payload?.context, 1000), pageTitle: str(payload?.pageTitle, 120) });
+const cleanEvidence = ev => (ev?.nodeId ? { nodeId: str(ev.nodeId, 100), nodeLabel: str(ev.nodeLabel, 100) } : null);
+
+// 이어 묻기 한 번. 보내는 글은 호버와 같은 범위(문장·단어·앞 문장·제목)만 받는다(문단은 받지 않는다, ADR 0017 열린 결정 1).
+// 호버 결과 캐시·피드백 기록은 건드리지 않는다
+async function followup({ payload, question, prev, candidateIds }) {
+  const t0 = Date.now();
+  const q = cleanQuestion(question);
+  if (!q) throw new Error('질문을 두 글자 이상 적어 주세요.');
+  const [{ graph }, blocklist] = await Promise.all([getMergedGraph(), loadBlocklist()]);
+  const base = { answer: '', evidence: null, rejected: null, capped: false, found: [], theme: graph.theme, domain: graph.domain };
+  const deps = await agentDeps(graph);
+  if (deps.provider.def.kind === 'demo') return { ...base, stopText: '데모 모드에서는 이어 묻기를 쓸 수 없어요.', debug: { trace: [], calls: 0 } };
+  const p = cleanPayload(payload);
+  if (!p.sentence.trim()) throw new Error('물어볼 문장이 없어요.');
+  const pv = { meaning: str(prev?.meaning, 300), analogy: str(prev?.analogy, 300), evidence: cleanEvidence(prev?.evidence) };
+  const r = await keepAlive(runFollowup({
+    graph, payload: p, question: q, prev: pv,
+    candidateIds: Array.isArray(candidateIds) ? candidateIds.slice(0, 10).map(id => str(id, 100)) : [],
+    ask: deps.ask, searchGraph: deps.searchGraph, blocklist, budget: deps.budget
+  }));
+  // 보인 답 수(날짜별, T-218 👎 비율의 분모). 14일만 남긴다
+  if (r.answer) {
+    const { agentAnswerCounts } = await chrome.storage.local.get('agentAnswerCounts');
+    await chrome.storage.local.set({ agentAnswerCounts: bumpHover(agentAnswerCounts || {}, localDay(Date.now())) });
+  }
+  return { ...base, ...r, question: q, debug: { ...r.debug, provider: deps.providerText(), fallbacks: deps.state.fallbacks, ms: Date.now() - t0 } };
+}
+
+/* ───────────── 👎 교정 진단 에이전트 (T-220, ADR 0017 에이전트 3) ───────────── */
+
+// 원래 결과(👎한 결과) 기록 다듬기. 콘텐츠 스크립트가 준 값은 진단 단서로만 쓰고, 노드 사실은 늘 그래프에서 읽는다
+const num = v => (Number.isFinite(v) ? v : null);
+function cleanOrig(orig) {
+  const cands = Array.isArray(orig?.candidates) ? orig.candidates.slice(0, 10) : [];
+  return {
+    meaning: str(orig?.meaning, 300),
+    analogy: str(orig?.analogy, 300),
+    evidence: cleanEvidence(orig?.evidence),
+    candidates: cands.filter(c => typeof c?.id === 'string').map(c => ({ id: str(c.id, 100), label: str(c.label, 100), score: num(c.score), tagId: typeof c.tagId === 'string' ? str(c.tagId, 100) : null, tagSim: num(c.tagSim) })),
+    grounding: orig?.grounding ? { ok: orig.grounding.ok === true, reason: str(orig.grounding.reason, 40) } : null,
+    ending: orig?.ending ? { ok: orig.ending.ok !== false } : null,
+    reason: REASONS.includes(orig?.reason) ? orig.reason : null
+  };
+}
+
+// 진단 한 번. 쓰기는 하지 않는다(제안 action만 돌려주고, 사용자가 누르면 agent:diagnose-apply)
+async function diagnose({ payload, orig, rerun, downNodeId }) {
+  const t0 = Date.now();
+  const [{ graph, session }, blocklist, common] = await Promise.all([getMergedGraph(), loadBlocklist(), loadChosenCommon()]);
+  const base = { diagnosis: null, analogy: '', evidence: null, rejected: null, note: null, capped: false, found: [], action: null, theme: graph.theme, domain: graph.domain };
+  const deps = await agentDeps(graph);
+  if (deps.provider.def.kind === 'demo') return { ...base, stopText: '데모 모드에서는 살펴보기를 쓸 수 없어요.', debug: { trace: [], calls: 0 } };
+  const p = cleanPayload(payload);
+  if (!p.sentence.trim()) throw new Error('살펴볼 문장이 없어요.');
+  const o = cleanOrig(orig);
+  const down = str(downNodeId || o.evidence?.nodeId, 100);
+  const r = await keepAlive(runDiagnose({
+    graph, payload: p, orig: o,
+    rerun: rerun ? { analogy: str(rerun.analogy, 300), evidence: cleanEvidence(rerun.evidence) } : null,
+    downNodeIds: down ? [down] : [],
+    ask: deps.ask, searchGraph: deps.searchGraph, blocklist, budget: deps.budget
+  }));
+  const action = r.analogy && r.evidence
+    ? diagnoseAction({ graph, nodeId: r.evidence.nodeId, sentence: p.sentence, loggedIn: !!session, commonTagIds: new Set(common.tags.map(t => t.id)), blockTerms: blocklist })
+    : null;
+  return { ...base, ...r, action, downNodeId: down || null, debug: { ...r.debug, provider: deps.providerText(), fallbacks: deps.state.fallbacks, ms: Date.now() - t0 } };
+}
+
+/* ───────────── 새 관심사 만들기 도우미 (T-225, ADR 0017 에이전트 2) ───────────── */
+
+// 상태는 chrome.storage.session interestHelper 하나. 단계마다 저장하고, 서비스 워커가 깨면(아래 맨 끝, helper:status) 이어 간다.
+// LLM·하루 상한은 다른 에이전트와 같은 agentDeps(agent.providerOrder 체인, agentCalls 공유).
+// 쓰기는 마지막 단계 한 번: 로그인한 같은 사용자의 오버레이 뒤에 검수 대기(draft) 노드만 붙인다(규칙 3). 공통 그래프는 읽기만
+const HELPER_KEY = 'interestHelper';
+let helperRun = null;
+
+const readHelper = async () => (await chrome.storage.session.get(HELPER_KEY))[HELPER_KEY] || null;
+
+async function helperDeps(st) {
+  const [{ overlay }, common, blockTerms, agent] = await Promise.all([getSessionAndOverlay(), loadChosenCommon(), loadBlocklist(), agentDeps(null)]);
+  const ov = normalizeOverlay(overlay);
+  const existing = [...(ov.nodes || []), ...(st.mode === 'add' ? common.nodes : [])];
+  return {
+    ask: agent.ask, lastProvider: agent.lastProvider, budget: agent.budget, tags: common.tags, blockTerms, existing,
+    reservedIds: common.nodes.map(n => n.id),
+    write: async nodes => {
+      const { store, session, overlay: fresh } = await getSessionAndOverlay();
+      if (!session || (st.user && session.name !== st.user)) throw new Error(HELPER_TEXT.loggedOut);
+      const next = mergeHelperDrafts(normalizeOverlay(fresh), nodes, { name: st.name, mode: st.mode, reservedIds: common.nodes.map(n => n.id) });
+      if (validateOverlay(next).length) throw new Error(HELPER_TEXT.writeFail);
+      await store.saveOverlay(session, next);
+      return { written: nodes.length };
+    }
+  };
+}
+
+// 돌고 있지 않으면 세션 상태에서 이어 돈다(한 서비스 워커 안에서 하나만)
+function kickHelper() {
+  if (helperRun) return helperRun;
+  helperRun = keepAlive((async () => {
+    const st = await readHelper();
+    if (st?.status !== 'running') return;
+    const deps = await helperDeps(st);
+    await runHelper(st, deps, { save: s => chrome.storage.session.set({ [HELPER_KEY]: s }) });
+  })()).catch(async e => {
+    console.warn('[helper] 도우미가 멈췄어요', e);
+    const st = await readHelper();
+    if (st?.status === 'running') await chrome.storage.session.set({ [HELPER_KEY]: { ...st, status: 'error', phase: 'done', error: String(e?.message || e).slice(0, 200) } });
+  }).finally(() => { helperRun = null; });
+  return helperRun;
+}
+
+async function helperStatus() {
+  const st = await readHelper();
+  if (st?.status === 'running') kickHelper();
+  const common = await loadChosenCommon();
+  return helperView(st, common.tags);
 }
 
 /* ───────────── 메시지 ───────────── */
@@ -559,6 +769,24 @@ const handlers = {
     const parsed = parseDraft(text, { tags: common.tags, existingIds, blockTerms });
     return { ...parsed, name: n, mode: mode === 'new' ? 'new' : 'add', provider: answered };
   },
+  // 새 관심사 만들기 도우미(T-225). 로그인 사용자만. 시작만 하고 바로 돌려준다(진행은 helper:status로 본다)
+  async 'helper:start'({ name, notes, mode }) {
+    const { session } = await getSessionAndOverlay();
+    if (!session) throw new Error(HELPER_TEXT.loggedOut);
+    const [blockTerms, provider] = await Promise.all([loadBlocklist(), resolveProvider()]);
+    const nameErr = draftNameError(name, blockTerms);
+    if (nameErr) throw new Error(nameErr);
+    const memo = cleanNotes(notes, blockTerms);
+    if (memo === null) throw new Error(HELPER_TEXT.notesBlocked);
+    if (provider.def.kind === 'demo') throw new Error(HELPER_TEXT.demo);
+    const cur = await readHelper();
+    if (cur?.status === 'running') { kickHelper(); throw new Error(HELPER_TEXT.running); }
+    const st = { ...newHelperState({ name: validDraftName(name), notes: memo, mode }), user: session.name };
+    await chrome.storage.session.set({ [HELPER_KEY]: st });
+    kickHelper();
+    return helperStatus();
+  },
+  async 'helper:status'() { return helperStatus(); },
   async 'graph:info'() {
     // 설정 화면 "공통 저장소"·팝업·말풍선 테마 미리 받기가 쓴다. 고른 공통 관심사(T-302)
     const common = await loadChosenCommon();
@@ -572,7 +800,7 @@ const handlers = {
   async 'embed:warmup'() {
     const { graph } = await getMergedGraph();
     const r = await ensureGraphVectors(graph);
-    return { embedderId: r.embedderId, status: r.embedderStatus, vectors: r.vecs.size, loadError: r.loadError };
+    return { embedderId: r.embedderId, status: r.embedderStatus, vectors: r.vecs.size, loadError: r.loadError, vectorSources: r.vectorSources };
   },
   async 'embed:status'() {
     const ctx = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
@@ -592,12 +820,34 @@ const handlers = {
     return { ok: true, text: text.trim().slice(0, 80), provider: `${provider.id}/${provider.model}` };
   },
   async explain(payload, sender) { await assertSiteAllowed(sender, payload?.topHost); countHover(); return explain(payload); },
+  // 말풍선 이어 묻기(T-216). 제외 사이트 이중 방어는 explain과 같다
+  async 'agent:ask'(msg, sender) { await assertSiteAllowed(sender, msg.payload?.topHost); return followup(msg); },
+  // 👎 교정 진단(T-220). 사용자가 "왜 틀렸는지 살펴볼게요"를 눌렀을 때만. 쓰기 없음
+  async 'agent:diagnose'(msg, sender) { await assertSiteAllowed(sender, msg.payload?.topHost); return diagnose(msg); },
+  // 진단 뒤 사용자가 누른 쓰기 하나: 피드백 층 고정(pick) 또는 로그인 + 내 노드·내 태그면 내 태그 예문(같은 pick 기록을
+  // syncCorrections가 corrections.js 거름으로 반영, T-131). 제안은 여기서 다시 계산해 콘텐츠 스크립트 값을 믿지 않는다.
+  // 공통 그래프는 어떤 길로도 쓰지 않는다(규칙 3·9)
+  async 'agent:diagnose-apply'({ kind, sentence, downNodeId, nodeId, provider, topHost }, sender) {
+    await assertSiteAllowed(sender, topHost);
+    if (kind !== 'pin' && kind !== 'example') throw new Error('알 수 없는 조치예요.');
+    const s = str(sentence, 1000);
+    if (!s.trim()) throw new Error('문장이 없어요.');
+    const [{ graph, session }, blockTerms, common] = await Promise.all([getMergedGraph(), loadBlocklist(), loadChosenCommon()]);
+    const action = diagnoseAction({ graph, nodeId: str(nodeId, 100), sentence: s, loggedIn: !!session, commonTagIds: new Set(common.tags.map(t => t.id)), blockTerms });
+    if (!action) throw new Error('지금 그래프에 없는 개념이에요.');
+    if (kind === 'example' && action.kind !== 'example') throw new Error(session ? '이 개념에는 내 태그 예문을 넣을 수 없어요.' : '로그인해야 내 태그 예문을 넣을 수 있어요.');
+    const down = str(downNodeId, 100);
+    const res = await handlers.feedback({ record: { sentence: s, nodeId: down && graph.nodes.some(n => n.id === down) ? down : null, tagId: null, vote: 'pick', pickedNodeId: action.nodeId, pickedTagId: action.tagId, provider: str(provider, 100) } }, sender);
+    return { id: res.id, kind: action.kind };
+  },
   // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
   async feedback({ record, rerun }, sender) {
     await assertSiteAllowed(sender, record?.topHost || rerun?.topHost);
     const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
     delete r.vec; // 벡터는 받지 않고 여기서 만든다
     delete r.topHost; // 검사용일 뿐 기록·내보내기에 남기지 않는다(T-111)
+    // 이어 묻기 답을 본 뒤 남긴 피드백인지(T-218, 👎 비율 집계용). 참일 때만 남긴다
+    if (record?.afterAgent === true) r.afterAgent = true; else delete r.afterAgent;
     if (r.vote === 'down' || r.vote === 'pick') {
       const vec = await queryVector(record.sentence);
       if (vec) r.vec = vec;
@@ -637,8 +887,10 @@ const handlers = {
     return { items, share: settings.feedbackShare === true };
   },
   async 'feedback:stats'() {
-    const { hoverCounts } = await chrome.storage.local.get('hoverCounts');
-    return summarizeFeedback(await feedbackStore.get(), hoverCounts || {}, localDay(Date.now()));
+    const { hoverCounts, agentAnswerCounts } = await chrome.storage.local.get(['hoverCounts', 'agentAnswerCounts']);
+    const records = await feedbackStore.get(), today = localDay(Date.now());
+    // agent: 이어 묻기 뒤 👎 비율(T-218)
+    return { ...summarizeFeedback(records, hoverCounts || {}, today), agent: summarizeAgentFeedback(records, hoverCounts || {}, agentAnswerCounts || {}, today) };
   },
   // 근거 검사 주간 집계(T-146, "내 피드백" 아래)
   async 'grounding:stats'() {
@@ -696,6 +948,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   h(msg, sender).then(r => sendResponse({ ok: true, data: r }), e => sendResponse({ ok: false, error: String(e?.message || e) }));
   return true;
 });
+
+// 서비스 워커가 다시 뜨면 하다 만 도우미를 이어 간다(T-225)
+readHelper().then(st => { if (st?.status === 'running') kickHelper(); }).catch(() => {});
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason !== 'install') return;

@@ -18,12 +18,24 @@
 //   npm run eval -- --interest restaurant  # 다른 공통 관심사 그래프로 그 관심사 평가셋(tools/eval-set-<id>.json)만 채점 (T-302)
 //        [--guard]                     # 그 관심사 가드(tools/eval-guard-<id>.json)로 회귀 검사 (T-156)
 //        [--holdout]                   # 그 관심사 홀드아웃(tools/eval-unseen-<id>.json)만 (T-156). --margin-guard·--server는 메이플 전용(오류)
-//   [--margin-guard]                   # 가드 문장 중 여유가 --margin 미만이면 종료 코드 1 (선택, 여유 경고는 기본으로 실패가 아님)
+//   [--margin-guard]                   # 가드 문장 중 여유가 --margin 미만이면 종료 코드 1 (선택, 여유 경고는 기본으로 실패가 아님).
+//                                      # 단 tools/eval-margin-known.json(아는 얇은 문장, T-188)에 있고 여유가 그 바닥 이상이면 통과(래칫)
+//   [--write-margin-known]             # 지금 얇은 가드 문장으로 eval-margin-known.json 다시 쓰기(바닥 = 여유 넷째 자리 내림, task 이어받음).
+//                                      # 더 얇아진 것을 받아들일 때만, 그 PR에 EVAL_LOG 한 줄과 함께. 실제 확장(크롬) 평가로만 쓴다
 //   npm run eval -- --judge gemini-choice  # 판정기(lib/judges.js)에 문장 → 추상 태그(다중 선택)를 묻고 (T-120, ADR 0014)
 //                                      # 판정 태그 top-1, 태그 유사도 대신(replace)·함께(combine) 쓴 노드 hit@1/@3, 1위 회귀(혼합 대비), 판정 지연을 출력.
 //        [--judge-weight 0.05]         # 함께(combine)의 가중치: 태그 점수 = 유사도 − 감점 + w·p
 //        [--rpm 10]                    # 판정 분당 요청 수(새로 물을 때만). 결과는 .tmp/judge-<id>-<모델>.json 캐시(다시 돌려도 호출 안 함)
 //                                      # jev는 키(JEV_API_KEY)와 API 문서가 아직 없어 멈춘다
+//   npm run eval -- --judge precise    # 정밀 모드 합침(T-184): 추상화+태그 판정 한 번의 호출(확장 runAbstract와 같은 프롬프트, Gemini)을
+//                                      # .tmp/judge-precise-<모델>.json에 캐시하고, 임베딩만 / 정밀(판정 없음) / 정밀+판정을 문장별 1위 변화와 함께 비교
+//        [--judge-floor 0.7]           # 판정 확률 하한(기본 admin.preciseTagJudge.floor). --judge-weight 기본은 admin.preciseTagJudge.weight
+//        [--judge-sweep]               # 하한 후보별 한 줄 요약(하한은 검증셋·가드로 고른다, 홀드아웃으로 고르지 않는다)
+//        [--judge-offline]             # 새로 묻지 않고 캐시만(한도 소진 때). 캐시 없는 문장은 "판정 빠짐"으로 원문 질의
+//        [--judge-candidate combine-best] # 결합 방식 후보를 지금 방식(admin.preciseTagJudge.mode)과 문장별 1위로 비교(T-186)
+//   [--precomputed]                    # 그래프 벡터를 동봉 파일(extension/data/vectors)에서 꺼내 채점, 런타임과 비트 동일 수 출력 (T-193)
+//   npm run eval -- --set tools/eval-expand-maplestory.json  # 그 파일 문장만 채점(가드 대상 아님, --interest와 같이 쓰면 그 관심사 그래프로, T-191)
+//   [--dump-top1 <파일>]               # 셋·줄별 문장 1위를 JSON으로 저장(다른 실행과 비교용, T-186). 정밀은 임베딩만·정밀·정밀+판정·후보
 import fs from 'node:fs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadInterestGraph, interestFromArgv } from './load-graph.mjs';
@@ -32,11 +44,11 @@ import { retrieve, topTags } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { embedEach } from '../extension/lib/embed-each.js';
 import { openBrowserEmbedder } from './browser-embedder.mjs';
-import { scoreCases, mixedSetting, regressions, latencyStats, rank1Regressions, rank1Gains, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
+import { scoreCases, mixedSetting, regressions, latencyStats, rank1Regressions, rank1Gains, rank1Changes, marginsOf, lowMargins, marginGuardFails, judgeMarginGuard, knownFromFails, marginGuardLines, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets, interestArgError, interestEvalFiles } from './eval-lib.mjs';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, rewriteQueryText } from '../extension/lib/prompt.js';
-import { loadJudgeResults } from './eval-judge.mjs';
-import { topChoice } from '../extension/lib/judges.js';
+import { loadJudgeResults, loadPreciseJudgeResults } from './eval-judge.mjs';
+import { topChoice, judgeTagProbs, judgeSaysNone, isStructureless, NONE_CHOICE } from '../extension/lib/judges.js';
 import { rankAllViaServer, gateLine, serverEmbedderLabel, rewriteIdFromArgv, ServerUnavailable } from './eval-server.mjs';
 
 const here = new URL('.', import.meta.url);
@@ -64,7 +76,14 @@ console.log(`관심사: ${interest.label} (${common.id} ${common.version})`);
 const readSet = f => JSON.parse(fs.readFileSync(new URL(f, here)));
 const files = interestEvalFiles(interest); // 관심사별 평가셋·홀드아웃·가드 파일 (T-156)
 // 평가셋·검증셋(eval-holdout.json), --holdout이면 홀드아웃(eval-unseen.json)만 (T-150). 다른 관심사면 그 관심사 평가셋이나 홀드아웃만
+// --set <파일>: 그 파일(eval-set과 같은 형식)만 채점 (T-191). 경로는 프로젝트 루트 기준
+const setAt = process.argv.indexOf('--set');
+const extraPath = setAt > 0 ? process.argv[setAt + 1] : null;
+if (setAt > 0 && (!extraPath || extraPath.startsWith('--'))) throw new Error('--set 뒤에 평가 파일 경로를 주세요: --set tools/eval-expand-maplestory.json');
+if (setAt > 0 && (process.argv.includes('--holdout') || process.argv.includes('--write-margin-known'))) throw new Error('--set은 --holdout·--write-margin-known과 같이 쓰지 않아요');
 const sets = pickSets(process.argv, {
+  extraSet: extraPath ? JSON.parse(fs.readFileSync(new URL(`../${extraPath}`, here))) : null,
+  extraName: extraPath ? extraPath.split('/').pop() : '',
   evalSet: isDefaultInterest ? readSet('./eval-set.json') : [],
   validation: isDefaultInterest ? readSet('./eval-holdout.json') : [],
   holdout: process.argv.includes('--holdout') ? readSet(`./${files.holdout}`) : [],
@@ -83,8 +102,15 @@ const guard = fs.existsSync(guardUrl) ? JSON.parse(fs.readFileSync(guardUrl)) : 
 let regressed = 0;
 // 여유(T-150): 정보용 경고. --margin-guard일 때만 가드 문장의 작은 여유를 실패로 친다
 const marginMin = marginThreshold(process.argv);
-const failMarginGuard = process.argv.includes('--margin-guard');
+const writeMarginKnown = process.argv.includes('--write-margin-known');
+const failMarginGuard = process.argv.includes('--margin-guard') || writeMarginKnown;
 let marginGuardFailed = [];
+// 아는 얇은 가드 문장(T-188). 바닥은 실제 확장(크롬) 여유라 Node·대체 임베더로 쓰지 않는다
+const marginKnownUrl = new URL('eval-margin-known.json', here);
+const marginKnown = fs.existsSync(marginKnownUrl) ? JSON.parse(fs.readFileSync(marginKnownUrl)) : { sentences: [] };
+if (writeMarginKnown && (process.argv.includes('--holdout') || process.argv.includes('--node') || useFallback)) {
+  throw new Error('--write-margin-known은 실제 확장(크롬) 평가셋·검증셋으로만 써요(--holdout·--node·대체 임베더 불가).');
+}
 
 // 서버 모드 (T-405). 토큰은 평가용 무작위 문자열이고 출력하지 않는다
 const argAfter = flag => { const i = process.argv.indexOf(flag); return i > 0 ? process.argv[i + 1] : null; };
@@ -128,17 +154,31 @@ const queryModes = rewrites ? [['원문', null], ['정밀(추상+원문)', 'prec
 
 // 판정기 (T-120). 원문 질의에만 쓴다. 캐시가 있으면 호출하지 않는다. 크롬을 띄우기 전에 물어 둔다(긴 대기 중 확장이 잠들지 않게)
 const judgeId = argAfter('--judge');
-const judgeWeight = Number(argAfter('--judge-weight')) || 0.05;
+const precise = judgeId === 'precise'; // T-184: 정밀 모드 합침 응답
+const ptj = admin.preciseTagJudge || {};
+const judgeWeight = Number(argAfter('--judge-weight')) || (precise ? ptj.weight : 0) || 0.05;
+const judgeFloor = argAfter('--judge-floor') !== null ? Number(argAfter('--judge-floor')) : (ptj.floor ?? 0);
+const judgeMode = ptj.mode || 'combine';
+const judgeCandidate = argAfter('--judge-candidate'); // T-186: 결합 방식 후보(예 combine-best)
+// 문장별 1위 저장(T-186): { "<셋 이름>": { "<줄>": { "<문장>": "<1위 노드>" } } }
+const dumpTop1File = argAfter('--dump-top1');
+const top1Dump = {};
+const dumpTop1 = (setName, line, cases, tops) => {
+  if (!dumpTop1File) return;
+  (top1Dump[setName] ??= {})[line] = Object.fromEntries(cases.map((c, i) => [c.sentence, tops[i] ?? null]));
+};
 let judged = null;
 if (judgeId && !serverOnly) {
   try {
-    judged = await loadJudgeResults({ judgeId, cases: sets.flatMap(x => x.cases), graph: mergeGraphs(common, null), admin, rpm: Number(argAfter('--rpm')) || 10 });
+    const args = { cases: sets.flatMap(x => x.cases), graph: mergeGraphs(common, null), admin, rpm: Number(argAfter('--rpm')) || 10 };
+    judged = precise ? await loadPreciseJudgeResults({ ...args, offline: process.argv.includes('--judge-offline') }) : await loadJudgeResults({ judgeId, ...args });
   } catch (e) {
     console.log(`판정기 ${judgeId}를 쓸 수 없어요: ${e.message}`);
     process.exit(1);
   }
 }
 let embed, embedderLabel, closeEmbedder = async () => {};
+let browserEmbedderId = null; // 실제 확장 평가일 때만(--precomputed, T-193)
 if (serverOnly) {
   // 브라우저 평가 생략
 } else if (useFallback) {
@@ -150,6 +190,7 @@ if (serverOnly) {
   embed = be.embed;
   closeEmbedder = be.close;
   embedderLabel = `${be.embedderId} · 브라우저`;
+  browserEmbedderId = be.embedderId;
 } else {
   const { pipeline } = await import('@huggingface/transformers');
   const cfg = admin.embedding;
@@ -168,6 +209,24 @@ const embedStart = Date.now();
 const vs = serverOnly ? [] : await embed(items.map(it => it.text), 'passage');
 if (!serverOnly) console.log(`그래프 벡터 ${items.length}개 임베딩 ${Date.now() - embedStart}ms`);
 const vecs = new Map(items.map((it, i) => [it.key, vs[i]]));
+// --precomputed (T-193): 그래프 벡터를 확장 동봉 파일(extension/data/vectors/<관심사>.json)에서 꺼내 채점한다(런타임과 같은 조회 규칙).
+// 런타임 임베딩과 비트 단위로 같은지도 센다. 실제 확장(크롬) 평가에서만
+if (process.argv.includes('--precomputed')) {
+  if (!browserEmbedderId) throw new Error('--precomputed는 실제 확장(크롬) 평가에서만 써요(--node·대체 임베더 불가)');
+  const { precomputedIndex, precomputedPath } = await import('../extension/lib/precomputed-vectors.js');
+  const { createHash } = await import('node:crypto');
+  const fileUrl = new URL(`../extension/${precomputedPath(interest.id)}`, here);
+  const pre = fs.existsSync(fileUrl) ? precomputedIndex(JSON.parse(fs.readFileSync(fileUrl)), { embedderId: browserEmbedderId, passagePrefix: admin.embedding.passagePrefix ?? '' }) : new Map();
+  let used = 0, same = 0;
+  items.forEach((it, i) => {
+    const v = pre.get(createHash('sha1').update(it.text, 'utf8').digest('hex'));
+    if (!v) return;
+    used++;
+    if (v.length === vs[i].length && v.every((x, k) => x === vs[i][k])) same++;
+    vecs.set(it.key, v);
+  });
+  console.log(`미리 계산 벡터 ${used}/${items.length}개 사용, 그중 런타임 임베딩과 비트 동일 ${same}개`);
+}
 const settings = [
   { name: '노드 직접 비교만', directWeight: 1, tagWeight: 0 },
   { name: '태그 경유만 (그래프 홉)', directWeight: 0, tagWeight: 1 },
@@ -225,6 +284,63 @@ function printJudge(name, cases, qs, mixedResult, guarded) {
   console.log(`  판정 지연 ${st ? `중앙값 ${st.median}ms · p90 ${st.p90}ms (${st.n}문장, 처음 호출 때 잰 값)` : '없음'}${fails ? ` · 판정 실패 ${fails}` : ''}`);
 }
 
+// 정밀 모드 합침 줄 (T-184): 임베딩만(원문 질의) / 정밀(합침 응답의 추상 구조 + 원문, 판정 없음) / 정밀 + 판정(combine, 하한·없음 적용,
+// "구조 없음"(없음 우세·하한 넘는 태그 없음)이면 원문 질의).
+// 1위 회귀는 임베딩만 기준과 정밀(판정 없음) 기준 둘 다. 문장별 1위 변화는 임베딩만 기준으로 모두 찍는다
+async function printPrecise(name, cases, qs, guarded) {
+  const res = c => judged.results.get(c.sentence) || {};
+  const qsP = await embed(cases.map(c => rewriteQueryText(res(c).abstract, c.sentence)), 'query');
+  const { topK, name: _n, ...base } = mixedSetting(admin, graph);
+  const ranker = (vecsOf, tj) => (c, i) => retrieve(vecsOf[i], graph, vecs, { ...base, topK: graph.nodes.length, aliasText: c.sentence, tagJudge: tj ? tj(c) : null }).map(x => ({ id: x.id, score: x.score }));
+  const judgeOf = (floor, mode = judgeMode) => c => { const p = judgeTagProbs(res(c).answers, { floor }); return p?.length ? { p, mode, weight: judgeWeight } : null; };
+  const top1s = rank => cases.map((c, i) => rank(c, i)[0]?.id);
+  // 정밀+판정의 질의: 판정이 "구조 없음"(없음 우세·하한 넘는 태그 없음)이면 원문 벡터(확장 runAbstract와 같다), 아니면 추상 구조 + 원문
+  const qsJ = floor => cases.map((c, i) => (isStructureless(judgeTagProbs(res(c).answers, { floor })) ? qs[i] : qsP[i]));
+  const rankE = ranker(qs), rankP = ranker(qsP);
+  const rE = scoreCases(cases, rankE), rP = scoreCases(cases, rankP);
+  const tE = top1s(rankE), tP = top1s(rankP);
+  console.log(`\n[${name} · ${judged.label} · 하한 ${judgeFloor} · w=${judgeWeight}]`);
+  const tagged = cases.filter(c => c.expectTag);
+  const tagTop = c => topChoice((res(c).answers || []).filter(a => a.id !== NONE_CHOICE.id));
+  console.log(`  판정 태그 top-1: ${pct(tagged.filter(c => tagTop(c) === c.expectTag).length, tagged.length)} · "없음" 우세 ${cases.filter(c => judgeSaysNone(res(c).answers)).length}문장 · 하한 ${judgeFloor}에서 원문 질의 ${cases.filter(c => isStructureless(judgeTagProbs(res(c).answers, { floor: judgeFloor }))).length}문장 · 판정 빠짐 ${cases.filter(c => !res(c).answers).length}`);
+  const negLine = r => r.negative.n ? `  음성 ${r.negative.pass}/${r.negative.n}` : '';
+  const guardLine = r => guarded ? `  가드 놓침 ${regressions(guard, r).length}` : '';
+  const summary = (label, r, t) => {
+    const chE = rank1Changes(cases, tE, t), chP = rank1Changes(cases, tP, t);
+    const n = (ch, k) => ch.filter(x => x[k]).length;
+    return `${pctLine(label, r)}${negLine(r)}${guardLine(r)}  | 임베딩만 대비 회귀 ${n(chE, 'regressed')} 개선 ${n(chE, 'gained')} | 정밀 대비 회귀 ${n(chP, 'regressed')} 개선 ${n(chP, 'gained')}`;
+  };
+  console.log(summary('임베딩만', rE, tE));
+  console.log(summary('정밀(판정 없음)', rP, tP));
+  dumpTop1(name, '임베딩만', cases, tE);
+  dumpTop1(name, '정밀', cases, tP);
+  const floors = process.argv.includes('--judge-sweep') ? [0, 0.5, 0.6, 0.7, 0.8, 0.9] : [judgeFloor];
+  for (const f of floors) {
+    const rankJ = ranker(qsJ(f), judgeOf(f));
+    const rJ = scoreCases(cases, rankJ), tJ = top1s(rankJ);
+    console.log(summary(`정밀+판정 하한 ${f}`, rJ, tJ));
+    if (f !== judgeFloor) continue;
+    // 원문 질의 + 같은 판정(정밀 질의 효과와 판정 효과를 나눠 보기)
+    const rankOJ = ranker(qs, judgeOf(f));
+    console.log(summary(`원문+판정 하한 ${f}`, scoreCases(cases, rankOJ), top1s(rankOJ)));
+    const mark = ok => (ok === null ? '·' : ok ? '✓' : '✗');
+    const changeLines = (before, after) => rank1Changes(cases, before, after).map(x => `    ${x.regressed ? '⚠ 회귀' : x.gained ? '+ 개선' : '  변화'} ${x.sentence.slice(0, 40)}… ${x.before}${mark(x.beforeOk)} → ${x.after}${mark(x.afterOk)}`);
+    for (const l of changeLines(tE, tJ)) console.log(l);
+    dumpTop1(name, '정밀+판정', cases, tJ);
+    if (judgeCandidate && judgeCandidate !== judgeMode) {
+      // 후보 결합 방식: 같은 질의·같은 판정, 결합만 다르게. 문장별 1위는 지금 방식(정밀+판정) 대비
+      const rankC = ranker(qsJ(f), judgeOf(f, judgeCandidate));
+      const rC = scoreCases(cases, rankC), tC = top1s(rankC);
+      const chJ = rank1Changes(cases, tJ, tC);
+      console.log(`${summary(`후보 ${judgeCandidate} 하한 ${f}`, rC, tC)} | 지금(${judgeMode}) 대비 회귀 ${chJ.filter(x => x.regressed).length} 개선 ${chJ.filter(x => x.gained).length}`);
+      for (const l of changeLines(tJ, tC)) console.log(l);
+      dumpTop1(name, `후보 ${judgeCandidate}`, cases, tC);
+    }
+  }
+  const st = latencyStats(cases.map(c => res(c).ms));
+  console.log(`  합침 호출 지연 ${st ? `중앙값 ${st.median}ms · p90 ${st.p90}ms (${st.n}문장, 처음 호출 때 잰 값)` : '없음'}`);
+}
+
 if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, cases, guarded } of sets) {
   const qs = await embed(cases.map(c => mode ? rewriteQueryText(rewrites[c.sentence], c.sentence, mode) : c.sentence), 'query');
   console.log(`\n[${name}${rewrites ? ' · 질의 ' + modeName : ''}] 문장 ${cases.length}개 · 임베더: ${embedderLabel}\n`);
@@ -238,8 +354,9 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
     if (verbose) for (const m of r.misses) console.log(missLine(m));
     if (s.name === mixedSetting(admin, graph).name) {
       mixedResult = r;
+      dumpTop1(name, mode ? `혼합 · ${modeName}` : '혼합', cases, cases.map((c, i) => rank(c, i)[0]?.id));
       margins = marginsOf(cases, rank);
-      if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…`);
+      if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…${m.rival ? `  (경쟁 ${m.rival})` : ''}`);
       // 음성 문장(T-149): 1위가 금지 노드가 아니면 통과. hit@1 분모와 따로
       if (r.negative.n) {
         console.log(`  alias-negative ${r.negative.pass}/${r.negative.n}`);
@@ -259,12 +376,13 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
   const tagged = cases.filter(c => c.expectTag);
   cases.forEach((c, i) => { if (c.expectTag && topTags(qs[i], graph, vecs, 1)[0]?.id === c.expectTag) t1++; });
   console.log(`\n추상 태그 top-1 정확도: ${pct(t1, tagged.length)}`);
-  if (judged && !mode) printJudge(name, cases, qs, mixedResult, guarded);
+  if (judged && !mode) await (precise ? printPrecise(name, cases, qs, guarded) : printJudge(name, cases, qs, mixedResult, guarded));
   // 여유 작은 맞힌 문장 (혼합 설정, -v와 상관없이). 기존 줄 뒤에 덧붙이기만 한다
   console.log(lowMarginLines(lowMargins(margins, marginMin), marginMin).join('\n'));
   if (guarded && !mode) marginGuardFailed.push(...marginGuardFails(guard, margins, marginMin));
 }
 await closeEmbedder();
+if (dumpTop1File) { fs.writeFileSync(dumpTop1File, JSON.stringify(top1Dump, null, 1)); console.log(`문장별 1위 저장: ${dumpTop1File}`); }
 
 if (serverUrl) {
   let serverHit1 = null, serverN = 0;
@@ -292,9 +410,16 @@ if (serverUrl) {
   const realBrowser = !useFallback && !process.argv.includes('--node');
   console.log(`\n${gateLine(serverHit1, serverOnly ? null : browserHit1, serverN, { server: serverEmbedderLabel(serverEmbedders), browser: embedderLabel, browserReal: realBrowser })}`);
 }
-if (failMarginGuard && marginGuardFailed.length) {
-  console.log(`\n여유 가드: 가드 문장 ${marginGuardFailed.length}개가 여유 < ${marginMin}`);
-  for (const s of marginGuardFailed) console.log(`  ${s}`);
+// 여유 가드(T-150·T-188): 아는 얇은 문장은 바닥 이상이면 통과, 새로 얇아졌거나 바닥보다 더 얇아지면 실패
+let marginJudge = null;
+if (failMarginGuard) {
+  marginJudge = judgeMarginGuard(marginGuardFailed, marginKnown.sentences);
+  console.log('\n' + marginGuardLines(marginJudge, marginMin).join('\n'));
+  if (writeMarginKnown) {
+    const sentences = knownFromFails(marginGuardFailed, marginKnown.sentences);
+    fs.writeFileSync(marginKnownUrl, JSON.stringify({ ...marginKnown, updated: new Date().toISOString().slice(0, 10), threshold: marginMin, sentences }, null, 2) + '\n');
+    console.log(`아는 얇은 문장 ${sentences.length}개를 tools/eval-margin-known.json에 썼어요`);
+  }
 }
 if (failGuard && regressed) { console.log(`\n회귀 ${regressed}건`); process.exit(1); }
-if (failMarginGuard && marginGuardFailed.length) process.exit(1);
+if (failMarginGuard && !writeMarginKnown && marginJudge.fail.length) process.exit(1);

@@ -8,6 +8,12 @@
 //   -- --compare N  : 평가셋(tools/eval-set.json)에서 고르게 N문장을 골라 제공자별 비교표를 낸다(T-122).
 //                     뜻까지 시간·JSON·규칙 1·근거 검사·존댓말(첫 답/최종). -- --rpm 4 로 제공자별 분당 호출 수(기본 4,
 //                     Groq 무료 분당 토큰 한도에 맞춘 값). 비교표는 실패로 세지 않는다
+//   -- --precise-judge [N] : 정밀 모드 합친 호출(추상 구조 + 태그 판정 JSON, T-184)을 고정 문장 N개(기본 전부 8개)로 확인(T-186).
+//                     확장과 같은 buildAbstractJudgePrompt·parseAbstractJudge. JSON 파싱·목록 밖 id·없음 우세·지연을 제공자별 한 줄.
+//                     형식을 어겨도 확장은 예전 정밀 모드로 돌아가므로 실패로 세지 않는다. 환경변수 PRECISE_JUDGE=true(또는 숫자)도 같다
+//   -- --agent [N]  : 이어 묻기(T-216) JSON 액션 형식을 고정 과제 N개(기본 전부 4개)로 확인(T-218). 확장과 같은 runFollowup.
+//                     응답마다 JSON 액션 파싱·도구 이름·인자·최종 답·단계·호출·지연을 제공자별 한 줄. 과제당 LLM 최대 4회.
+//                     형식을 어겨도 확장은 "여기까지 했어요"로 멈출 뿐이라 실패로 세지 않는다. 환경변수 AGENT_SMOKE=true(또는 숫자)도 같다
 // 검색은 글자 n-gram 대체 임베더로 한다. 여기서 보는 것은 검색 품질이 아니라 요청·응답 형식과 생성 품질이다.
 // 생성은 확장과 같은 runAnalogy(규칙 1·근거 검사·금칙어·끝맺음 검사, T-104·T-122)로 한다. 키 값은 출력하지 않는다.
 import fs from 'node:fs';
@@ -15,10 +21,14 @@ import { PROVIDERS, complete } from '../extension/lib/providers.js';
 import { buildAbstractPrompt, leakedTerms } from '../extension/lib/prompt.js';
 import { runAnalogy } from '../extension/lib/pipeline.js';
 import { REJECTED_TEXT } from '../extension/lib/analogy-server.js';
+import { generationVerdict } from './smoke-check.mjs';
 import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve, retrievalFor } from '../extension/lib/retrieval.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
+import { PRECISE_SENTENCES, checkPreciseJudge, summarizePrecise, preciseSummaryLine, preciseRowLine } from './smoke-precise.mjs';
+import { AGENT_TASKS, checkAgentTask, summarizeAgent, agentSummaryLine, agentRowLine } from './smoke-agent.mjs';
+import { makeSearchGraph } from './eval-followup-lib.mjs';
 
 const here = new URL('.', import.meta.url);
 const admin = JSON.parse(fs.readFileSync(new URL('../extension/config/admin.json', here)));
@@ -29,6 +39,14 @@ const argValue = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i 
 const allModels = argv.includes('--all-models');
 const compareN = Number(argValue('--compare') ?? process.env.COMPARE ?? 0) || 0;
 const compareRpm = Number(argValue('--rpm') ?? process.env.COMPARE_RPM ?? 4) || 4;
+// --precise-judge [N] / PRECISE_JUDGE=true|N (T-186). 0·false·빈 값이면 안 함. N이 없거나 true면 전부
+const preciseArg = argv.includes('--precise-judge') ? (argValue('--precise-judge') ?? 'true') : (process.env.PRECISE_JUDGE || '');
+const preciseN = /^(true|yes)$/i.test(preciseArg) || (argv.includes('--precise-judge') && !/^\d+$/.test(preciseArg))
+  ? PRECISE_SENTENCES.length : Math.min(PRECISE_SENTENCES.length, Number(preciseArg) || 0);
+// --agent [N] / AGENT_SMOKE=true|N (T-218). 규칙은 --precise-judge와 같다
+const agentArg = argv.includes('--agent') ? (argValue('--agent') ?? 'true') : (process.env.AGENT_SMOKE || '');
+const agentN = /^(true|yes)$/i.test(agentArg) || (argv.includes('--agent') && !/^\d+$/.test(agentArg))
+  ? AGENT_TASKS.length : Math.min(AGENT_TASKS.length, Number(agentArg) || 0);
 
 // jargon: 정밀 모드 추상화에 그대로 남으면 안 되는 원문 전문용어(T-122). 띄어쓰기·대소문자 무시
 const SENTENCES = [
@@ -136,20 +154,90 @@ for (const p of runs) {
     console.log(`  추상화    ${bad ? '✗' : '✓'} ${r0.ms}ms${r0.retry}  ${r0.ok ? r0.value.trim().slice(0, 100) : r0.error}`);
     if (leaked.length) console.log(`    문제: 원문 용어가 그대로 남음: ${leaked.join(', ')}`);
   }
-  // 비유 생성(json, 스트리밍). 확장과 같은 검사: JSON, 규칙 1, 끝맺음(다시 불러도 어기면 실패). 근거 검사는 결과만 보인다
+  // 비유 생성(json, 스트리밍). 확장과 같은 검사: JSON, 규칙 1(후보 밖 id), 끝맺음(다시 불러도 어기면 실패). 근거 검사는 결과만 보인다
   for (const s of SENTENCES) {
     const row = await generate(p, s);
-    const problem = !row.ok ? row.error
-      : !row.answer.meaning ? 'meaning 없음'
-      : !row.rule1 ? `후보에 없는 nodeId: ${row.nodeId}`
-      : row.ending && !row.ending.ok ? `존댓말 아님: ${row.ending.issues.map(i => `${i.field}(${i.style})`).join(', ')}`
-      : null;
+    // 판정은 smoke-check.mjs(T-188): nodeId null + analogy 는 실패가 아니라 참고
+    const { problem, note } = generationVerdict(row);
     if (problem) failed++;
     const marks = `첫 글자 ${row.first ?? '-'}ms · 뜻 ${row.meaningMs ?? '-'}ms · 전체 ${row.ms}ms${row.calls > 1 ? ` · 호출 ${row.calls}회` : ''}${row.retries ? ` (재시도 ${row.retries}회)` : ''}`;
     console.log(`  비유 생성  ${problem ? '✗' : '✓'} ${marks}  ${s.sentence.slice(0, 24)}…`);
     if (problem) console.log(`    문제: ${problem}${row.raw ? `\n    원문: ${row.raw}` : ''}`);
+    if (note) console.log(`    참고: ${note}`);
     if (row.ok) console.log(describe(row));
   }
+}
+
+// ── 정밀 모드 합친 호출(T-186): 합친 JSON을 지키는지. 실패로 세지 않는다 ──
+if (preciseN > 0) {
+  const ptj = admin.preciseTagJudge || {};
+  const cases = PRECISE_SENTENCES.slice(0, preciseN);
+  const gap = 60_000 / compareRpm;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  console.log(`\n=== 정밀 판정 (고정 ${cases.length}문장, 하한 ${ptj.floor ?? 0}, 제공자별 분당 ${compareRpm}회, 실패로 세지 않음)`);
+  const lines = [];
+  for (const p of runs) {
+    console.log(`\n== 정밀 판정 ${p.id} / ${p.model}`);
+    const rows = [];
+    for (const s of cases) {
+      let row;
+      // 분당 한도 429는 30초 기다려 한 번 더(확장 complete의 재시도 뒤에도 429일 때)
+      for (let tries = 0; ; tries++) {
+        const t = Date.now();
+        row = await checkPreciseJudge((system, user, opts) => complete(p, system, user, opts), s, graph.tags, { floor: ptj.floor ?? 0 });
+        if (row.ok || row.status !== 429 || tries >= 1) { await sleep(Math.max(0, gap - (Date.now() - t))); break; }
+        console.log('  429, 30초 뒤 다시');
+        await sleep(30_000);
+      }
+      rows.push(row);
+      console.log(preciseRowLine(row));
+    }
+    const line = preciseSummaryLine(`${p.id}/${p.model}`, summarizePrecise(rows));
+    console.log(line);
+    lines.push(line);
+  }
+  console.log('\n=== 정밀 판정 요약');
+  for (const l of lines) console.log(l);
+}
+
+// ── 이어 묻기 JSON 액션 형식(T-218): 실패로 세지 않는다 ──
+if (agentN > 0) {
+  const tasks = AGENT_TASKS.slice(0, agentN);
+  const gap = 60_000 / compareRpm;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const searchGraph = makeSearchGraph({ graph, vecs, embedQuery: async t => hashEmbed(t), retrieval: admin.retrieval });
+  console.log(`\n=== 이어 묻기 형식 (고정 ${tasks.length}과제, 과제당 LLM 최대 4회, 제공자별 분당 ${compareRpm}회, 실패로 세지 않음)`);
+  const lines = [];
+  for (const p of runs) {
+    console.log(`\n== 이어 묻기 ${p.id} / ${p.model}`);
+    const rows = [];
+    for (const t of tasks) {
+      // 호출마다 간격을 두고, 분당 한도 429는 30초 기다려 그 과제를 한 번 더
+      // 지연(ms)에는 간격 기다림을 넣지 않는다(모델 시간만)
+      let last = 0, waited = 0;
+      const ask = async (system, user, opts) => {
+        const wait = last + gap - Date.now();
+        if (wait > 0) { await sleep(wait); waited += wait; }
+        last = Date.now();
+        return complete(p, system, user, opts);
+      };
+      const now = () => Date.now() - waited;
+      let row;
+      for (let tries = 0; ; tries++) {
+        row = await checkAgentTask(ask, t, { graph, searchGraph, blocklist, now });
+        if (row.ok || !/429/.test(row.error || '') || tries >= 1) break;
+        console.log('  429, 30초 뒤 다시');
+        await sleep(30_000);
+      }
+      rows.push(row);
+      console.log(agentRowLine(row));
+    }
+    const line = agentSummaryLine(`${p.id}/${p.model}`, summarizeAgent(rows));
+    console.log(line);
+    lines.push(line);
+  }
+  console.log('\n=== 이어 묻기 형식 요약');
+  for (const l of lines) console.log(l);
 }
 
 // ── 비교표(T-122): 평가셋 문장으로 제공자별 생성 품질·시간 ──

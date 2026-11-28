@@ -47,8 +47,9 @@ export function aliasMatch(text, aliases) {
 }
 
 /**
- * 메이플 단서에서 빼는 일반어 (T-149). 공통 노드 라벨 낱말 중 다른 분야 글에도 흔한 것.
+ * 메이플 단서로 쓰면 안 되는 일반어 (T-149). 공통 노드 라벨 낱말 중 다른 분야 글에도 흔한 것.
  * 이 낱말만으로는 "메이플 이야기"라고 볼 수 없어 약한 별칭(세금·펑)의 가산 근거로 쓰지 않는다.
+ * T-199부터 단서는 그래프의 명시 목록(cueWords)이라 런타임에는 쓰지 않고, cueWordProblems(데이터 검증)가 목록과 대조한다.
  * 근거는 낱말마다 주석. 라벨이 바뀌면 단위 테스트가 죽은 항목을 알려 준다.
  */
 export const MAPLE_GENERIC_WORDS = [
@@ -105,34 +106,111 @@ export const MAPLE_GENERIC_WORDS = [
   '세트',       // 세트 메뉴
   '효과',       // 약 효과, 광고 효과
   '보상',       // 손해 보상, 성과 보상
-  '분배'        // 이익 분배, 소득 분배
+  '분배',        // 이익 분배, 소득 분배
+  // T-191 확장 노드 라벨 낱말
+  '추가',    // 추가 요금
+  '옵션',    // 옵션 계약, 차량 옵션
+  '불꽃',    // 불꽃 축제
+  '하이퍼',  // 하이퍼링크
+  '스탯',    // 선수 스탯(스포츠 기록)
+  '방어율',  // 야구 방어율
+  '무시',    // 일반어
+  '레벨',    // 레벨 테스트
+  '범위',    // 일반어
+  '몬스터',  // 몬스터 고객
+  '전문기술', // 채용 공고의 전문기술
+  '피로도',  // 건강 기사의 피로도
+  '성향',    // 투자 성향
+  '지하',    // 지하철·지하 주차장
+  '수로',    // 농업용 수로
+  '시드',    // 시드머니, 토너먼트 시드
+  '에픽',    // 에픽 판타지, 애자일 에픽
+  '컬렉션',  // 패션 컬렉션
+  '챔피언',  // 스포츠 챔피언
+  '아티팩트', // 빌드 아티팩트, 유물
+  '로얄',    // 로얄 패밀리
+  '스타일',  // 패션 스타일
+  '합성',    // 화학 합성, 사진 합성
+  '소울',    // 소울 음악
+  '특수',    // 특수 교육
+  '해방',    // 역사 속 해방
+  '패스',    // 시즌 패스, 정기권
+  'VIP',  // VIP 고객
+  '사우나',  // 목욕탕 사우나
+  '옥션',    // 경매 사이트
+  '제네시스', // 자동차·성경 이름
+  '그린',    // 그린 에너지
+  'PC',    // 일반어
+  '보안',    // 정보 보안
+  '초기화',  // 공장 초기화
+  '주문의',  // 주문의 취소(주문서)
+  '흔적',    // 일반어
+  '피버',    // 피버 타임 마케팅
+  '매크로',  // 엑셀 매크로
+  '단속',    // 음주 단속
+  '거짓말',  // 일반어
+  '탐지기',  // 금속 탐지기
+  '모집',    // 직원 모집
+  '아이템',  // 패션 아이템
+  '길라잡이', // 안내서
+  '의문의',  // 의문의 사건
+  '카탈리스트', // 촉매
+  '시즌',    // 일반어
+  '블루베리', // 과일
+  '농장',    // 일반어
+  '메멘토',  // 영화·앱 이름
+  '각인',    // 반지 각인
+  '주문서',  // 주문서·발주서
+  '레이드',  // 게임 일반어(다른 게임 레이드)
+  '반지'      // 결혼반지
 ];
-const GENERIC = new Set(MAPLE_GENERIC_WORDS);
-
 /**
- * 공통 노드 라벨의 핵심 낱말 (T-149): 괄호 안을 빼고 공백으로 나눈 뒤, 3글자 이상이면 끝의 과·와(이음 조사)를 떼고,
- * 2글자 이상이며 일반어가 아닌 것. 사용자 노드(source 'common'이 아님)는 넣지 않는다.
+ * 관심사 단서 낱말 (T-199): 관심사 그래프의 명시 목록(cueWords). mergeGraphs가 공통 그래프 것만 싣는다(오버레이는 못 더함).
+ * T-149~T-198은 공통 노드 라벨 낱말 전부를 단서로 썼는데, 노드가 늘면 일상어(식당 라벨 "신고" 등)가 단서가 되어
+ * 약한 별칭이 엉뚱하게 가산됐다(T-193 측정). 목록이 없으면 라벨 단서는 없다(강한 별칭만 단서).
  */
-export function labelCueWords(graph) {
-  const out = new Set();
-  for (const n of graph?.nodes || []) {
-    if (n.source !== 'common' || !n.label) continue;
-    for (let w of n.label.replace(/\([^)]*\)/g, ' ').split(/\s+/)) {
-      if (w.length >= 3) w = w.replace(/[과와]$/, '');
-      if (w.length >= 2 && !GENERIC.has(w)) out.add(w);
-    }
-  }
-  return [...out];
+export function cueWords(graph) {
+  return Array.isArray(graph?.cueWords) ? graph.cueWords : [];
 }
 
-// 라벨 단서 낱말 바로 뒤에 올 수 있는 조사 (T-152). 긴 것을 앞에 둔다
+/**
+ * 단서 낱말 목록 데이터 검증 (T-199). 문제 문구 배열(비면 통과). 단위 테스트가 실제 그래프 파일로 돌린다.
+ *   형식       2~20자 문자열
+ *   generic    일반어 목록(MAPLE_GENERIC_WORDS 등)에 있으면 안 된다
+ *   otherGraphs 다른 관심사 그래프의 라벨 낱말·별칭이면 안 된다(그 관심사 글에도 나온다)
+ *   texts      다른 분야 글(태그 설명·예문, 평가셋의 관심사 아닌 문장)에 cueWordMatch로 나오면 안 된다
+ */
+export function cueWordProblems(words, { generic = [], otherGraphs = [], texts = [] } = {}) {
+  const out = [];
+  const gen = new Set(generic);
+  const other = new Set();
+  for (const g of otherGraphs) {
+    for (const n of g?.nodes || []) {
+      for (let w of String(n.label || '').replace(/\([^)]*\)/g, ' ').split(/\s+/)) {
+        if (w.length >= 3) w = w.replace(/[과와]$/, '');
+        if (w) other.add(w);
+      }
+      for (const a of [...(n.aliases || []), ...(n.weakAliases || [])]) other.add(a);
+    }
+  }
+  for (const w of words || []) {
+    if (typeof w !== 'string' || w.trim().length < 2 || w.length > 20) { out.push(`단서 낱말 형식 오류(2~20자): ${JSON.stringify(w)}`); continue; }
+    if (gen.has(w)) out.push(`일반어 목록에 있는 단서 낱말: ${w}`);
+    if (other.has(w)) out.push(`다른 관심사 라벨·별칭 낱말: ${w}`);
+    const hit = texts.find(t => cueWordMatch(t, [w]));
+    if (hit) out.push(`다른 분야 글에 나오는 단서 낱말: ${w} ← ${hit.slice(0, 40)}`);
+  }
+  return out;
+}
+
+// 단서 낱말 바로 뒤에 올 수 있는 조사 (T-152). 긴 것을 앞에 둔다
 const CUE_PARTICLES = ['이랑', '까지', '부터', '에서', '으로', '처럼', '보다', '하고',
   '랑', '은', '는', '이', '가', '을', '를', '의', '에', '로', '와', '과', '도', '만'];
 // 단서 낱말에 바로 붙는 동사 어간 (스타포스하다가, 스타포스했다, 스타포스해서). 뒤는 무엇이든 된다
 const CUE_VERB_STEMS = ['하', '해', '했', '한', '할'];
 
 /**
- * 라벨 단서 낱말이 문장에 낱말로 있는지 (T-152). 앞 경계는 aliasMatch와 같다. 뒤는 셋 중 하나:
+ * 단서 낱말(cueWords)이 문장에 낱말로 있는지 (T-152). 앞 경계는 aliasMatch와 같다. 뒤는 셋 중 하나:
  * 한글이 아님(공백·문장부호·숫자·끝) / 조사 1~2개 뒤 한글이 아님(메소가, 메소에서는) / 동사 어간(스타포스하다가).
  * 메소포타미아·샤이닝스타·아케인과학·메소도시는 다른 낱말이라 아니다.
  * 알려진 한계: 서술격(메소다, 메소였다)은 단서로 안 잡고, 어간 뒤를 보지 않아 "메소한…" 같은 드문 합성어는 잡는다.
@@ -149,13 +227,13 @@ export function cueWordMatch(text, words) {
 }
 
 /**
- * 문장에 메이플 단서가 있는지 (T-149): 어떤 노드의 강한 별칭(aliases)이나 공통 라벨 핵심 낱말이 낱말로 있으면 참.
- * 강한 별칭은 aliasMatch 그대로(앞만 경계, 활용도 붙음: 재획하고), 라벨 낱말은 cueWordMatch(뒤에 조사만, T-152).
+ * 문장에 관심사(메이플) 단서가 있는지 (T-149): 어떤 노드의 강한 별칭(aliases)이나 그래프 단서 낱말(cueWords, T-199)이 낱말로 있으면 참.
+ * 강한 별칭은 aliasMatch 그대로(앞만 경계, 활용도 붙음: 재획하고), 단서 낱말은 cueWordMatch(뒤에 조사만, T-152).
  */
 export function mapleCue(text, graph) {
   if (!text) return false;
   if ((graph?.nodes || []).some(n => aliasMatch(text, n.aliases))) return true;
-  return cueWordMatch(text, labelCueWords(graph));
+  return cueWordMatch(text, cueWords(graph));
 }
 
 /**
@@ -209,8 +287,9 @@ export function combineTagSim({ sim, penalty = 0, p, mode = null, weight = 0 }) 
  *   aliasText   별칭(게임 은어) 판정에 쓰는 원문. 없으면 별칭 가산 없음 (T-114)
  *   aliasBoost  aliasText에 노드 별칭이 낱말로 있으면 그 노드 점수에 더할 값. 기본 0(영향 없음)
  *               약한 별칭(weakAliases, 일상어와 겹치는 은어)은 mapleCue가 참일 때만 더한다. 한 노드에 한 번만 (T-149)
- *   tagJudge    { p, mode: 'replace'|'combine', weight } 판정기 태그 확률(T-120, combineTagSim). p는 {id: 확률} | Map | [{id,p}].
- *               없으면(기본) 결과가 이전과 같다. 지금은 평가 도구만 쓴다(ADR 0014)
+ *   tagJudge    { p, mode: 'replace'|'combine'|'combine-best', weight } 판정기 태그 확률(T-120, combineTagSim). p는 {id: 확률} | Map | [{id,p}].
+ *               'combine-best'는 가산(weight·p)을 노드마다 임베딩 최고 태그(유사도 − 감점 1위) 하나에만 준다(T-186).
+ *               없으면(기본) 결과가 이전과 같다. 정밀 모드 판정(admin.preciseTagJudge, ADR 0014)과 평가 도구가 쓴다
  */
 export function retrieve(q, graph, vecs, {
   topK = 3, directWeight = 0.45, tagWeight = 0.55, tagAgg = 'max', tagPenalty = {},
@@ -228,7 +307,10 @@ export function retrieve(q, graph, vecs, {
   }
 
   const jp = tagJudge ? judgeProbs(tagJudge.p) : null;
-  const adjOf = id => combineTagSim({ sim: tagSim.get(id) ?? 0, penalty: tagPenalty[id] || 0, p: jp?.get(id), mode: tagJudge?.mode, weight: tagJudge?.weight || 0 });
+  // 'combine-best'(T-186): 판정 가산을 노드의 임베딩 최고 태그(유사도 − 감점 1위)에만 준다.
+  // 그래서 태그 순위는 판정 없이 매기고, 가산은 아래에서 1위 태그에만 더한다
+  const best = tagJudge?.mode === 'combine-best';
+  const adjOf = id => combineTagSim({ sim: tagSim.get(id) ?? 0, penalty: tagPenalty[id] || 0, p: jp?.get(id), mode: best ? null : tagJudge?.mode, weight: tagJudge?.weight || 0 });
 
   const scored = graph.nodes.map(n => {
     const v = vecs.get('node:' + n.id);
@@ -237,6 +319,7 @@ export function retrieve(q, graph, vecs, {
     const ranked = n.tags
       .map(id => ({ id, sim: tagSim.get(id) ?? 0, adj: adjOf(id) }))
       .sort((a, b) => b.adj - a.adj);
+    if (best && ranked.length) ranked[0] = { ...ranked[0], adj: ranked[0].adj + (tagJudge.weight || 0) * (jp.get(ranked[0].id) ?? 0) };
     const top = ranked.slice(0, tagAgg === 'top2mean' ? 2 : 1);
     const tagScore = top.length ? Math.max(0, top.reduce((sum, t) => sum + t.adj, 0) / top.length) : 0;
     const bestTag = ranked[0]?.sim > 0 ? ranked[0].id : null, bestTagSim = bestTag ? ranked[0].sim : 0;

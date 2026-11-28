@@ -21,6 +21,9 @@ export const PROVIDERS = {
     defaultModel: 'openai/gpt-oss-120b',
     keyUrl: 'https://console.groq.com/keys',
     extraBody: { reasoning_effort: 'low' },
+    // opts.jsonObject(이어 묻기 에이전트, T-222)일 때 response_format json_object를 보낸다. gpt-oss는 도구 목록을 보면
+    // 고유 함수 호출(빈 content·400 tool_use_failed)로 답하는 일이 잦아서. 호버는 보내지 않는다(스트리밍과 함께 안 씀)
+    jsonObject: true,
     stream: true,
     free: true
   },
@@ -30,7 +33,8 @@ export const PROVIDERS = {
     baseUrl: 'https://integrate.api.nvidia.com/v1',
     // 2026-10-18 실제 키로 확인: /v1/models 에 있음. deepseek-v4.1-flash·nemotron-3.5-lightning 은 20초 넘게 응답 없음이라 뺐다.
     // 무료는 키당 분당 약 40회(모든 모델 공유), 개발·시험용 약관
-    models: ['nvidia/nemotron-3.5-super-vl-120b-a12b', 'nvidia/nemotron-3-super-120b-a12b'],
+    // nemotron-3-super-120b-a12b 는 2026-10-03 단종(410, T-229에서 확인)이라 뺐다
+    models: ['nvidia/nemotron-3.5-super-vl-120b-a12b'],
     defaultModel: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
     // Nemotron 은 기본으로 생각부터 해서 첫 글자까지 14~30초. 끄면 0.2~0.4초(2026-10-18 측정)
     extraBody: { chat_template_kwargs: { enable_thinking: false } },
@@ -104,7 +108,10 @@ async function readSSE(body, onData) {
     if (!line.startsWith('data:')) return;
     const payload = line.slice(5).trim();
     if (!payload || payload === '[DONE]') return;
-    try { onData(JSON.parse(payload)); } catch {}
+    let data;
+    try { data = JSON.parse(payload); } catch { return; }
+    // onData 가 던지는 오류(스트림 도중 error 이벤트, T-188)는 삼키지 않고 위로 올린다
+    onData(data);
   };
   for (;;) {
     const { value, done } = await reader.read();
@@ -162,7 +169,8 @@ async function postJSON(url, headers, body, { timeoutMs = 30000, stats, onData, 
       return await postOnce(url, headers, body, Math.max(1, deadline - Date.now()), onData);
     } catch (e) {
       // 다음 순서 모델이 있으면(fallback 체인) 429는 기다리지 않고 바로 넘긴다
-      const retryable = e.network || (RETRYABLE.has(e.status) && !(noRetry429 && e.status === 429));
+      // 스트림 도중 끊긴 오류(midStream)는 앞부분을 이미 보냈으니 같은 곳에 다시 보내지 않는다(T-188)
+      const retryable = !e.midStream && (e.network || (RETRYABLE.has(e.status) && !(noRetry429 && e.status === 429)));
       if (!retryable || attempt >= retryPolicy.delays.length) throw e;
       const base = retryPolicy.delays[attempt];
       let wait = base + base * retryPolicy.jitter * Math.random();
@@ -203,7 +211,7 @@ const KINDS = {
     }
   },
   'openai-compat': {
-    build({ baseUrl, model, apiKey, def }, system, user, _opts, stream) {
+    build({ baseUrl, model, apiKey, def }, system, user, opts, stream) {
       if (!baseUrl) throw new ProviderError('OpenAI 호환 주소가 비어 있어요. 설정에서 입력해 주세요.', 0);
       return {
         url: `${baseUrl.replace(/\/$/, '')}/chat/completions`,
@@ -212,12 +220,27 @@ const KINDS = {
           model,
           messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
           ...(def.extraBody || {}),
+          ...(opts.json && opts.jsonObject && def.jsonObject && !stream ? { response_format: { type: 'json_object' } } : {}),
           ...(stream ? { stream: true } : {})
         }
       };
     },
-    text: d => d.choices?.[0]?.message?.content || '',
-    chunk: d => d.choices?.[0]?.delta?.content || ''
+    text: d => d.choices?.[0]?.message?.content || toolCallText(d.choices?.[0]?.message?.tool_calls),
+    chunk: d => d.choices?.[0]?.delta?.content || '',
+    // 모델이 고유 함수 호출을 내서 서버가 400(tool_use_failed)을 준 경우(T-222, Groq gpt-oss): JSON을 바랐으면
+    // 서버가 돌려준 원래 생성(failed_generation)을 답으로 쓴다. 없으면 null(오류 그대로)
+    recover(e, opts) {
+      if (!opts.json || !isToolUseFailed(e)) return null;
+      try { const g = JSON.parse(e.body).error?.failed_generation; return typeof g === 'string' && g.trim() ? g : null; } catch { return null; }
+    },
+    // 원래 생성도 없는 모델 출력 400이면 한 번만 다시 보낸다(무작위라 다음엔 맞는 일이 많다, 2026-11-28 스모크).
+    // JSON 객체 모드였으면 끄고 보낸다(검증 실패 400을 되풀이하지 않게). 두 번째도 실패하면 modelOutput으로 다음 순서
+    fallback(e, req) {
+      if (!isToolUseFailed(e) || req.resent) return false;
+      req.resent = true;
+      delete req.body.response_format;
+      return true;
+    }
   },
   anthropic: {
     build({ baseUrl, model, apiKey }, system, user, opts, stream) {
@@ -236,6 +259,31 @@ const KINDS = {
   }
 };
 
+// 고유 함수 호출(tool_calls)로 온 답 → JSON 액션 글자(T-222). 우리는 도구를 선언하지 않으므로 JSON 액션 루프만 이 모양을 읽는다
+function toolCallText(calls) {
+  const f = Array.isArray(calls) ? calls[0]?.function : null;
+  if (!f?.name) return '';
+  let args = f.arguments ?? {};
+  if (typeof args === 'string') { try { args = JSON.parse(args || '{}'); } catch { args = {}; } }
+  return JSON.stringify({ action: f.name, args });
+}
+
+// 모델이 선언되지 않은 도구를 불러 서버가 거절한 400(Groq tool_use_failed). 키 오류가 아니라 모델 출력 문제다
+export function isToolUseFailed(e) {
+  return e?.status === 400 && /tool_use_failed|called a tool|json_validate_failed|failed to validate json/i.test(`${e.body || ''} ${e.message || ''}`);
+}
+
+// 스트림 도중 온 error 이벤트(Gemini {"error":{"code":503,...}}, OpenAI 호환·Anthropic {"error":{"message"}})를
+// 오류로 바꾼다. 예전엔 조각으로 보고 무시해 잘린 JSON을 돌려줬다(T-188). 숫자 코드(503·429)는 status 로 넘겨
+// fallback 체인이 다음 순서로 넘기게 하고, 같은 제공자에는 다시 보내지 않는다(midStream)
+function streamError(error) {
+  const code = Number(error.code);
+  const status = Number.isInteger(code) && code >= 400 && code < 600 ? code : 0;
+  const err = new ProviderError(`응답이 중간에 끊겼어요: ${status || ''} ${error.message || error.status || error.type || ''}`.replace(/\s+/g, ' ').trim(), status);
+  err.midStream = true;
+  return err;
+}
+
 async function send(kind, req, opts, stream) {
   // opts.timeoutMs: 긴 답(AI 초안, T-301)만 늘린다. 없으면 postJSON 기본값
   if (!stream) return kind.text(await postJSON(req.url, req.headers, req.body, { stats: opts.stats, noRetry429: opts.noRetry429, timeoutMs: opts.timeoutMs }));
@@ -244,9 +292,18 @@ async function send(kind, req, opts, stream) {
     stats: opts.stats,
     noRetry429: opts.noRetry429,
     timeoutMs: opts.timeoutMs,
-    onData: d => { const piece = kind.chunk(d); if (piece) { acc += piece; opts.onText(acc); } }
+    onData: d => {
+      if (d?.error) throw streamError(d.error);
+      const piece = kind.chunk(d); if (piece) { acc += piece; opts.onText(acc); }
+    }
   });
   return acc;
+}
+
+// 모델 출력 때문에 생긴 400은 표시해 둔다: fallback 체인이 다음 순서로 넘긴다(키 오류 400과 구분, T-222)
+function markModelOutput(e) {
+  if (isToolUseFailed(e)) e.modelOutput = true;
+  return e;
 }
 
 // provider = resolveProvider() 결과. opts.stats 객체를 넘기면 재시도 횟수(retries)를 채운다.
@@ -266,8 +323,12 @@ export async function complete(provider, system, user, opts = {}) {
   try {
     text = await send(kind, req, opts, stream);
   } catch (e) {
-    if (!kind.fallback?.(e, req)) throw e;
-    text = await send(kind, req, opts, stream);
+    const recovered = kind.recover?.(e, opts);
+    if (recovered != null) text = recovered;
+    else if (!kind.fallback?.(e, req)) throw markModelOutput(e);
+    else {
+      try { text = await send(kind, req, opts, stream); } catch (e2) { throw markModelOutput(e2); }
+    }
   }
   if (opts.onText && !stream) opts.onText(text);
   return text;
@@ -282,6 +343,29 @@ export function parseJSONLoose(text) {
   const end = cleaned.lastIndexOf('}');
   if (start >= 0 && end > start) {
     try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
+  }
+  // 객체가 둘 이상 이어 붙었거나 뒤에 중괄호 섞인 설명이 붙은 경우(T-222): 앞에서부터 균형 잡힌 첫 객체
+  return firstJSONObject(cleaned);
+}
+
+// 문자열 안 중괄호는 세지 않고, 처음으로 짝이 맞고 JSON으로 읽히는 객체를 돌려준다. 없으면 null
+export function firstJSONObject(text) {
+  for (let from = text.indexOf('{'); from >= 0; from = text.indexOf('{', from + 1)) {
+    let depth = 0, inStr = false, esc = false;
+    for (let i = from; i < text.length; i++) {
+      const ch = text[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === '\\') esc = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') inStr = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) {
+        try { return JSON.parse(text.slice(from, i + 1)); } catch { break; }
+      }
+    }
   }
   return null;
 }

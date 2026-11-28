@@ -1,0 +1,311 @@
+{
+  "interest": "maplestory",
+  "note": "T-217 메이플 커뮤니티 출처 묶음 2: 대체 임베더 관문 통과 후보(우리 문장·출처 주소만, 원문 없음)",
+  "results": [
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "hexa_stat_enhance",
+        "label": "HEXA 스탯 강화와 초기화",
+        "facts": [
+          "HEXA 스탯은 조각을 쓸 때마다 세 능력치 중 하나가 무작위로 오르고, 메인 능력치는 레벨이 높을수록 오를 확률이 낮아진다.",
+          "메인 능력치가 낮게 쌓이면 메소를 내고 처음부터 다시 강화할 수 있어서, 다시 굴릴지 그대로 쓸지를 남은 조각과 비용으로 따진다."
+        ],
+        "tags": [
+          "random_reroll"
+        ],
+        "sources": [
+          "https://namu.wiki/w/HEXA%20%EB%A7%A4%ED%8A%B8%EB%A6%AD%EC%8A%A4",
+          "https://www.inven.co.kr/board/maple/2304/34712"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hexa_stat_core_iii",
+          "rel": "스탯 코어를 키움"
+        }
+      ]
+    },
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "cooldown_hat",
+        "label": "쿨감 모자",
+        "aliases": [
+          "쿨뚝"
+        ],
+        "facts": [
+          "스킬은 한 번 쓰면 재사용 대기시간이 지나야 다시 쓸 수 있는데, 모자 잠재능력의 재사용 대기시간 감소 옵션은 모든 스킬의 대기시간을 몇 초씩 줄여 준다.",
+          "이 옵션은 최고 등급 모자에서만 나오고, 강한 스킬을 자주 다시 쓰는 직업일수록 가치가 커서 직업마다 원하는 초 수가 다르다."
+        ],
+        "tags": [
+          "cooldown"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EC%9E%A0%EC%9E%AC%EB%8A%A5%EB%A0%A5",
+          "https://www.inven.co.kr/board/maple/2304/43854"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "skill_cooldown",
+          "rel": "대기시간을 줄임"
+        },
+        {
+          "to": "cube",
+          "rel": "잠재능력 재설정으로 얻음"
+        }
+      ]
+    },
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "boss_cooldown_reset",
+        "label": "보스 입장 쿨타임 초기화",
+        "facts": [
+          "주간·월간 보스에 들어가면 대부분의 스킬 재사용 대기시간이 초기화되어, 누구나 강한 스킬을 모두 쓸 수 있는 상태로 전투를 시작한다.",
+          "그래서 입장 직후 강한 스킬을 한꺼번에 쏟아붓고, 다음 공세는 그 스킬들의 대기시간이 다시 돌아오는 주기에 맞춘다.",
+          "보스에서 나오면 대기시간은 들어가기 전 상태로 돌아간다."
+        ],
+        "tags": [
+          "cooldown"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0/%EB%B3%B4%EC%8A%A4%20%EC%BB%A8%ED%85%90%EC%B8%A0",
+          "https://maplestory.nexon.com/news/update/774"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "skill_cooldown",
+          "rel": "첫 공세 타이밍을 정함"
+        },
+        {
+          "to": "weekly_boss",
+          "rel": "입장할 때 적용"
+        }
+      ]
+    },
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "monthly_boss",
+        "label": "월간 보스 검은 마법사",
+        "facts": [
+          "검은 마법사는 한 달에 한 번만 격파 기록을 남길 수 있는 유일한 월간 보스라, 달이 바뀌어야 다시 보상을 받을 수 있다.",
+          "입장하려면 그 아래 주간 보스에서 모은 재료가 필요해서, 앞 단계 주간 보스를 먼저 꾸준히 잡아야 도전할 수 있다."
+        ],
+        "tags": [
+          "periodic_cap",
+          "progression_gate"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EA%B2%80%EC%9D%80%20%EB%A7%88%EB%B2%95%EC%82%AC/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0",
+          "https://www.inven.co.kr/board/maple/5974/4642949"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "weekly_boss",
+          "rel": "주간 보스 재료로 입장"
+        }
+      ]
+    },
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "boss_timeout",
+        "label": "보스 제한 시간과 타임아웃",
+        "facts": [
+          "보스는 정해진 제한 시간 안에 체력을 모두 깎지 못하면 격파에 실패하고 쫓겨나서, 시간 안에 낼 수 있는 피해량이 넘어야 할 기준선이 된다.",
+          "패턴을 다 피해 살아남아도 딜이 모자라면 타임아웃으로 실패하므로, 제한 시간이 줄면 같은 보스라도 필요한 스펙이 올라간다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0/%EB%B3%B4%EC%8A%A4%20%EC%BB%A8%ED%85%90%EC%B8%A0",
+          "https://www.inven.co.kr/board/maple/5974/4535480",
+          "https://maplestory.nexon.com/news/update/806"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "boss_entry",
+          "rel": "필요 스펙을 정함"
+        }
+      ]
+    },
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "field_boss_respawn",
+        "label": "필드 보스",
+        "facts": [
+          "필드 보스는 사냥터에 나타났다가 잡히면 한동안 다시 나오지 않고, 다시 나타나기까지 걸리는 시간도 일정하지 않다.",
+          "잡힌 뒤 다음 등장은 채널 순서를 따라가서, 유저들은 채널을 돌며 다시 나타날 때를 기다린다."
+        ],
+        "tags": [
+          "cooldown"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0",
+          "https://www.inven.co.kr/board/maple/2299/9199838"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥터에 등장"
+        }
+      ]
+    },
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "spec_up_efficiency",
+        "label": "스펙업 가성비",
+        "facts": [
+          "장비를 어디부터 올릴지는 같은 메소를 썼을 때 오르는 공격력이나 환산 수치를 부위마다 비교해, 많이 오르는 쪽부터 고른다.",
+          "레벨 제한이 낮은 장비처럼 싸게 많이 오르는 부위가 먼저이고, 같은 돈으로 오르는 폭이 작은 부위는 뒤로 미룬다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://www.inven.co.kr/board/maple/2294/311834",
+          "https://namu.wiki/w/%ED%99%98%EC%82%B0%20%EC%A3%BC%EC%8A%A4%ED%83%AF"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "budget_gear",
+          "rel": "싼 부위부터 강화"
+        }
+      ]
+    },
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "daily_boss",
+        "label": "일간 보스",
+        "facts": [
+          "일간 보스는 하루에 한 번씩 잡을 수 있고 매일 자정에 횟수가 돌아와서, 주간 보스보다 보상은 작아도 날마다 챙기는 일과가 된다.",
+          "일간 보스에는 연습 모드가 없어 실전으로만 익히고, 하루를 넘기면 그날 기회는 사라진다."
+        ],
+        "tags": [
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0/%EB%B3%B4%EC%8A%A4%20%EC%BB%A8%ED%85%90%EC%B8%A0",
+          "https://www.inven.co.kr/board/maple/2304/10207"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "weekly_boss",
+          "rel": "주기만 다른 보스"
+        }
+      ]
+    },
+    {
+      "batch": 36,
+      "status": "warn",
+      "node": {
+        "id": "will_boss_split",
+        "label": "윌의 두 거울 공간",
+        "facts": [
+          "윌 첫 단계는 푸른 공간과 보라 공간에 윌이 한 마리씩 있고, 한쪽만 깎으면 덜 깎인 쪽에 맞춰 체력이 되돌아가서 두 공간을 고르게 깎아야 넘어간다.",
+          "그래서 파티원이 두 공간으로 나뉘어 각자 맡은 쪽 윌을 공격하고, 두 쪽 체력이 함께 줄어야 다음 단계가 열린다."
+        ],
+        "tags": [
+          "role_division"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EC%9C%8C%28%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC%29/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0",
+          "https://www.inven.co.kr/board/maple/2304/22851"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "party",
+          "rel": "파티원이 공간을 나눠 맡음"
+        }
+      ]
+    },
+    {
+      "batch": 37,
+      "status": "warn",
+      "node": {
+        "id": "bind_rotation",
+        "label": "바인드 순번",
+        "facts": [
+          "보스 파티에서는 보스를 잠시 묶어 두는 바인드를 파티원마다 맡을 차례로 나눠, 한 사람이 몰아 쓰지 않고 돌아가며 건다.",
+          "묶인 동안 모두가 가장 센 공격을 몰아 넣기 때문에, 순번이 어긋나면 그 차례의 공세를 통째로 놓친다."
+        ],
+        "tags": [
+          "role_division"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2300/348247"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "boss_party_board",
+          "rel": "파티원끼리 차례를 정함"
+        }
+      ]
+    },
+    {
+      "batch": 38,
+      "status": "warn",
+      "node": {
+        "id": "hexa_core_levelup",
+        "label": "HEXA 코어 레벨업 재료",
+        "facts": [
+          "HEXA 코어는 레벨이 높아질수록 한 레벨 올리는 데 필요한 솔 에르다와 조각 개수가 늘고, 열 단위 레벨에서는 요구 개수가 앞뒤 레벨보다 크게 뛴다.",
+          "높은 레벨로 갈수록 조각이 차지하는 몫이 커져서, 코어를 끝까지 올리는 데 드는 재료가 뒤로 갈수록 무거워진다."
+        ],
+        "tags": [
+          "escalating_cost"
+        ],
+        "sources": [
+          "https://namu.wiki/w/HEXA%20%EB%A7%A4%ED%8A%B8%EB%A6%AD%EC%8A%A4",
+          "https://www.inven.co.kr/board/maple/2304/44894",
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/405"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "sixth_job",
+          "rel": "6차 스킬을 키움"
+        },
+        {
+          "to": "sol_erda_fragment",
+          "rel": "조각을 소모함"
+        }
+      ]
+    }
+  ]
+}

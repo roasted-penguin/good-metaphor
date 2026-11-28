@@ -1,11 +1,13 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.22-4",
+  "version": "2026.11.28-2",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
   "noMatchText": "메이플스토리에서 딱 맞는 비유를 찾지 못했어요. 억지로 만들지 않았어요.",
+  "cueWords": ["스타포스", "샤이닝", "아케인", "아케인포스", "결정석", "메소", "재획", "극딜", "HEXA", "에르다", "메이플포인트", "챌린저스", "퀵패스"],
+  "cueWordsNote": "약한 별칭(weakAliases) 가산의 근거가 되는 메이플 고유 낱말(T-199). 라벨에서 자동으로 뽑지 않는다. 더할 때는 일반어·다른 관심사 라벨·태그 예문·평가셋 비메이플 문장에 나오지 않아야 한다(단위 테스트 cueWordProblems).",
   "note": "공통 저장소 샘플. 사실(facts)은 시스템의 일반적인 구조만 적고, 수치·확률표처럼 자주 바뀌는 값은 넣지 않는다. 추상 태그 정의는 같은 폴더 tags.json에 있고, 노드 tags에는 그 id만 적는다(T-304).",
   "nodes": [
     {
@@ -33,12 +35,12 @@
       "id": "cube", "label": "잠재능력 재설정(큐브)", "aliases": ["잡옵"],
       "facts": [
         "큐브나 메소로 잠재능력을 재설정하면 장비의 잠재능력 옵션이 무작위로 다시 정해진다.",
-        "원하는 옵션 조합이 나올 때까지 여러 번 돌리는 경우가 많다.",
-        "옵션별 등장 확률이 공개되어 있어 평균 몇 개가 드는지 계산하기도 한다."
+        "옵션별 등장 확률이 공개되어 있어 평균 몇 개가 드는지 계산하기도 한다.",
+        "원하는 옵션 조합이 나올 때까지 여러 번 돌리는 경우가 많다."
       ],
       "tags": ["random_reroll", "expected_value", "prob_upgrade"],
       "sources": ["https://maplestory.nexon.com/News/Update/799", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/413", "https://maplestory.nexon.com/Guide/OtherProbability/cube/black", "https://maplestory.nexon.com/News/Notice/Notice/133316"],
-      "verifiedAt": "2026-10-11"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "arcane_symbol", "label": "아케인 심볼", "weakAliases": ["세금"],
@@ -64,12 +66,12 @@
     {
       "id": "boss_entry", "label": "보스 입장 조건과 난이도", "aliases": ["데카", "풀데카", "최소컷"],
       "facts": [
-        "보스마다 입장할 수 있는 최소 레벨이 정해져 있다.",
-        "같은 보스라도 난이도에 따라 필요한 스펙과 받는 보상이 다르다."
+        "같은 보스라도 난이도에 따라 필요한 스펙과 받는 보상이 다르다.",
+        "보스마다 입장할 수 있는 최소 레벨이 정해져 있다."
       ],
       "tags": ["threshold_req", "progression_gate"],
       "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/459", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/458"],
-      "verifiedAt": "2026-11-08"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "weekly_boss", "label": "주간 보스와 결정석", "aliases": ["메요일"],
@@ -95,12 +97,12 @@
     {
       "id": "meso_inflation", "label": "메소 인플레이션",
       "facts": [
-        "게임 안에 메소가 많이 풀리면 아이템 가격이 오르고 메소의 가치가 떨어진다.",
+        "게임 안에 메소를 많이 풀면 메소의 가치가 떨어지고 물가가 뛴다.",
         "강화 비용처럼 메소를 소모시키는 곳이 풀린 메소를 회수하는 역할을 한다."
       ],
       "tags": ["inflation", "market_price"],
       "sources": ["https://maplestory.nexon.com/News/Notice/Notice/134898"],
-      "verifiedAt": "2026-11-08"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "auction", "label": "경매장", "aliases": ["쌀먹"],
@@ -250,13 +252,13 @@
     {
       "id": "mvp_membership", "label": "MVP 등급",
       "facts": [
-        "MVP 등급은 메이플ID에서 최근 일정 기간 동안 쓴 캐시 금액의 합으로 주 단위로 정해진다.",
         "등급이 높을수록 매주 받는 보상과 상시 혜택이 커지고, 최근 구매 금액이 기준에 못 미치면 등급이 내려간다.",
+        "MVP 등급은 메이플ID에서 최근 일정 기간 동안 쓴 캐시 금액의 합으로 주 단위로 정해진다.",
         "최고 등급 기준을 넘겨 쓴 금액은 정해진 한도까지 이월되어, 다음 등급 갱신 때 모자란 만큼 자동으로 쓰인다."
       ],
       "tags": ["threshold_req"],
       "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/425"],
-      "verifiedAt": "2026-11-21"
+      "verifiedAt": "2026-11-22"
     },
     {
       "id": "burning_field", "label": "버닝 필드",
@@ -323,6 +325,1371 @@
       "tags": ["efficiency_metric"],
       "sources": ["https://maplestory.nexon.com/News/Update/746", "https://maplestory.nexon.com/News/Update/806"],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "additional_option", "label": "추가 옵션과 환생의 불꽃", "aliases": ["추옵", "검환불"], "weakAliases": ["환불"],
+      "facts": [
+        "추가 옵션은 사냥이나 제작으로 얻은 장비에 기본 능력치와 따로 붙는 옵션으로, 환생의 불꽃을 쓰면 다시 정해진다.",
+        "일부 환생의 불꽃은 다시 정해진 옵션과 원래 옵션을 비교해 마음에 드는 쪽을 골라 적용할 수 있다.",
+        "자유롭게 거래되던 장비에 환생의 불꽃을 쓰면 가위 사용 가능 횟수가 생겨 거래 횟수에 제한이 붙는다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/411"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "ability", "label": "어빌리티",
+      "facts": [
+        "어빌리티는 캐릭터 정보창에서 여는 숨은 능력치로, 레어·에픽·유니크·레전드리 등급에 따라 붙는 옵션과 수치가 다르다.",
+        "명성치를 내고 재설정할 때 바꾸고 싶지 않은 옵션을 잠그고 나머지만 다시 돌릴 수 있지만, 잠글수록 한 번에 드는 명성치가 커지고 등급은 오르지 않는다.",
+        "재설정해도 어빌리티 등급은 떨어지지 않는다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/392"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "hyper_stat", "label": "하이퍼 스탯",
+      "facts": [
+        "하이퍼 스탯은 높은 레벨부터 레벨업마다 받는 포인트를 크리티컬·방어율 무시·데미지 같은 능력치에 나눠 투자하는 시스템이다.",
+        "같은 능력치를 높은 단계로 올릴수록 한 단계에 필요한 포인트가 커지고, 높은 레벨 구간일수록 레벨업 때 받는 포인트도 늘어난다.",
+        "메소를 내면 투자한 포인트를 언제든 거둬 다시 나눌 수 있고, 세팅을 프리셋으로 저장해 바꿔 쓸 수 있다."
+      ],
+      "tags": ["escalating_cost"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/386"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "ignore_defense", "label": "방어율 무시", "aliases": ["방무"],
+      "facts": [
+        "방어율 무시는 적의 방어율 일부를 무시하고 피해를 주게 하는 능력치로, 장비·스킬·하이퍼 스탯 등에서 얻는다.",
+        "여러 곳에서 얻은 방어율 무시는 단순히 더해지지 않고 곱하는 방식으로 합쳐진다.",
+        "그래서 이미 방어율 무시가 높을수록 같은 값을 더 얻어도 실제로 오르는 폭은 작아진다.",
+        "하이퍼 스탯, 유니온 아티팩트, 유니온 챔피언 휘장처럼 여러 시스템에서 방어율 무시를 조금씩 올릴 수 있다."
+      ],
+      "tags": ["diminishing_returns"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/390", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/386"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "level_range", "label": "레벨 범위 몬스터",
+      "facts": [
+        "레벨 범위 몬스터는 캐릭터 레벨 기준 위아래 일정 범위 안의 몬스터로, 엘리트 몬스터 등장이나 데일리 기프트 사냥 조건 같은 혜택은 이 몬스터를 잡을 때만 쳐 준다.",
+        "캐릭터와 몬스터의 레벨 차이에 따라 얻는 경험치와 주는 피해가 달라져, 레벨이 비슷한 몬스터를 잡을 때 경험치를 가장 많이 받고 차이가 벌어질수록 줄어든다."
+      ],
+      "tags": ["efficiency_metric", "threshold_req"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/377", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/455", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/448"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "profession", "label": "전문기술과 피로도",
+      "facts": [
+        "전문기술은 약초채집·채광 같은 채집과 장비·장신구 제작, 연금술로 아이템을 직접 만드는 생활 컨텐츠로, 채집 기술을 먼저 배워야 연결된 제작 기술을 배울 수 있다.",
+        "채집이나 제작을 할 때마다 피로도가 쌓이고, 피로도가 한도에 차면 그날은 더 할 수 없으며 매일 자정에 초기화된다.",
+        "직접 만든 아이템을 쓰거나 다른 사람에게 팔 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/379"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "trait", "label": "성향",
+      "facts": [
+        "성향은 카리스마·감성·통찰력·의지·손재주·매력으로 나뉜 캐릭터 능력치로, 레벨이 오를수록 효과가 강해진다.",
+        "보스 사냥, 채집, 아이템 제작처럼 성향마다 경험치를 얻는 활동이 정해져 있다.",
+        "성향 경험치는 하루에 쌓을 수 있는 양에 상한이 있다."
+      ],
+      "tags": ["daily_accumulation"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/382"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "guild_canal", "label": "샤레니안의 지하 수로", "weakAliases": ["수로"],
+      "facts": [
+        "샤레니안의 지하 수로는 길드원이 혼자 들어가 제한 시간 동안 악마 아르카누스에게 준 피해만큼 점수를 얻는 길드 컨텐츠이다.",
+        "길드원 점수를 합쳐 한 주 단위로 다른 길드와 순위를 겨루고, 합이 최소 기준에 못 미치면 순위 구간에 들어도 노블레스 스킬 포인트를 받지 못한다.",
+        "길드원이 탈퇴하거나 추방되면 그 사람이 얻은 점수는 길드 점수에서 빠진다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/391"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "monster_park", "label": "몬스터파크", "aliases": ["몬파"],
+      "facts": [
+        "몬스터파크는 제한 시간 안에 스테이지의 몬스터를 모두 잡아 경험치와 보상을 받는 던전으로, 요일마다 받는 보상이 다르다.",
+        "하루에 클리어할 수 있는 횟수가 정해져 있고, 그중 일부만 무료이며 나머지는 이용권이나 메이플포인트를 내야 한다.",
+        "소탕을 쓰면 한 번 플레이로 여러 번 클리어한 보상을 받을 수 있지만, 하루 횟수를 넘겨 소탕할 수는 없다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/463"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "mureung", "label": "무릉도장", "aliases": ["무릉"],
+      "facts": [
+        "층마다 지키는 몬스터를 쓰러뜨려야 다음 층으로 올라가는 탑으로, 제한 시간 안에 오른 가장 높은 층이 기록으로 남아 다른 플레이어와 순위를 겨룬다.",
+        "무릉도장 안에서는 결계 때문에 원래 힘의 일부만 쓸 수 있고, 하루에 도전할 수 있는 횟수가 정해져 있다.",
+        "도전 기록에 따라 무릉도장 상점에서 쓰는 포인트를 받는다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/468"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "the_seed", "label": "더 시드", "weakAliases": ["시드"],
+      "facts": [
+        "층을 차례로 깨며 올라가는 탑이고, 중간 쉼터 층에서 나가면 다음에 그 층부터 이어서 할 수 있다.",
+        "안에 머물 수 있는 시간이 정해져 있어, 헤이지스톤을 착용해야 더 오래 머문다.",
+        "잠긴 헤이지스톤 슬롯은 특정 층에 도달한 뒤 시드 포인트를 내야 열린다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/464"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "epic_dungeon", "label": "에픽 던전",
+      "facts": [
+        "에픽 던전은 높은 레벨 구간의 성장을 돕는 던전으로, 스테이지를 차례로 깨고 최종 보스까지 처치해야 클리어 보상을 받는다.",
+        "앞 지역의 스토리 퀘스트와 앞 던전의 스토리를 끝내야 다음 던전이 열린다.",
+        "한 주에 넥슨ID당 정해진 수의 캐릭터로만 입장할 수 있고, 같은 캐릭터로 서로 다른 에픽 던전을 깰 수 없다."
+      ],
+      "tags": ["periodic_cap", "progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/470"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "monster_collection", "label": "몬스터 컬렉션",
+      "facts": [
+        "사냥하면 일정 확률로 몬스터가 도감에 수집되고, 몬스터 한 줄을 다 채울 때마다 보상 상자를 받는다.",
+        "같은 월드의 모든 캐릭터가 수집 기록을 함께 쓴다.",
+        "완성한 줄로 탐험을 보내 보상을 받는데, 탐험 시간이 길수록 보상이 좋다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/467"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "union_champion", "label": "유니온 챔피언",
+      "facts": [
+        "유니온 챔피언은 월드의 높은 레벨 캐릭터를 챔피언으로 지정해 챔피언 등급에 따른 휘장 능력치를 받는 컨텐츠이다.",
+        "챔피언 등급은 등급마다 정해진 보스를 제한 시간 안에 혼자 격파하는 평가전을 통과해야 한 단계씩 오른다.",
+        "같은 직업 캐릭터는 두 명 이상 챔피언으로 등록할 수 없고, 챔피언에서 해제하면 등급과 평가전 기록이 초기화된다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/409"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "union_artifact", "label": "유니온 아티팩트",
+      "facts": [
+        "유니온 아티팩트는 아티팩트 크리스탈에 원하는 능력치를 골라 붙여 월드 안의 모든 캐릭터에게 적용하는 컨텐츠이다.",
+        "크리스탈 능력치에는 유효기간이 있어, 아티팩트 포인트를 내고 기간을 연장해야 계속 적용된다.",
+        "아티팩트 레벨이 오르면 크리스탈을 더 받고, 아티팩트 AP로 크리스탈 등급을 올리며 포인트를 내면 투자한 AP를 되돌려 다시 나눌 수 있다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/408"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "royal_style", "label": "로얄 스타일",
+      "facts": [
+        "로얄 스타일 쿠폰을 쓰면 그 기간 구성품 가운데 캐시 아이템 하나가 나오며, 구성품마다 나올 확률이 정해져 공개되어 있다.",
+        "로얄 스타일로 얻은 장비 아이템은 교환하지 않았다면 캐시 보관함에서 쿠폰 값의 일부를 메이플포인트로 돌려받는 페이백을 할 수 있다.",
+        "로얄 스타일에서 나온 스페셜 아이템은 마스터피스 합성의 기본 재료가 된다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/426", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/428", "https://maplestory.nexon.com/Guide/CashShop/Probability/RoyalStyle"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "masterpiece", "label": "마스터피스 합성",
+      "facts": [
+        "마스터피스는 로얄 스타일 스페셜 아이템을 합성해 레드라벨·블랙라벨·마스터라벨 같은 더 좋은 라벨의 캐시 장비를 정해진 확률로 얻는 시스템이다.",
+        "레드라벨 아이템을 베이스로 한 번 더 합성하면 마스터라벨을 얻을 가능성이 높아진다.",
+        "레드라벨과 블랙라벨의 옵션은 유지 기간이 정해져 있지만, 기간이 끝나도 아이템 자체는 영구로 쓸 수 있다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/428"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "soul_weapon", "label": "소울 웨폰",
+      "facts": [
+        "소울 웨폰은 소울 인챈터로 바꾼 무기에 보스 소울을 장착해 추가 능력치를 얻는 무기이고, 보스 소울은 보스에게서 모은 소울 조각을 합성해 얻는다.",
+        "새 보스 소울을 장착하면 기존에 장착한 보스 소울은 파괴된다.",
+        "위대한 보스 소울을 단 소울 웨폰은 소울 에테르와 메소를 내고 소울 증폭을 시도할 수 있고, 증폭은 정해진 확률로 성공하거나 실패한다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/416", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/418"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "party_quest", "label": "파티퀘스트",
+      "facts": [
+        "파티퀘스트는 여러 명이 함께 NPC의 퀘스트를 수행해 보상을 받는 컨텐츠로, 퀘스트마다 입장 레벨과 참가 인원이 정해져 있다.",
+        "파티퀘스트는 하루 입장 횟수가 정해져 있다.",
+        "모은 파티 포인트로 아이템을 사거나, 도중에 사망했을 때 파티 포인트를 써서 그 자리에서 부활할 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/462"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "theme_dungeon", "label": "특수 테마던전",
+      "facts": [
+        "특수 테마던전은 낮은 레벨 구간용 던전으로, 일반 퀘스트나 필드 사냥보다 효율적으로 경험치와 보상을 얻을 수 있다.",
+        "플레이어마다 전용 몬스터가 소환되어 다른 플레이어와 몬스터를 나눠 갖지 않는다.",
+        "몬스터 레벨은 캐릭터 레벨을 따라 올라가다 일정 레벨에서 멈춘다."
+      ],
+      "tags": ["efficiency_metric"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/460"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "rune", "label": "룬 해방",
+      "facts": [
+        "룬은 사냥터에 일정 주기로 생기는 돌로, 화면에 나온 방향키를 제한 시간 안에 순서대로 입력해 해방하면 일정 시간 동안 경험치를 더 받는다.",
+        "룬을 해방하면 쿨타임이 적용되어 한동안 다른 룬을 쓸 수 없다.",
+        "룬 효과는 해방한 캐릭터에게만 적용되고, 맵을 벗어나면 대부분의 추가 효과가 끝난다."
+      ],
+      "tags": ["cooldown"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/454"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "hyper_burning", "label": "하이퍼 버닝",
+      "facts": [
+        "하이퍼 버닝은 이벤트 기간에 지정한 캐릭터가 레벨업할 때마다 추가 레벨을 더 얻는 성장 이벤트이다.",
+        "정해진 레벨까지만 혜택이 적용되고, 그 레벨에 이르기 전에는 성장의 비약 같은 일부 아이템을 쓸 수 없다.",
+        "지정한 뒤에 달성한 레벨에 따라 단계별 보상을 받는다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "challengers_pass", "label": "챌린저스 패스",
+      "facts": [
+        "챌린저스 패스는 정해진 시즌 동안 주간 미션으로 패스 포인트를 모아 패스 레벨을 올리고, 레벨마다 보상을 받는 이벤트이다.",
+        "한 주에 얻을 수 있는 패스 포인트에는 상한이 있고, 지난주에 못 얻은 포인트는 메이플포인트로 살 수 있다.",
+        "패스 레벨과 미션 진행도는 같은 월드의 모든 캐릭터가 함께 쓴다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "vip_sauna", "label": "VIP 사우나",
+      "facts": [
+        "VIP 사우나는 메이플포인트나 이용권으로 이용 시간을 충전해, 그 시간 동안 사우나에 머물며 레벨에 맞는 경험치를 받는 이벤트이다.",
+        "충전한 시간은 메이플ID 안의 모든 캐릭터가 함께 쓰고, 메이플포인트로 충전할 수 있는 시간은 한 주 상한이 있다.",
+        "이벤트 기간이 끝나면 남은 이용 시간이 있어도 경험치를 받을 수 없다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "newname_auction", "label": "뉴네임 옥션",
+      "facts": [
+        "뉴네임 옥션은 캐릭터 이름을 메이플포인트로 경매에 부치는 이벤트로, 경매가 끝날 때 가장 높은 가격을 부른 사람이 이름을 낙찰받는다.",
+        "새로 입찰하려면 현재 최고가보다 일정 금액 이상 높게 불러야 하고, 경매는 정해진 종료 시각 앞뒤의 짧은 시간 사이에 끝난다.",
+        "단순 변심으로는 판매나 입찰을 취소할 수 없다."
+      ],
+      "tags": ["scarcity_value"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "genesis_pass", "label": "제네시스 패스",
+      "facts": [
+        "제네시스 패스는 제네시스 무기 해방 퀘스트를 하는 캐릭터에게 적용하는 유료 패스로, 적용 기간 동안 보스에게서 얻는 어둠의 흔적이 몇 배로 늘어난다.",
+        "그 주에 이미 얻은 어둠의 흔적이 있으면 패스를 적용할 때 늘어난 만큼을 소급해 준다.",
+        "명의당 한 번만 살 수 있다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "green_pc", "label": "그린 PC 보안 등급",
+      "facts": [
+        "PC마다 레드·옐로우·그린 보안 등급이 매겨지고, 처음 접속하거나 자주 쓰지 않던 PC는 레드 PC가 되어 거래와 주간 보스 입장 같은 기능이 막힌다.",
+        "본인 인증이나 넥슨 OTP 가입으로 바로 등급을 올리거나, 그 PC로 꾸준히 접속하고 사냥해 보안 등급 게이지를 채워 올릴 수 있으며 게이지는 하루에 채울 수 있는 양이 정해져 있다.",
+        "모르는 PC가 레드 PC로 등록되어 있으면 계정 도용을 의심할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/446"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "hyper_skill", "label": "하이퍼 스킬 초기화",
+      "facts": [
+        "하이퍼 스킬은 높은 레벨에서 정해진 레벨에 이를 때마다 열리는 강화 패시브와 공격·버프 스킬이다.",
+        "투자한 하이퍼 스킬은 메소를 내고 초기화할 수 있는데, 초기화를 거듭할수록 비용이 커지다가 정해진 상한에서 멈춘다."
+      ],
+      "tags": ["escalating_cost"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/403"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "training_ground", "label": "연무장",
+      "facts": [
+        "연무장은 전투 기록을 리플레이로 남기는 곳으로, 전투력이 일정 이상인 캐릭터만 기록을 남기는 연마의 전당에 들어갈 수 있다.",
+        "연마의 전당에 들어가면 대부분 스킬의 재사용 대기시간이 초기화되고, 가져갈 수 있는 아이템 종류가 제한된다.",
+        "등록된 리플레이는 다른 플레이어가 보고 추천할 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/News/Update/799"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "scroll_fever", "label": "주문의 흔적 피버 타임",
+      "facts": [
+        "주문의 흔적 피버 타임은 매주 금요일부터 일요일까지 주문의 흔적으로 하는 주문서 강화의 성공 확률을 올려 주는 기간이다.",
+        "프리미엄 PC방에서 접속하거나 MVP 등급이 높으면 피버 타임 효과가 상시 적용된다.",
+        "메소로 하는 주문서 강화에는 피버 타임이 적용되지 않는다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/374", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/444", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/425"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "macro_detection", "label": "매크로 단속과 거짓말 탐지기",
+      "facts": [
+        "운영진은 운영정책에 따라 매크로와 불법 프로그램 사용을 단속하고, 거짓말 탐지기 같은 보안 시스템을 반복해서 통과하지 못한 기록도 단속 근거로 삼는다.",
+        "거짓말 탐지기에 실패하면 진실의 방으로 옮겨지고, 그 기록이 일정 횟수 이상 쌓이면 단속될 수 있다.",
+        "입력을 반복해 주는 키보드·마우스 기능은 쓰는 것만으로 막지는 않지만, 그 때문에 정상 범위를 넘는 기록이 감지되면 단속될 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/452"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "boss_party_board", "label": "보스 파티 모집",
+      "facts": [
+        "보스 파티 모집 게시판에서는 다른 월드의 플레이어와도 파티를 꾸려 높은 난이도 보스에 도전할 수 있다.",
+        "모집은 정원이 차거나 파티장이 마감하거나 일정 시간이 지나면 끝난다.",
+        "보스 입장 맵으로 옮긴 뒤 보스가 입장하면 모집 파티가 정식 파티로 바뀌고, 파티원끼리 준비 확인을 한다."
+      ],
+      "tags": ["role_division"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/458"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "item_burning", "label": "아이템 버닝",
+      "facts": [
+        "아이템 버닝은 이벤트로 받은 도전자의 장비를 미션 단계마다 성장시키는 이벤트로, 단계마다 목표 레벨과 보스 혼자 격파 미션이 있다.",
+        "다음 단계 미션을 미리 달성해도 이전 미션을 모두 끝내야 다음 단계로 성장할 수 있다.",
+        "명의당 한 캐릭터로만 시작할 수 있고, 지급된 장비는 정해진 기간까지만 쓸 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "maple_guide", "label": "메이플 길라잡이",
+      "facts": [
+        "메이플 길라잡이는 캐릭터 레벨에 맞는 퀘스트·테마던전·사냥터를 추천해 주는 안내 시스템이다.",
+        "추천 퀘스트를 끝내면 그 지역의 도장을 얻고, 도장을 얻은 지역은 길라잡이에서 바로 이동할 수 있다.",
+        "길라잡이의 빠른 이동은 한 번 쓰면 잠깐의 재사용 대기시간이 지나야 다시 쓸 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/441"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "mystery_barrier", "label": "의문의 결계",
+      "facts": [
+        "의문의 결계는 챌린저스 월드 이벤트로, 결계 제어봉을 써서 결계를 풀면 정해진 확률에 따라 희귀도가 다른 결계의 핵을 얻는다.",
+        "결계 제어봉은 접속하지 않아도 매일 자동으로 지급되지만, 보유 한도에 차 있으면 더 쌓이지 않는다.",
+        "챌린저스 월드 티어가 높을수록 더 큰 결계를 풀 수 있고, 좋은 결계의 핵이 나올 확률이 높아진다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "v_matrix", "label": "V 매트릭스",
+      "facts": [
+        "V 매트릭스는 5차 전직을 마친 캐릭터가 V 코어로 5차 스킬을 얻고 기존 스킬을 강화하는 시스템이다.",
+        "코어 젬스톤으로 얻은 V 포인트로 코어를 활성화하고 강화하며, 메소를 내면 강화에 쓴 V 포인트를 초기화할 수 있다.",
+        "특수 코어는 장착한 뒤 정해진 기간이 지나면 사라지고, 기간을 연장할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/404"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "symbol_catalyst", "label": "심볼 카탈리스트",
+      "facts": [
+        "카탈리스트를 쓰면 키운 아케인심볼이나 어센틱심볼을 같은 월드의 내 다른 캐릭터로 옮길 수 있다.",
+        "옮길 때 지금까지 성장에 쓴 심볼의 일부를 잃고 심볼 레벨이 처음으로 돌아가 다시 강화해야 한다.",
+        "한 번 쓰면 되돌릴 수 없고, 받을 캐릭터가 그 심볼의 획득 퀘스트를 끝냈어야 한다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/396"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "season_boss", "label": "시즌 보스",
+      "facts": [
+        "시즌 보스는 챌린저스 월드에서만 정해진 시즌 동안 도전할 수 있는 보스로, 일반 보스보다 강력한 보상을 준다.",
+        "메이플ID마다 한 주에 한 번만 클리어할 수 있고, 주간 보스 처치 제한에는 포함되지 않는다.",
+        "처치해도 강렬한 힘의 결정은 얻을 수 없다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "blueberry_farm", "label": "블루베리 농장",
+      "facts": [
+        "블루베리 농장은 입장권을 쓰면 정해진 시간 동안 들어가 블루베리 몬스터를 잡고 레벨에 맞는 경험치를 받는 컨텐츠이다.",
+        "입장권을 쓴 뒤 정해진 시간 안에서는 수확을 마치기 전까지 자유롭게 다시 들어갈 수 있다.",
+        "농장 안에서는 다른 추가 경험치 효과가 적용되지 않는다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "arcane_weekly", "label": "아케인리버 스페셜 컨텐츠",
+      "facts": [
+        "아케인리버 지역마다 있는 스페셜 컨텐츠는 그 지역 스토리 퀘스트를 끝내야 열리고, 클리어하면 아케인심볼을 준다.",
+        "스페셜 컨텐츠 가운데 에르다 스펙트럼은 일주일에 한 번만 클리어할 수 있고 매주 목요일 자정에 횟수가 초기화된다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/465"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "sunday_maple", "label": "썬데이 메이플",
+      "facts": [
+        "썬데이 메이플은 일요일 하루 동안 열리는 이벤트로, 주마다 잠재능력 등급을 올리기 좋은 미라클 타임이나 스타포스 강화 혜택처럼 붙는 혜택이 바뀐다.",
+        "콤보킬 구슬 경험치 증가처럼 사냥 혜택이 붙는 주도 있다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/News/Event/823", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/453"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "buff_stacking", "label": "버프 중첩",
+      "facts": [
+        "버프는 여러 종류를 한꺼번에 쓸 수 있어, 스킬과 소비 아이템 버프가 쌓이면 같은 장비로도 능력치가 크게 오른다.",
+        "다만 물약과 알약처럼 같은 종류로 묶인 버프끼리는 겹쳐 쓸 수 없는 것이 있다.",
+        "대부분의 소비 아이템 버프는 정해진 시간 동안만 유지된다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/451", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/418"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "additional_potential", "label": "에디셔널 잠재능력",
+      "facts": [
+        "에디셔널 잠재능력은 일반 잠재능력이 붙어 있는 장비에만 따로 붙일 수 있는 두 번째 잠재능력이다.",
+        "일반 잠재능력과 따로 재설정하며, 메소로 재설정할 때는 기존 옵션과 새 옵션 중 골라 적용할 수 있다.",
+        "레어·에픽·유니크·레전드리 등급이 있고 재설정할 때 정해진 확률로 등급이 오른다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/413", "https://maplestory.nexon.com/News/Update/746"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "memento", "label": "메멘토 각인",
+      "facts": [
+        "메멘토 브론즈 에디셔널 큐브처럼 메멘토 접두어가 붙은 강화 아이템은 일부 보스를 잡으면 확정으로 주는 보상이다.",
+        "메멘토 강화 아이템을 쓴 장비는 원래 교환 속성과 상관없이 일정 기간 교환할 수 없는 메멘토 각인 상태가 되고, 다시 쓰면 그 기간이 새로 시작된다.",
+        "각인 상태인 장비에는 카르마의 가위를 쓸 수 없고 장비 전승도 할 수 없다."
+      ],
+      "tags": ["cooldown"],
+      "sources": ["https://maplestory.nexon.com/News/Update/799"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "chaos_scroll", "label": "혼돈의 주문서",
+      "facts": [
+        "긍정의 혼돈 주문서는 장비의 공격력·방어력·주스탯 같은 여러 능력치를 정해진 확률에 따라 각각 올리거나 그대로 둔다.",
+        "일반 혼돈의 주문서는 같은 방식이지만 능력치가 내려갈 수도 있다.",
+        "주문서이므로 장비의 주문서 강화 가능 횟수 안에서 쓴다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/374", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/418"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "union_start", "label": "유니온 시작과 확장 스탯",
+      "facts": [
+        "메이플 유니온은 같은 월드에 일정 레벨 이상 캐릭터를 여러 개 키우거나 5차 전직 캐릭터가 있어야 시작할 수 있고, 조건을 채운 뒤 퀘스트까지 끝내야 열린다.",
+        "유니온 레벨이 오르면 크리티컬 데미지·보스 데미지 같은 확장 스탯이 열리고 확장 스탯의 최대 레벨도 단계별로 오른다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/407", "https://maplestory.nexon.com/News/Update/806"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "maple_home", "label": "메이플 홈",
+      "facts": [
+        "메이플 홈은 높은 레벨에서 정해진 스토리를 끝낸 월드에서 퀘스트를 마쳐야 만들 수 있는 집이다.",
+        "메이플 홈은 같은 월드의 내 캐릭터들이 함께 쓰고, 이벤트 보상으로 받은 가구로 꾸민다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/News/Update/805"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "mvp_resort", "label": "MVP 리조트",
+      "facts": [
+        "MVP 리조트는 MVP 등급에 따라 매주 이용 시간이 쌓이고, 그 시간 동안 머물며 레벨에 맞는 경험치를 받는 공간이다.",
+        "쓰지 않은 이용 시간은 사라지지 않지만 쌓아 둘 수 있는 시간에 상한이 있고, 이용 시간은 메이플ID 안의 모든 캐릭터가 함께 쓴다.",
+        "가장 높은 등급은 이용 시간을 두 배 빨리 쓰는 대신 경험치를 두 배로 받는 모드를 쓸 수 있다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/425"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "scroll_upgrade", "label": "주문서", "aliases": ["주흔"],
+      "facts": [
+        "주문서는 성공률이 낮을수록 성공했을 때 장비에 더 좋은 옵션을 붙여 주고, 주문의 흔적이나 메소로 쓸 수 있다.",
+        "장비마다 주문서를 쓸 수 있는 횟수가 정해져 있고, 성공하든 실패하든 쓸 때마다 그 횟수가 줄어든다.",
+        "순백의 주문서는 실패로 줄어든 횟수를 하나 되돌리고, 이노센트 주문서는 주문서로 올린 옵션을 표준 상태로 되돌린다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/374", "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/418"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "union_raid", "label": "유니온 레이드",
+      "facts": [
+        "유니온 레이드는 내 유니온 공격대가 보스 드래곤을 자동으로 공격해 유니온 코인을 모으는 곳으로, 공격대 전투력이 높을수록 코인이 빨리 쌓인다.",
+        "받기 전에 모아 둘 수 있는 코인 수가 유니온 등급마다 정해져 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/Guide/N23GameInformation/Articles/407"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "skill_ring", "label": "특수 스킬 반지",
+      "facts": [
+        "특수 스킬 반지는 착용하면 반지마다 정해진 특수 스킬을 쓸 수 있는 반지이다.",
+        "리스트레인트 링이나 컨티뉴어스 링을 일정 레벨 이상으로 끼면 특수 스킬 반지를 하나 더 낄 수 있는 슬롯이 열린다.",
+        "추가 슬롯을 포함해 액티브 특수 스킬 반지와 패시브 특수 스킬 반지는 각각 한 종씩만 낄 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/News/Update/799"],
+      "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "achievement", "label": "메이플 업적", "aliases": ["업적"],
+      "facts": [
+        "게임 내 다양한 활동을 수행하면 난이도에 따라 업적 점수가 쌓이고, 점수가 일정 기준을 넘으면 업적 등급이 오른다.",
+        "메이플ID 내 모든 캐릭터가 업적 진행 상황과 정보를 공유하며 월드 통합으로 관리된다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/466"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "monster_park_hands", "label": "몬스터파크 핸즈", "aliases": ["몬파 핸즈"],
+      "facts": [
+        "이용권을 사용해 시간을 충전하면 모바일 환경에서 캐릭터가 자동으로 사냥하며 경험치와 아이템을 모을 수 있다.",
+        "자동 전투 중에는 추가 경험치와 메소 획득량 증가 등 별도의 상시 버프 혜택이 적용된다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/463"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "starforce_hunting_zone", "label": "스타포스 사냥터와 방어막", "aliases": ["스포존"],
+      "facts": [
+        "특정 지역의 사냥터는 몬스터가 방어막을 두르고 있어 요구하는 수치를 채워야만 온전한 피해를 줄 수 있다.",
+        "입장 시 필요한 수치에 도달하지 못하면 오히려 적에게 받는 피해가 커지고 공격 효율이 크게 떨어진다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/457"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "ability_advanced_reset", "label": "어빌리티 고급 재설정과 자동 재설정", "aliases": ["어빌리티 재설정"],
+      "facts": [
+        "명성치와 메소를 소모하여 레전드리 등급의 어빌리티 옵션을 원하는 조건에 맞춰 재설정할 수 있다.",
+        "목표 옵션이나 수치 조건을 설정해두면 조건에 도달할 때까지 자동으로 재설정을 반복할 수 있다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/news/update/813"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "soul_amplification", "label": "소울 증폭", "aliases": ["소울 증폭"],
+      "facts": [
+        "소울 에테르와 메소를 소모하여 위대한 소울이 부여된 무기에 증폭 단계를 올리고 소울 잠재능력을 부여한다.",
+        "증폭에 실패할 때마다 게이지가 쌓이며 게이지가 가득 차면 다음 시도에서 무조건 성공한다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/news/update/813"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "prime_cube", "label": "프라임 큐브와 에디셔널 큐브", "aliases": ["프큐"],
+      "facts": [
+        "레전드리 등급의 장비에 사용할 수 있으며, 첫 번째 옵션을 고정하고 나머지 옵션을 재설정하여 기존 결과와 비교해 선택할 수 있다.",
+        "큐브를 사용할 때마다 전용 조각을 얻으며, 이를 모아 다른 유용한 아이템으로 바꿀 수 있다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/news/update/813"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "boss_bellona", "label": "신규 보스 벨로나", "aliases": ["벨로나"],
+      "facts": [
+        "특정 선행 퀘스트를 완료하고 일정 레벨 이상을 달성한 캐릭터만 전용 게이트를 통해 입장할 수 있다.",
+        "일반 및 하드 난이도에 따라 도전 가능한 시점이 다르게 열리며 격파 시 전용 장비와 소울 등 보상을 얻는다."
+      ],
+      "tags": ["threshold_req", "progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/811"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "mission_ultima_ch2", "label": "미션 울티마 챕터2", "aliases": ["울티마 챕터2"],
+      "facts": [
+        "특정 레벨 이상의 캐릭터가 전구 알림이를 통해 퀘스트를 수락하면 전용 UI를 통해 진행할 수 있다.",
+        "새로운 퀘스트 연계와 지역이 추가되어 사도와 제른 다르모어에 맞서는 이야기를 다룬다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/808"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "yellow_maple_id", "label": "Yellow 메이플ID 제한", "aliases": ["옐로우메이플아이디"],
+      "facts": [
+        "Green 메이플ID로 선택되지 않은 계정은 Yellow 메이플ID로 지정되어 경험치와 드롭률 감소를 비롯한 다수의 콘텐츠 이용 제약을 받는다.",
+        "Yellow 메이플ID 상태에서는 아이템 거래, 경매장, 메소마켓, 길드 창고 등 경제 활동과 교환 기능이 전면 차단된다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/808"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "chronicle_lete", "label": "메이플 크로니클 레테 추가", "aliases": ["크로니클 레테"],
+      "facts": [
+        "특정 업적을 달성한 캐릭터가 있으면 동일 월드 내의 조건을 만족하는 캐릭터로 새로운 스토리 컨텐츠를 진행할 수 있다.",
+        "요건을 채운 뒤 게임 내 이동 수단을 통해 관련 지역으로 이동하여 새로운 서사의 스토리를 시작할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/808"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "boss_crystal_world_cap", "label": "월드 합산 주간 결정석 판매 한도",
+      "facts": [
+        "주간 보스 결정석을 NPC에게 팔 수 있는 수량은 캐릭터마다 따로가 아니라 같은 월드의 캐릭터를 모두 합쳐 한 주 단위로 상한이 정해진다.",
+        "월드 합산 상한에 닿으면 그 주에는 어느 캐릭터로도 결정석을 더 팔 수 없고, 주간 초기화 뒤에 다시 팔 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/813"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "crafting_mastery_level", "label": "전문기술 장인 및 명장", "aliases": ["장인", "명장"],
+      "facts": [
+        "제작 숙련도를 계속 쌓아 장인이나 명장 단계에 도달하면 제작 성공률과 추가 옵션 획득 확률이 대폭 상승한다.",
+        "명장 단계를 달성하면 특정 등급 미만의 최하위 추가 옵션이나 불리한 수치가 나오지 않도록 보장된다."
+      ],
+      "tags": ["prob_upgrade"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/379"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "extreme_potion", "label": "익스트림 물약", "aliases": ["익스물약", "익스레드", "익스그린"],
+      "facts": [
+        "몬스터파크 이용을 통해 얻은 화폐로 전용 상점에서 구매하여 능력치를 일시적으로 올릴 수 있다.",
+        "다른 버프 소비 아이템 및 여러 색상의 익스트림 물약을 중복으로 사용하여 혜택을 동시에 누릴 수 있다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/451"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "sparkling_star_potion", "label": "반짝이는 별 물약", "aliases": ["반별", "빨별", "파별"],
+      "facts": [
+        "보스 처치 시 일정 확률로 드롭되거나 상인에게서 구매하여 보스전 관련 스탯을 일정 시간 동안 향상시킨다.",
+        "동일한 종류의 스탯을 제공하는 전문기술 비약과 중복해서 사용할 수 없다."
+      ],
+      "tags": ["temporary_multiplier"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/451"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "enheim_defense", "label": "엔하임 디펜스", "aliases": ["엔디"],
+      "facts": [
+        "일반 몬스터를 잡아 광마력을 모은 뒤 발사기를 가동하여 직접 공격이 불가능한 보스 몬스터를 물리쳐 클리어한다.",
+        "일주일에 단 한 번만 클리어할 수 있으며 매주 특정 요일에 참여 가능 횟수가 다시 채워진다.",
+        "성공 시 클리어 시간에 상관없이 해당 지역 심볼 교환권과 경험치를 받는다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/465"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "training_ground_replay", "label": "잔영의 전당 리플레이", "aliases": ["연무장 리플레이", "잔영의 전당"],
+      "facts": [
+        "연무장에서 자동으로 측정을 마친 기록을 등록해 다른 유저가 전투 과정과 키 입력 내역을 볼 수 있게 공유한다.",
+        "하루에 등록 및 추천할 수 있는 횟수가 제한되어 있으며 동일한 메이플ID 내에서는 한 직업의 기록만 등록해 둘 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/144565"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "world_archive", "label": "월드 아카이브", "aliases": ["월드아카이브", "아카이브"],
+      "facts": [
+        "몬스터를 처치하거나 NPC와 상호작용하여 정보를 수집하면 계정 내 모든 캐릭터가 진행도와 수집 기록을 공유받는다.",
+        "정해진 레벨 기준을 만족하고 선행 퀘스트를 완료해야 도감 기능을 시작할 수 있다.",
+        "수집한 조사 기록의 누적 개수가 일정 목표에 도달할 때마다 계정당 한 번씩 단계별 보상을 받는다."
+      ],
+      "tags": ["threshold_req", "shared_bonus", "progression_gate"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/140877"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "union_champion_slot", "label": "유니온 챔피언 슬롯 확장",
+      "facts": [
+        "특정 등급 이상의 챔피언을 일정 수 이상 보유하면 추가적인 챔피언 슬롯이 개방된다.",
+        "슬롯이 늘어나면 더 많은 챔피언을 운용하여 전력을 강화할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/806"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "teleport_world_map", "label": "텔레포트 월드맵", "aliases": ["텔월"],
+      "facts": [
+        "월드맵에서 원하는 지역을 선택하여 즉시 이동하는 편의 기능이다.",
+        "사용 후 일정 시간의 재사용 대기 시간이 발생하며, 전용 아이템을 사용하여 이 시간을 단축할 수 있다."
+      ],
+      "tags": ["cooldown"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/443"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "harvesting_farm_entry", "label": "채집 농장 입장 제약", "aliases": ["채농", "마이스터빌 채집장"],
+      "facts": [
+        "해당 일자에 사냥한 레벨 범위 몬스터 수가 최소 기준을 넘어야 마이스터빌 채집 농장에 입장할 자격이 주어진다.",
+        "캐릭터의 피로도가 소진되어 있거나 보안 인증 등급이 낮은 계정 상태에서는 채집 농장 입장이 제한된다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/379"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "maple_guide_teleport", "label": "길라잡이 빠른 이동", "aliases": ["길라잡이", "텔레포트"],
+      "facts": [
+        "퀘스트를 완료하여 지역별 도장을 획득하면 해당 지역이나 사냥터로 즉시 이동할 수 있다.",
+        "이동 기능을 사용한 후에는 일정 재사용 대기시간이 지나야 다시 사용할 수 있다.",
+        "자주 방문하는 마을이나 필드는 빠른 이동 목록에 직접 등록하여 관리할 수 있다."
+      ],
+      "tags": ["cooldown"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/441"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "link_skill_mechanic", "label": "링크 스킬 레벨과 성장",
+      "facts": [
+        "특정 레벨 도달이나 퀘스트 완료 등 캐릭터의 성장 단계에 따라 링크 스킬의 레벨이 자동으로 상승하거나 해금되는 구조를 가진다.",
+        "일반적인 직업은 정해진 캐릭터 레벨에 도달하면 스킬 레벨이 오르지만, 제로와 같은 일부 직업은 전용 챕터 완료를 통해 스킬 레벨이 단계적으로 해금된다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/406"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "guild_contribution", "label": "길드 기여도 및 포인트", "aliases": ["길드 기여도", "GP"],
+      "facts": [
+        "길드원이 출석 체크나 보스 처치 등 활동을 수행하면 길드 기여도가 누적되며, 기여도가 쌓임에 따라 길드 포인트가 부여된다.",
+        "한 명의 길드원이 일주일 동안 쌓을 수 있는 기여도 총량에는 한도가 정해져 있다.",
+        "모인 길드 포인트를 사용하면 길드 인원을 단계적으로 늘리거나 길드 마크를 설정할 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/389"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "level_up_reward", "label": "레벨업 보상",
+      "facts": [
+        "캐릭터 레벨이 오를 때마다 능력치를 직접 찍는 AP와 스킬을 강화하는 SP를 획득한다.",
+        "특정 레벨 구간에 도달하면 하이퍼 스탯이나 하이퍼 스킬과 같은 고성능 성장 요소를 해금한다.",
+        "아주 높은 레벨에 이른 뒤에는 레벨이 오를 때마다 V 매트릭스 슬롯을 강화할 수 있는 전용 포인트를 얻는다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/377"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "treasure_hunter", "label": "트레져 헌터",
+      "facts": [
+        "개인화된 사냥 필드에서 몬스터를 처치하다 보면 일정 확률로 경험치를 주는 트레져 박스가 생성된다.",
+        "트레져 박스는 캐릭터별로 하루에 등장할 수 있는 횟수에 제한이 있다.",
+        "박스를 공격하여 파괴하면 캐릭터 레벨에 맞는 경험치를 즉시 획득한다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/588"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "exploration_coin", "label": "탐험 코인",
+      "facts": [
+        "게임 플레이를 통해 얻을 수 있는 재화로, 전용 상점에서 각종 아이템을 구매하는 데 사용된다.",
+        "넥슨ID 단위로 공유되는 자산이며, 넥슨ID당 매월 정해진 최대 개수까지만 획득할 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/149093"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "remote_play_limit", "label": "넥슨링크 사냥 제한",
+      "facts": [
+        "넥슨링크를 이용해 몬스터를 사냥하면 메이플ID당 하루에 일정 마릿수까지만 정상적으로 경험치와 아이템을 획득할 수 있다.",
+        "제한 마릿수를 초과하면 필드 사냥 시 경험치와 드롭률이 대폭 감소하고 개인화 필드에서 몬스터가 등장하지 않는다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/675"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "reverse_dimension_tower_progression", "label": "리버스 차원의 탑 스테이지 해금",
+      "facts": [
+        "앞 스테이지를 완료해야 다음 스테이지에 도전할 수 있는 단계적 구조를 가진다.",
+        "기존 차원의 탑 기록이 있거나 특정 훈장을 보유한 캐릭터는 예외적으로 뒤 스테이지에 바로 입장할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/804"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "jupiter_boss_entry", "label": "신규 보스 유피테르 입장 조건",
+      "facts": [
+        "특정 지역의 후일담 퀘스트를 완료해야 하며, 일정 레벨 이상인 캐릭터만 보스에 입장할 수 있다.",
+        "보스전은 정해진 지역 내 입구를 통해 진입하며, 난이도에 따라 입장 가능한 시점이 다를 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "destiny_transcendence_2nd", "label": "데스티니 2차 초월",
+      "facts": [
+        "데스티니 1차 초월 무기를 특정 결전 퀘스트를 완료하여 더 높은 등급의 2차 초월 무기로 강화할 수 있다.",
+        "결전 퀘스트를 수행하려면 특정 보스 몬스터를 처치하여 대적자의 결의를 모아야 한다.",
+        "2차 초월 무기는 이전 무기의 잠재능력, 추가 옵션, 스타포스 강화 수치 등을 전승받으며, 착용 레벨 제한이 상승하고 추가 강화가 제한된다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "guild_castle_altar", "label": "강화의 제단",
+      "facts": [
+        "일정 레벨 이상의 길드 캐슬에서 이용 가능하며, 여기서 진행하는 스타포스 강화 현황이 길드원에게 공유된다.",
+        "이용하려면 길드원 여러 명이 제단 필드에 함께 있어야 하며, 하루 이용 횟수와 제한 시간이 정해져 있다."
+      ],
+      "tags": ["periodic_cap", "threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "guild_skill_system", "label": "길드 스킬", "aliases": ["길스"],
+      "facts": [
+        "길드 레벨이 오를 때마다 단계적으로 새로운 패시브 또는 액티브 스킬이 해금되는 구조를 가지고 있다.",
+        "일부 스킬은 스탯 상승, 경험치 획득 증가, 장비 강화 성공률 보정 등 캐릭터 성장에 직접적인 도움을 준다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "maple_hands_search_limit", "label": "메이플핸즈 옥션 검색 제한",
+      "facts": [
+        "메이플핸즈+ 애플리케이션 내의 메이플 옥션 기능을 통한 아이템 검색 횟수는 메이플ID 단위로 하루에 정해진 상한이 존재한다.",
+        "해당 기능 사용 시 검색 횟수가 제한치에 도달하면 당일 추가 검색을 수행할 수 없다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/797"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "boss_brilliant_chestvoice", "label": "찬란한 흉성",
+      "facts": [
+        "특정 지역의 사전 퀘스트를 모두 완료하고 최소 레벨 조건을 충족해야 전투에 입장할 수 있다.",
+        "현혹의 신전에 위치한 게이트를 통해 도전하며, 하드 모드와 같은 상위 난이도는 특정 시간대나 인원 제한이 적용될 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/795"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "custom_illustration_ticket", "label": "주간 일러스트 의뢰 티켓",
+      "facts": [
+        "메이플 ID 단위로 매주 일정 수량의 의뢰 티켓을 메소를 소모하여 구매할 수 있으며, 구매 횟수는 매주 목요일에 초기화된다.",
+        "구매한 티켓은 일정 기간 동안만 유효하며, 월드 내 나의 캐릭터 간에만 이동이 가능하다.",
+        "티켓을 사용하여 커스텀 일러스트를 의뢰할 수 있으며, 특정 아이템 착용 시에는 의뢰가 제한될 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/795"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "astra_secondary_acquisition", "label": "아스트라 보조무기 획득과 성장",
+      "facts": [
+        "특정 레벨 이상의 캐릭터가 특정 지역 스토리와 퀘스트를 완료하여 아스트라 보조무기를 획득하며, 퀘스트를 진행할수록 아이템의 성능이 단계적으로 강화된다.",
+        "획득한 아스트라 보조무기는 교환 불가 속성을 가지며, 모든 퀘스트를 완료한 후에는 초기화하여 퀘스트를 다시 진행할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/794"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "special_skill_ring_swap_cooldown", "label": "링 익스체인지 스킬 재사용 제한",
+      "facts": [
+        "링 익스체인지는 등록된 예비 특수 스킬 반지와 현재 장착된 특수 스킬 반지를 교체하는 스킬이다.",
+        "교체 후 짧은 시간 동안 링 액티베이션 및 특수 스킬 반지 스킬을 사용할 수 없다.",
+        "링 익스체인지와 교체로 인한 재사용 대기시간은 재사용 대기시간 초기화나 감소의 효과를 받지 않는다."
+      ],
+      "tags": ["cooldown"],
+      "sources": ["https://maplestory.nexon.com/news/update/779"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "destiny_weapon", "label": "데스티니 무기",
+      "facts": [
+        "제네시스 무기를 보유한 캐릭터가 특정 퀘스트를 완수하여 획득하는 상위 단계의 장비이다.",
+        "기존 무기의 능력치를 상향된 레벨에 맞춰 전승받으며, 캐릭터당 하나만 가질 수 있는 교환 불가 아이템이다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/767"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "hexa_stat_core_iii", "label": "스탯 코어 III",
+      "facts": [
+        "기존 스탯 코어의 강화 수준이 일정 단계에 도달해야 활성화할 수 있는 상위 성장 시스템이다.",
+        "활성화에는 솔 에르다와 솔 에르다 조각이 필요하며, 강화 초기화 시에는 많은 양의 메소가 소모된다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/767"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "world_integrated_boss_limit", "label": "월드 통합 보스 콘텐츠 입장 제한",
+      "facts": [
+        "월드 통합 보스 콘텐츠인 차원의 전장에 입장하기 위해서는 남은 보스 보상 슬롯이 일정 기준 이상 확보되어 있어야 한다.",
+        "보유한 보상 슬롯이 기준에 미치지 못하는 캐릭터는 해당 콘텐츠에 진입할 수 없다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/767"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "quest_story_skip_id", "label": "메이플ID 단위 스토리 스킵",
+      "facts": [
+        "메이플ID 내에 선행 퀘스트를 완료한 캐릭터가 있으면, 다른 캐릭터는 퀘스트를 직접 수행하지 않고 스토리 요약이나 즉시 완료 기능을 선택할 수 있다.",
+        "스토리 스킵을 선택하면 퀘스트 완료 보상은 받을 수 있지만 경험치 보상은 지급되지 않는다.",
+        "보스 선행 퀘스트 역시 메이플ID 내 한 캐릭터만 완료하면 다른 캐릭터들도 해당 보스 콘텐츠를 자유롭게 이용할 수 있다."
+      ],
+      "tags": ["shared_bonus"],
+      "sources": ["https://maplestory.nexon.com/news/update/762"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "grand_authentic_symbol", "label": "그랜드 어센틱심볼",
+      "facts": [
+        "그랜드 어센틱심볼은 전용 장비창에서 성장시키며, 레벨이 오를 때마다 어센틱포스와 캐릭터의 추가 능력치가 강화되는 구조다.",
+        "해당 지역 퀘스트를 모두 완료하면 최초 획득이 가능하며, 이후 지역 내 일일 퀘스트를 수행하여 심볼 교환권(성장 재료)을 꾸준히 얻을 수 있다.",
+        "기존의 어센틱심볼과 달리 어센틱 카탈리스트를 사용할 수 없으며, 선택형 어센틱심볼 교환권에서도 획득이 불가능하여 고유한 성장 경로를 갖는다."
+      ],
+      "tags": ["daily_accumulation", "progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/752"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "limbo_boss", "label": "보스 림보",
+      "facts": [
+        "특정 퀘스트를 완료한 고레벨 캐릭터만 입장할 수 있는 보스 콘텐츠로, 일반과 하드 모드로 나뉜다.",
+        "처치 시 에테르넬 장비 제작 재료인 결정과 소울 조각, 그리고 전용 훈장 등의 보상을 획득할 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/749"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "daily_field_meso_cap", "label": "필드 메소 획득 제한",
+      "facts": [
+        "캐릭터 레벨에 따라 하루 동안 필드 사냥을 통해 획득할 수 있는 기본 메소의 양에 상한이 적용된다.",
+        "일일 누적 메소 상한에 도달하면 해당 캐릭터는 더 이상 필드에서 메소를 얻을 수 없으며, 이 한도는 매일 특정 시간에 초기화된다.",
+        "캐릭터의 레벨이 오를수록 하루에 획득 가능한 메소의 상한선도 함께 높아지는 구조를 가진다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/737"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "meso_market_recommendation", "label": "메소마켓 추천 거래가",
+      "facts": [
+        "메소의 현재 수요와 공급 현황을 분석하여 거래에 유리한 적정 가격을 제안한다.",
+        "거래 창에서 추천 가격을 선택하여 즉시 매매가격을 간편하게 설정할 수 있다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://maplestory.nexon.com/news/update/734"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "sol_erda_purchase", "label": "솔 에르다 구매 제한",
+      "facts": [
+        "6차 전직을 완료한 특정 레벨 이상의 캐릭터로만 매월 계정당 정해진 수량만큼 캐시샵에서 솔 에르다를 구매할 수 있다.",
+        "솔 에르다를 최대 보유 수량까지 소지한 상태에서는 추가 구매 아이템을 사용할 수 없으며, 강화 재료를 보유한 상태에서 사용 시 기존 재료가 손실되는 구조를 가진다."
+      ],
+      "tags": ["periodic_cap", "threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/718"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "sol_hecate", "label": "솔 헤카테 공용 코어",
+      "facts": [
+        "전직업이 공용으로 사용할 수 있는 신규 공용 코어로서 솔 에르다가 모여 패밀리어로 탄생한다.",
+        "레벨에 따라 성장하며 특정 레벨에 도달하면 전용 스킬이 추가로 활성화된다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/793"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "boss_reward_threshold", "label": "보스 리워드 획득 기준",
+      "facts": [
+        "파티가 보스 몬스터에게 가한 데미지 비중에 따라 실시간으로 보상 획득 가능 여부가 결정된다.",
+        "파티 전체 데미지 기여도가 일정 비율 미만일 경우 보스 리워드를 획득할 수 없는 제약이 존재한다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/708"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "ursus_entry_requirement", "label": "우르스 입장 조건",
+      "facts": [
+        "전투에 참여하기 위해서는 당일 일정 수준 이상의 레벨 범위 몬스터 처치 기록이 필요하다.",
+        "입장 조건을 충족하지 못해도 대기맵 이동은 가능하지만, 실제 보스 전투에는 입장할 수 없다.",
+        "그날 처치 기록이 모자란 캐릭터는 우르스 파티에 초대할 수도 없다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/691"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "union_rank_expansion", "label": "유니온 등급 확장",
+      "aliases": ["유니온 확장"],
+      "facts": [
+        "상위 유니온 등급이 추가되면 공격대 배치 슬롯이 늘어나 유니온 성장의 폭이 넓어진다.",
+        "등급 승급을 위해서는 월드 내 캐릭터들의 총 레벨 합계가 기준치 이상이어야 하며 특정 비용이 요구된다.",
+        "등급이 상승함에 따라 유니온 코인의 최대 누적 한도가 늘어나 더 많은 재화를 보관할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/674"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "kalos_boss", "label": "감시자 칼로스",
+      "facts": [
+        "특정 레벨 조건과 관련 선행 퀘스트를 완료해야 도전할 수 있는 상위 보스 콘텐츠다.",
+        "보스 처치 시 장비 교환에 필요한 핵심 재료를 획득할 수 있으며 관련 전용 업적과 소울 아이템이 존재한다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/665"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "mileage_system", "label": "마일리지",
+      "facts": [
+        "게임 내 다양한 경로로 획득할 수 있는 포인트 형태의 재화로, 유료 아이템 구매 시 현금 대신 사용 가능하다.",
+        "하루 동안 쌓을 수 있는 양에 제한이 있으며, 매일 일정 시각마다 일일 누적 획득량이 초기화된다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/653"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "inventory_item_crafting", "label": "전문기술 가방 제작",
+      "facts": [
+        "전문기술 명장 등급 이상의 캐릭터만 특정 칸 수의 아이템 가방을 제작할 수 있는 권한을 가진다.",
+        "제작 시 이전 단계의 가방과 여러 가지 재료 아이템이 소모된다.",
+        "제작을 통해 더 큰 용량의 보관함을 확보하여 인벤토리 부족 문제를 해결할 수 있다."
+      ],
+      "tags": ["progression_gate"],
+      "sources": ["https://maplestory.nexon.com/news/update/651"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "protect_esfera", "label": "프로텍트 에스페라",
+      "facts": [
+        "에스페라 지역에서 수행하는 일일 콘텐츠로, 제한 시간 내에 전용 포탑을 사용해 차원 문을 모두 파괴하는 방식이다.",
+        "매일 입장 횟수 제한이 있으며, 미션 성공 시 아케인심볼 보상을 얻을 수 있다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/638"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "flag_race_entry_requirement", "label": "플래그 레이스 참여 조건",
+      "facts": [
+        "플래그 레이스에 참여하려면 한 주간 길드 활동을 통해 획득한 주간 길드 미션 포인트가 최소 기준치 이상이어야 한다.",
+        "이 제약은 무분별한 참여를 막고 길드 활동에 기여한 인원 중심으로 콘텐츠를 운영하기 위해 도입되었다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/636"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "beauty_room_cooldown", "label": "뷰티룸 재사용 대기 시간",
+      "facts": [
+        "뷰티룸 내에서 저장, 적용, 삭제 기능을 사용하면 다음 조작까지 일정 시간 동안 기능을 다시 사용할 수 없다.",
+        "많은 이용자가 동시에 뷰티룸 기능을 호출하여 발생할 수 있는 서버 과부하를 줄이기 위해 도입된 제약이다."
+      ],
+      "tags": ["cooldown"],
+      "sources": ["https://maplestory.nexon.com/news/update/626"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "boss_karing", "label": "보스 카링",
+      "facts": [
+        "5차 전직과 특정 스토리 퀘스트를 완료한 아주 높은 레벨의 캐릭터만 입장할 수 있는 고난도 보스다.",
+        "전투에 성공하면 에테르넬 장비 제작 재료인 뒤엉킨 흉수의 고리나 전용 소울 아이템을 보상으로 얻을 수 있다."
+      ],
+      "tags": ["threshold_req"],
+      "sources": ["https://maplestory.nexon.com/news/update/699"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "daily_reward_account_cap", "label": "월드 단위 일일 보상 제한",
+      "facts": [
+        "일부 일일 퀘스트의 경험치 보상은 캐릭터마다 획득할 수 없고 월드마다 한 번만 수령할 수 있도록 제한된다.",
+        "동일 월드 내 여러 캐릭터를 사용하여 보상을 반복 획득하는 효율적인 성장 방식을 차단하고 획득량을 조절한다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/678"],
+      "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "combo_kill", "label": "콤보킬",
+      "facts": [
+        "몬스터를 끊기지 않고 연달아 처치하면 콤보가 쌓이고, 한동안 처치가 없거나 채널을 옮기면 콤보가 끊긴다.",
+        "콤보가 정해진 수만큼 쌓일 때마다 경험치 구슬이 생기고, 누적 콤보가 클수록 구슬도 단계가 올라 더 많은 경험치를 준다.",
+        "구슬 경험치는 몬스터 기본 경험치를 기준으로 정해져 있어, 다른 경험치 보너스가 많은 고레벨로 갈수록 전체에서 차지하는 비중이 줄어든다."
+      ],
+      "tags": ["threshold_req", "diminishing_returns"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/453", "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "growth_potion", "label": "성장의 비약",
+      "facts": [
+        "성장의 비약은 정해진 레벨 범위 안의 캐릭터가 쓰면 그 자리에서 레벨을 하나 올려 준다.",
+        "범위보다 높은 레벨에서 쓰면 범위 끝 레벨 하나를 올리는 만큼의 경험치만 주므로, 레벨이 높아질수록 같은 비약으로 오르는 비율이 작아진다."
+      ],
+      "tags": ["diminishing_returns"],
+      "sources": ["https://maplestory.nexon.com/News/Notice/138894", "https://www.inven.co.kr/board/maple/2304/18586"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "drop_meso_rate", "label": "아이템 드롭률과 메소 획득량", "aliases": ["드메"],
+      "facts": [
+        "아이템 드롭률과 메소 획득량 옵션은 사냥과 보스에서 얻는 아이템과 메소를 늘리지만, 장비 잠재능력으로 올릴 수 있는 양에는 상한이 있다.",
+        "드롭률이 일정 수준을 넘으면 메소 주머니가 거의 확실히 떨어져서, 그 기준까지는 드롭률을 먼저 맞추고 그 뒤로는 메소 획득량을 올리는 순서를 따진다.",
+        "이 옵션 장비는 전투 능력을 덜어 내는 대신 수입을 늘리므로 사냥할 때만 바꿔 끼기도 한다."
+      ],
+      "tags": ["efficiency_metric"],
+      "sources": ["https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4", "https://www.inven.co.kr/board/maple/2304/11607"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "damage_stacking", "label": "데미지 합연산과 곱연산",
+      "facts": [
+        "데미지와 보스 몬스터 데미지 옵션은 모두 더해서 한 번에 적용되는 합연산이라, 이미 많이 가진 상태에서 같은 양을 더하면 실제로 늘어나는 비율이 점점 작아진다.",
+        "최종 데미지는 다른 옵션과 따로 곱해지는 곱연산이라, 이미 가진 양과 상관없이 붙은 비율만큼 피해가 늘어난다."
+      ],
+      "tags": ["diminishing_returns"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/390", "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "fame_points", "label": "인기도",
+      "facts": [
+        "인기도는 다른 플레이어가 올리거나 내려 줄 수 있는 수치로, 한 캐릭터는 하루에 한 번만 남의 인기도를 바꿀 수 있다.",
+        "같은 상대에게는 한 번 올려 준 뒤 다음 달이 되어야 다시 올려 줄 수 있다.",
+        "인기도가 오르면 매력 성향도 함께 올라서, 거래 상대의 신뢰도를 가늠하는 지표나 매력 레벨을 채우는 수단으로 쓰인다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://namu.wiki/w/%EC%9D%B8%EA%B8%B0%EB%8F%84", "https://maplestory.nexon.com/guide/n23gameinformation/articles/382"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "maple_homework", "label": "메할일(일일·주간 숙제)", "aliases": ["메할일"],
+      "facts": [
+        "매일 하는 일일 퀘스트와 매주 하는 주간 보스·주간 퀘스트처럼 정해진 주기로 반복하는 일과를 흔히 숙제나 메할일이라 부른다.",
+        "일일 숙제는 자정에, 주간 숙제는 정해진 요일에 초기화되어 그 전에 끝내지 못하면 그 주기의 몫은 사라진다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4", "https://www.inven.co.kr/board/maple/2304/39607"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "boss_gear_generation", "label": "보스 장비 세대",
+      "facts": [
+        "보스 방어구와 무기 세트는 루타비스, 앱솔랩스, 아케인셰이드, 에테르넬처럼 더 강한 보스에서 나오는 다음 세대로 이어지고, 세대가 오를수록 착용 레벨과 성능이 높아진다.",
+        "다음 세대가 널리 쓰이면 이전 세대 장비는 매물이 넘쳐 아주 싼값에 거래되고, 새로 키우는 캐릭터가 잠깐 거쳐 가는 장비가 된다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://namu.wiki/w/%EC%95%84%EC%BC%80%EC%9D%B8%EC%85%B0%EC%9D%B4%EB%93%9C%20%EC%84%B8%ED%8A%B8", "https://maplestory.nexon.com/guide/n23gameinformation/articles/459"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "combat_analysis", "label": "전투분석",
+      "facts": [
+        "정해진 시간 동안 캐릭터가 준 데미지, 얻은 메소와 경험치, 처치한 몬스터 수를 재서 보여 주는 기능이다.",
+        "같은 시간 동안 사냥터나 스킬 배치를 바꿔 가며 재면 어느 쪽이 더 많이 버는지 숫자로 비교할 수 있다.",
+        "스킬별로 준 데미지와 사용 횟수도 따로 보여 줘서, 어떤 스킬이 딜에서 얼마를 차지하는지 확인하는 데 쓴다."
+      ],
+      "tags": ["efficiency_metric"],
+      "sources": ["https://maplestory.nexon.com/news/update/407", "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "sol_erda_fragment", "label": "솔 에르다 조각 시세",
+      "facts": [
+        "솔 에르다 조각은 HEXA 코어를 강화하는 데 꼭 필요한 재료로, 사냥과 보스에서 얻고 다른 사람과 거래할 수 있다.",
+        "모두가 필요로 해서 경매장 가격이 수요와 공급에 따라 오르내리고, 새 6차 스킬 소식이나 획득량을 늘리는 이벤트가 있으면 값이 크게 흔들린다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/405", "https://www.inven.co.kr/board/maple/5974/6801760"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "wonderberry", "label": "위습의 원더베리",
+      "facts": [
+        "캐시로 사는 위습의 원더베리를 쓰면 원더 펫이나 펫 관련 소비 아이템 가운데 하나가 정해진 확률로 무작위로 나온다.",
+        "원하는 펫이 나올 때까지 여러 개를 쓰는 경우가 많고, 얻은 펫은 한 번 교환할 수 있어 시장에서 거래된다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/437", "https://namu.wiki/w/%EC%9C%84%EC%8A%B5%EC%9D%98%20%EC%9B%90%EB%8D%94%EB%B2%A0%EB%A6%AC"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "genesis_liberation", "label": "제네시스 무기 해방",
+      "facts": [
+        "제네시스 무기 해방 퀘스트는 검은 마법사 군단장 보스들을 차례로 잡아 어둠의 흔적을 정해진 만큼 모아야 다음 단계로 넘어간다.",
+        "어둠의 흔적은 주간 보스에서 얻어 일주일에 모을 수 있는 양이 정해져 있어서, 해방까지 여러 주가 걸린다.",
+        "모든 단계를 마치면 봉인이 풀린 제네시스 무기를 얻는다."
+      ],
+      "tags": ["progression_gate", "periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/762", "https://namu.wiki/w/%EC%A0%9C%EB%84%A4%EC%8B%9C%EC%8A%A4%20%EB%AC%B4%EA%B8%B0"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "multi_kill", "label": "멀티킬",
+      "facts": [
+        "한 번에 처치한 몬스터 수가 많을수록 보너스 경험치가 커지는 구조라, 몬스터를 모아 한꺼번에 잡는 쪽이 같은 시간에 더 많은 경험치를 번다.",
+        "한 번의 공격으로 여러 마리를 동시에 처치하면 처치 수에 따라 추가 경험치가 붙는데, 이를 멀티킬이라 한다."
+      ],
+      "tags": ["efficiency_metric"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/453", "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "budget_gear", "label": "흙템(가성비 장비)",
+      "facts": [
+        "강화 단계가 높을수록 한 단계 올리는 비용은 급격히 커지는데 늘어나는 성능은 비슷해서, 상위 장비를 낮은 단계까지만 강화해 쓰는 흙템이 가성비가 좋다.",
+        "흙템은 완성 수준 장비보다 훨씬 싼 값으로 최소한의 성능을 챙긴 장비를 가리킨다."
+      ],
+      "tags": ["diminishing_returns"],
+      "sources": ["https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4", "https://www.inven.co.kr/board/maple/2304/40365"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "hexa_stat_enhance", "label": "HEXA 스탯 강화와 초기화",
+      "facts": [
+        "HEXA 스탯은 조각을 쓸 때마다 세 능력치 중 하나가 무작위로 오르고, 메인 능력치는 레벨이 높을수록 오를 확률이 낮아진다.",
+        "메인 능력치가 낮게 쌓이면 메소를 내고 처음부터 다시 강화할 수 있어서, 다시 굴릴지 그대로 쓸지를 남은 조각과 비용으로 따진다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://namu.wiki/w/HEXA%20%EB%A7%A4%ED%8A%B8%EB%A6%AD%EC%8A%A4", "https://www.inven.co.kr/board/maple/2304/34712"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "cooldown_hat", "label": "쿨감 모자", "aliases": ["쿨뚝"],
+      "facts": [
+        "스킬은 한 번 쓰면 재사용 대기시간이 지나야 다시 쓸 수 있는데, 모자 잠재능력의 재사용 대기시간 감소 옵션은 모든 스킬의 대기시간을 몇 초씩 줄여 준다.",
+        "이 옵션은 최고 등급 모자에서만 나오고, 강한 스킬을 자주 다시 쓰는 직업일수록 가치가 커서 직업마다 원하는 초 수가 다르다."
+      ],
+      "tags": ["cooldown"],
+      "sources": ["https://namu.wiki/w/%EC%9E%A0%EC%9E%AC%EB%8A%A5%EB%A0%A5", "https://www.inven.co.kr/board/maple/2304/43854"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "monthly_boss", "label": "월간 보스 검은 마법사",
+      "facts": [
+        "검은 마법사는 한 달에 한 번만 격파 기록을 남길 수 있는 유일한 월간 보스라, 달이 바뀌어야 다시 보상을 받을 수 있다.",
+        "입장하려면 그 아래 주간 보스에서 모은 재료가 필요해서, 앞 단계 주간 보스를 먼저 꾸준히 잡아야 도전할 수 있다."
+      ],
+      "tags": ["periodic_cap", "progression_gate"],
+      "sources": ["https://namu.wiki/w/%EA%B2%80%EC%9D%80%20%EB%A7%88%EB%B2%95%EC%82%AC/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0", "https://www.inven.co.kr/board/maple/5974/4642949"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "daily_boss", "label": "일간 보스",
+      "facts": [
+        "일간 보스는 하루에 한 번씩 잡을 수 있고 매일 자정에 횟수가 돌아와서, 주간 보스보다 보상은 작아도 날마다 챙기는 일과가 된다.",
+        "일간 보스에는 연습 모드가 없어 실전으로만 익히고, 하루를 넘기면 그날 기회는 사라진다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0/%EB%B3%B4%EC%8A%A4%20%EC%BB%A8%ED%85%90%EC%B8%A0", "https://www.inven.co.kr/board/maple/2304/10207"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "will_boss_split", "label": "윌의 두 거울 공간",
+      "facts": [
+        "윌 첫 단계는 푸른 공간과 보라 공간에 윌이 한 마리씩 있고, 한쪽만 깎으면 덜 깎인 쪽에 맞춰 체력이 되돌아가서 두 공간을 고르게 깎아야 넘어간다.",
+        "그래서 파티원이 두 공간으로 나뉘어 각자 맡은 쪽 윌을 공격하고, 두 쪽 체력이 함께 줄어야 다음 단계가 열린다."
+      ],
+      "tags": ["role_division"],
+      "sources": ["https://namu.wiki/w/%EC%9C%8C%28%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC%29/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0", "https://www.inven.co.kr/board/maple/2304/22851"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "hexa_core_levelup", "label": "HEXA 코어 레벨업 재료",
+      "facts": [
+        "HEXA 코어는 레벨이 높아질수록 한 레벨 올리는 데 필요한 솔 에르다와 조각 개수가 늘고, 열 단위 레벨에서는 요구 개수가 앞뒤 레벨보다 크게 뛴다.",
+        "높은 레벨로 갈수록 조각이 차지하는 몫이 커져서, 코어를 끝까지 올리는 데 드는 재료가 뒤로 갈수록 무거워진다."
+      ],
+      "tags": ["escalating_cost"],
+      "sources": ["https://namu.wiki/w/HEXA%20%EB%A7%A4%ED%8A%B8%EB%A6%AD%EC%8A%A4", "https://www.inven.co.kr/board/maple/2304/44894", "https://maplestory.nexon.com/guide/n23gameinformation/articles/405"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
     }
   ],
   "edges": [
@@ -351,6 +1718,112 @@
     { "from": "set_effect", "to": "boss_entry", "rel": "보스에 맞는 스펙을 맞추는 데 씀" },
     { "from": "boss_reward_split", "to": "party", "rel": "파티원끼리 보상을 나눔" },
     { "from": "boss_reward_split", "to": "weekly_boss", "rel": "결정석 가격을 인원에 따라 정함" },
-    { "from": "quick_pass", "to": "arcane_symbol", "rel": "일일 퀘스트를 메이플포인트로 대신함" }
+    { "from": "quick_pass", "to": "arcane_symbol", "rel": "일일 퀘스트를 메이플포인트로 대신함" },
+    { "from": "scroll_upgrade", "to": "starforce", "rel": "스타포스와 별도로 장비를 강화함" },
+    { "from": "additional_option", "to": "cube", "rel": "잠재능력과 따로 옵션을 다시 뽑음" },
+    { "from": "ability", "to": "cube", "rel": "같은 방식으로 옵션을 무작위로 다시 뽑음" },
+    { "from": "hyper_stat", "to": "level_exp", "rel": "레벨업마다 포인트를 받음" },
+    { "from": "ignore_defense", "to": "boss_entry", "rel": "보스에게 주는 피해를 좌우함" },
+    { "from": "level_range", "to": "hunting", "rel": "사냥터 효율을 정함" },
+    { "from": "profession", "to": "auction", "rel": "만든 아이템을 팔 수 있음" },
+    { "from": "trait", "to": "profession", "rel": "채집·제작으로 성향을 올림" },
+    { "from": "monster_park", "to": "hunting", "rel": "사냥 대신 경험치를 몰아 받음" },
+    { "from": "mureung", "to": "the_seed", "rel": "층을 차례로 오르는 같은 구조" },
+    { "from": "quick_pass", "to": "epic_dungeon", "rel": "에픽 던전을 즉시 완료함" },
+    { "from": "monster_collection", "to": "union_link", "rel": "같은 월드 캐릭터끼리 함께 씀" },
+    { "from": "guild_canal", "to": "party", "rel": "길드원끼리 점수를 모아 다른 길드와 겨룸" },
+    { "from": "union_champion", "to": "union_link", "rel": "유니온 안에서 챔피언을 지정함" },
+    { "from": "union_artifact", "to": "union_link", "rel": "유니온 컨텐츠로 월드 전체에 능력치를 줌" },
+    { "from": "royal_style", "to": "masterpiece", "rel": "합성 재료를 줌" },
+    { "from": "masterpiece", "to": "cube", "rel": "확률로 더 좋은 등급을 노림" },
+    { "from": "soul_weapon", "to": "weekly_boss", "rel": "보스에게서 소울 조각을 모음" },
+    { "from": "party_quest", "to": "party", "rel": "파티를 맺어 함께 수행함" },
+    { "from": "theme_dungeon", "to": "hunting", "rel": "낮은 레벨에서 필드 사냥 대신 씀" },
+    { "from": "rune", "to": "hunting", "rel": "사냥터에서 경험치를 더 줌" },
+    { "from": "hyper_burning", "to": "level_exp", "rel": "레벨업 속도를 높임" },
+    { "from": "challengers_pass", "to": "challengers_world", "rel": "챌린저스 월드 전용 이벤트" },
+    { "from": "vip_sauna", "to": "level_exp", "rel": "경험치를 따로 벌게 해 줌" },
+    { "from": "newname_auction", "to": "auction", "rel": "이름을 경매로 거래함" },
+    { "from": "genesis_pass", "to": "weekly_boss", "rel": "보스 보상을 늘려 해방을 앞당김" },
+    { "from": "green_pc", "to": "auction", "rel": "보안 등급이 낮으면 거래를 막음" },
+    { "from": "hyper_skill", "to": "hyper_stat", "rel": "높은 레벨에서 함께 열림" },
+    { "from": "memento", "to": "item_binding", "rel": "일정 기간 교환을 막음" },
+    { "from": "training_ground", "to": "skill_cooldown", "rel": "입장 때 재사용 대기시간을 초기화함" },
+    { "from": "scroll_fever", "to": "scroll_upgrade", "rel": "주말에 성공 확률을 올림" },
+    { "from": "macro_detection", "to": "hunting", "rel": "비정상 사냥 기록을 단속함" },
+    { "from": "boss_party_board", "to": "party", "rel": "다른 월드 플레이어와 파티를 꾸림" },
+    { "from": "item_burning", "to": "challengers_world", "rel": "챌린저스 월드 이벤트로 열림" },
+    { "from": "maple_guide", "to": "level_range", "rel": "레벨에 맞는 사냥터를 추천함" },
+    { "from": "mystery_barrier", "to": "challengers_world", "rel": "챌린저스 월드 이벤트로 열림" },
+    { "from": "sixth_job", "to": "v_matrix", "rel": "5차 다음 단계의 스킬 성장" },
+    { "from": "scroll_fever", "to": "mvp_membership", "rel": "높은 MVP 등급은 피버 효과를 상시 받음" },
+    { "from": "symbol_catalyst", "to": "arcane_symbol", "rel": "키운 심볼을 다른 캐릭터로 옮김" },
+    { "from": "season_boss", "to": "weekly_boss", "rel": "주간 보스 제한과 따로 셈" },
+    { "from": "blueberry_farm", "to": "challengers_world", "rel": "챌린저스 패스 보상으로 입장" },
+    { "from": "union_raid", "to": "union_link", "rel": "유니온 공격대가 자동으로 싸움" },
+    { "from": "arcane_weekly", "to": "arcane_symbol", "rel": "주간 보상으로 심볼을 줌" },
+    { "from": "chaos_scroll", "to": "scroll_upgrade", "rel": "주문서 강화 횟수 안에서 씀" },
+    { "from": "chaos_scroll", "to": "cube", "rel": "능력치를 무작위로 바꾸는 다른 강화 수단" },
+    { "from": "sunday_maple", "to": "starforce_event", "rel": "샤이닝 스타포스 타임이 열리는 날" },
+    { "from": "buff_stacking", "to": "skill_cooldown", "rel": "버프 스킬을 겹쳐 극딜을 준비함" },
+    { "from": "additional_potential", "to": "cube", "rel": "일반 잠재능력 위에 하나 더 붙음" },
+    { "from": "union_start", "to": "union_link", "rel": "유니온이 열리는 조건" },
+    { "from": "maple_home", "to": "vip_sauna", "rel": "사우나 누적 보상 가구로 꾸밈" },
+    { "from": "mvp_resort", "to": "mvp_membership", "rel": "MVP 등급에 따라 이용 시간을 줌" },
+    { "from": "skill_ring", "to": "boss_entry", "rel": "보스 스펙을 맞추는 장비" },
+    { "from": "monster_park_hands", "to": "monster_park", "rel": "모바일 연동 시스템" },
+    { "from": "starforce_hunting_zone", "to": "starforce", "rel": "요구하는 수치를 채우기 위해 필요함" },
+    { "from": "starforce_hunting_zone", "to": "arcane_force", "rel": "입장 요건과 방어막 해제 구조가 비슷함" },
+    { "from": "prime_cube", "to": "cube", "rel": "재설정 보완" },
+    { "from": "boss_bellona", "to": "boss_entry", "rel": "입장 조건 공유" },
+    { "from": "boss_crystal_world_cap", "to": "weekly_boss", "rel": "규정함" },
+    { "from": "extreme_potion", "to": "monster_park", "rel": "몬스터파크 참여 보상 주화로 구매함" },
+    { "from": "enheim_defense", "to": "arcane_symbol", "rel": "보상으로 지급" },
+    { "from": "training_ground_replay", "to": "training_ground", "rel": "측정 완료 결과를 전달받음" },
+    { "from": "union_champion_slot", "to": "union_champion", "rel": "확장하는" },
+    { "from": "maple_guide_teleport", "to": "maple_guide", "rel": "기능 제공" },
+    { "from": "level_up_reward", "to": "v_matrix", "rel": "슬롯 강화" },
+    { "from": "level_up_reward", "to": "hyper_stat", "rel": "포인트 사용" },
+    { "from": "treasure_hunter", "to": "level_range", "rel": "발생 조건으로 사용" },
+    { "from": "jupiter_boss_entry", "to": "boss_entry", "rel": "규칙을 공유함" },
+    { "from": "destiny_transcendence_2nd", "to": "equipment_transfer", "rel": "능력치를 계승함" },
+    { "from": "guild_castle_altar", "to": "starforce", "rel": "활용하는" },
+    { "from": "boss_brilliant_chestvoice", "to": "boss_entry", "rel": "보스 입장 규칙 적용" },
+    { "from": "special_skill_ring_swap_cooldown", "to": "skill_ring", "rel": "사용 가능한 대상" },
+    { "from": "destiny_weapon", "to": "sixth_job", "rel": "다음 단계의" },
+    { "from": "hexa_stat_core_iii", "to": "sixth_job", "rel": "활성화하는" },
+    { "from": "world_integrated_boss_limit", "to": "boss_entry", "rel": "입장 제약" },
+    { "from": "quest_story_skip_id", "to": "boss_entry", "rel": "입장 완화" },
+    { "from": "grand_authentic_symbol", "to": "arcane_force", "rel": "확장된 개념인" },
+    { "from": "limbo_boss", "to": "boss_entry", "rel": "규칙을 공유하는" },
+    { "from": "meso_market_recommendation", "to": "meso_market", "rel": "개선" },
+    { "from": "sol_erda_purchase", "to": "sol_erda", "rel": "보충하는" },
+    { "from": "sol_hecate", "to": "sol_erda", "rel": "활용" },
+    { "from": "boss_reward_threshold", "to": "boss_reward_split", "rel": "획득 조건 구체화" },
+    { "from": "ursus_entry_requirement", "to": "boss_entry", "rel": "입장 제약" },
+    { "from": "union_rank_expansion", "to": "union_start", "rel": "확장하는" },
+    { "from": "kalos_boss", "to": "boss_entry", "rel": "입장 조건을 갖춘" },
+    { "from": "inventory_item_crafting", "to": "profession", "rel": "제작 기술 활용" },
+    { "from": "protect_esfera", "to": "arcane_symbol", "rel": "보상으로 획득" },
+    { "from": "combo_kill", "to": "hunting", "rel": "사냥 경험치를 더함" },
+    { "from": "growth_potion", "to": "level_exp", "rel": "레벨업 요구 경험치에 따라 효과가 달라짐" },
+    { "from": "drop_meso_rate", "to": "hunting", "rel": "사냥 수입을 늘림" },
+    { "from": "fame_points", "to": "trait", "rel": "매력 성향을 올림" },
+    { "from": "maple_homework", "to": "weekly_boss", "rel": "주간 숙제의 하나" },
+    { "from": "boss_gear_generation", "to": "set_effect", "rel": "같은 세대끼리 세트 효과" },
+    { "from": "combat_analysis", "to": "hunting", "rel": "사냥 효율을 잼" },
+    { "from": "sol_erda_fragment", "to": "sol_erda", "rel": "함께 쓰는 강화 재료" },
+    { "from": "genesis_liberation", "to": "genesis_pass", "rel": "흔적 획득을 늘리는 패스" },
+    { "from": "genesis_liberation", "to": "weekly_boss", "rel": "주간 보스에서 흔적을 얻음" },
+    { "from": "multi_kill", "to": "hunting", "rel": "사냥 효율을 높임" },
+    { "from": "budget_gear", "to": "starforce", "rel": "강화 단계를 어디서 멈출지 정함" },
+    { "from": "hexa_stat_enhance", "to": "hexa_stat_core_iii", "rel": "스탯 코어를 키움" },
+    { "from": "cooldown_hat", "to": "skill_cooldown", "rel": "대기시간을 줄임" },
+    { "from": "cooldown_hat", "to": "cube", "rel": "잠재능력 재설정으로 얻음" },
+    { "from": "monthly_boss", "to": "weekly_boss", "rel": "주간 보스 재료로 입장" },
+    { "from": "daily_boss", "to": "weekly_boss", "rel": "주기만 다른 보스" },
+    { "from": "will_boss_split", "to": "party", "rel": "파티원이 공간을 나눠 맡음" },
+    { "from": "hexa_core_levelup", "to": "sixth_job", "rel": "6차 스킬을 키움" },
+    { "from": "hexa_core_levelup", "to": "sol_erda_fragment", "rel": "조각을 소모함" }
   ]
 }

@@ -1,7 +1,8 @@
-import { localDay, formatFeedbackStats } from './lib/feedback.js';
+import { localDay, formatFeedbackStats, formatAgentFeedbackStats } from './lib/feedback.js';
 import { formatGroundingStats, GROUNDING_REASON_LABEL, FALSE_POSITIVE } from './lib/grounding-log.js';
 import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.js';
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
+import { reviewDelta, addReviewStats, reviewStatsLine, REVIEW_STATS_KEY } from './lib/review-stats.js';
 import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
 import { COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
 import { embedStatusText, modelSizeText, statusKind } from './lib/embed-status.js';
@@ -390,11 +391,31 @@ function updateNode(id, fn) {
   const n = (ov.nodes || []).find(x => x.id === id);
   if (!n) return;
   const next = fn(n);
+  recordReview(reviewDelta(n, next));
   ov = next ? upsertNode(ov, next) : removeNode(ov, id);
   if (!next && editingId === id) resetNodeForm();
   renderMyNodes();
   markDirty();
 }
+
+/* 검수 기록(T-229): 초안 사실을 확인·지움·고침한 수만 이 기기 chrome.storage.local에 센다(글자는 싣지 않음).
+   저장 버튼과 상관없이 누른 순간 센다. 차례로 써서 빠르게 눌러도 빠지지 않게 */
+let reviewQueue = Promise.resolve();
+function recordReview(delta) {
+  if (!delta.confirmed && !delta.deleted && !delta.edited) return;
+  reviewQueue = reviewQueue.then(async () => {
+    const cur = (await chrome.storage.local.get(REVIEW_STATS_KEY))[REVIEW_STATS_KEY];
+    const next = addReviewStats(cur, delta);
+    await chrome.storage.local.set({ [REVIEW_STATS_KEY]: next });
+    showReviewStats(next);
+  }).catch(e => console.warn('검수 기록을 남기지 못했어요', e));
+}
+function showReviewStats(stats) {
+  const line = reviewStatsLine(stats);
+  $('#reviewStats').textContent = line;
+  $('#reviewStats').hidden = !line;
+}
+chrome.storage.local.get(REVIEW_STATS_KEY).then(r => showReviewStats(r[REVIEW_STATS_KEY])).catch(() => {});
 
 function renderReview() {
   const drafts = draftNodes(ov);
@@ -517,6 +538,7 @@ function applyNodeForm() {
   if (!formed) return false;
   // 초안 노드를 고쳤으면 고친 사실은 확인된 것으로(T-301). 모두 확인되면 일반 노드가 된다
   const node = reviewAfterEdit(prev, formed);
+  recordReview(reviewDelta(prev, node, 'edit'));
   ov = upsertNode(ov, node);
   resetNodeForm();
   renderMyNodes();
@@ -525,6 +547,7 @@ function applyNodeForm() {
 }
 function deleteNode(id) {
   if (!confirm('이 노드를 지울까요?')) return;
+  recordReview(reviewDelta((ov.nodes || []).find(x => x.id === id), null));
   ov = removeNode(ov, id);
   if (editingId === id) resetNodeForm();
   renderMyNodes();
@@ -641,6 +664,98 @@ $('#draftRun').addEventListener('click', async () => {
   }
 });
 
+/* ───────── 새 관심사 만들기 도우미 (T-225) ─────────
+   background helper:start → 계획·초안·평가·고쳐 쓰기를 background가 돌리고(서비스 워커가 잠들어도 세션 상태로 이어 감),
+   여기서는 helper:status를 짧게 물어 단계 줄을 그린다. 끝나면 background가 저장한 검수 대기 노드를 화면 ov로 가져온다 */
+let helperTimer = null;
+const HELPER_POLL_MS = 800;
+
+function renderHelper(v) {
+  const log = $('#helperLog');
+  const lines = v?.log || [];
+  log.replaceChildren(...lines.map((l, i) => el('li', { class: v.status === 'running' && i === lines.length - 1 ? 'now' : '', text: l.text })));
+  log.hidden = !lines.length;
+  const absent = v?.absentTags || [];
+  $('#helperAbsent').textContent = absent.length ? `이 관심사에 없는 구조로 본 태그: ${absent.map(t => t.label).join(', ')}` : '';
+  $('#helperAbsent').hidden = !absent.length;
+  const dl = $('#draftDropped');
+  const dropped = v?.dropped || [];
+  dl.replaceChildren(...dropped.map(d => el('li', { text: d.label ? `${d.label}: ${d.reason}` : d.reason })));
+  dl.hidden = !dropped.length;
+}
+
+// 도우미가 저장한 검수 대기 노드를 화면 ov로. 저장 안 한 편집이 없으면 다시 읽고, 있으면 새 노드만 붙여 편집을 지킨다
+async function pullHelperDrafts() {
+  const dirty = $('#overlayStatus').classList.contains('warn');
+  if (!dirty || !ov) return loadStore();
+  const fresh = normalizeOverlay(await send('overlay:get'));
+  const have = new Set((ov.nodes || []).map(n => n.id));
+  const added = draftNodes(fresh).filter(n => !have.has(n.id));
+  ov = { ...ov, useCommon: fresh.useCommon, domain: fresh.domain, analogyPrefix: fresh.analogyPrefix, theme: fresh.theme, nodes: [...(ov.nodes || []), ...added] };
+  renderOverlayEditor();
+  markDirty();
+}
+
+function helperBusy(on) {
+  $('#helperRun').disabled = on;
+  $('#draftRun').disabled = on;
+}
+
+async function pollHelper() {
+  clearTimeout(helperTimer);
+  let v;
+  try { v = await send('helper:status'); }
+  catch (e) { helperBusy(false); return setStatus($('#draftStatus'), e.message, 'err'); }
+  if (!v) return helperBusy(false);
+  renderHelper(v);
+  if (v.status === 'running') {
+    helperBusy(true);
+    setStatus($('#draftStatus'), `도우미가 만드는 중이에요… (AI ${v.calls}회)`);
+    helperTimer = setTimeout(pollHelper, HELPER_POLL_MS);
+    return;
+  }
+  helperBusy(false);
+  if (helperWatching) {
+    helperWatching = false;
+    if (v.written) await pullHelperDrafts();
+    setStatus($('#draftStatus'), v.status === 'error' ? v.stopText : v.doneText, v.status === 'done' && v.written ? 'ok' : v.status === 'done' && !v.stop ? 'warn' : 'err');
+    if (v.written) $('#reviewBox').scrollIntoView({ block: 'nearest' });
+  }
+}
+let helperWatching = false;
+
+$('#helperRun').addEventListener('click', async () => {
+  if (!ov) return;
+  const status = $('#draftStatus');
+  const blockTerms = await loadBlocklist();
+  const nameErr = draftNameError($('#draftName').value, blockTerms);
+  if (nameErr) return setStatus(status, nameErr, 'err');
+  const name = validDraftName($('#draftName').value);
+  const mode = document.querySelector('input[name=draftMode]:checked')?.value === 'new' ? 'new' : 'add';
+  const existing = (ov.nodes || []).length;
+  if (mode === 'new' && existing && !confirm(`기존 내 노드 ${existing}개가 있어요. 초안을 더할까요?`)) {
+    return setStatus(status, '초안 만들기를 그만뒀어요.');
+  }
+  helperBusy(true);
+  renderHelper(null);
+  setStatus(status, '도우미를 시작했어요…');
+  try {
+    const v = await send('helper:start', { name, notes: $('#helperNotes').value, mode });
+    helperWatching = true;
+    renderHelper(v);
+    pollHelper();
+  } catch (e) {
+    helperBusy(false);
+    setStatus(status, e.message, 'err');
+  }
+});
+
+// 설정 화면을 다시 열었을 때 돌고 있는 도우미가 있으면 이어서 보인다
+async function resumeHelperView() {
+  const v = await send('helper:status').catch(() => null);
+  if (v?.status === 'running') { helperWatching = true; pollHelper(); }
+}
+
 /* ───────── 임베딩 ───────── */
 let pollTimer = null;
 async function pollEmbed() {
@@ -718,6 +833,10 @@ async function loadFeedback() {
   if (seq !== fbLoadSeq) return;
   fbItems = list.items;
   $('#fbStats').textContent = formatFeedbackStats(st);
+  // 이어 묻기 뒤 👎 비율(T-218). 이어 묻기 답이 없으면 감춘다
+  const agentLine = formatAgentFeedbackStats(st.agent);
+  $('#fbAgentStats').hidden = !agentLine;
+  $('#fbAgentStats').textContent = agentLine || '';
   renderGrounding(gst);
   $('#fbList').innerHTML = fbItems.map(it => {
     // 라벨이 없으면(고른 개념 없음 등) 날짜만. 구분점이 홀로 남지 않게
@@ -861,5 +980,6 @@ $('#fbShare').addEventListener('change', async () => {
   renderServerPermission().catch(e => console.warn('서버 권한 확인 실패', e));
   loadFeedback().catch(e => setStatus($('#fbStatus'), '피드백을 불러오지 못했어요: ' + e.message, 'err'));
   await loadStore().catch(e => { $('#commonTitle').textContent = '불러오기 실패: ' + e.message; });
+  resumeHelperView();
   pollEmbed();
 })();

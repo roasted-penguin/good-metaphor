@@ -157,13 +157,16 @@
               <label><input type="radio" name="useCommon" value="false"><span>내 관심사만</span></label>
             </div>
           </div>
-          <!-- AI 초안 (T-301): 로그인했을 때만 보인다(#loggedIn 안). 초안은 검수 대기로 들어가고, 사실을 모두 확인해야 검색에 쓴다 -->
+          <!-- AI 초안 (T-301) + 새 관심사 만들기 도우미 (T-225): 로그인했을 때만 보인다(#loggedIn 안). 초안은 검수 대기로 들어가고, 사실을 모두 확인해야 검색에 쓴다 -->
           <details class="ov-block draft-panel" id="draftPanel">
             <summary>AI로 초안 만들기</summary>
-            <p class="hint">관심사 이름을 넣으면 AI가 개념 노드 10~20개를 제안해요. 사실을 하나씩 확인해야 비유 근거로 써요.</p>
+            <p class="hint">관심사 이름을 넣으면 AI가 개념 노드를 제안해요. 사실을 하나씩 확인해야 비유 근거로 써요.</p>
             <div class="grid">
               <label for="draftName">관심사 이름</label>
               <input type="text" id="draftName" maxlength="30" placeholder="예: 축구" autocomplete="off">
+
+              <label for="helperNotes">메모 <span class="hint">(선택)</span></label>
+              <textarea id="helperNotes" rows="2" maxlength="300" placeholder="예: 국내 리그 위주로, 규칙보다 이적·운영 이야기"></textarea>
 
               <label id="draftModeLabel">시작 방식</label>
               <div class="seg" id="draftMode" role="radiogroup" aria-labelledby="draftModeLabel">
@@ -172,10 +175,18 @@
               </div>
 
               <span></span>
-              <div class="row"><button class="primary" id="draftRun">초안 만들기</button><span class="status" id="draftStatus" role="status"></span></div>
+              <div class="row">
+                <button class="primary" id="helperRun">도우미로 만들기</button>
+                <button id="draftRun">한 번에 만들기</button>
+                <span class="status" id="draftStatus" role="status"></span>
+              </div>
             </div>
-            <p class="hint">초안 만들기를 누르면 검수 대기에 넣고 바로 저장해요.</p>
+            <p class="hint">도우미는 개념 목록을 먼저 계획하고, 초안마다 태그·중복·숫자·익숙함을 검사해 고쳐 써요. 한 번에 만들기는 AI를 한 번만 불러요.</p>
+            <p class="hint">어느 쪽이든 만든 초안은 검수 대기에 넣고 바로 저장해요.</p>
+            <ol class="helper-log" id="helperLog" aria-live="polite" hidden></ol>
+            <p class="hint" id="helperAbsent" hidden></p>
             <ul class="draft-dropped" id="draftDropped" hidden></ul>
+            <p class="hint" id="reviewStats" hidden></p>
           </details>
 
           <div class="ov-block" id="reviewBox" hidden>
@@ -251,6 +262,7 @@
       <h2>내 피드백</h2>
       <p class="desc">말풍선에서 남긴 👍·👎·교정이에요. 이 브라우저에만 저장되고, 되돌리면 다음 비유부터 반영이 빠져요.</p>
       <div class="fb-stats" id="fbStats"></div>
+      <div class="fb-stats" id="fbAgentStats" hidden></div>
       <ul class="fb-list" id="fbList" hidden></ul>
       <p class="fb-empty hint" id="fbEmpty" hidden>아직 남긴 피드백이 없어요.</p>
       <div class="row" style="margin-top:10px"><button id="fbExport">JSON으로 내보내기</button><button id="fbCorrections">운영자용 교정 내보내기</button><button id="fbClear">전부 지우기</button><span class="status" id="fbStatus"></span></div>

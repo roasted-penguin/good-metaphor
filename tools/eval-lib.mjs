@@ -73,8 +73,13 @@ export function marginsOf(cases, rank) {
   const out = [];
   cases.forEach((c, i) => {
     if (c.forbidNodes?.length || !c.expectNodes?.length) return;
-    const margin = marginOf(rank(c, i), c.expectNodes);
-    if (margin !== null) out.push({ sentence: c.sentence, margin });
+    const ranked = rank(c, i);
+    const margin = marginOf(ranked, c.expectNodes);
+    if (margin === null) return;
+    // 경쟁자(T-192): 맞혔으면 기대 밖 최고 노드, 틀렸으면 1위 노드. 노드를 더할 때 누가 여유를 깎는지 보려고
+    const isExp = x => c.expectNodes.includes(x.id);
+    const rival = isExp(ranked[0]) ? ranked.find(x => !isExp(x))?.id : ranked[0].id;
+    out.push({ sentence: c.sentence, margin, rival });
   });
   return out;
 }
@@ -84,10 +89,47 @@ export function lowMargins(margins, threshold) {
   return margins.filter(m => m.margin >= 0 && m.margin < threshold).sort((a, b) => a.margin - b.margin);
 }
 
-// --margin-guard: 가드 문장 중 여유가 임계값 미만(틀린 문장 포함)
+// --margin-guard: 가드 문장 중 여유가 임계값 미만(틀린 문장 포함). [{ sentence, margin }] 가드 순서
 export function marginGuardFails(guard, margins, threshold) {
-  const low = new Set(margins.filter(m => m.margin < threshold).map(m => m.sentence));
-  return guard.filter(s => low.has(s));
+  const low = new Map(margins.filter(m => m.margin < threshold).map(m => [m.sentence, m.margin]));
+  return guard.filter(s => low.has(s)).map(s => ({ sentence: s, margin: low.get(s) }));
+}
+
+// --- 여유 가드 기준선(T-188): tools/eval-margin-known.json 의 "아는 얇은 문장" ---
+// 그래프·예문을 바꾸지 않고는 넓힐 수 없는 가드 문장을 바닥(floor)과 함께 적어 두고,
+// 새로 얇아진 가드 문장과 아는 문장이 바닥보다 더 얇아진 것만 실패로 친다(래칫).
+// known = [{ sentence, floor, task? }]
+// 돌려주는 값: fail(실패, 아는 문장이면 floor 포함), held(바닥 이상이라 통과), cleared(목록에 있지만 이제 얇지 않음 → 빼도 됨)
+export function judgeMarginGuard(fails, known) {
+  const byS = new Map((known || []).map(k => [k.sentence, k]));
+  const fail = [], held = [];
+  for (const f of fails) {
+    const k = byS.get(f.sentence);
+    // 틀린 문장(여유 < 0)은 바닥과 상관없이 실패
+    if (k && f.margin >= 0 && f.margin >= k.floor) held.push({ ...f, floor: k.floor, ...(k.task ? { task: k.task } : {}) });
+    else fail.push(k ? { ...f, floor: k.floor } : { ...f });
+  }
+  const failed = new Set(fails.map(f => f.sentence));
+  const cleared = (known || []).filter(k => !failed.has(k.sentence));
+  return { fail, held, cleared };
+}
+
+// --write-margin-known: 지금 얇은 가드 문장(맞힌 것만)을 바닥 = 여유 넷째 자리 내림으로. 이전 task 를 이어받는다
+export function knownFromFails(fails, prevKnown = []) {
+  const prev = new Map(prevKnown.map(k => [k.sentence, k]));
+  return fails.filter(f => f.margin >= 0).map(f => {
+    const task = prev.get(f.sentence)?.task;
+    return { sentence: f.sentence, floor: Math.floor(f.margin * 1e4) / 1e4, ...(task ? { task } : {}) };
+  });
+}
+
+export function marginGuardLines({ fail, held, cleared }, threshold) {
+  return [
+    `여유 가드: 실패 ${fail.length} · 아는 얇은 문장 ${held.length} · 목록에서 뺄 수 있음 ${cleared.length} (임계값 ${threshold})`,
+    ...fail.map(f => `  ✗ ${fmtMargin(f.margin)} (${f.floor != null ? `바닥 ${fmtMargin(f.floor)}` : '새로 얇아짐'})  ${f.sentence}`),
+    ...held.map(h => `  · ${fmtMargin(h.margin)} (바닥 ${fmtMargin(h.floor)}${h.task ? `, ${h.task}` : ''})  ${h.sentence}`),
+    ...cleared.map(c => `  - ${c.sentence}`)
+  ];
 }
 
 export const fmtMargin = m => (m < 0 ? '-' : '+') + Math.abs(m).toFixed(4);
@@ -121,14 +163,16 @@ export function interestEvalFiles(interest) {
 // --holdout이면 그 관심사 홀드아웃만
 // 메이플 전용 옵션: 여유 가드는 메이플 평가셋 기준이고, 서버(analogy-api)는 메이플 그래프만 안다.
 // 다른 관심사와 같이 주면 조용히 무시하지 않고 오류 문구를 돌려준다. 괜찮으면 null
-const MAPLE_ONLY_FLAGS = ['--margin-guard', '--server'];
+const MAPLE_ONLY_FLAGS = ['--margin-guard', '--write-margin-known', '--server'];
 export function interestArgError(argv, interest) {
   if (!interest || interest.id === 'maplestory') return null;
   const bad = MAPLE_ONLY_FLAGS.filter(f => argv.includes(f));
   return bad.length ? `${bad.join(', ')}는 메이플 관심사에서만 써요(지금 --interest ${interest.id}).` : null;
 }
 
-export function pickSets(argv, { evalSet, validation, holdout, interestSet }, interest = null) {
+export function pickSets(argv, { evalSet, validation, holdout, interestSet, extraSet = null, extraName = '' }, interest = null) {
+  // --set <파일>(T-191·T-192): 그 파일 문장만 채점(관심사 무관, 가드 대상 아님). 확장 노드가 실제로 쓰이는지 보는 셋
+  if (argv.includes('--set')) return [{ name: `추가 셋 ${extraName}`.trim(), cases: extraSet || [], guarded: false }];
   if (interest && interest.id !== 'maplestory') {
     if (argv.includes('--holdout')) return [{ name: `${interest.label} 홀드아웃`, cases: holdout || [], guarded: false }];
     return [{ name: `${interest.label} 평가셋`, cases: interestSet || [], guarded: true }];
@@ -253,4 +297,22 @@ export function rank1Regressions(base, cur) {
 export function rank1Gains(base, cur) {
   const now = new Set(cur.misses.map(m => m.sentence));
   return base.misses.map(m => m.sentence).filter(s => !now.has(s));
+}
+
+/**
+ * 문장별 1위 변화 (T-184). before·after는 문장 순서대로 1위 노드 id.
+ * 맞음(ok): 일반 문장은 기대 노드, 음성 문장(forbidNodes)은 금지 노드가 아님, 비유 없음 문장(expectNodes [])은 null(판단 없음).
+ * 1위가 바뀐 문장만 돌려준다. regressed = 맞던 것이 틀림, gained = 틀리던 것이 맞음
+ * @returns {{sentence, kind:'hit'|'negative'|'noMatch', before, after, beforeOk, afterOk, regressed, gained}[]}
+ */
+export function rank1Changes(cases, before, after) {
+  const okOf = (c, id) => c.forbidNodes?.length ? !c.forbidNodes.includes(id) : c.expectNodes?.length ? c.expectNodes.includes(id) : null;
+  const out = [];
+  cases.forEach((c, i) => {
+    if (before[i] === after[i]) return;
+    const kind = c.forbidNodes?.length ? 'negative' : c.expectNodes?.length ? 'hit' : 'noMatch';
+    const beforeOk = okOf(c, before[i]), afterOk = okOf(c, after[i]);
+    out.push({ sentence: c.sentence, kind, before: before[i], after: after[i], beforeOk, afterOk, regressed: beforeOk === true && afterOk === false, gained: beforeOk === false && afterOk === true });
+  });
+  return out;
 }

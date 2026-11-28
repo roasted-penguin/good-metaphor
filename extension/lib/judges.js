@@ -1,9 +1,10 @@
 // 판정기 레지스트리 (T-120). 판정기는 글을 쓰지 않고 정해진 질문에 선택지·확률로만 답한다.
 // 인터페이스: judge(판정기, { text, question, choices, multi }) → [{ id, p }] (선택지 전부, 확률 높은 순)
 // 새 판정기는 JUDGES 항목 하나와 kind별 함수(KINDS)만 더한다(규칙 7과 같은 방식).
-// 모두 클라우드다(규칙 8: 호버는 맥에 기대지 않는다). 지금은 평가 도구(tools/eval.mjs --judge)만 쓰고
-// 호버 경로에는 연결하지 않았다(ADR 0014).
+// 모두 클라우드다(규칙 8: 호버는 맥에 기대지 않는다). 따로 부르는 판정기는 평가 도구(tools/eval.mjs --judge)만 쓴다.
+// 호버에는 정밀 모드 추상화 호출에 태그 질문을 합친 것(parseAbstractJudge·judgeTagProbs, T-184)만 쓴다(ADR 0014).
 import { PROVIDERS, complete, parseJSONLoose } from './providers.js';
+import { NONE_TAG } from './prompt.js';
 
 export const JUDGES = {
   // Gemini에 객관식 JSON으로 묻는다. HTTP·재시도·thinking 대체는 providers.js complete 그대로
@@ -159,4 +160,54 @@ export async function judge(j, input, opts = {}) {
   if (!run) throw new JudgeError(`알 수 없는 판정기 종류: ${j.def.kind}`);
   const raw = await run(j, input, opts);
   return normalizeChoices(raw, input.choices, { multi: input.multi !== false });
+}
+
+// --- 정밀 모드 합침(T-184): 추상화 호출 한 번이 추상 구조와 태그 확률을 함께 돌려준다 ---
+// "맞는 태그 없음" 예약 선택지. 프롬프트(prompt.js)와 같은 것
+export const NONE_CHOICE = NONE_TAG;
+
+/**
+ * 합친 응답 → { abstractText, answers }. answers는 choices + 없음 전부를 normalizeChoices(다중 선택)한 것, 판정이 없으면 null.
+ * JSON이 아니면 응답 전체를 추상 구조로 본다(모델이 형식을 어겨도 검색은 정밀 모드 그대로). tags 형식은 parseChoiceJSON과 같다
+ */
+export function parseAbstractJudge(text, choices) {
+  const raw = String(text || '').trim();
+  if (!raw) return { abstractText: '', answers: null };
+  const j = parseJSONLoose(raw.replace(/```(?:json)?/gi, '').trim());
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return { abstractText: raw, answers: null };
+  const abstractText = typeof j.abstract === 'string' ? j.abstract.trim() : '';
+  const tags = j.tags ?? j.answers;
+  if (tags == null) return { abstractText, answers: null };
+  const parsed = parseChoiceJSON(JSON.stringify({ answers: tags }));
+  return { abstractText, answers: parsed ? normalizeChoices(parsed, [...choices, NONE_CHOICE], { multi: true }) : null };
+}
+
+/**
+ * 판정 결과 → retrieve tagJudge.p에 넘길 태그 확률 [{ id, p }](없음 제외).
+ * - "없음" 확률이 가장 높은 태그 이상이면 판정 없음([]) — 구조 없는 일상 문장에 태그를 얹지 않는다
+ * - floor(확률 하한) 아래 태그는 버린다. 값은 검증셋·가드로 정했다(admin.json preciseTagJudge.floor, ADR 0014)
+ * answers가 null이면 null
+ */
+export function judgeTagProbs(answers, { floor = 0 } = {}) {
+  if (!answers) return null;
+  if (judgeSaysNone(answers)) return [];
+  return answers.filter(a => a.id !== NONE_CHOICE.id && a.p > 0 && a.p >= floor).map(({ id, p }) => ({ id, p }));
+}
+
+/**
+ * judgeTagProbs 결과가 "구조 없음"인가: 판정은 있었는데(null 아님) 쓸 태그가 하나도 없다
+ * (없음 우세이거나, 하한을 넘는 태그가 없음 = 판정기도 구조를 확신하지 못함). 이때 정밀 모드는 원문으로 검색한다(T-184)
+ */
+export const isStructureless = probs => Array.isArray(probs) && probs.length === 0;
+
+/**
+ * 판정이 "구조 없음"인가: 없음 확률이 0보다 크고 가장 높은 태그 확률 이상. answers가 null이면 false(판정 없음과 구별).
+ * 이때 정밀 모드는 추상 구조를 검색 질의에 섞지 않고 원문으로 찾는다(runAbstract, T-184).
+ * 구조 없는 일상 문장의 추상화("탈것의 부품에 갑작스러운 고장")가 "파괴" 노드로 끌려가는 것을 막는다
+ */
+export function judgeSaysNone(answers) {
+  if (!answers) return false;
+  const none = answers.find(a => a.id === NONE_CHOICE.id)?.p || 0;
+  const best = answers.reduce((m, a) => (a.id === NONE_CHOICE.id ? m : Math.max(m, a.p || 0)), 0);
+  return none > 0 && none >= best;
 }

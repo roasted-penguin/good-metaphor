@@ -52,6 +52,10 @@ class FakeOllama:
         self.chat_status = 0
         # 0보다 크면 /api/chat이 이만큼(초) 늦게 답한다(청크 중간 타임아웃 흉내)
         self.delay_s = 0.0
+        # True면 MLX 러너처럼 format이 있는 요청에 501 "structured output is unavailable"(T-413)
+        self.no_structured_output = False
+        # True면 정상 응답을 코드 펜스와 앞 설명으로 감싼다(JSON 모드 없이 답하는 모델 흉내)
+        self.fenced = False
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._stopper: threading.Thread | None = None
@@ -122,6 +126,9 @@ class FakeOllama:
                 if fake.chat_status:
                     self._json(fake.chat_status, {"error": f"model '{body.get('model')}' not found"})
                     return
+                if fake.no_structured_output and "format" in body:
+                    self._json(501, {"error": "structured output is unavailable"})
+                    return
                 user = body["messages"][-1]["content"]
                 if "깨진응답" in user:
                     content = "죄송해요, 지금은 못 해요."
@@ -137,6 +144,8 @@ class FakeOllama:
                             {"source": "스타포스 강화", "target": "목록밖구조", "keywords": "x", "description": "버려질 관계."},
                         ],
                     }, ensure_ascii=False)
+                    if fake.fenced:
+                        content = f"다음은 추출 결과예요.\n```json\n{content}\n```\n끝."
                 try:
                     self._json(200, {"model": body.get("model"), "message": {"role": "assistant", "content": content},
                                      "done": True})
@@ -337,6 +346,56 @@ def test_parse_failure_marks_failed_and_continues(tmp_path, ollama):
     assert q[0]["attempts"] == 1 and "JSON" in q[0]["lastError"]
     assert summary["failed"] == 1 and summary["done"] == 1
     assert len(ins.calls) == 1
+
+
+def test_no_structured_output_retries_without_format_then_keeps_off(tmp_path, ollama):
+    """MLX 러너는 format에 501로 답한다(T-413). 한 번 format 없이 다시 보내고, 그 뒤 청크는 처음부터 없이."""
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 2)
+    ollama.no_structured_output = True
+    ollama.fenced = True
+    ins = Inserted()
+    summary = asyncio.run(make_worker(s, ollama.url, ins).run_window(IN_WINDOW))
+    assert summary["done"] == 2 and summary["stopped"] is None
+    assert ["format" in c for c in ollama.chat_calls] == [True, False, False]
+    _, ents, _ = ins.calls[0]
+    assert [e["name"] for e in ents] == ["스타포스 강화", "확률형 강화"]  # 펜스 안 JSON을 읽고 후처리까지
+
+
+def test_chat_reports_json_mode(ollama):
+    """A/B 하네스가 줄마다 JSON 모드였는지 적는다(T-209): 501을 받기 전엔 True, 받은 뒤엔 False."""
+    chat = ew.make_ollama_chat(ollama.url, "gemma4:12b", "system")
+    asyncio.run(chat("글"))
+    assert chat.json_mode() is True
+    ollama.no_structured_output = True
+    ollama.fenced = True
+    asyncio.run(chat("글"))
+    assert chat.json_mode() is False
+
+
+def test_other_501_is_still_connection_error(tmp_path, ollama):
+    s = make_settings(tmp_path)
+    enqueue_n(s, COMMON_WS, 1)
+    ollama.chat_status = 501
+    summary = asyncio.run(make_worker(s, ollama.url, Inserted()).run_window(IN_WINDOW))
+    assert summary["stopped"] == "연결 끊김" and len(ollama.chat_calls) == 1
+
+
+@pytest.mark.parametrize("content", [
+    '{"entities": [{"name": "메소"}], "relationships": []}',
+    '```json\n{"entities": [{"name": "메소"}], "relationships": []}\n```',
+    '결과예요.\n```json\n{"entities": [{"name": "메소"}], "relationships": []}\n```\n끝.',
+    '결과: {"entities": [{"name": "메소"}], "relationships": []} 이상이에요.',
+])
+def test_parse_extraction_tolerates_fence_and_surrounding_text(content):
+    ents, rels = ew.parse_extraction(content)
+    assert ents == [{"name": "메소"}] and rels == []
+
+
+@pytest.mark.parametrize("content", ["", "죄송해요.", "[1, 2]", '```json\n[1]\n```', '{"entities": "x"}'])
+def test_parse_extraction_rejects_non_object(content):
+    with pytest.raises(ew.ExtractParseError):
+        ew.parse_extraction(content)
 
 
 def test_outside_window_does_nothing(tmp_path, ollama):

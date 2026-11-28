@@ -24,6 +24,14 @@
         "cooldownMaxMs": { "type": "integer", "description": "서버를 건너뛰는 시간의 상한(ms). 429 의 Retry-After 도 이 값을 넘지 않아요" }
       }
     },
+    "agent": {
+      "type": "object",
+      "description": "말풍선 이어 묻기 에이전트(T-216)",
+      "properties": {
+        "dailyCallCap": { "type": "integer", "description": "에이전트 LLM 호출의 하루 상한(기기별). 호버와 따로 세요. 0이면 이어 묻기를 꺼요" },
+        "providerOrder": { "type": "array", "items": { "type": "string" }, "description": "에이전트만의 제공자 순서(제공자 id). fallbackChain 항목끼리 자리만 바꿔요. 로컬은 늘 맨 뒤예요" }
+      }
+    },
     "userStore": {
       "type": "object",
       "properties": {

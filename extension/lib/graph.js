@@ -59,6 +59,10 @@ export function validateGraph(g, { partial = false } = {}) {
   if (g.noMatchText !== undefined && !(typeof g.noMatchText === 'string' && g.noMatchText.trim())) {
     errors.push('noMatchText(비유 없음 문구)는 빈 문자열이 아닌 문자열이어야 해요.');
   }
+  // 관심사 단서 낱말(T-199, 선택): 약한 별칭 가산의 근거. 2~20자 문자열 배열(내용 검증은 retrieval.js cueWordProblems)
+  if (g.cueWords !== undefined && !(Array.isArray(g.cueWords) && g.cueWords.every(w => typeof w === 'string' && w.trim().length >= 2 && w.length <= 20))) {
+    errors.push('cueWords(관심사 단서 낱말)는 2~20자 문자열 배열이어야 해요.');
+  }
   const tagIds = new Set();
   for (const [i, t] of (g.tags || []).entries()) {
     if (!t.id || !t.label) errors.push(`tags[${i}]에 id 또는 label이 없어요.`);
@@ -93,6 +97,10 @@ export function validateGraph(g, { partial = false } = {}) {
     }
     if (n.sources !== undefined || !partial) {
       if (!validSources(n.sources)) errors.push(`노드 ${n.id || i}의 sources(출처)는 http(s) 주소 1개 이상인 배열이어야 해요.`);
+    }
+    // 출처 종류(D-8, ADR 0016): 커뮤니티(나무위키·인벤) 출처가 있는 노드는 'community'. 호스트·교차 확인 판정은 tools/source-policy.mjs(테스트·파이프라인)
+    if (n.sourceKind !== undefined && n.sourceKind !== 'official' && n.sourceKind !== 'community') {
+      errors.push(`노드 ${n.id || i}의 sourceKind(출처 종류)는 official 또는 community여야 해요.`);
     }
     if (n.verifiedAt !== undefined || !partial) {
       if (!validDate(n.verifiedAt)) errors.push(`노드 ${n.id || i}의 verifiedAt(검수 날짜)은 YYYY-MM-DD 형식의 날짜여야 해요.`);
@@ -178,6 +186,8 @@ export function mergeGraphs(common, overlay) {
     noMatchText: useCommon ? (common.noMatchText || '') : '',
     // 관심사별 감점(T-156): 공통 관심사 그래프에 있을 때만. retrievalFor가 admin.retrieval.tagPenalty 위에 덮어쓴다
     tagPenalty: useCommon ? { ...(common.tagPenalty || {}) } : {},
+    // 관심사 단서 낱말(T-199): 공통 관심사 그래프 것만. 오버레이는 단서를 더하지 못한다(약한 별칭 가산 근거라서)
+    cueWords: useCommon ? [...(common.cueWords || [])] : [],
     sources: {
       common: useCommon ? { id: common.id, version: common.version, tagsVersion: common.tagsVersion ?? null } : null,
       userNodes: reviewedNodes.length,

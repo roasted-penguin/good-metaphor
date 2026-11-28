@@ -96,7 +96,10 @@ def test_analogy_uses_seeded_lightrag_index(seeded_dir, llm_calls, query_params)
     ids = [c["id"] for c in body["debug"]["candidates"]]
     assert 1 <= len(ids) <= 3
     assert set(ids) <= NODE_IDS  # 공통 그래프 노드만(태그 엔티티·그래프 밖 개체는 버린다)
-    assert "starforce" in ids  # 확률형 강화 태그의 대표 노드
+    # 확률형 강화(prob_upgrade) 태그 노드가 후보에 든다. 대체(hash) 임베딩이라 같은 태그 노드 중 누가 뽑힐지는 노드 수에 따라 바뀐다
+    # (T-208: 노드 127개에서 starforce 대신 cube가 뽑힘)
+    tags_by_id = {n["id"]: set(n.get("tags", [])) for n in GRAPH["nodes"]}
+    assert any("prob_upgrade" in tags_by_id[i] for i in ids), ids
     assert body["evidence"]["nodeId"] in ids
     assert body["evidence"]["source"] == "common"
     assert body["rejected"] is None

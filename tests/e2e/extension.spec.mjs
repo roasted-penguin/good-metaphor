@@ -4,7 +4,7 @@ import { test as base, expect, chromium } from '@playwright/test';
 import { mkdtempSync, readFileSync, cpSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startServers, calls, analogyCalls, SERVER_ANALOGY, GHOST_NODE, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES } from './servers.mjs';
+import { startServers, calls, analogyCalls, SERVER_ANALOGY, GHOST_NODE, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES, HELPER_FACTS, HELPER_FIXED_FACT } from './servers.mjs';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
 import { COMMON_INTERESTS } from '../../extension/lib/graph.js';
 import { openBrowserEmbedder } from '../../tools/browser-embedder.mjs';
@@ -45,6 +45,8 @@ const test = base.extend({
 
 // 서버 모드 시험(T-404·T-141)과 서버 요청 0을 함께 보는 개인정보 시험(T-107·T-111·T-144·T-147·T-148)
 const serverTest = test.extend({ extPath: async ({}, use) => { await use(EXT_SERVER); } });
+// 미리 계산 벡터 사본(T-193): 대체 임베더 id로 만든 data/vectors 파일이 있다
+const vectorsTest = test.extend({ extPath: async ({}, use) => { await use(path.resolve('.tmp/ext-e2e-vectors')); } });
 
 let stop;
 test.beforeAll(async () => { stop = await startServers(); });
@@ -114,7 +116,7 @@ test('평가 도구(browser-embedder): 같은 프로필을 다시 써도 바뀐 
       expect(await be.embed(['첫 문장', '두 번째 문장'], 'query')).toHaveLength(2);
       const info = await be.send('graph:info');
       expect(info.ok).toBe(true);
-      expect(info.data.common.tags).toBe(21); // tags.json 전체(T-176에서 21개)
+      expect(info.data.common.tags).toBe(27); // tags.json 전체(T-223에서 27개)
     } finally {
       await be.close();
     }
@@ -142,6 +144,42 @@ test('벡터 캐시 정리(T-110): 다른 임베더 키는 지워지고, 바뀐 
   expect(r2.data.vectors).toBe(r.data.vectors);
   await ext.page.waitForTimeout(300);
   expect(await ext.page.evaluate(() => window.__vecWrites)).toBe(0);
+});
+
+// 미리 계산 벡터(T-193): 사본에 대체 임베더 id로 만든 data/vectors/<관심사>.json 이 있다(scripts/prepare-e2e.mjs).
+// 메이플 파일에서 한 항목을 뺐으므로 그 하나만 오프스크린에서 임베딩하고, 나머지는 파일에서 꺼내 vecCache에 넣지 않는다
+vectorsTest('미리 계산 벡터(T-193): 맞는 텍스트는 오프스크린 임베딩 없이 쓰고, 파일에 없는 것만 임베딩, 호버는 그대로', async ({ context, ext }) => {
+  const getCache = () => ext.page.evaluate(async () => (await chrome.storage.local.get('vecCache')).vecCache || {});
+  const r = await ext.send({ type: 'embed:warmup' });
+  expect(r.ok).toBe(true);
+  expect(r.data.status).toBe('fallback');
+  const total = r.data.vectors;
+  expect(r.data.vectorSources).toEqual({ precomputed: total - 1, cached: 0, embedded: 1 });
+  await expect.poll(async () => Object.keys(await getCache()).length).toBe(1); // 빠진 한 항목만 저장
+
+  // 다시: 파일 + vecCache로 모두 덮여 새로 임베딩하는 것이 없다
+  const r2 = await ext.send({ type: 'embed:warmup' });
+  expect(r2.data.vectorSources).toEqual({ precomputed: total - 1, cached: 1, embedded: 0 });
+
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플스토리로 보면');
+  const ex = await ext.send({ type: 'explain', sentence: '변동금리 대출은 기준금리가 오르면 이자도 늘어난다.', noCache: true });
+  expect(ex.ok).toBe(true);
+  expect(ex.data.debug.vectorSources.embedded).toBe(0);
+  expect(ex.data.debug.candidates.length).toBeGreaterThan(0);
+
+  // 식당으로 바꾸면 식당 파일(빠진 항목 없음)만으로 덮인다
+  await ext.setSettings({ interest: 'restaurant' });
+  const r3 = await ext.send({ type: 'embed:warmup' });
+  expect(r3.data.vectorSources).toEqual({ precomputed: r3.data.vectors, cached: 0, embedded: 0 });
+});
+
+test('미리 계산 벡터(T-193): 동봉 파일은 실제 모델 id라 대체 임베더에서는 쓰지 않는다(대체 경로 그대로)', async ({ ext }) => {
+  const r = await ext.send({ type: 'embed:warmup' });
+  expect(r.data.status).toBe('fallback');
+  expect(r.data.vectorSources.precomputed).toBe(0);
 });
 
 test('Alt+호버: 문장 강조, 메이플 테마 말풍선, Esc 닫기, 캐시', async ({ context, ext }) => {
@@ -593,6 +631,228 @@ test('피드백 UI: 자동 모드에서 말풍선으로 옮겨 가도 닫히지 
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
   await page.mouse.down(); await page.mouse.up();
   await expect.poll(() => evidence(page), { timeout: 10000 }).not.toBe(first);
+});
+
+/* ───────── 말풍선 이어 묻기 (T-216, ADR 0017) ─────────
+   가짜 LLM은 "이어서 묻는 질문" 시스템 프롬프트에 JSON 액션으로 답한다(servers.mjs agentReply) */
+const fuBox = page => box(page).locator('.fu');
+const agentLLMCalls = from => calls.slice(from).filter(c => c.system.includes('이어서 묻는 질문'));
+const agentCount = ext => ext.page.evaluate(async () => (await chrome.storage.local.get('agentCalls')).agentCalls || null);
+
+test('이어 묻기(T-216): 결과 뒤 버튼 → 칩·입력칸, "왜 비슷해요?" → 근거 노드 사실로 답, 보내는 글은 호버 범위, 하루 호출 수', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  expect(await box(page).locator('input').count(), '열기 전에는 입력칸 없음').toBe(0);
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  await expect(box(page).getByRole('textbox', { name: '이어 묻기 질문' })).toBeVisible();
+  await expect(box(page).getByRole('button', { name: '다른 비유는요?' })).toBeVisible();
+  expect(await boxClass(page)).toContain('t-maple');
+  const from = calls.length;
+  await box(page).getByRole('button', { name: '왜 비슷해요?' }).click();
+  await expect.poll(() => fuBox(page).innerText()).toContain(`${first}도 같은 구조라서 비슷해요.`);
+  expect(await fuBox(page).innerText()).toContain(`근거: ${first}`);
+  expect(await evidence(page), '호버 결과 근거는 그대로').toBe(first);
+  const sent = agentLLMCalls(from);
+  expect(sent.map(c => c.model)).toEqual(['mock-model', 'mock-model']); // 같은 fallbackChain
+  expect(sent[0].user).toContain('설명할 문장: 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  expect(sent[0].user, '같은 문단의 다음 문장은 보내지 않는다(문단 전송 보류)').not.toContain('고정금리');
+  expect(sent[0].user).toContain('질문: 왜 비슷해요?');
+  expect(sent[1].user).toContain('[지금까지]');
+  expect((await agentCount(ext)).count).toBe(2);
+});
+
+test('이어 묻기(T-216): 직접 입력 "다른 …" → 그래프 검색으로 다른 개념, 응답에 debug.trace', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  await box(page).getByRole('textbox', { name: '이어 묻기 질문' }).fill('다른 개념도 있나요?');
+  await box(page).getByRole('textbox', { name: '이어 묻기 질문' }).press('Enter');
+  await expect.poll(() => fuBox(page).innerText()).toContain('도 같은 구조라서 비슷해요.');
+  const text = await fuBox(page).innerText();
+  expect(text).toContain('다른 개념도 있나요?');
+  const label = text.match(/근거: (.+)/)?.[1]?.trim();
+  expect(label).toBeTruthy();
+  expect(label, '근거로 쓴 개념은 빼고 찾는다').not.toBe(first);
+
+  const r = await ext.send({ type: 'agent:ask', payload: { sentence: 'API 서버는 분당 요청 수에 상한을 두어 한 사용자가 자원을 독점하지 못하게 한다.' }, question: '다른 비유는요?', prev: {}, candidateIds: [] });
+  expect(r.ok).toBe(true);
+  expect(r.data.debug.trace.map(t => t.type)).toEqual(['action', 'final', 'verify']); // 최종 답 검사(T-222)는 통과해 되묻지 않음
+  expect(r.data.debug.trace[0].tool).toBe('search_graph');
+  expect(r.data.debug.provider).toBe('custom/mock-model');
+  expect(r.data.evidence).not.toBeNull();
+});
+
+test('이어 묻기(T-216): 후보 밖 개념을 대면 답을 숨긴다(규칙 1), 질문이 너무 짧으면 오류', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  await box(page).getByRole('textbox', { name: '이어 묻기 질문' }).fill('후보밖테스트 이건요?');
+  await box(page).getByRole('button', { name: '묻기', exact: true }).click();
+  await expect.poll(() => fuBox(page).innerText()).toContain('근거 목록에 없는 개념');
+  expect(await fuBox(page).innerText()).not.toContain('레벨이 오를수록');
+  const short = await ext.send({ type: 'agent:ask', payload: { sentence: '문장이에요.' }, question: 'a' });
+  expect(short.ok).toBe(false);
+  expect(short.error).toContain('두 글자');
+});
+
+test('이어 묻기(T-216): 하루 상한이면 LLM을 부르지 않고 안내 문구', async ({ context, ext }) => {
+  await ext.page.evaluate(async () => {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await chrome.storage.local.set({ agentCalls: { day, count: 40 } }); // admin agent.dailyCallCap 기본 40
+  });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  const from = calls.length;
+  await box(page).getByRole('button', { name: '왜 비슷해요?' }).click();
+  await expect.poll(() => fuBox(page).innerText()).toContain('오늘 이어 묻기를 다 썼어요.');
+  expect(agentLLMCalls(from)).toEqual([]);
+  expect((await agentCount(ext)).count).toBe(40);
+});
+
+/* ───────── 👎 교정 진단 (T-220, ADR 0017 에이전트 3) ─────────
+   가짜 LLM은 "왜 틀렸는지 진단" 시스템 프롬프트에 JSON 액션으로 답한다(servers.mjs diagnoseReply) */
+const dgBox = page => box(page).locator('.dg');
+const diagnoseLLMCalls = from => calls.slice(from).filter(c => c.system.includes('왜 틀렸는지 진단'));
+const DG_BTN = '왜 틀렸는지 살펴볼게요';
+
+test('교정 진단(T-220): 👎 뒤에만 버튼, 누르면 한 줄 진단 + 👎한 개념이 아닌 새 근거 비유, 보내는 글은 호버 범위, 하루 호출 수 공유', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  expect(await box(page).getByRole('button', { name: DG_BTN }).count(), '👎 전에는 없음').toBe(0);
+  const from0 = calls.length;
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => evidence(page)).not.toBe(first); // 기존 빠른 다시 비유는 그대로
+  expect(diagnoseLLMCalls(from0), '누르기 전에는 진단을 부르지 않음(기본 경로를 늦추지 않음)').toEqual([]);
+  await expect(box(page).getByRole('button', { name: DG_BTN })).toBeVisible();
+  expect(await boxClass(page)).toContain('t-maple');
+  const from = calls.length;
+  await box(page).getByRole('button', { name: DG_BTN }).click();
+  await expect.poll(() => dgBox(page).innerText()).toContain('후보 개념의 구조가 문장과 달랐어요.');
+  const text = await dgBox(page).innerText();
+  expect(text).toContain('다시 보면');
+  expect(text).toMatch(/메이플로 치면 .+와 같은 구조예요\./);
+  const label = text.match(/근거: (.+)/)?.[1]?.trim();
+  expect(label).toBeTruthy();
+  expect(label, '👎한 개념은 쓰지 않는다').not.toBe(first);
+  await expect(box(page).getByRole('button', { name: '이 비유로 고정' })).toBeVisible();
+  const sent = diagnoseLLMCalls(from);
+  expect(sent.length).toBe(2);
+  expect(sent[0].user).toContain('설명할 문장: 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  expect(sent[0].user, '같은 문단의 다음 문장은 보내지 않는다').not.toContain('고정금리');
+  expect(sent[0].user).toContain(`쓰지 말 개념: id=`);
+  expect(sent[0].user).toContain('[코드가 본 단서]');
+  expect((await agentCount(ext)).count).toBe(2);
+
+  // 고정(피드백 층 pick) → 되돌리기
+  await box(page).getByRole('button', { name: '이 비유로 고정' }).click();
+  await expect.poll(() => dgBox(page).innerText()).toContain('이 문장은 이 개념으로 고정했어요');
+  const fb = () => ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback.map(r => r.vote));
+  await expect.poll(fb).toEqual(['down', 'pick']);
+  await dgBox(page).getByRole('button', { name: '되돌리기' }).click();
+  await expect.poll(fb).toEqual(['down']);
+});
+
+test('교정 진단(T-220): 후보 밖 개념만 대면 검증기가 숨기고 "여기까지 했어요"(규칙 1)', async ({ ext }) => {
+  const from = calls.length;
+  const r = await ext.send({ type: 'agent:diagnose', payload: { sentence: '후보밖진단테스트 변동금리는 기준금리를 따라 움직인다.' }, orig: { analogy: '메이플로 치면 메소와 같아요.', evidence: { nodeId: 'meso', nodeLabel: '메소' }, candidates: [{ id: 'meso' }, { id: 'starforce' }, { id: 'cube' }] }, downNodeId: 'meso' });
+  expect(r.ok).toBe(true);
+  expect(r.data.analogy).toBe('');
+  expect(r.data.evidence).toBeNull();
+  expect(r.data.stopText).toContain('여기까지 했어요.');
+  expect(r.data.rejected).toContain('근거 목록에 없는 개념');
+  expect(r.data.action).toBeNull();
+  expect(r.data.debug.stop).toBe('verify');
+  expect(r.data.debug.trace.filter(t => t.type === 'verify').map(t => t.reason)).toEqual(['rule1', 'rule1']);
+  expect(diagnoseLLMCalls(from).length).toBe(2);
+  expect(diagnoseLLMCalls(from)[1].user).toContain('[검증 실패]');
+});
+
+test('교정 진단(T-220): 하루 상한이면 LLM을 부르지 않고 안내 문구', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => evidence(page)).not.toBe(first);
+  await ext.page.evaluate(async () => {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await chrome.storage.local.set({ agentCalls: { day, count: 40 } }); // 이어 묻기와 같은 agent.dailyCallCap
+  });
+  const from = calls.length;
+  await box(page).getByRole('button', { name: DG_BTN }).click();
+  await expect.poll(() => dgBox(page).innerText()).toContain('오늘 살펴보기를 다 썼어요.');
+  expect(diagnoseLLMCalls(from)).toEqual([]);
+  expect((await agentCount(ext)).count).toBe(40);
+});
+
+test('교정 진단(T-220): 로그아웃이면 내 태그 예문을 쓸 수 없고(고정만), 로그인 + 내 노드·내 태그면 확인 뒤 예문', async ({ ext }) => {
+  const { send } = ext;
+  // 로그아웃: example은 거절, pin은 피드백 층에만
+  const no = await send({ type: 'agent:diagnose-apply', kind: 'example', sentence: FOCUS_SENTENCE, downNodeId: 'meso', nodeId: 'starforce' });
+  expect(no.ok).toBe(false);
+  expect(no.error).toContain('로그인해야');
+  const pin = await send({ type: 'agent:diagnose-apply', kind: 'pin', sentence: FOCUS_SENTENCE, downNodeId: 'meso', nodeId: 'starforce' });
+  expect(pin.ok).toBe(true);
+  expect(pin.data.kind).toBe('pin');
+  await send({ type: 'feedback-undo', id: pin.data.id });
+
+  // 로그인 + 내 노드·내 태그: 진단 결과가 예문 미리보기(가린 문장)를 제안하고, 누르면 내 태그 examples에
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const r = await send({ type: 'agent:diagnose', payload: { sentence: FOCUS_SENTENCE }, orig: { analogy: '메이플로 치면 메소와 같아요.', evidence: { nodeId: 'meso', nodeLabel: '메소' }, candidates: [{ id: 'meso' }, { id: 'u:focus' }] }, downNodeId: 'meso' });
+  expect(r.ok).toBe(true);
+  expect(r.data.evidence.nodeId).toBe('u:focus');
+  expect(r.data.action).toEqual({ kind: 'example', nodeId: 'u:focus', tagId: 'u_focus', tagLabel: '몰입 시간', text: FOCUS_MASKED });
+  expect((await send({ type: 'overlay:get' })).data.tags[0].examples, '누르기 전에는 쓰지 않는다').toEqual(['손으로 적은 예문은 그대로 남아야 한다.']);
+  const ap = await send({ type: 'agent:diagnose-apply', kind: 'example', sentence: FOCUS_SENTENCE, downNodeId: 'meso', nodeId: 'u:focus' });
+  expect(ap.ok).toBe(true);
+  expect((await send({ type: 'overlay:get' })).data.tags[0].examples).toEqual(['손으로 적은 예문은 그대로 남아야 한다.', FOCUS_MASKED]);
+  // 공통 노드는 로그인이어도 예문 거절(공통 그래프·tags.json은 쓰지 않는다)
+  const common = await send({ type: 'agent:diagnose-apply', kind: 'example', sentence: FOCUS_SENTENCE, downNodeId: 'meso', nodeId: 'starforce' });
+  expect(common.ok).toBe(false);
+  expect(common.error).toContain('예문을 넣을 수 없어요');
+});
+
+test('이어 묻기 뒤 👎 비율(T-218): 이어 묻기 답을 본 뒤 👎는 afterAgent로 기록, 설정 화면에 두 비율', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click(); // 호버 뒤 👎
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  await box(page).getByRole('button', { name: '왜 비슷해요?' }).click();
+  await expect.poll(() => fuBox(page).innerText()).toContain('같은 구조라서 비슷해요.');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click(); // 이어 묻기 답 뒤 👎
+  await expect.poll(() => ext.page.evaluate(async () => ((await chrome.storage.local.get('feedback')).feedback || []).map(r => `${r.vote}:${r.afterAgent === true}`))).toEqual(['down:false', 'down:true']);
+  const st = (await ext.send({ type: 'feedback:stats' })).data;
+  expect(st.agent.answers).toBe(1);
+  expect(st.agent.downAfter).toBe(1);
+  expect(st.agent.downHover).toBe(1);
+  const op = ext.page;
+  await op.reload();
+  await expect(op.locator('#fbAgentStats')).toBeVisible();
+  await expect(op.locator('#fbAgentStats')).toContainText('이어 묻기 답 1번 뒤 👎 1 (100%)');
 });
 
 /* ───────── 설정 화면 "내 피드백" 칸 (T-132) ───────── */
@@ -1341,6 +1601,9 @@ test('정밀 모드, 데모 제공자, 키 없음 오류', async ({ ext }) => {
   const p = await send({ type: 'explain', sentence: '뽑기형 상품은 원하는 결과가 나올 때까지 돈을 내고 다시 뽑게 만든다.', noCache: true });
   expect(p.data.debug.abstractText).toContain('확률');
   expect(calls.some(c => c.system.includes('추상 구조로'))).toBe(true);
+  // 정밀 모드 태그 판정(T-184, e2e 사본에서 켬): 같은 추상화 호출의 JSON에서 태그 확률을 읽어 검색에 쓴다. 호출이 늘지 않는다
+  expect(p.data.debug.tagJudge).toEqual({ probs: [{ id: 'prob_upgrade', p: 0.9 }], none: 0.05, structureless: false });
+  expect(calls.filter(c => c.user.includes('뽑기형 상품') && c.system.includes('추상 구조로'))).toHaveLength(1);
 
   await setSettings({ preciseMode: false, provider: 'demo' });
   const d = await send({ type: 'explain', sentence: '레버리지는 이익과 손실을 모두 키운다.', noCache: true });
@@ -2448,7 +2711,7 @@ serverTest('제보 제외(T-118): 서버 결과 근거가 제보 제외 노드�
 /* ───────── AI 초안 + 검수 (T-301) ───────── */
 const reviewNode = (page, label) => page.locator('#reviewList > li', { has: page.locator('.rv-label', { hasText: label }) });
 const draftCalls = since => calls.slice(since).filter(c => c.system.includes('개념 노드 목록으로 정리'));
-const TRANSFER_SENTENCE = '인기 선수는 원하는 구단이 많아 이적료가 오른다.';
+const TRANSFER_SENTENCE = '인기 축구 선수는 데려가려는 구단이 몰려 이적료가 치솟는다.';
 const openDraftPanel = async page => {
   await expect(page.locator('#draftPanel')).toBeVisible();
   if (!(await page.locator('#draftPanel').evaluate(d => d.open))) await page.locator('#draftPanel > summary').click();
@@ -2528,6 +2791,9 @@ test('AI 초안(T-301): 로그아웃이면 패널·메시지 모두 막힘 → �
   page.once('dialog', d => { expect(d.message()).toBe('이 노드를 지울까요?'); d.accept(); });
   await reviewNode(page, '금칙 사실 개념').locator('.rv-del-node').click();
   await expect(page.locator('#reviewBox')).toBeHidden();
+  // 검수 기록(T-229): 확인 2(오프사이드 첫 사실·이적 시장) · 지움 2(오프사이드 둘째 사실·금칙 사실 개념 노드) · 고침 1(경기 시간)
+  await expect(page.locator('#reviewStats')).toHaveText('검수 기록: 사실 5개 중 지움 2개(40%) · 고침 1개(20%) · 확인 2개. 이 기기에만 남아요.');
+  expect(await page.evaluate(async () => (await chrome.storage.local.get('reviewStats')).reviewStats)).toMatchObject({ confirmed: 2, deleted: 2, edited: 1 });
   await page.click('#saveOverlay');
   await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
 
@@ -2608,7 +2874,7 @@ test('AI 초안 수정 1회차(T-301): 저장 안내 한 줄, 금칙어 이름�
   await send({ type: 'auth:login', nickname: '마감' });
   await page.reload();
   await openDraftPanel(page);
-  await expect(page.locator('#draftPanel')).toContainText('초안 만들기를 누르면 검수 대기에 넣고 바로 저장해요.');
+  await expect(page.locator('#draftPanel')).toContainText('어느 쪽이든 만든 초안은 검수 대기에 넣고 바로 저장해요.');
 
   let since = calls.length;
   await page.fill('#draftName', `${BLOCKED_IN_ANALOGY} 게임`);
@@ -2628,6 +2894,136 @@ test('AI 초안 수정 1회차(T-301): 저장 안내 한 줄, 금칙어 이름�
   expect(draftCalls(since)).toHaveLength(1);
   expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
   await expect(page.locator('#draftRun')).toBeEnabled();
+});
+
+/* ───────── 새 관심사 만들기 도우미 (T-225) ───────── */
+const helperCalls = since => calls.slice(since).filter(c => /개념 목록을 계획하는 도우미|노드 초안을 쓰는 도우미|초안 노드를 검사하는 도우미|검사에 걸린 노드를 고쳐 쓰는 도우미/.test(c.system));
+const helperKind = c => (c.system.includes('계획하는') ? 'plan' : c.system.includes('초안을 쓰는') ? 'draft' : c.system.includes('검사하는') ? 'evaluate' : 'rewrite');
+const waitHelperDone = (send, timeout = 20_000) => expect.poll(async () => (await send({ type: 'helper:status' })).data?.status, { timeout }).not.toBe('running');
+
+test('도우미(T-225): 로그아웃이면 막힘 → 계획·초안·평가·고쳐 쓰기 → 검수 대기, 약한 태그 노드는 빠지고 숫자는 고쳐 씀, 공통 그래프 그대로', async ({ ext }) => {
+  const { page, send } = ext;
+  await expect(page.locator('#draftPanel')).toBeHidden();
+  const denied = await send({ type: 'helper:start', name: '축구', mode: 'add' });
+  expect(denied.ok).toBe(false);
+  expect(denied.error).toBe('로그인이 필요해요.');
+  const commonBefore = (await send({ type: 'graph:info' })).data.common.nodes;
+
+  await send({ type: 'auth:login', nickname: '도우미' });
+  await page.reload();
+  await openDraftPanel(page);
+  await page.click('#helperRun');
+  await expect(page.locator('#draftStatus')).toHaveText('관심사 이름을 1~30자로 적어 주세요.');
+  await page.fill('#helperNotes', `${BLOCKED_IN_ANALOGY} 얘기`);
+  await page.fill('#draftName', '축구');
+  await page.click('#helperRun');
+  await expect(page.locator('#draftStatus')).toHaveText('메모에 쓸 수 없는 표현이 있어요.');
+
+  const since = calls.length;
+  await page.fill('#helperNotes', '국내 리그 위주');
+  await page.click('#helperRun');
+  await expect(page.locator('#draftStatus')).toContainText('초안 3개를 검수 대기에 넣었어요.', { timeout: 20_000 });
+  // 단계 줄: 계획 → 초안 → 검사 → 고쳐 쓰기 → 넣기
+  const log = page.locator('#helperLog');
+  await expect(log).toContainText('1바퀴 계획: 개념 4개');
+  await expect(log).toContainText('초안 4개를 썼어요.');
+  await expect(log).toContainText('고쳐 쓰기');
+  await expect(log).toContainText('검수 대기에 3개를 넣었어요.');
+  await expect(page.locator('#draftDropped')).toContainText('억지 태그 개념: 이 관심사에 맞는 구조가 없어요.');
+  await expect(page.locator('#helperAbsent')).toContainText('이 관심사에 없는 구조로 본 태그');
+  // 검수 대기 화면에 바로 보인다
+  await expect(page.locator('#reviewList > li')).toHaveCount(3);
+  await expect(page.locator('#myNodeList > li')).toHaveCount(0);
+
+  // 호출: 계획(메모 포함) → 초안 → 검사(숫자 노드는 빼고) → 고쳐 쓰기 → 다시 검사 → 다음 바퀴 계획, 모두 가짜 LLM(에이전트 체인)
+  const hc = helperCalls(since);
+  expect(hc.map(helperKind)).toEqual(['plan', 'draft', 'evaluate', 'rewrite', 'evaluate', 'plan']);
+  expect(hc[0].user).toContain('사용자 메모: 국내 리그 위주');
+  expect(hc[2].user).not.toContain('90분');
+  expect(hc[5].user).not.toContain('- threshold_req |');
+  // skip 한 번은 실패 1이라 다음 바퀴에 다시 묻는다(T-226). 두 번째 skip에 "없음"
+  expect(hc[5].user).toContain('- vendor_lock_in |');
+  const st = (await send({ type: 'helper:status' })).data;
+  expect(st).toMatchObject({ status: 'done', written: 3, calls: 6, stop: null });
+
+  // 저장: 초안 노드만, 검수 전, 출처는 있으면 sources, 공통 그래프는 그대로
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.useCommon).toBe(true);
+  expect(ov.nodes.map(n => n.label)).toEqual(['오프사이드', '이적 시장', '경기 시간']);
+  for (const n of ov.nodes) {
+    expect(n.draft, n.label).toBe(true);
+    expect(n.factsReviewed, n.label).toEqual(n.facts.map(() => false));
+    expect(n.id).toMatch(/^u:/);
+  }
+  expect(ov.nodes[0].sources).toEqual([HELPER_FACTS['오프사이드'].source]);
+  expect(ov.nodes[2].facts).toEqual([HELPER_FIXED_FACT]);
+  const info = (await send({ type: 'graph:info' })).data;
+  expect(info.common.nodes).toBe(commonBefore);
+  expect(info.merged.userNodes).toBe(0);
+  // 검수 전 초안은 검색 후보에 없다(규칙 1)
+  const r = await send({ type: 'explain', sentence: HELPER_FACTS['이적 시장'].facts[0], noCache: true });
+  expect(r.data.debug.candidates.map(c => c.id)).not.toContain(ov.nodes[1].id);
+});
+
+test('도우미(T-225): 에이전트 하루 상한을 다 쓰면 LLM 없이 상한 문구, 데모 제공자면 안내', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '상한' });
+  await page.evaluate(async () => {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await chrome.storage.local.set({ agentCalls: { day, count: 9999 } });
+  });
+  await page.reload();
+  await openDraftPanel(page);
+  const since = calls.length;
+  await page.fill('#draftName', '축구');
+  await page.click('#helperRun');
+  await expect(page.locator('#draftStatus')).toHaveText('오늘 AI 도우미를 다 썼어요. 내일 다시 해 주세요.', { timeout: 10_000 });
+  expect(helperCalls(since)).toHaveLength(0);
+  expect((await send({ type: 'helper:status' })).data.stop).toBe('daily-cap');
+  expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
+
+  await ext.setSettings({ provider: 'demo' });
+  const demo = await send({ type: 'helper:start', name: '축구', mode: 'add' });
+  expect(demo.ok).toBe(false);
+  expect(demo.error).toContain('데모 모드에서는 도우미를 쓸 수 없어요.');
+});
+
+test('도우미(T-225): 세션 저장소의 중간 상태에서 이어 가고, 서비스 워커를 멈췄다 깨워도 끝까지 간다', async ({ ext, context }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '이어' });
+  // (1) 평가 단계 중간 상태를 넣고 상태를 물으면 background가 그 자리부터 이어 간다(계획·초안을 다시 부르지 않음)
+  let since = calls.length;
+  await page.evaluate(async node => {
+    await chrome.storage.session.set({ interestHelper: {
+      v: 1, status: 'running', phase: 'evaluate', name: '축구', notes: '', mode: 'add', user: '이어', startedAt: 0, updatedAt: 0,
+      calls: 2, steps: 2, round: 1, pending: [], queue: [node], fix: [], accepted: [], dropped: [],
+      tagFails: {}, absentTags: ['vendor_lock_in'], log: [{ phase: 'plan', text: '1바퀴 계획: 개념 1개' }], stop: null, error: null, written: 0
+    } });
+  }, { id: 'u:resume1', label: '이적 시장', facts: HELPER_FACTS['이적 시장'].facts, tags: ['market_price'], target: 'market_price', rewrites: 0, evalTries: 0 });
+  await send({ type: 'helper:status' });
+  await waitHelperDone(send);
+  expect(helperCalls(since).map(helperKind)[0]).toBe('evaluate');
+  let ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes.map(n => n.id)).toEqual(['u:resume1']);
+  expect(ov.nodes[0].draft).toBe(true);
+
+  // (2) 실제 서비스 워커 정지: 느린 가짜 LLM으로 시작해 첫 호출이 나간 뒤 멈추고, 상태를 물어 깨우면 이어서 끝난다
+  since = calls.length;
+  const started = await send({ type: 'helper:start', name: '도우미지연테스트', mode: 'add' });
+  expect(started.ok).toBe(true);
+  await expect.poll(() => helperCalls(since).length, { timeout: 10_000 }).toBeGreaterThan(0);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('ServiceWorker.enable');
+  await cdp.send('ServiceWorker.stopAllWorkers');
+  await waitHelperDone(send, 40_000);
+  const st = (await send({ type: 'helper:status' })).data;
+  expect(st.status).toBe('done');
+  expect(st.written).toBe(2); // 이미 있는 "이적 시장"은 계획에서 피하고, 억지 태그 개념은 빠진다
+  // 첫 계획 호출 도중 워커가 멈춰 그 단계를 다시 돌았다(저장된 앞 단계에서 이어 감)
+  expect(helperCalls(since).filter(c => helperKind(c) === 'plan' && c.user.includes('많아야 10개')).length).toBe(2);
+  ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes.filter(n => n.draft).map(n => n.label)).toEqual(['이적 시장', '오프사이드', '경기 시간']);
 });
 
 /* ───────── 공통 관심사 선택: 메이플 / 식당 (T-302) ───────── */

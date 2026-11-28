@@ -212,3 +212,29 @@ export function formatFeedbackStats(st) {
   };
   return `지난 7일 · 호버 ${st.hovers}번 · ${n('👍', st.up)} · ${n('👎', st.down)} · ${n('교정', st.pick)}`;
 }
+
+/**
+ * 이어 묻기 뒤 👎 비율 (T-218, ADR 0017 에이전트 1 "재는 방법"). 같은 7일 창.
+ * - 이어 묻기 쪽: 말풍선에서 이어 묻기 답(근거 검사를 지나 보인 답)을 본 뒤 누른 👎(기록 afterAgent: true) ÷ 이어 묻기 답 수(agentCounts, 날짜별)
+ * - 호버 쪽: 그 밖의 👎 ÷ 호버 수(hoverCounts)
+ * 기기 안 집계일 뿐 보내지 않는다(새 권한 없음).
+ * @returns {{ answers: number, downAfter: number, agentPct: number|null, hovers: number, downHover: number, hoverPct: number|null }}
+ */
+export function summarizeAgentFeedback(records, hoverCounts, agentCounts, today) {
+  const days = new Set(last7Days(today));
+  const sum = counts => Object.entries(counts || {}).reduce((a, [day, n]) => a + (days.has(day) ? n : 0), 0);
+  const answers = sum(agentCounts), hovers = sum(hoverCounts);
+  let downAfter = 0, downHover = 0;
+  for (const r of records || []) {
+    if (r?.vote !== 'down' || !days.has(localDay(r.ts))) continue;
+    if (r.afterAgent === true) downAfter += 1; else downHover += 1;
+  }
+  return { answers, downAfter, agentPct: feedbackPercent(downAfter, answers), hovers, downHover, hoverPct: feedbackPercent(downHover, hovers) };
+}
+
+// "내 피드백" 두 번째 줄. 이어 묻기 답이 없으면 null(줄을 감춘다)
+export function formatAgentFeedbackStats(st) {
+  if (!st || !(st.answers > 0)) return null;
+  const pct = p => (p === null ? '' : ` (${p}%)`);
+  return `이어 묻기 답 ${st.answers}번 뒤 👎 ${st.downAfter}${pct(st.agentPct)} · 호버 ${st.hovers}번 뒤 👎 ${st.downHover}${pct(st.hoverPct)}`;
+}

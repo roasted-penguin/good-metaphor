@@ -16,8 +16,8 @@ PoC 완료, 실제 키·실제 모델로 확인됨.
 - **검색:** 임베딩 `multilingual-e5-base`(2026-11-01, ADR 0009). 평가셋 40문장(T-103) 혼합 hit@1 27/35(77%), hit@3 94%, 금융 10/12(실제 확장 기준, ADR 0011). 은어 문장 4개 추가(T-114, 별칭 부스트 0.08) 뒤 31/39, 태그 예문 보강·화폐 가치 하락 감점 0.03(T-135) 뒤 35/39, 애매한 별칭(세금·펑)은 메이플 단서가 있을 때만(T-149) 뒤 34/39, `loss_risk` 예문 보강·단서 조사 규칙(T-152) 뒤 **40/44(91%, 은어 홀드아웃 5문장 추가), 은어 9/9, 검증 13/14, 음성 6/6**, 회귀 없음. 단 일부 문장은 1위와 2위 차이가 0.001~0.002라 예문 한 줄에도 흔들린다(T-150). 태그에 다른 분야 예문, 노드 텍스트는 구조 먼저, 경제 태그 감점. 회귀 가드 39문장(`npm run eval -- --guard`). 첫 로드 39초(266MB 다운로드), 이후 3초, 호버 임베딩 약 0.12초.
 - **LLM:** 무료 Gemini(`gemini-3.8-flash`)·Groq(`openai/gpt-oss-120b`) 키로 스모크 통과(T-101·T-119). 실제 확장 호버는 3.6~9.1초로 느리다(T-117 뜻 먼저, P0). Groq가 5~10배 빠르지만 존댓말·추상화 품질을 다듬어야 한다(T-122). 503·429는 재시도한다(T-121). 기본은 Groq `gpt-oss-120b` → Gemini `gemini-3.5-flash-lite` → NVIDIA `nemotron-3.5-super-vl` fallback 체인 → 맨 뒤 로컬 Ollama `gemma4:12b`(최종 방어선)(순위는 더 붙을 수 있음, `admin.json` `fallbackChain`에 추가만), 429 모델은 쿨다운(T-124, ADR 0008).
 - **데이터:** 공통 그래프 사실은 2026-10 패치 노트로 검수(2026.10.11-1).
-- **결정됨:** 앱 이름 "좋은비유네용"(변경은 T-115), 기본 트리거 Alt + 첫 실행 선택(D-1), 두 번째 관심사 식당·로그인 없이(D-4), 문서 출처(D-5), 검수 방식(D-3), 최신화 설계(ADR 0007). D-2(로그인)는 L3 전에 정한다.
-- **열린 질문:** "에이전트 단" 설계(D-6, `docs/TASKS.md`).
+- **결정됨:** 앱 이름 "좋은비유네용"(변경은 T-115), 기본 트리거 Alt + 첫 실행 선택(D-1), 두 번째 관심사 식당·로그인 없이(D-4), 문서 출처(D-5), 커뮤니티 출처(D-8, ADR 0016), 검수 방식(D-3), 최신화 설계(ADR 0007). D-2(로그인)는 L3 전에 정한다.
+- **결정됨(D-6, 2026-11-28):** 제품 안 에이전트(ADR 0017), 호버 다음 사용자가 부를 때만. 첫 구현 T-216 이어 묻기, "이 글 풀어 주기"는 페이지 글 전송 범위 결정까지 보류.
 - **다음 큰 기능:** 말풍선 원클릭 피드백 루프(ADR 0010, 제안). 👎 한 번이면 그 자리에서 다시 비유하고, 교정은 승인 뒤 태그 예문으로 그래프에 들어간다. 순서 T-129 → T-106 → T-130·T-131·T-132, 서버 전송 동의는 첫 실행 화면(T-116, D-7 결정).
 - 테스트는 가짜 LLM 서버와 대체 임베더로 돈다. Node 22 이상.
 
@@ -43,13 +43,20 @@ npm run check:embed              # 실제 모델 로드 시간·호버 시간, �
 npm run eval:fallback            # 모델 없이 같은 평가
 npm run eval:fallback -- --baseline  # 대체 임베더 기준선(tools/eval-fallback-baseline.json, 5개 셋 문장별 1위)과 비교: 새로 틀림·맞음·1위 바뀜·상위 3. 맞던 문장이 1위에서 틀리면 실패(CI `test` 잡). 받아들이면 `--write-baseline`으로 다시 써 같은 PR에 커밋 (T-179)
 npm run eval -- --guard           # 회귀 검사: tools/eval-guard.json 문장이 하나라도 틀리면 실패. 검색을 바꾸는 PR은 항상 돌린다
-npm run eval -- --holdout         # 평가셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점. 출력 끝에 여유(1·2위 점수 차) < --margin(기본 0.005) 문장 목록, -v면 문장별 여유. --margin-guard면 가드 문장의 작은 여유도 실패(T-150)
+npm run eval -- --holdout         # 평가셋 대신 홀드아웃(tools/eval-unseen.json, 예문 고를 때 보지 않는 문장)만 채점. 출력 끝에 여유(1·2위 점수 차) < --margin(기본 0.005) 문장 목록, -v면 문장별 여유. --margin-guard면 가드 문장의 작은 여유도 실패(T-150). 이미 얇은 가드 문장은 `tools/eval-margin-known.json` 바닥 기준선이라 새로 얇아지거나 바닥보다 얇아질 때만 실패, 받아들이면 `--write-margin-known`(T-188)
 npm run eval -- --rewrite gemini  # 질의를 LLM으로 추상화해 함께 비교(키 필요, 결과는 .tmp에 캐시)
 npm run eval -- --interest restaurant  # 식당 관심사 평가셋(tools/eval-set-restaurant.json)을 식당 그래프로 채점(T-302). --guard는 tools/eval-guard-restaurant.json, --holdout은 tools/eval-unseen-restaurant.json(T-156). --server·--margin-guard는 메이플만
 npm run eval -- --server <url>    # 같은 문장을 analogy-api 서버 후보 순위로도 채점 + 관문 한 줄(T-405). --server-only, --rpm 20, --token
 npm run eval -- --judge gemini-choice  # 판정기에 문장 → 추상 태그를 물어 태그 top-1·대신/함께 hit@1·회귀·지연(T-120, ADR 0014). 결과는 .tmp 캐시, --rpm 10, --judge-weight 0.05. 호버에는 안 씀
 npm run smoke:providers          # 실제 키로 제공자 호출 확인(키 있는 제공자만). CI에서는 Actions 탭 → smoke → Run workflow
+npm run eval:ci -- <프리셋>       # 실제 크롬 평가 묶음(guard·full·precomputed·precise-judge-offline·custom, tools/eval-ci-lib.mjs). 로그 .tmp/eval-ci, 하나라도 실패면 실패. 맥 없이는 Actions 탭 → eval → Run workflow(같은 프리셋, 키 없음, 모델 캐시, 요약·로그·벡터는 아티팩트, CI는 커밋 안 함) 또는 `eval/` 브랜치 push(guard) (T-200)
+npm run build:vectors            # 공통 그래프 노드·태그 벡터를 실제 확장(크롬, q8, 한 문장씩)으로 미리 계산해 extension/data/vectors/<관심사>.json에 쓴다. 그래프·태그 예문·admin.retrieval 텍스트 방식을 바꾼 PR은 다시 돌려 같은 PR에 커밋(T-193, ADR 0015). -- --verify 다시 임베딩해 비트 동일 확인, -- --interest <id> 한 관심사
+npm run check:vectors            # 크롬 없이(CI): 벡터 파일 형식·embedderId·접두어가 admin.json과 맞는지(틀리면 실패), 그래프와 어긋난 항목은 경고만(-- --strict면 실패)
+npm run eval -- --precomputed     # 그래프 벡터를 동봉 파일에서 꺼내 채점, 런타임과 비트 동일 수 출력(T-193)
+npm run eval -- --set tools/eval-expand-maplestory.json  # 그 파일 문장만 채점(가드 대상 아님). 확장 노드마다 다른 분야 문장 하나, 노드가 실제로 쓰이는지 보는 셋(T-191)
+node tools/scale-bench.mjs        # 합성 1,000노드 그래프(.tmp/scale에만)로 첫 로드·호버·vecCache·여유를 실제 크롬에서 측정(T-193, 30분 안팎)
 npm run check:corrections -- <내보낸.json>  # 운영자용 교정 내보내기를 평가셋·검증셋·가드와 대조(베낀 예문 후보를 거름). 반영 절차는 /approve-corrections
+npm run node-pipeline:index|draft|check|gate|apply|accept-alt -- --interest <id>  # 반자동 노드 파이프라인(T-194·T-195): 공식 페이지 색인 → 절 단위 LLM 후보(캐시·--max-calls) → 자동 검사 시트 → 회귀 관문(대체 → 실제 확장, 대안 정답 후보 표) → 패치. 원문 저장 안 함, 실제 그래프는 --write-real + 관문 browser만. tools/node-pipeline/README.md
 ```
 
 확장 수동 실행: `chrome://extensions` → 개발자 모드 → 압축해제된 확장 로드 → `extension/`. 코드를 고치면 확장 카드의 새로고침 버튼 + 페이지 새로고침.
@@ -78,18 +85,26 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/place.js               말풍선 배치: 호버한 줄(인덱스) 아래, 넘치면 위. 고른 범위는 마지막 줄 아래, 넘치면 첫 줄 위(`placeBoxSpan`) (클래식 스크립트, T-109·T-182)
   lib/selection.js           고른 범위 순수 함수: 공백 접기·2자 미만 거름·400자 문장 경계 자르기·커서가 범위 위인지 (클래식 스크립트, T-182)
   lib/shadow.js              열린 shadow root 모으기·shadow 경계 블록·`composedParent` (클래식 스크립트, T-111)
-  lib/vec-cache.js           그래프 벡터 캐시 정리: 다른 임베더 삭제, 2,000개 LRU (T-110)
+  lib/vec-cache.js           그래프 벡터 캐시 정리: 다른 임베더 삭제, 2,000개 LRU (T-110). 미리 계산 벡터로 덮인 텍스트는 넣지 않는다(T-193)
+  lib/precomputed-vectors.js 미리 계산 벡터 파일(f32le-base64, 런타임과 비트 동일) 형식·조회: embedderId·passagePrefix·sha1(텍스트)가 맞을 때만 쓰고 아니면 런타임 임베딩 (T-193, ADR 0015)
   lib/blocklist.js           금칙어 필터(`applyBlocklist`): 출력 직전·스트리밍 뜻·서버 결과·정밀 모드 추상화까지. 확장·서버 같은 규칙 (T-114)
   lib/grounding-log.js       근거 검사로 숨긴 비유를 이 기기에 기록(가린 문장, 금칙어 제외, 300건)·7일 집계·오탐 표시, 보내기 동의 시 운영자 내보내기에 샘플 (T-146)
   lib/prompt.js              프롬프트, 데모 응답, 조사 처리
+  lib/agent.js               제품 안 에이전트 루프(T-216, ADR 0017): JSON 액션 ReAct(`{action,args}`/`{final}`), 단계·호출 상한(4·4), 같은 도구·인자 반복 멈춤, 형식 틀리면 한 번 다시, `debug.trace`, 하루 호출 상한 `takeDailyCall`, 선택 검증기 훅 `verify`(지면 실패 이유를 관찰로 붙여 다시, `maxVerifies`면 `stop: 'verify'`, T-220). chrome.* 없음, ask·도구·budget 주입. 제공자 고유 function calling 안 씀(규칙 7)
+  lib/agent-tools.js         에이전트 1 "말풍선 이어 묻기": 읽기 전용 도구(get_node_facts·search_graph·search_by_tag), 프롬프트(호버와 같은 범위만, 문단 전송 보류), 최종 답 검사 `finalizeAnswer`(규칙 1: 호버 후보 ∪ 도구로 본 노드만 → 근거 검사 → 금칙어), `runFollowup`. background `agent:ask`가 부르고, 하루 상한은 admin `agent.dailyCallCap`(호버 한도와 따로, `chrome.storage.local` `agentCalls`)
+  lib/agent-diagnose.js      에이전트 3 "👎 교정 진단"(T-220): 원인 7개(structure·tag·facts·tone·number·meaning·none, 말풍선엔 고정 문구), 원래 결과 기록에서 코드 단서(`diagnoseHints`), 검증기 `verifyDiagnosis`(👎 개념 금지 → 규칙 1 → 근거 검사 → 금칙어 → 해요체), `runDiagnose`(5단계·LLM 4회·검증 2회, 이어 묻기 도구·하루 상한 공유), 쓰기 제안 `diagnoseAction`(고정, 로그인 + 내 노드·내 태그면 가린 예문 미리보기). 이 모듈은 쓰지 않는다
+  lib/interest-helper.js     에이전트 2 "새 관심사 만들기 도우미"(T-225): 코드가 순서를 쥐는 Plan-and-Execute + 평가자-개선자 상태 머신 `helperStep`(한 단계 = LLM 많아야 1회). 계획(못 덮은 통제 어휘 태그를 채울 익숙한 개념, 없는 구조는 skip) → 초안(`parseDraft` 거름, 출처 URL은 있으면 `sources`) → 평가(코드: 금칙어·수치·근접 중복 / LLM: 태그 적합성·익숙함·이름) → 고쳐 쓰기(노드당 1회, drop 가능) → 빈 태그 남으면 다시 계획(3바퀴) → 쓰기. 상한 초안 20·LLM 12·단계 30, 같은 태그 2번 실패면 "이 관심사에 없음". 상태는 JSON 하나, 쓰기는 `deps.write`로 검수 대기 노드만(`helperDraftNodes`·`mergeHelperDrafts`). chrome.* 없음
+  lib/node-checks.js         노드 검사 순수 함수(수치 `changingNumbers`·구조 먼저·대체 임베더 근접 중복 `dupIndex`·태그 적합성 프롬프트/답 읽기). `tools/node-pipeline/check.mjs`·`tag-fit.mjs`는 다시 내보내기만, 도우미와 같은 기준(T-225)
   lib/fallback-embed.js      모델 없을 때 쓰는 글자 n-gram 임베더
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)
-  data/common/tags.json     추상 태그 21개(통제 어휘, 규칙 9)의 원본. 새 태그는 맨 뒤에만(T-171: fixed_cost_leverage·vendor_lock_in, T-176: brokerage_fee). 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
-  data/common/maplestory.json 공통 저장소 그래프 (노드 30, 엣지 26, 태그는 id만, T-172). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114)
-  data/common/restaurant.json 두 번째 공통 관심사 "식당" 그래프 (노드 27, 엣지 17, 공통 태그 id만(T-168·T-171), 수치 없음, 중립 테마, `noMatchText`). 팝업·설정 "관심사"(설정 `interest`)로 로그인 없이 고른다. 서버는 메이플만 알아 식당이면 로컬 (T-302)
+  data/common/tags.json     추상 태그 27개(통제 어휘, 규칙 9)의 원본. 새 태그는 맨 뒤에만(T-171: fixed_cost_leverage·vendor_lock_in, T-176: brokerage_fee, T-206: compliance_procedure, T-219: queue_rationing·self_service·time_window(T-223에서 lunch_peak·business_hours_limit이 씀, self_service는 쓰는 노드 없음), T-223: limited_attempts·risk_reward_tradeoff(쓰는 노드 없음)). 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
+  data/common/maplestory.json 공통 저장소 그래프 (노드 81, 엣지 78, 태그는 id만, T-172·T-191). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114). 약한 별칭(`weakAliases`)은 그래프 `cueWords`(메이플 단서 명시 목록, `cueWordProblems`로 일반어·다른 관심사 낱말 검사)가 문장에 있을 때만 (T-199)
+  data/common/restaurant.json 두 번째 공통 관심사 "식당" 그래프 (노드 66, 엣지 53, T-196·T-207·T-192에서 넓힘, 공통 태그 id만(T-168·T-171), 수치 없음, 중립 테마, `noMatchText`). 팝업·설정 "관심사"(설정 `interest`)로 로그인 없이 고른다. 서버는 메이플만 알아 식당이면 로컬 (T-302)
+  data/vectors/<관심사>.json  미리 계산한 공통 그래프 벡터(데이터, 규칙 4). `npm run build:vectors`가 만든다. 직접 고치지 말 것 (T-193)
   data/common/blocklist.json  금칙어 용어 카드(ADR 0007 형식, `승인`만 필터에 씀). 확장·서버가 같이 읽음 (T-114)
 src/offscreen-src.js         오프스크린 원본 (transformers.js 번들 입력)
 tools/eval.mjs, eval-set.json 검색 품질 평가
+tools/source-policy.json·.mjs 공통 그래프 출처 정책(관심사별 공식·커뮤니티 호스트, 교차 확인, ADR 0016). 확장·서버 그래프 테스트와 노드 파이프라인이 같이 씀
 tools/eval-set-restaurant.json 식당 관심사 평가셋(`npm run eval -- --interest restaurant`, T-302). 식당 홀드아웃 `eval-unseen-restaurant.json`(조정에 안 씀)·식당 가드 `eval-guard-restaurant.json`(T-156)
 tools/eval-gen.mjs           생성 품질 평가(`npm run eval:gen -- --judge`, 다른 모델이 근거·구조·자연스러움 채점)
 tests/unit/                  node:test 단위 테스트 (lib/* 순수 함수)
@@ -97,12 +112,19 @@ tests/e2e/                   Playwright: 가짜 LLM(:8765) + 테스트 페이지
 scripts/                     build, prepare-e2e
 ```
 
-호버 한 번의 흐름: content.js가 문장(커서가 고른 범위 위면 고른 글, 단어는 빈 값, T-182)·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 근거 검사(usedFact·숫자) → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
+호버 한 번의 흐름: content.js가 문장(커서가 고른 범위 위면 고른 글, 단어는 빈 값, T-182)·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 미리 계산 벡터(동봉 파일, T-193)·벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 근거 검사(usedFact·숫자) → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
+
+이어 묻기(T-216): 결과 말풍선의 `이어 묻기` → 칩(왜 비슷해요?·다른 비유는요?)·입력칸 → content.js가 `agent:ask`(같은 payload + 방금 결과 + 후보 id) → background `followup()`이 같은 fallback 체인으로 `runFollowup`(LLM 최대 4회, 호출마다 하루 상한 차감) → 최종 답 검사 → 말풍선 아래 Q/A(최근 3개). 호버 결과 캐시·피드백 기록은 건드리지 않는다.
+
+교정 진단(T-220): 👎 → 지금처럼 빠른 다시 비유(기본 경로 그대로) → 말풍선에 `왜 틀렸는지 살펴볼게요`(opt-in) → content.js가 `agent:diagnose`(같은 payload + 👎한 결과 기록(후보·점수·근거 검사·끝맺음·이유 칩) + 다시 만든 비유 + 👎 개념 id) → background `diagnose()`가 같은 fallback 체인으로 `runDiagnose`(읽기 도구 → final → 검증기, 지면 이유를 넣어 다시) → 한 줄 진단 + 새 비유, 아니면 "여기까지 했어요" + 이유. 쓰기는 버튼을 눌러야만 `agent:diagnose-apply`: 피드백 층 pick(고정), 로그인 + 내 노드·내 태그면 같은 pick을 `syncCorrections`가 내 태그 예문으로(서버 측에서 제안을 다시 계산, 로그아웃이면 예문 거절). 공통 그래프는 쓰지 않는다.
+
+새 관심사 도우미(T-225): 설정 "AI로 초안 만들기"(로그인만) `도우미로 만들기`(이름 + 메모 선택 + 시작 방식) → background `helper:start`가 `chrome.storage.session` `interestHelper`에 상태를 만들고 `runHelper`를 돌림(단계마다 저장, 서비스 워커가 깨면 맨 끝 `readHelper`·`helper:status`가 이어 감, LLM은 `agentDeps` 체인 `agent.providerOrder`, 호출마다 `agentCalls` 하루 상한 차감) → 설정 화면은 `helper:status`를 0.8초마다 물어 단계 줄·뺀 이유·없는 태그를 보임 → 끝나면 background가 로그인한 같은 사용자 오버레이 뒤에 검수 대기 노드만 붙여 저장, 화면은 다시 읽음(저장 안 한 편집이 있으면 새 노드만 붙임). 데모 제공자면 안내만, `한 번에 만들기`(T-301 `graph:draft`)는 그대로.
 
 ## 지켜야 할 규칙
 
 1. **근거 밖 비유 금지.** LLM이 고른 `nodeId`가 후보에 없으면 비유를 숨기는 검증(`lib/pipeline.js` `runAnalogy`, background.js가 부름 — 근거 검사 `lib/grounding.js`도 같은 곳)을 절대 빼지 않는다. 프롬프트의 "근거에 없는 사실을 지어내지 않는다" 규칙도 유지.
 2. **공통 그래프 facts에는 자주 바뀌는 수치를 넣지 않는다**(확률표, 최대 강화 단계, 가격). 게임 패치로 틀려진다. 예외는 날짜와 함께 판본별로 통째 교체되는 공식 패치 노트 원문뿐이다(ADR 0007). 노드 추가는 `/add-common-node` 절차를 따른다.
+   **출처(D-5·D-8, ADR 0016):** 공식·공공 출처가 먼저이고, 정책(`tools/source-policy.json`)에 있는 커뮤니티(메이플 나무위키·인벤, 식당 나무위키·티스토리·브런치)에서 확인한 사실도 쓴다. 사실만 우리 문장으로, 원문은 저장·인덱싱하지 않고 URL만, 커뮤니티 출처가 있으면 `sourceKind: "community"` + 교차 확인(공식 1개 또는 서로 다른 사이트 2곳), 공식과 어긋나면 공식 우선, 커뮤니티는 긁지 않는다(한 쪽씩, robots 준수). 식당은 특정 가게 이름 금지. 판정은 `checkNodeSources`(그래프 테스트·파이프라인 apply).
 3. **저장소 두 층을 섞지 않는다.** 로그아웃 = 공통만, 로그인 = 공통 + 오버레이. 공통 그래프 파일을 사용자 데이터로 고치지 않는다. 사용자 노드 id는 `u:` 접두어. **예외: 말풍선 피드백 층**(D-7, ADR 0010)은 로그아웃이어도 사용자 크롬 프로필(`chrome.storage.local` `feedback`)에 저장해 그 사용자 결과에만 반영한다. 피드백은 후보 제외·고정만 하고 그래프 파일·새 사실·새 태그를 만들지 않는다.
 4. **원격 코드 금지(MV3·웹스토어 정책).** 스크립트와 wasm은 모두 확장 안에 번들한다. 모델 가중치(데이터)만 원격에서 받는다. CSP는 `script-src 'self' 'wasm-unsafe-eval'`.
 5. **UI 문구는 한국어 존댓말(~요), 짧고 구체적으로.** 코드 주석도 한국어.

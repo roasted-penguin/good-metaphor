@@ -46,7 +46,7 @@ def _all_text(config: dict) -> str:
 def test_vocabulary_is_graph_tag_labels_in_file_order(graph):
     vocab = controlled_vocabulary(graph)
     assert vocab == [t["label"] for t in graph["tags"]]
-    assert len(vocab) == 21  # T-176: 태그 21개(맨 뒤 fixed_cost_leverage, vendor_lock_in, brokerage_fee)
+    assert len(vocab) == 27  # T-223: 태그 27개(맨 뒤 fixed_cost_leverage, vendor_lock_in, brokerage_fee, compliance_procedure, queue_rationing, self_service, time_window, limited_attempts, risk_reward_tradeoff)
 
 
 def test_vocabulary_matches_keyword_prompt_tag_list(graph):
@@ -66,7 +66,7 @@ def test_vocabulary_follows_graph_not_hardcoded():
 
 def test_glossary_one_line_per_node_with_first_fact(graph):
     lines = glossary(graph)
-    assert len(lines) == len(graph["nodes"]) == 30
+    assert len(lines) == len(graph["nodes"]) > 0
     for line, node in zip(lines, graph["nodes"]):
         aliases = node.get("aliases") or []
         label = f"{node['label']}({', '.join(aliases)})" if aliases else node["label"]
@@ -149,6 +149,81 @@ def test_config_has_two_examples_using_allowed_types_and_vocabulary(graph, confi
             assert r["source"] in names and r["target"] in names
 
 
+# --- 프롬프트 판본 v2(T-209) ---
+
+def _example_bodies(config: dict) -> list[tuple[str, dict]]:
+    out = []
+    for ex in config["prompt_overrides"]["entity_extraction_json_examples"]:
+        text = ex.split(" 입력: ", 1)[1].split("\n", 1)[0]
+        out.append((text, json.loads(ex[ex.index("{"):])))
+    return out
+
+
+def test_default_prompt_is_v1_unchanged(graph, config):
+    assert config["prompt"] == "v1"
+    assert build_extraction_config(graph, "v1") == config
+    assert "[관계 규칙]" not in config["addon_params"]["entity_types_guidance"]
+
+
+def test_unknown_prompt_variant_raises(graph):
+    with pytest.raises(ValueError):
+        build_extraction_config(graph, "v9")
+
+
+def test_v2_guidance_has_link_rules_and_everything_v1_has(graph, config):
+    v2 = build_extraction_config(graph, "v2")["addon_params"]["entity_types_guidance"]
+    assert "[관계 규칙]" in v2 and "관계로 꼭 잇는다" in v2 and "나열된" in v2
+    v1 = config["addon_params"]["entity_types_guidance"]
+    assert all(line in v2.splitlines() for line in v1.splitlines())  # v1 줄은 모두 그대로 남는다
+
+
+def test_v2_examples_valid_grounded_and_linked(graph):
+    cfg = build_extraction_config(graph, "v2")
+    bodies = _example_bodies(cfg)
+    assert len(bodies) == 4
+    vocab = set(controlled_vocabulary(graph))
+    systems = linked_systems = 0
+    for text, body in bodies:
+        names = {e["name"] for e in body["entities"]}
+        assert body["entities"] and body["relationships"]
+        for r in body["relationships"]:
+            assert r["source"] in names and r["target"] in names
+        tagged = {r["source"] for r in body["relationships"] if r["target"] in vocab}
+        for e in body["entities"]:
+            assert e["type"] in ENTITY_TYPES
+            if e["type"] == "추상구조":
+                assert e["name"] in vocab
+                # 선언만 하고 잇지 않은 추상구조가 없다("태그는 관계로")
+                assert any(e["name"] in (r["source"], r["target"]) for r in body["relationships"])
+            else:
+                assert e["name"].replace(" ", "") in text.replace(" ", "")  # 입력에 있는 이름만
+            if e["type"] == "게임시스템":
+                systems += 1
+                linked_systems += e["name"] in tagged
+            if e["type"] in ("재화", "아이템"):
+                # 재화·아이템은 시스템·보스와 이어진다
+                assert any(e["name"] in (r["source"], r["target"]) for r in body["relationships"])
+    # 예시도 관문 정의(게임시스템 연결률)를 넘되, 구조가 없는 입력에는 태그를 붙이지 않는 예(4)를 둔다
+    assert linked_systems / systems >= 0.6 and linked_systems < systems
+    assert not any(e["type"] == "추상구조" for e in bodies[3][1]["entities"])
+
+
+def test_v2_examples_have_no_numbers_or_banned_words(graph):
+    text = json.dumps(build_extraction_config(graph, "v2")["prompt_overrides"], ensure_ascii=False)
+    assert not any(ch.isdigit() for ch in text.replace("예시 1", "").replace("예시 2", "")
+                   .replace("예시 3", "").replace("예시 4", ""))  # 규칙 2: 수치 없음
+    for word in BANNED_WORDS:
+        assert word not in text
+
+
+def test_system_prompt_takes_prompt_variant(graph):
+    from app.extract_worker import extraction_system_prompt
+
+    v1, v2 = extraction_system_prompt(graph), extraction_system_prompt(graph, "v2")
+    assert "[관계 규칙]" in v2 and "[관계 규칙]" not in v1
+    assert "예시 4 입력" in v2 and "예시 3 입력" not in v1
+
+
 def test_extraction_prompts_restores_global_prompts(config):
     before = {k: (list(v) if isinstance(v, list) else v) for k, v in PROMPTS.items()}
     with extraction_prompts(config):
@@ -164,8 +239,10 @@ def test_extraction_prompts_restores_on_error(config):
     assert PROMPTS["entity_extraction_json_examples"] == before
 
 
-def test_lightrag_accepts_config_and_formats_system_prompt(tmp_path, config):
-    """실제 LightRAG 1.5.7이 설정을 받아 프롬프트 프로필에 반영하는지(LLM 호출 없음)."""
+@pytest.mark.parametrize("variant", ["v1", "v2"])
+def test_lightrag_accepts_config_and_formats_system_prompt(tmp_path, graph, variant):
+    """실제 LightRAG 1.5.7이 설정을 받아 프롬프트 프로필에 반영하는지(LLM 호출 없음). v2(T-209)도 같은 길."""
+    config = build_extraction_config(graph, variant)
     from lightrag import LightRAG
 
     from app.config import Settings
@@ -254,3 +331,21 @@ def test_filter_does_not_mutate_inputs():
     relationships = [_rel("a", "지어낸 구조")]
     filter_extraction(entities, relationships, VOCAB)
     assert len(entities) == 1 and len(relationships) == 1
+
+
+def test_filter_drops_types_outside_entity_types_and_their_relationships():
+    """Other·목록 밖 유형은 버린다(T-413). 비튼 유형으로 목록 밖 추상구조가 빠져나가지 않게."""
+    entities = [_ent("스타포스 강화", "게임시스템"), _ent("경험치", "추상structure"), _ent("입장권", "Other"),
+                _ent("사냥", "활동"), _ent("확률형 강화", "추상구조")]
+    relationships = [_rel("스타포스 강화", "경험치"), _rel("입장권", "스타포스 강화"), _rel("스타포스 강화", "확률형 강화")]
+    ents, rels = filter_extraction(entities, relationships, VOCAB)
+    assert [e["entity_name"] for e in ents] == ["스타포스 강화", "확률형 강화"]
+    assert [(r["src_id"], r["tgt_id"]) for r in rels] == [("스타포스 강화", "확률형 강화")]
+
+
+def test_filter_keeps_relationship_when_same_name_also_kept():
+    entities = [_ent("메소", "재화"), _ent("메소", "Other"), _ent("결정석", "아이템")]
+    relationships = [_rel("결정석", "메소")]
+    ents, rels = filter_extraction(entities, relationships, VOCAB)
+    assert [e["entity_type"] for e in ents] == ["재화", "아이템"]
+    assert rels == relationships

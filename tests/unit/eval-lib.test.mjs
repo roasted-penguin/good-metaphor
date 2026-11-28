@@ -191,7 +191,7 @@ test('평가셋 alias-negative: 4문장 이상, forbidNodes는 그래프 id, exp
 
 // --- T-150 여유(margin)·홀드아웃 ---
 import {
-  marginOf, marginsOf, lowMargins, marginGuardFails, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets
+  marginOf, marginsOf, lowMargins, marginGuardFails, judgeMarginGuard, knownFromFails, marginGuardLines, fmtMargin, lowMarginLines, missLine, marginThreshold, pickSets
 } from '../../tools/eval-lib.mjs';
 
 const R = (...pairs) => pairs.map(([id, score]) => ({ id, score }));
@@ -231,6 +231,8 @@ test('marginsOf: 비유 없음·음성 문장은 빼고 문장별 여유를 순�
   assert.deepEqual(ms.map(m => m.sentence), ['가', '나']);
   assert.ok(Math.abs(ms[0].margin - 0.001) < 1e-9);
   assert.ok(Math.abs(ms[1].margin - -0.1) < 1e-9);
+  // 경쟁자(T-192): 맞히면 기대 밖 최고 노드, 틀리면 1위 노드
+  assert.deepEqual(ms.map(m => m.rival), ['x', 'x']);
 });
 
 test('lowMargins: 맞힌 문장(여유 ≥ 0) 중 임계값 미만만, 작은 순서로', () => {
@@ -238,10 +240,46 @@ test('lowMargins: 맞힌 문장(여유 ≥ 0) 중 임계값 미만만, 작은 �
   assert.deepEqual(lowMargins(ms, 0.005).map(m => m.sentence), ['다', '가']);
 });
 
-test('marginGuardFails: 가드 문장 중 여유가 임계값 미만(틀린 것 포함)만', () => {
+test('marginGuardFails: 가드 문장 중 여유가 임계값 미만(틀린 것 포함)만, 여유와 함께', () => {
   const ms = [{ sentence: '가', margin: 0.001 }, { sentence: '나', margin: -0.01 }, { sentence: '다', margin: 0.001 }, { sentence: '라', margin: 0.3 }];
-  assert.deepEqual(marginGuardFails(['가', '나', '라'], ms, 0.005), ['가', '나']);
+  assert.deepEqual(marginGuardFails(['가', '나', '라'], ms, 0.005), [{ sentence: '가', margin: 0.001 }, { sentence: '나', margin: -0.01 }]);
   assert.deepEqual(marginGuardFails([], ms, 0.005), []);
+});
+
+// --- T-188 여유 가드 기준선(아는 얇은 문장): 새로 얇아진 가드·아는 문장이 더 얇아진 것만 실패 ---
+test('judgeMarginGuard: 목록에 없는 얇은 가드는 실패, 아는 문장은 바닥 이상이면 통과', () => {
+  const known = [{ sentence: '가', floor: 0.0010, task: 'T-1' }, { sentence: '나', floor: 0.0030 }, { sentence: '마', floor: 0.002 }];
+  const fails = [{ sentence: '가', margin: 0.0012 }, { sentence: '나', margin: 0.0021 }, { sentence: '다', margin: 0.004 }];
+  const j = judgeMarginGuard(fails, known);
+  assert.deepEqual(j.held.map(x => x.sentence), ['가']);
+  assert.equal(j.held[0].task, 'T-1');
+  assert.deepEqual(j.fail.map(x => [x.sentence, x.floor ?? null]), [['나', 0.003], ['다', null]]);
+  // 목록에 있는데 이제 여유가 임계값 이상(또는 가드에서 빠짐): 실패 아님, 목록에서 빼라고 알림
+  assert.deepEqual(j.cleared.map(x => x.sentence), ['마']);
+});
+
+test('judgeMarginGuard: 아는 문장도 틀리면(여유 < 0) 실패, 목록이 비면 예전처럼 모두 실패', () => {
+  assert.deepEqual(judgeMarginGuard([{ sentence: '가', margin: -0.0001 }], [{ sentence: '가', floor: 0 }]).fail.map(x => x.sentence), ['가']);
+  assert.equal(judgeMarginGuard([{ sentence: '가', margin: 0.001 }], []).fail.length, 1);
+});
+
+test('knownFromFails: 맞힌 얇은 가드만 바닥(넷째 자리 내림)으로, 이전 task는 이어받는다', () => {
+  const out = knownFromFails([{ sentence: '가', margin: 0.00169 }, { sentence: '나', margin: -0.002 }, { sentence: '다', margin: 0.0040 }], [{ sentence: '가', floor: 0.002, task: 'T-181' }]);
+  assert.deepEqual(out.map(x => x.sentence), ['가', '다']);
+  assert.equal(out[0].floor, 0.0016);
+  assert.equal(out[0].task, 'T-181');
+  assert.ok(out[1].floor <= 0.004 && out[1].floor >= 0.0039);
+  assert.equal(out[1].task, undefined);
+});
+
+test('marginGuardLines: 실패·통과(아는 문장)·뺄 수 있는 문장을 나눠 보인다', () => {
+  const lines = marginGuardLines({ fail: [{ sentence: '나', margin: 0.0021, floor: 0.003 }, { sentence: '다', margin: 0.004 }], held: [{ sentence: '가', margin: 0.0012, floor: 0.001, task: 'T-1' }], cleared: [{ sentence: '마', floor: 0.002 }] }, 0.005);
+  const text = lines.join('\n');
+  assert.match(text, /여유 가드: 실패 2 · 아는 얇은 문장 1 · 목록에서 뺄 수 있음 1 \(임계값 0\.005\)/);
+  assert.match(text, /✗ \+0\.0021 \(바닥 \+0\.0030\)  나/);
+  assert.match(text, /✗ \+0\.0040 \(새로 얇아짐\)  다/);
+  assert.match(text, /· \+0\.0012 \(바닥 \+0\.0010, T-1\)  가/);
+  assert.match(text, /- 마/);
 });
 
 test('fmtMargin: 부호를 붙여 소수 넷째 자리까지', () => {
@@ -277,6 +315,24 @@ test('pickSets: 기본은 평가셋·검증셋, --holdout이면 홀드아웃만 
   assert.ok(def.every(s => s.guarded));
   const ho = pickSets(['--holdout'], { evalSet: e, validation: v, holdout: h });
   assert.deepEqual(ho.map(s => [s.name, s.cases, s.guarded]), [['홀드아웃', h, false]]);
+});
+
+test('pickSets: --set이면 그 파일 문장 하나만(가드 대상 아님), 관심사와 무관 (T-191)', () => {
+  const e = [{ sentence: 'e' }], x = [{ sentence: 'x', expectNodes: ['guild'] }];
+  const s = pickSets(['--set', 'tools/eval-expand-maplestory.json'], { evalSet: e, validation: e, holdout: e, extraSet: x, extraName: 'eval-expand-maplestory.json' });
+  assert.deepEqual(s.map(z => [z.name, z.cases, z.guarded]), [['추가 셋 eval-expand-maplestory.json', x, false]]);
+});
+
+// 확장 평가 파일(T-191): 정답 노드가 지금 메이플 그래프에 있고, 다른 평가 파일과 문장이 겹치지 않는다
+test('eval-expand-maplestory.json: 정답 노드가 그래프에 있고 다른 셋과 문장이 겹치지 않는다', () => {
+  const expand = read('tools/eval-expand-maplestory.json');
+  const ids = new Set(read('extension/data/common/maplestory.json').nodes.map(n => n.id));
+  const others = new Set(['tools/eval-set.json', 'tools/eval-holdout.json', 'tools/eval-unseen.json'].flatMap(f => read(f).map(c => c.sentence)));
+  assert.ok(expand.length > 0);
+  for (const c of expand) {
+    assert.ok(c.expectNodes?.length && c.expectNodes.every(id => ids.has(id)), `정답 노드가 그래프에 없어요: ${c.sentence}`);
+    assert.ok(!others.has(c.sentence), `다른 셋과 겹쳐요: ${c.sentence}`);
+  }
 });
 
 // 홀드아웃(tools/eval-unseen.json): 예문을 고를 때 보지 않는 문장. 평가셋·검증셋·가드와 겹치지 않아야 의미가 있다

@@ -1,0 +1,662 @@
+{
+  "interest": "maplestory",
+  "note": "T-215 커뮤니티 출처 첫 묶음(D-8, ADR 0016): 에이전트가 나무위키·인벤·공식 페이지를 직접 읽고 우리 문장으로 쓴 후보 중 대체 임베더 관문 채택분. 원문 없음, 우리 문장과 출처 주소만",
+  "results": [
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "boss_bus",
+        "label": "보스 버스",
+        "facts": [
+          "보스를 쉽게 잡을 수 있는 강한 캐릭터가 메소나 솔 에르다 조각을 받고, 혼자서는 못 잡는 캐릭터를 파티에 태워 보스를 대신 잡아 주는 거래를 버스라고 부른다.",
+          "태워 주는 쪽을 기사, 타는 쪽을 먹자라고 하며, 먹자는 전투에 거의 기여하지 않아도 파티원으로서 보스 보상을 받는다.",
+          "기사의 스펙이 모자라 전멸하면 다시 도전할지, 받은 값을 돌려줄지를 두고 다툼이 생기기 쉬워 미리 조건을 확인한다."
+        ],
+        "tags": [
+          "role_division"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/5974/3588444"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "boss_reward_split",
+          "rel": "보상을 나누는 방식과 이어짐"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "exp_sprinkle",
+        "label": "경험치 뿌리기",
+        "aliases": [
+          "경뿌"
+        ],
+        "facts": [
+          "한 사람이 기상효과 아이템을 쓰면 그 맵에 있는 다른 사람들까지 함께 일정 시간 혜택을 받는데, MVP 보상의 경험치 기상효과를 이렇게 쓰는 것을 경험치 뿌리기라고 한다.",
+          "그래서 정해진 시각과 장소에 뿌리기를 예고하면 그 시간에 맞춰 사람들이 모여든다."
+        ],
+        "tags": [
+          "shared_bonus",
+          "temporary_multiplier"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/425",
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/24396"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "mvp_membership",
+          "rel": "MVP 보상으로 받음"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "combo_kill",
+        "label": "콤보킬",
+        "facts": [
+          "몬스터를 끊기지 않고 연달아 처치하면 콤보가 쌓이고, 한동안 처치가 없거나 채널을 옮기면 콤보가 끊긴다.",
+          "콤보가 정해진 수만큼 쌓일 때마다 경험치 구슬이 생기고, 누적 콤보가 클수록 구슬도 단계가 올라 더 많은 경험치를 준다.",
+          "구슬 경험치는 몬스터 기본 경험치를 기준으로 정해져 있어, 다른 경험치 보너스가 많은 고레벨로 갈수록 전체에서 차지하는 비중이 줄어든다."
+        ],
+        "tags": [
+          "threshold_req",
+          "diminishing_returns"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/453",
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 경험치를 더함"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "multi_kill",
+        "label": "멀티킬",
+        "facts": [
+          "한 번의 공격으로 몬스터를 여러 마리 동시에 처치하면 처치한 수에 따라 보너스 경험치를 더 받는다.",
+          "한꺼번에 잡는 수가 많을수록 마리당 보너스 비율도 커져서, 몬스터를 모아 한 번에 쓸어 담는 사냥이 더 효율적이다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/453",
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 효율을 높임"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "pass",
+      "node": {
+        "id": "combat_analysis",
+        "label": "전투분석",
+        "facts": [
+          "정해진 시간 동안 캐릭터가 준 데미지, 얻은 메소와 경험치, 처치한 몬스터 수를 재서 보여 주는 기능이다.",
+          "같은 시간 동안 사냥터나 스킬 배치를 바꿔 가며 재면 어느 쪽이 더 많이 버는지 숫자로 비교할 수 있다.",
+          "스킬별로 준 데미지와 사용 횟수도 따로 보여 줘서, 어떤 스킬이 딜에서 얼마를 차지하는지 확인하는 데 쓴다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/news/update/407",
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 효율을 잼"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "elite_monster",
+        "label": "엘리트 몬스터와 엘리트 보스",
+        "facts": [
+          "레벨 범위 몬스터를 사냥하다 보면 체력과 공격력이 훨씬 강한 엘리트 몬스터가 가끔 나타난다.",
+          "엘리트 몬스터와 엘리트 챔피언을 많이 잡으면 엘리트 보스가 나타나고, 잡으면 경험치 구슬과 희귀한 보물 상자를 준다.",
+          "희귀한 보물 상자에서는 주문서 같은 강화 재료가 나오지만, 하루에 열 수 있는 개수에는 상한이 있다."
+        ],
+        "tags": [
+          "progression_gate",
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/455",
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%97%98%EB%A6%AC%ED%8A%B8%20%EB%AA%AC%EC%8A%A4%ED%84%B0%20%EB%B0%8F%20%EB%B3%B4%EC%8A%A4"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "level_range",
+          "rel": "레벨 범위 몬스터를 잡을 때 나옴"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "growth_potion",
+        "label": "성장의 비약",
+        "facts": [
+          "성장의 비약은 정해진 레벨 범위 안의 캐릭터가 쓰면 그 자리에서 레벨을 하나 올려 준다.",
+          "범위보다 높은 레벨에서 쓰면 범위 끝 레벨 하나를 올리는 만큼의 경험치만 주므로, 레벨이 높아질수록 같은 비약으로 오르는 비율이 작아진다."
+        ],
+        "tags": [
+          "diminishing_returns"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/News/Notice/138894",
+          "https://www.inven.co.kr/board/maple/2304/18586"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "level_exp",
+          "rel": "레벨업 요구 경험치에 따라 효과가 달라짐"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "combat_power_cut",
+        "label": "전투력과 환산 주스탯",
+        "facts": [
+          "전투력은 캐릭터의 스탯과 공격력, 데미지 관련 수치를 한데 모아 다른 캐릭터와 성장 정도를 비교하기 쉽게 만든 숫자다.",
+          "높은 보스로 갈수록 유저들이 만든 환산 주스탯을 기준으로 삼아, 보스마다 필요한 환산 대비 내 환산 비율로 혼자 잡을 수 있는지를 가늠한다.",
+          "보스 파티를 모을 때도 일정 전투력이나 환산 이상만 받는 식으로 참여 기준으로 쓴다."
+        ],
+        "tags": [
+          "threshold_req"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/390",
+          "https://namu.wiki/w/%ED%99%98%EC%82%B0%20%EC%A3%BC%EC%8A%A4%ED%83%AF"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "boss_entry",
+          "rel": "보스 도전 기준이 됨"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "one_kill_cut",
+        "label": "원킬컷과 원젠",
+        "aliases": [
+          "원킬컷",
+          "원젠"
+        ],
+        "facts": [
+          "사냥터 몬스터를 스킬 한 번에 잡는 데 필요한 최소 스펙을 원킬컷이라 하고, 이를 넘기면 사냥 속도가 크게 빨라진다.",
+          "맵의 몬스터를 다시 나타나기 전에 모두 잡아 내는 상태를 원젠이라 하며, 그 맵에서 시간당 잡을 수 있는 최대치다."
+        ],
+        "tags": [
+          "threshold_req",
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/19056"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 효율을 정함"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "drop_meso_rate",
+        "label": "아이템 드롭률과 메소 획득량",
+        "aliases": [
+          "드메"
+        ],
+        "facts": [
+          "아이템 드롭률과 메소 획득량 옵션은 사냥과 보스에서 얻는 아이템과 메소를 늘리지만, 장비 잠재능력으로 올릴 수 있는 양에는 상한이 있다.",
+          "드롭률이 일정 수준을 넘으면 메소 주머니가 거의 확실히 떨어져서, 그 기준까지는 드롭률을 먼저 맞추고 그 뒤로는 메소 획득량을 올리는 순서를 따진다.",
+          "이 옵션 장비는 전투 능력을 덜어 내는 대신 수입을 늘리므로 사냥할 때만 바꿔 끼기도 한다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/11607"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 수입을 늘림"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "damage_stacking",
+        "label": "데미지 합연산과 곱연산",
+        "facts": [
+          "데미지와 보스 몬스터 데미지 옵션은 모두 더해서 한 번에 적용되는 합연산이라, 이미 많이 가진 상태에서 같은 양을 더하면 실제로 늘어나는 비율이 점점 작아진다.",
+          "최종 데미지는 다른 옵션과 따로 곱해지는 곱연산이라, 이미 가진 양과 상관없이 붙은 비율만큼 피해가 늘어난다."
+        ],
+        "tags": [
+          "diminishing_returns"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/390",
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": []
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "cube_pity",
+        "label": "잠재능력 등급 상승 보장",
+        "facts": [
+          "큐브로 잠재능력 등급을 올리는 시도가 정해진 횟수만큼 연달아 실패하면, 그다음에는 등급이 확정으로 올라간다.",
+          "보장까지 남은 횟수는 큐브 종류와 등급마다 따로 쌓이고, 운 좋게 먼저 등급이 오르면 처음부터 다시 센다.",
+          "그래서 운이 나빠도 등급을 올리는 데 드는 최대 비용을 미리 계산할 수 있다."
+        ],
+        "tags": [
+          "prob_upgrade",
+          "expected_value"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/News/Update/704",
+          "https://namu.wiki/w/%EC%9E%A0%EC%9E%AC%EB%8A%A5%EB%A0%A5"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "cube",
+          "rel": "큐브 등급 상승에 적용"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "fame_points",
+        "label": "인기도",
+        "facts": [
+          "인기도는 다른 플레이어가 올리거나 내려 줄 수 있는 수치로, 한 캐릭터는 하루에 한 번만 남의 인기도를 바꿀 수 있다.",
+          "같은 상대에게는 한 번 올려 준 뒤 다음 달이 되어야 다시 올려 줄 수 있다.",
+          "인기도가 오르면 매력 성향도 함께 올라서, 거래 상대의 신뢰도를 가늠하는 지표나 매력 레벨을 채우는 수단으로 쓰인다."
+        ],
+        "tags": [
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EC%9D%B8%EA%B8%B0%EB%8F%84",
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/382"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "trait",
+          "rel": "매력 성향을 올림"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "wonderberry",
+        "label": "위습의 원더베리",
+        "facts": [
+          "캐시로 사는 위습의 원더베리를 쓰면 원더 펫이나 펫 관련 소비 아이템 가운데 하나가 정해진 확률로 무작위로 나온다.",
+          "원하는 펫이 나올 때까지 여러 개를 쓰는 경우가 많고, 얻은 펫은 한 번 교환할 수 있어 시장에서 거래된다."
+        ],
+        "tags": [
+          "random_reroll"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/437",
+          "https://namu.wiki/w/%EC%9C%84%EC%8A%B5%EC%9D%98%20%EC%9B%90%EB%8D%94%EB%B2%A0%EB%A6%AC"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": []
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "genesis_liberation",
+        "label": "제네시스 무기 해방",
+        "facts": [
+          "제네시스 무기 해방 퀘스트는 검은 마법사 군단장 보스들을 차례로 잡아 어둠의 흔적을 정해진 만큼 모아야 다음 단계로 넘어간다.",
+          "어둠의 흔적은 주간 보스에서 얻어 일주일에 모을 수 있는 양이 정해져 있어서, 해방까지 여러 주가 걸린다.",
+          "모든 단계를 마치면 봉인이 풀린 제네시스 무기를 얻는다."
+        ],
+        "tags": [
+          "progression_gate",
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/news/update/762",
+          "https://namu.wiki/w/%EC%A0%9C%EB%84%A4%EC%8B%9C%EC%8A%A4%20%EB%AC%B4%EA%B8%B0"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "genesis_pass",
+          "rel": "흔적 획득을 늘리는 패스"
+        },
+        {
+          "to": "weekly_boss",
+          "rel": "주간 보스에서 흔적을 얻음"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "sol_erda_fragment",
+        "label": "솔 에르다 조각 시세",
+        "facts": [
+          "솔 에르다 조각은 HEXA 코어를 강화하는 데 꼭 필요한 재료로, 사냥과 보스에서 얻고 다른 사람과 거래할 수 있다.",
+          "모두가 필요로 해서 경매장 가격이 수요와 공급에 따라 오르내리고, 새 6차 스킬 소식이나 획득량을 늘리는 이벤트가 있으면 값이 크게 흔들린다."
+        ],
+        "tags": [
+          "market_price"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/405",
+          "https://www.inven.co.kr/board/maple/5974/6801760"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "sol_erda",
+          "rel": "함께 쓰는 강화 재료"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "self_enhance",
+        "label": "직접 강화와 완성품 구매",
+        "aliases": [
+          "직작"
+        ],
+        "facts": [
+          "장비를 직접 강화하면 운이 좋을 때 완성품보다 싸게 끝나지만, 운이 나쁘면 훨씬 많은 비용이 들 수 있다.",
+          "경매장에서 이미 강화된 완성품을 사면 드는 비용이 확정되므로, 부위마다 경매장 가격과 직접 강화의 평균 비용을 비교해 고른다."
+        ],
+        "tags": [
+          "expected_value"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/5974/7227545"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "auction",
+          "rel": "완성품을 사는 곳"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "maple_homework",
+        "label": "메할일(일일·주간 숙제)",
+        "aliases": [
+          "메할일"
+        ],
+        "facts": [
+          "매일 하는 일일 퀘스트와 매주 하는 주간 보스·주간 퀘스트처럼 정해진 주기로 반복하는 일과를 흔히 숙제나 메할일이라 부른다.",
+          "일일 숙제는 자정에, 주간 숙제는 정해진 요일에 초기화되어 그 전에 끝내지 못하면 그 주기의 몫은 사라진다."
+        ],
+        "tags": [
+          "periodic_cap"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/39607"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "weekly_boss",
+          "rel": "주간 숙제의 하나"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "bind_skill",
+        "label": "바인드",
+        "facts": [
+          "바인드는 보스를 잠시 움직이지 못하게 묶는 스킬로, 묶인 동안 가장 강한 스킬을 몰아 써서 피해를 크게 준다.",
+          "재사용 대기시간이 길고 한 번 풀린 보스는 한동안 다시 묶이지 않아서, 파티원끼리 바인드를 거는 순서를 나눠 맡는다."
+        ],
+        "tags": [
+          "cooldown",
+          "role_division"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2300/348247"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "skill_cooldown",
+          "rel": "극딜 타이밍을 맞춤"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "chilheuk_set",
+        "label": "칠흑의 보스 세트",
+        "facts": [
+          "칠흑의 보스 세트는 상위 보스에서 아주 낮은 확률로만 나오는 장신구 묶음으로, 세트 효과가 하위 보스 장신구보다 훨씬 강하다.",
+          "구하기 어려워 경매장 가격이 매우 높고, 같은 보스를 잡는 사람이 늘어 공급이 많아지면 값이 내려간다."
+        ],
+        "tags": [
+          "scarcity_value",
+          "market_price"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EC%B9%A0%ED%9D%91%EC%9D%98%20%EB%B3%B4%EC%8A%A4%20%EC%84%B8%ED%8A%B8",
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/459"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "set_effect",
+          "rel": "세트 효과가 붙음"
+        }
+      ]
+    },
+    {
+      "batch": 32,
+      "status": "warn",
+      "node": {
+        "id": "budget_gear",
+        "label": "흙템(가성비 장비)",
+        "facts": [
+          "완성 수준까지 강화하는 대신 비용이 싸고 결과 편차가 적은 단계까지만 강화해 최소한의 성능을 챙긴 장비를 흙템이라 부른다.",
+          "강화 단계가 높을수록 같은 성능을 더 얻는 데 드는 비용이 급격히 커져서, 낮은 단계에서 멈춘 상위 장비가 높은 단계까지 올린 하위 장비보다 가성비가 좋을 때가 많다."
+        ],
+        "tags": [
+          "diminishing_returns"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/40365"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "chilheuk_set",
+          "rel": "흙칠흑처럼 낮은 단계로 쓰는 상위 세트"
+        },
+        {
+          "to": "starforce",
+          "rel": "강화 단계를 어디서 멈출지 정함"
+        }
+      ]
+    },
+    {
+      "batch": 33,
+      "status": "warn",
+      "node": {
+        "id": "boss_gear_generation",
+        "label": "보스 장비 세대",
+        "facts": [
+          "보스 방어구와 무기 세트는 루타비스, 앱솔랩스, 아케인셰이드, 에테르넬처럼 더 강한 보스에서 나오는 다음 세대로 이어지고, 세대가 오를수록 착용 레벨과 성능이 높아진다.",
+          "다음 세대가 널리 쓰이면 이전 세대 장비는 매물이 넘쳐 아주 싼값에 거래되고, 새로 키우는 캐릭터가 잠깐 거쳐 가는 장비가 된다."
+        ],
+        "tags": [
+          "market_price"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EC%95%84%EC%BC%80%EC%9D%B8%EC%85%B0%EC%9D%B4%EB%93%9C%20%EC%84%B8%ED%8A%B8",
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/459"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "set_effect",
+          "rel": "같은 세대끼리 세트 효과"
+        }
+      ]
+    },
+    {
+      "batch": 33,
+      "status": "warn",
+      "node": {
+        "id": "alt_character_leveling",
+        "label": "부캐 육성(유니온·링크 작)",
+        "facts": [
+          "본캐가 아닌 캐릭터를 유니온 등급이나 링크 스킬 단계를 채울 만큼만 키우는 일을 흔히 작이라고 부른다.",
+          "부캐를 하나 키울 때마다 유니온 공격대와 링크 스킬로 본캐 능력치가 조금씩 올라서, 본캐를 직접 키우기 어려워진 뒤의 성장 수단이 된다."
+        ],
+        "tags": [
+          "shared_bonus"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/48124"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "union_link",
+          "rel": "유니온과 링크 스킬을 채움"
+        }
+      ]
+    },
+    {
+      "batch": 33,
+      "status": "warn",
+      "node": {
+        "id": "stationary_hunting",
+        "label": "제자리 사냥",
+        "facts": [
+          "캐릭터가 거의 움직이지 않고 한자리에서 사냥터 몬스터를 다시 나타나는 대로 잡아 내는 사냥 방식을 제자리 사냥이라고 한다.",
+          "몬스터를 끌어오거나 넓게 덮는 설치형 스킬을 맞는 자리에 두면 직업과 상관없이 가능해, 손이 덜 가면서 시간당 사냥량은 유지된다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/38663"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 방식의 하나"
+        }
+      ]
+    }
+  ]
+}

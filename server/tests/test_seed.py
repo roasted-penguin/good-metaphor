@@ -39,7 +39,7 @@ def test_shape_matches_insert_custom_kg_keys(kg):
 
 def test_entity_count_is_tags_plus_nodes_without_duplicates(graph, kg):
     names = [e["entity_name"] for e in kg["entities"]]
-    assert len(names) == len(graph["tags"]) + len(graph["nodes"]) == 51  # 태그 21(T-176) + 노드 30(T-172)
+    assert len(names) == len(graph["tags"]) + len(graph["nodes"])  # 노드 수는 확장마다 바뀌므로 그래프에서 센다(T-196)
     assert len(set(names)) == len(names)
 
 
@@ -203,7 +203,7 @@ def test_unknown_node_tag_is_dropped():
 
 def test_seed_counts(graph, kg):
     expected_rels = sum(len(n["tags"]) for n in graph["nodes"]) + len(graph["edges"])
-    assert seed_counts(kg) == {"entities": 51, "relationships": expected_rels}
+    assert seed_counts(kg) == {"entities": len(graph["tags"]) + len(graph["nodes"]), "relationships": expected_rels}
 
 
 def test_self_loop_edge_is_dropped():
@@ -224,24 +224,68 @@ def test_provenance_fields_do_not_change_seed(graph):
     """sources·verifiedAt은 사실이 아니라 메타데이터다. 있어도 없어도 KG가 똑같다(URL이 설명·청크에 섞이지 않음)."""
     with_prov = copy.deepcopy(graph)
     for n in with_prov["nodes"]:
-        n["sources"] = ["https://maplestory.nexon.com/News/Update/799"]
+        n["sources"] = ["https://maplestory.nexon.com/News/Update/799", "https://namu.wiki/w/x"]
+        n["sourceKind"] = "community"
         n["verifiedAt"] = "2026-10-11"
     without = copy.deepcopy(graph)
     for n in without["nodes"]:
         n.pop("sources", None)
+        n.pop("sourceKind", None)
         n.pop("verifiedAt", None)
     assert graph_to_custom_kg(with_prov) == graph_to_custom_kg(without)
     text = json.dumps(graph_to_custom_kg(with_prov), ensure_ascii=False)
     assert "maplestory.nexon.com" not in text and "2026-10-11" not in text
+    assert "namu.wiki" not in text and "community" not in text
+
+
+SOURCE_POLICY = REPO_ROOT / "tools" / "source-policy.json"
+
+
+def _classify(url, policy):
+    """tools/source-policy.mjs classifySource와 같은 판정: (kind, site) 또는 None."""
+    from urllib.parse import urlparse
+
+    u = urlparse(url)
+    if u.scheme != "https":
+        return None
+
+    def hit(rule):
+        host_ok = u.hostname == rule["host"] if "host" in rule else u.hostname.endswith(rule.get("suffix", "\0"))
+        return host_ok and (not rule.get("paths") or any(u.path.startswith(p) for p in rule["paths"]))
+
+    if any(hit(r) for r in policy["official"]):
+        return ("official", "official")
+    c = next((r for r in policy["community"] if hit(r)), None)
+    return ("community", c["site"]) if c else None
+
+
+def test_source_policy_classify_and_corroborate():
+    """D-8·ADR 0016: 커뮤니티(나무위키 /w/·인벤 메이플)는 공식 1개 또는 서로 다른 커뮤니티 2곳과 함께여야 한다."""
+    policy = json.loads(SOURCE_POLICY.read_text(encoding="utf-8"))["interests"]["maplestory"]
+    assert _classify("https://maplestory.nexon.com/News/Update/1", policy) == ("official", "official")
+    assert _classify("https://namu.wiki/w/x", policy) == ("community", "namuwiki")
+    assert _classify("https://www.inven.co.kr/board/maple/5974/1", policy) == ("community", "inven")
+    assert _classify("https://namu.wiki/history/x", policy) is None
+    assert _classify("http://namu.wiki/w/x", policy) is None
+    assert _classify("https://blog.naver.com/x", policy) is None
 
 
 def test_real_graph_nodes_have_provenance(graph):
-    """확장 validateGraph와 같은 규칙: 공통 노드마다 공식 출처 1개 이상 + YYYY-MM-DD 검수 날짜."""
+    """확장 그래프 테스트와 같은 규칙: 공통 노드마다 출처 정책(공식, 또는 교차 확인된 커뮤니티 + sourceKind) + YYYY-MM-DD 검수 날짜."""
     import re
     from datetime import date
 
+    policy = json.loads(SOURCE_POLICY.read_text(encoding="utf-8"))["interests"]["maplestory"]
     for n in graph["nodes"]:
         assert n.get("sources"), n["id"]
-        assert all(u.startswith("https://maplestory.nexon.com/") for u in n["sources"]), n["id"]
+        classes = [_classify(u, policy) for u in n["sources"]]
+        assert all(classes), (n["id"], n["sources"])
+        official = sum(1 for k, _ in classes if k == "official")
+        sites = {s for k, s in classes if k == "community"}
+        if sites:
+            assert n.get("sourceKind") == "community", n["id"]
+            assert official >= 1 or len(sites) >= 2, n["id"]
+        else:
+            assert n.get("sourceKind", "official") == "official", n["id"]
         assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", n["verifiedAt"]), n["id"]
         date.fromisoformat(n["verifiedAt"])

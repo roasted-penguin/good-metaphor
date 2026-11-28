@@ -11,6 +11,16 @@
 // 비유 문구는 시스템 프롬프트의 analogyPrefix("4. analogy는 "…" 문구로 시작")를 따른다(T-302, 관심사별 말머리 확인용)
 // AI 초안(T-301): 시스템 프롬프트가 "개념 노드 목록으로 정리"면 DRAFT_NODES 를 코드블록 JSON으로 답한다.
 //   쓸 수 있는 노드 4개(숫자 경고 1) + 목록 밖 태그만 있는 노드 1(버림) + 금칙어 사실 1개가 섞인 노드(그 사실만 버림)
+// 이어 묻기 에이전트(T-216): 시스템 프롬프트가 "이어서 묻는 질문"이면 JSON 액션으로 답한다(agentReply).
+//   첫 차례: 질문에 "다른"이 있으면 search_graph(근거 개념 제외), 아니면 get_node_facts(근거 개념).
+//   관찰이 있으면 그 결과 첫 노드의 첫 fact로 final. 질문에 "후보밖테스트"면 첫 차례에 후보 밖(그래프에는 있는) 노드로 final(규칙 1)
+// 👎 교정 진단 에이전트(T-220): 시스템 프롬프트가 "왜 틀렸는지 진단"이면 JSON 액션으로 답한다(diagnoseReply).
+//   첫 차례: 후보 개념이 있으면 첫 후보로 get_node_facts, 없으면 search_graph(쓰지 말 개념 제외).
+//   관찰이 있으면 cause "structure" + 그 노드 첫 fact로 새 비유 final. 문장에 "후보밖진단테스트"면 매번 후보 밖 노드로 final(검증기가 숨김)
+// 새 관심사 도우미(T-225): 시스템 프롬프트 표시어(HELPER_MARK)로 계획·초안·평가·고쳐 쓰기에 답한다(helperReply).
+//   계획(첫 바퀴): HELPER_CONCEPTS + skip vendor_lock_in, 다음 바퀴는 빈 목록 + 같은 skip(두 번 skip이라 없음, T-226). 초안: 개념 이름별 HELPER_FACTS("경기 시간"은 숫자 사실 → 코드가 고쳐 쓰기로).
+//   평가: "억지 태그 개념"만 태그 no. 고쳐 쓰기: "억지 태그 개념"은 drop, 그 밖은 숫자 없는 사실.
+//   관심사가 "도우미지연테스트"면 응답마다 HELPER_SLOW_MS 늦춘다(서비스 워커를 멈췄다 이어 가는 시험)
 export const BLOCKED_IN_ANALOGY = '리.선.족';
 export const BLOCKED_IN_MEANING = '쌀 숭이';
 import http from 'node:http';
@@ -18,13 +28,87 @@ import { readFileSync } from 'node:fs';
 
 export const DRAFT_NODES = [
   { label: '오프사이드 규칙', facts: ['공격수가 마지막 수비수보다 앞에서 공을 받으면 오프사이드 반칙이다.', '오프사이드는 부심이 깃발로 알린다.'], tags: ['threshold_req'] },
-  { label: '이적 시장', facts: ['인기 선수는 원하는 구단이 많아 이적료가 오른다.'], tags: ['market_price', 'scarcity_value'] },
+  { label: '이적 시장', facts: ['인기 축구 선수는 데려가려는 구단이 몰려 이적료가 치솟는다.'], tags: ['market_price', 'scarcity_value'] },
   { label: '경기 시간', facts: ['한 경기는 전후반 90분이다.'], tags: ['periodic_cap'] },
   { label: '없는 태그 개념', facts: ['목록 밖 태그만 붙은 개념이다.'], tags: ['made_up_tag'] },
   { label: '금칙 사실 개념', facts: [`${BLOCKED_IN_ANALOGY}는 쓰면 안 되는 말이다.`, '이 사실은 남는다.'], tags: ['role_division', 'made_up_tag'] }
 ];
 
+export const HELPER_CONCEPTS = [['오프사이드', 'threshold_req'], ['이적 시장', 'market_price'], ['억지 태그 개념', 'prob_upgrade'], ['경기 시간', 'periodic_cap']];
+export const HELPER_FACTS = {
+  '오프사이드': { facts: ['공격수가 마지막 수비수보다 앞에서 공을 받으면 반칙이 된다.'], tags: ['threshold_req'], source: 'https://example.com/laws' },
+  '이적 시장': { facts: ['인기 선수는 데려가려는 구단이 몰릴수록 몸값이 오른다.'], tags: ['market_price', 'scarcity_value'] },
+  '억지 태그 개념': { facts: ['선수들은 경기 전에 몸을 푼다.'], tags: ['prob_upgrade'] },
+  '경기 시간': { facts: ['한 경기는 전후반 90분 동안 한다.'], tags: ['periodic_cap'] }
+};
+export const HELPER_FIXED_FACT = '한 경기는 정해진 시간이 끝나면 더 뛰지 않는다.';
+export const HELPER_SLOW_MS = 1500;
+function helperReply(system, user) {
+  const out = o => JSON.stringify(o);
+  const blocks = () => user.split('\n[노드] ').slice(1).map(b => ({ id: b.match(/^id=(\S+)/)[1], label: b.match(/^id=\S+ \| (.+)/)[1], tags: [...b.matchAll(/^  태그 (\S+) \|/gm)].map(m => m[1]) }));
+  if (system.includes('개념 목록을 계획하는 도우미')) {
+    const first = user.includes('개념 수: 많아야 10개'); // 첫 바퀴(firstPlan)만 개념을 낸다
+    return out(first ? { concepts: HELPER_CONCEPTS.map(([label, tag]) => ({ label, tag, why: '팬이면 다 알아요' })), skip: ['vendor_lock_in'] } : { concepts: [], skip: ['vendor_lock_in'] });
+  }
+  if (system.includes('계획한 개념마다 노드 초안을 쓰는 도우미')) {
+    const labels = [...user.matchAll(/^- (.+?) \| 태그 /gm)].map(m => m[1]);
+    return '```json\n' + out({ nodes: labels.map(l => ({ label: l, ...(HELPER_FACTS[l] || { facts: [`${l}은 연습할수록 는다.`], tags: ['daily_accumulation'] }) })) }) + '\n```';
+  }
+  if (system.includes('초안 노드를 검사하는 도우미')) {
+    return out({ nodes: blocks().map(b => ({ id: b.id, tags: b.tags.map(t => ({ id: t, verdict: b.label === '억지 태그 개념' ? 'no' : 'yes', reason: '판정' })), familiar: 'yes', named: 'no', reason: '' })) });
+  }
+  if (system.includes('검사에 걸린 노드를 고쳐 쓰는 도우미')) {
+    return out({ nodes: blocks().map(b => b.label === '억지 태그 개념'
+      ? { id: b.id, drop: true, reason: '이 관심사에는 이 구조가 없어요.' }
+      : { id: b.id, label: b.label, facts: b.label === '경기 시간' ? [HELPER_FIXED_FACT] : HELPER_FACTS[b.label]?.facts || ['고친 사실이 생기면 달라진다.'], tags: HELPER_FACTS[b.label]?.tags || ['threshold_req'] }) });
+  }
+  return null;
+}
+
 export const calls = [];
+// 후보 밖 final용: 그래프에 있는 노드 중 프롬프트 후보에 없는 첫 노드(T-216)
+const OUTSIDE_IDS = ['level_exp', 'quick_pass', 'trait', 'profession'];
+function agentReply(user) {
+  const out = o => JSON.stringify(o);
+  const q = user.match(/질문: (.+)/)?.[1] || '';
+  const ev = user.match(/근거 개념: id=(\S+)/)?.[1] || user.match(/- id=(\S+) \|/)?.[1] || null;
+  const sentence = user.match(/설명할 문장: (.+)/)?.[1] || '';
+  if (q.includes('후보밖테스트')) {
+    const id = OUTSIDE_IDS.find(x => !user.includes(`id=${x} `));
+    return out({ final: { answer: '레벨이 오를수록 더 많이 필요한 것과 같아요.', nodeId: id, usedFact: '' } });
+  }
+  const results = [...user.matchAll(/결과: (.+)/g)].map(m => m[1]);
+  if (!results.length) {
+    return q.includes('다른')
+      ? out({ action: 'search_graph', args: { text: sentence, exclude: ev ? [ev] : [] } })
+      : out({ action: 'get_node_facts', args: { nodeId: ev } });
+  }
+  const last = results.at(-1);
+  const id = last.match(/"id":"([^"]+)","label":"([^"]+)"/);
+  const fact = last.match(/"facts":\["((?:[^"\\]|\\.)*)"/)?.[1];
+  if (!id || !fact) return out({ final: { answer: '딱 맞는 다른 개념은 없어요.', nodeId: null, usedFact: '' } });
+  return out({ final: { answer: `${id[2]}도 같은 구조라서 비슷해요.`, nodeId: id[1], usedFact: JSON.parse(`"${fact}"`) } });
+}
+function diagnoseReply(system, user) {
+  const out = o => JSON.stringify(o);
+  const sentence = user.match(/설명할 문장: (.+)/)?.[1] || '';
+  const prefix = system.match(/answer는 "([^"]+)"로 시작/)?.[1] ?? '메이플로 치면';
+  if (sentence.includes('후보밖진단테스트')) {
+    const id = OUTSIDE_IDS.find(x => !user.includes(`id=${x} `));
+    return out({ final: { diagnosis: { cause: 'structure' }, answer: `${prefix} 레벨이 오를수록 더 많이 필요한 것과 같아요.`, nodeId: id, usedFact: '' } });
+  }
+  const results = [...user.matchAll(/결과: (.+)/g)].map(m => m[1]).filter(r => !r.startsWith('[검증 실패]'));
+  if (!results.length) {
+    const first = user.match(/후보 개념:\n- id=(\S+) \|/)?.[1];
+    const ex = [...(user.match(/쓰지 말 개념: (.+)/)?.[1] || '').matchAll(/id=([^\s,|]+)/g)].map(m => m[1]);
+    return first ? out({ action: 'get_node_facts', args: { nodeId: first } }) : out({ action: 'search_graph', args: { text: sentence, exclude: ex } });
+  }
+  const last = results.at(-1);
+  const id = last.match(/"id":"([^"]+)","label":"([^"]+)"/);
+  const fact = last.match(/"facts":\["((?:[^"\\]|\\.)*)"/)?.[1];
+  if (!id || !fact) return out({ final: { diagnosis: { cause: 'none' }, answer: '', nodeId: null, usedFact: '' } });
+  return out({ final: { diagnosis: { cause: 'structure' }, answer: `${prefix} ${id[2]}와 같은 구조예요.`, nodeId: id[1], usedFact: JSON.parse(`"${fact}"`) } });
+}
 export const analogyCalls = []; // 가짜 analogy-api 요청 기록 { headers, body }
 export const STREAM_GAP_MS = 1500;
 // 문장에 "로딩지연테스트"가 있으면 응답을 이만큼 늦춘다(로딩 말풍선을 붙잡아 두는 용도, T-108)
@@ -46,7 +130,14 @@ function mockLLM(req, res) {
     }
     let content;
     if (system.includes('개념 노드 목록으로 정리')) content = '초안이에요.\n```json\n' + JSON.stringify({ nodes: DRAFT_NODES }) + '\n```';
-    else if (system.includes('추상 구조로')) content = user.includes('금칙추상테스트') ? `${BLOCKED_IN_ANALOGY} 처럼 비용을 내고 시도하는 구조` : '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
+    else if (system.includes('추상 구조로')) {
+      const abstract = user.includes('금칙추상테스트') ? `${BLOCKED_IN_ANALOGY} 처럼 비용을 내고 시도하는 구조` : '비용을 내고 시도하면 결과가 확률에 따라 달라지는 구조';
+      // 정밀 모드 태그 판정이 켜져 있으면(T-184) 같은 호출이 JSON으로 추상 구조와 태그 확률을 함께 돌려준다
+      content = system.includes('"tags"') ? JSON.stringify({ abstract, tags: [{ id: 'prob_upgrade', p: 0.9 }, { id: 'none', p: 0.05 }] }) : abstract;
+    }
+    else if (system.includes('이어서 묻는 질문')) content = agentReply(user);
+    else if (system.includes('왜 틀렸는지 진단')) content = diagnoseReply(system, user);
+    else if (system.includes('도우미다.') && helperReply(system, user) !== null) content = helperReply(system, user);
     else if (user.includes('연결 성공')) content = '연결 성공';
     else {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
@@ -72,6 +163,7 @@ function mockLLM(req, res) {
     };
     if (user.includes('로딩지연테스트')) return void setTimeout(out, SLOW_MS);
     // AI 초안 전체 마감 확인용(T-301): e2e 사본의 마감(admin.draft.deadlineMs)보다 늦게 답한다
+    if (user.includes('관심사: 도우미지연테스트')) return void setTimeout(() => { if (!res.destroyed) out(); }, HELPER_SLOW_MS);
     if (user.includes('관심사: 초안지연테스트')) return void setTimeout(() => { if (!res.destroyed) out(); }, DRAFT_SLOW_MS);
     out();
   });

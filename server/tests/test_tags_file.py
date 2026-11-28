@@ -15,7 +15,10 @@ TAG_ORDER = [
     "inflation", "scarcity_value", "periodic_cap", "daily_accumulation", "diminishing_returns", "temporary_multiplier",
     "cooldown", "random_reroll", "expected_value", "shared_bonus", "role_division", "efficiency_metric",
     # T-171: 새 태그는 맨 뒤에만 붙인다(ADR 0012)
-    "fixed_cost_leverage", "vendor_lock_in", "brokerage_fee",
+    "fixed_cost_leverage", "vendor_lock_in", "brokerage_fee", "compliance_procedure",
+    "queue_rationing", "self_service", "time_window",
+    # T-223
+    "limited_attempts", "risk_reward_tradeoff",
 ]
 PROV = {"sources": ["https://maplestory.nexon.com/News/Update/799"], "verifiedAt": "2026-10-11"}
 

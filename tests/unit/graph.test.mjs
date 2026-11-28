@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { mergeGraphs, validateGraph, nodeText, tagText, tagDescText, embedItems } from '../../extension/lib/graph.js';
 import { validateOverlay } from '../../extension/lib/stores.js';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
+import { checkNodeSources } from '../../tools/source-policy.mjs';
 
 // 해석된 공통 그래프 = maplestory.json + tags.json (T-304)
 const common = loadCommonGraphFromDisk();
@@ -124,11 +125,11 @@ test('공통 그래프 태그마다 예문 2개 이상, 평가셋·검증셋·�
   }
 });
 
-test('태그는 통제 어휘 목록 그대로 (규칙 9, T-171·T-176에서 맨 뒤에 추가)', () => {
+test('태그는 통제 어휘 목록 그대로 (규칙 9, T-171·T-176·T-206·T-219·T-223에서 맨 뒤에 추가)', () => {
   assert.deepEqual(common.tags.map(t => t.id).sort(), [
-    'brokerage_fee', 'cooldown', 'daily_accumulation', 'diminishing_returns', 'efficiency_metric', 'escalating_cost', 'expected_value',
-    'fixed_cost_leverage', 'inflation', 'loss_risk', 'market_price', 'periodic_cap', 'prob_upgrade', 'progression_gate', 'random_reroll',
-    'role_division', 'scarcity_value', 'shared_bonus', 'temporary_multiplier', 'threshold_req', 'vendor_lock_in'
+    'brokerage_fee', 'compliance_procedure', 'cooldown', 'daily_accumulation', 'diminishing_returns', 'efficiency_metric', 'escalating_cost', 'expected_value',
+    'fixed_cost_leverage', 'inflation', 'limited_attempts', 'loss_risk', 'market_price', 'periodic_cap', 'prob_upgrade', 'progression_gate', 'queue_rationing', 'random_reroll',
+    'risk_reward_tradeoff', 'role_division', 'scarcity_value', 'self_service', 'shared_bonus', 'temporary_multiplier', 'threshold_req', 'time_window', 'vendor_lock_in'
   ]);
 });
 
@@ -192,9 +193,11 @@ test('공통 그래프 aliases: naming-meme.md A 표의 은어가 대응 노드�
   assert.deepEqual(weak, {
     starforce: ['펑'], arcane_symbol: ['세금'],
     world_trade_group: ['관세'], item_binding: ['가위'], balance_patch: ['하향', '상향'],
-    challengers_world: ['리프'], equipment_transfer: ['전승'], boss_reward_split: ['분배']
+    challengers_world: ['리프'], equipment_transfer: ['전승'], boss_reward_split: ['분배'],
+    // T-191: 확장 노드의 일상어 겹침 은어(천장·수로·시드 등)도 약한 별칭으로 넣었다
+    additional_option: ['환불'], guild_canal: ['수로'], the_seed: ['시드']
   });
-  assert.equal(common.version, '2026.11.22-4'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가, T-172 quick_pass, T-174 사냥 룬 사실, T-177 주간 보스 사실 순서, T-176 trade_fee 태그
+  assert.equal(common.version, '2026.11.28-2'); // T-153 sol_erda 희소성 태그 제거, T-302 noMatchText 추가, T-151 사실 고침, T-167 결정석 NPC·노드 11개 추가, T-172 quick_pass, T-174 사냥 룬 사실, T-177 주간 보스 사실 순서, T-176 trade_fee 태그, T-187 meso_inflation 사실 고쳐 씀, T-189 mvp·cube·boss_entry 사실 순서, T-191 노드 확장, T-196 파이프라인 첫 실제 관문 묶음 10개, T-207 묶음 2 13개, T-208 묶음 3 23개, T-211 묶음 4 12개, T-215 커뮤니티 출처 묶음 13개, T-217 묶음 2 6개
 });
 
 test('평가셋에 은어 문장 4개, 대응 노드가 그래프에 있다 (T-114)', () => {
@@ -240,10 +243,10 @@ test('오버레이(사용자 노드)는 sources·verifiedAt이 없어도 통과�
   assert.match(validateOverlay({ nodes: [{ id: 'u:x', label: 'a', facts: ['f'], tags: ['t'], sources: ['아무거나'] }] }).join(), /sources/);
 });
 
-test('실제 공통 그래프: 모든 노드에 공식 출처(maplestory.nexon.com)와 검수 날짜가 있다 (T-118, D-5)', () => {
+test('실제 공통 그래프: 모든 노드 출처가 출처 정책을 따르고(공식, 또는 교차 확인된 커뮤니티) 검수 날짜가 있다 (T-118, D-5, D-8·ADR 0016)', () => {
   for (const n of common.nodes) {
     assert.ok(Array.isArray(n.sources) && n.sources.length >= 1, `${n.id} 출처 없음`);
-    for (const u of n.sources) assert.match(u, /^https:\/\/maplestory\.nexon\.com\//, `${n.id} 출처는 공식 사이트만(D-5): ${u}`);
+    assert.deepEqual(checkNodeSources(n, 'maplestory'), [], `${n.id} 출처 정책(tools/source-policy.json): ${n.sources.join(', ')}`);
     assert.match(n.verifiedAt, /^\d{4}-\d{2}-\d{2}$/, n.id);
   }
 });

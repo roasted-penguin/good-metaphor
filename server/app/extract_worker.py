@@ -45,7 +45,7 @@ import httpx
 
 from app import seedmeta
 from app.config import Settings
-from app.extract import build_extraction_config, filter_extraction
+from app.extract import DEFAULT_PROMPT, build_extraction_config, filter_extraction
 
 log = logging.getLogger(__name__)
 
@@ -483,9 +483,11 @@ async def health(ollama_url: str, timeout: float = HEALTH_TIMEOUT_S) -> bool:
         return False
 
 
-def extraction_system_prompt(graph: Mapping[str, Any]) -> str:
-    """T-412 추출 설정(유형 안내·통제 어휘·용어 사전·예시)으로 만든 Ollama /api/chat system 프롬프트."""
-    cfg = build_extraction_config(graph)
+def extraction_system_prompt(graph: Mapping[str, Any], prompt: str = DEFAULT_PROMPT) -> str:
+    """T-412 추출 설정(유형 안내·통제 어휘·용어 사전·예시)으로 만든 Ollama /api/chat system 프롬프트.
+
+    prompt는 판본(app.extract.PROMPT_VARIANTS). 운영 워커는 기본 v1, v2는 A/B 하네스에서만 쓴다(T-209)."""
+    cfg = build_extraction_config(graph, prompt)
     examples = "\n\n".join(cfg["prompt_overrides"]["entity_extraction_json_examples"])
     return "\n".join([
         "너는 메이플스토리 문서에서 엔티티와 관계를 뽑는다. 입력에 없는 사실은 지어내지 않는다.",
@@ -499,16 +501,34 @@ def extraction_system_prompt(graph: Mapping[str, Any]) -> str:
     ])
 
 
+def _json_candidates(s: str) -> Iterator[str]:
+    """JSON으로 읽어 볼 글 후보: 통째로 → 코드 펜스 안 → 처음 `{`부터 마지막 `}`까지.
+
+    JSON 모드(format)를 못 쓰는 Ollama 러너(MLX)는 펜스·앞뒤 설명을 붙이기도 해서 뒤 두 후보를 둔다(T-413).
+    """
+    yield s
+    fence = re.search(r"```(?:json)?\s*(.*?)\s*```", s, re.S)
+    if fence:
+        yield fence.group(1)
+    start, end = s.find("{"), s.rfind("}")
+    if 0 <= start < end:
+        yield s[start:end + 1]
+
+
 def parse_extraction(content: str) -> tuple[list[dict], list[dict]]:
     """모델 응답 글 → (엔티티, 관계). JSON 객체가 아니면 ExtractParseError."""
     s = (content or "").strip()
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", s, re.S)
-    if fence:
-        s = fence.group(1)
-    try:
-        data = json.loads(s)
-    except ValueError as e:
-        raise ExtractParseError("모델 응답이 JSON이 아니에요.") from e
+    data: Any = None
+    for cand in _json_candidates(s):
+        try:
+            data = json.loads(cand)
+        except ValueError:
+            continue
+        if isinstance(data, dict):
+            break
+    else:
+        if data is None:
+            raise ExtractParseError("모델 응답이 JSON이 아니에요.")
     if not isinstance(data, dict):
         raise ExtractParseError("모델 응답이 JSON 객체가 아니에요.")
     ents = data.get("entities") or []
@@ -518,30 +538,76 @@ def parse_extraction(content: str) -> tuple[list[dict], list[dict]]:
     return [e for e in ents if isinstance(e, dict)], [r for r in rels if isinstance(r, dict)]
 
 
-def make_ollama_extractor(ollama_url: str, model: str, graph: Mapping[str, Any], think: bool = False,
-                          timeout: float = EXTRACT_TIMEOUT_S) -> Extractor:
-    """맥 Ollama `/api/chat`(JSON 모드, 스트리밍 끔)으로 청크 하나를 추출하는 함수."""
-    system = extraction_system_prompt(graph)
-    url = (ollama_url or "").rstrip("/") + "/api/chat"
+def ollama_chat_body(model: str, system: str, text: str, think: bool) -> dict[str, Any]:
+    """맥 Ollama `/api/chat` 요청 본문(JSON 모드, 스트리밍 끔). A/B 하네스(tools/ab_extract.py)도 같은 본문을 쓴다."""
+    return {"model": model, "stream": False, "format": "json", "think": think,
+            "options": {"num_ctx": EXTRACT_NUM_CTX},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}]}
 
-    async def extract(text: str) -> tuple[list[Any], list[Any]]:
-        body = {"model": model, "stream": False, "format": "json", "think": think,
-                "options": {"num_ctx": EXTRACT_NUM_CTX},
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}]}
+
+# Ollama MLX 러너(nvfp4 safetensors 모델, 0.40)는 JSON 모드를 못 해 501과 이 오류 글로 답한다(T-413 실측)
+NO_STRUCTURED_OUTPUT = "structured output is unavailable"
+
+
+def _no_structured_output(res: httpx.Response) -> bool:
+    if res.status_code != 501:
+        return False
+    try:
+        return NO_STRUCTURED_OUTPUT in str(res.json().get("error", ""))
+    except ValueError:
+        return False
+
+
+def make_ollama_chat(ollama_url: str, model: str, system: str, think: bool = False,
+                     timeout: float = EXTRACT_TIMEOUT_S) -> Callable[[str], Awaitable[dict]]:
+    """맥 Ollama `/api/chat`를 한 번 부르고 응답 JSON(dict)을 돌려주는 함수. 오류는 워커 예외로 바꾼다.
+
+    모델이 JSON 모드를 못 하면(501 structured output is unavailable) format 없이 한 번 더 보내고,
+    이 함수로는 그 뒤로도 format 없이 보낸다. 응답 파싱은 parse_extraction이 펜스·앞뒤 글을 견딘다.
+    """
+    url = (ollama_url or "").rstrip("/") + "/api/chat"
+    state = {"format": True}
+
+    async def post(body: dict) -> httpx.Response:
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=EXTRACT_CONNECT_TIMEOUT_S)) as client:
-                res = await client.post(url, json=body)
+                return await client.post(url, json=body)
         except (httpx.HTTPError, OSError) as e:
             raise ExtractConnectionError(f"맥 Ollama 연결이 끊겼어요({type(e).__name__}).") from e
+
+    async def chat(text: str) -> dict:
+        body = ollama_chat_body(model, system, text, think)
+        if not state["format"]:
+            body.pop("format")
+        res = await post(body)
+        if state["format"] and _no_structured_output(res):
+            state["format"] = False
+            log.warning("맥 Ollama 모델 %s가 JSON 모드를 못 해요. format 없이 보내요.", model)
+            body.pop("format")
+            res = await post(body)
         if 400 <= res.status_code < 500:
             raise ExtractConfigError(f"맥 Ollama 설정 오류({res.status_code}): EXTRACT_MODEL·주소를 확인해 주세요.")
         if res.status_code >= 500:
             raise ExtractConnectionError(f"맥 Ollama가 {res.status_code}로 답했어요.")
         try:
-            content = res.json()["message"]["content"]
+            data = res.json()
+            data["message"]["content"]
         except (ValueError, KeyError, TypeError) as e:
             raise ExtractParseError("Ollama 응답 JSON 모양이 달라요.") from e
-        return parse_extraction(content)
+        return data
+
+    chat.json_mode = lambda: state["format"]  # type: ignore[attr-defined]  # A/B 하네스가 JSON 모드였는지 기록(T-209)
+    return chat
+
+
+def make_ollama_extractor(ollama_url: str, model: str, graph: Mapping[str, Any], think: bool = False,
+                          timeout: float = EXTRACT_TIMEOUT_S) -> Extractor:
+    """맥 Ollama `/api/chat`(JSON 모드, 스트리밍 끔)으로 청크 하나를 추출하는 함수."""
+    chat = make_ollama_chat(ollama_url, model, extraction_system_prompt(graph), think, timeout)
+
+    async def extract(text: str) -> tuple[list[Any], list[Any]]:
+        data = await chat(text)
+        return parse_extraction(data["message"]["content"])
 
     return extract
 

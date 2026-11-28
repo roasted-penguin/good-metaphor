@@ -5,15 +5,36 @@ import { parseJSONLoose } from './providers.js';
 import { REJECTED_TEXT } from './analogy-server.js';
 import { checkGrounding, GROUNDING_REJECTED_TEXT } from './grounding.js';
 import { activeTerms, findBlocked, applyBlocklist } from './blocklist.js';
-import { buildAbstractPrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText, endingIssues, endingRetryNote } from './prompt.js';
+import { tagChoices, parseAbstractJudge, judgeTagProbs, isStructureless } from './judges.js';
+import { buildAbstractPrompt, buildAbstractJudgePrompt, buildAnalogyPrompt, demoAnswer, extractMeaning, rewriteQueryText, endingIssues, endingRetryNote } from './prompt.js';
 
 // 정밀 모드의 추상화 단계. 검색 전에 부른다(질의 문장을 바꾸므로).
-// ask(system, user, opts) → 응답 문자열. 돌려주는 값: { abstractText, queryText }
-export async function runAbstract({ sentence, word, pageTitle, ask, onStage = () => {} }) {
+// ask(system, user, opts) → 응답 문자열. 돌려주는 값: { abstractText, queryText, judge }
+// tagJudge({ tags, floor })를 주면 같은 한 번의 호출로 태그 판정도 받는다(T-184, 호출 수·지연 그대로).
+//   tags는 그래프의 통제 어휘(tags.json에서 온 graph.tags, 규칙 9). judge = { answers, probs }:
+//   answers는 없음 포함 전체 확률(debug용), probs는 judgeTagProbs(없음·하한 적용) 결과로 retrieve tagJudge.p에 넘긴다.
+//   none(isStructureless: 없음 우세 또는 하한 넘는 태그 없음)이면 queryText는 원문 그대로다
+//   (구조가 없거나 불확실한 문장의 추상화가 엉뚱한 노드를 끌어오지 않게).
+//   응답에 판정이 없으면 probs null(검색은 판정 없이). tagJudge가 없으면 예전 글 응답 그대로, judge null
+export async function runAbstract({ sentence, word, pageTitle, ask, onStage = () => {}, tagJudge = null }) {
   onStage('abstract');
-  const p = buildAbstractPrompt({ sentence, word, pageTitle });
-  const abstractText = (await ask(p.system, p.user, { json: false })).trim();
-  return { abstractText, queryText: rewriteQueryText(abstractText, sentence) };
+  if (!tagJudge) {
+    const p = buildAbstractPrompt({ sentence, word, pageTitle });
+    const abstractText = (await ask(p.system, p.user, { json: false })).trim();
+    return { abstractText, queryText: rewriteQueryText(abstractText, sentence), judge: null };
+  }
+  const choices = tagChoices(tagJudge.tags || []);
+  const p = buildAbstractJudgePrompt({ sentence, word, pageTitle, choices });
+  const { abstractText, answers } = parseAbstractJudge(await ask(p.system, p.user, { json: true }), choices);
+  // 판정이 "구조 없음"(없음 우세, 또는 하한을 넘는 태그가 하나도 없음)이면 추상 구조를 질의에 섞지 않고 원문으로 찾는다.
+  // 추상 구조는 debug에만 남긴다. 판정이 빠진 응답(answers null)은 예전 정밀 모드처럼 추상 구조 + 원문
+  const probs = judgeTagProbs(answers, { floor: tagJudge.floor ?? 0 });
+  const none = isStructureless(probs);
+  return {
+    abstractText,
+    queryText: none ? sentence : rewriteQueryText(abstractText, sentence),
+    judge: { answers, probs, none }
+  };
 }
 
 // 후보 → 비유 프롬프트 → LLM → 파싱 → 규칙 1 nodeId 검증 → 근거 검사(T-123) → 금칙어 검사(T-114).

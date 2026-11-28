@@ -6,6 +6,7 @@
   "description": "관심사 그래프 기반 비유 설명 크롬 확장 (PoC)",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:vectors": "node tools/build-vectors.mjs",
     "build:store": "node scripts/build-store.mjs",
     "store:screenshots": "node scripts/prepare-e2e.mjs && node scripts/store-screenshots.mjs",
     "test": "npm run test:unit && npm run test:e2e",
@@ -13,11 +14,23 @@
     "test:e2e": "node scripts/prepare-e2e.mjs && playwright test",
     "eval": "node tools/eval.mjs",
     "eval:fallback": "node tools/eval.mjs --fallback",
+    "eval:ci": "node tools/eval-ci.mjs",
     "eval:gen": "node tools/eval-gen.mjs",
+    "eval:followup": "node tools/eval-followup.mjs",
     "smoke:providers": "node tools/smoke-providers.mjs",
     "check:embed": "node tools/check-real-embed.mjs",
     "sim:feedback": "node tools/feedback-sim.mjs",
-    "check:corrections": "node tools/check-corrections.mjs"
+    "check:corrections": "node tools/check-corrections.mjs",
+    "node-pipeline:index": "node tools/node-pipeline/cli.mjs index",
+    "node-pipeline:draft": "node tools/node-pipeline/cli.mjs draft",
+    "node-pipeline:draft-scenes": "node tools/node-pipeline/cli.mjs draft-scenes",
+    "node-pipeline:check": "node tools/node-pipeline/cli.mjs check",
+    "node-pipeline:gate": "node tools/node-pipeline/cli.mjs gate",
+    "node-pipeline:apply": "node tools/node-pipeline/cli.mjs apply",
+    "node-pipeline:accept-alt": "node tools/node-pipeline/cli.mjs accept-alt",
+    "node-pipeline:explain-alt": "node tools/node-pipeline/cli.mjs explain-alt",
+    "check:vectors": "node tools/build-vectors.mjs --check",
+    "eval:helper": "node tools/eval-helper.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"

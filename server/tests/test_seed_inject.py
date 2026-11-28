@@ -19,6 +19,9 @@ from app.seed import graph_to_custom_kg, seed, seed_counts
 SERVER_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = SERVER_DIR.parent
 COMMON_GRAPH = REPO_ROOT / "extension" / "data" / "common" / "maplestory.json"
+_G = load_common_graph(COMMON_GRAPH)
+# 공통 그래프 엔티티 수(태그 + 노드). 확장마다 바뀌므로 그래프에서 센다(T-196)
+N_ENTITIES = len(_G["tags"]) + len(_G["nodes"])
 
 
 @pytest.fixture(scope="module")
@@ -131,7 +134,7 @@ def test_seed_loads_all_entities_and_relationships(tmp_path, kg, llm_calls):
     s = make_settings(tmp_path)
     out = asyncio.run(seed(s))
     expected = seed_counts(kg)
-    assert out["entities"] == expected["entities"] == 51
+    assert out["entities"] == expected["entities"] == N_ENTITIES
     assert out["relationships"] == expected["relationships"]
     assert out["workspace"] == "common_maplestory"
     assert Path(out["working_dir"]) == tmp_path / "rag"
@@ -147,7 +150,7 @@ def test_seed_twice_keeps_counts_and_does_not_repeat_descriptions(tmp_path, kg, 
     assert (second["entities"], second["relationships"]) == (first["entities"], first["relationships"])
 
     nodes, edges = asyncio.run(read_graph(s))
-    assert len(nodes) == 51 and len(edges) == seed_counts(kg)["relationships"]
+    assert len(nodes) == N_ENTITIES and len(edges) == seed_counts(kg)["relationships"]
     want = {e["entity_name"]: e for e in kg["entities"]}
     for n in nodes:
         e = want[n["entity_id"]]
@@ -171,7 +174,7 @@ def test_seed_does_not_need_tiktoken_download(tmp_path, monkeypatch):
     monkeypatch.setattr(tiktoken, "encoding_for_model", no_network)
     monkeypatch.setattr(tiktoken, "get_encoding", no_network)
     out = asyncio.run(seed(make_settings(tmp_path)))
-    assert out["entities"] == 51
+    assert out["entities"] == N_ENTITIES
 
 
 def test_seed_does_not_create_unknown_placeholder_nodes(tmp_path):
@@ -191,7 +194,7 @@ def test_seed_cli_prints_one_line_summary(tmp_path, kg):
     lines = r.stdout.strip().splitlines()
     assert len(lines) == 1
     line = lines[0]
-    assert "엔티티 51" in line
+    assert f"엔티티 {N_ENTITIES}" in line
     assert f"관계 {seed_counts(kg)['relationships']}" in line
     assert "common_maplestory" in line
     assert str(tmp_path / "rag") in line

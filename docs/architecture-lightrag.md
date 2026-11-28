@@ -98,7 +98,7 @@ sequenceDiagram
 ```
 
 1. **확장 → `POST /v1/analogy`**: 문장, 커서 단어, 앞 문장, 설치 토큰(로그인 시 JWT). 서버는 먼저 결과 캐시(문장 해시 + 워크스페이스 버전)를 본다.
-2. **키워드 (Gemini Flash-Lite)**: 한 번의 호출로 `ll_keywords`(구체 개념)와 `hl_keywords`(추상 구조)를 뽑는다. `hl_keywords`는 통제 어휘 18개 중에서만 고르고, 맞는 게 없으면 빈 배열이다. 문장에 승인된 은어(용어 카드 A)가 있으면 연결된 게임 시스템 이름을 `ll_keywords`에 더한다.
+2. **키워드 (Gemini Flash-Lite)**: 한 번의 호출로 `ll_keywords`(구체 개념)와 `hl_keywords`(추상 구조)를 뽑는다. `hl_keywords`는 통제 어휘 21개 중에서만 고르고, 맞는 게 없으면 빈 배열이다. 문장에 승인된 은어(용어 카드 A)가 있으면 연결된 게임 시스템 이름을 `ll_keywords`에 더한다.
 3. **검색 (LightRAG)**: `QueryParam(mode="hybrid", hl_keywords=..., ll_keywords=..., only_need_context=True)`로 공통 워크스페이스와 내 워크스페이스를 동시에 검색한다. 키워드를 직접 넘기므로 LightRAG는 키워드 LLM을 부르지 않고, 답변 대신 컨텍스트(엔티티·관계·원문 청크)만 돌려준다.
 4. **병합**: 내 워크스페이스 결과를 앞에 두고 상위 후보 3개를 고른다. 후보마다 엔티티 이름, 설명, 연결된 추상구조, 출처 청크 id가 붙는다. 오버레이 설정(공통 노드 숨김, 가중치, `useCommon`)을 여기서 적용한다.
 5. **비유 (Gemini Flash)**: 기존 `buildAnalogyPrompt`와 같은 규칙으로 한 번 호출. `nodeId`가 후보에 없으면 비유를 숨긴다. 출력에 금칙어(멸칭·실존 인물, 규칙 11)가 있으면 그 필드도 숨긴다. 같은 시스템의 근거가 여러 판이면 최신 패치 노트를 앞에 두고, 근거에 기준 날짜를 붙인다(아래 "최신화").
@@ -115,7 +115,7 @@ LLM이 필요한 두 단계(추출, 설명 병합 요약)만 맥에서 돈다.
 ```mermaid
 flowchart TB
   docs["공식 가이드·패치 노트<br/>(원문, 판본별)"] --> chunk["청킹·큐 등록<br/>EC2 · 800토큰"] --> q{"맥 켜짐?"}
-  q -->|예| ext["맥: 엔티티·관계 추출<br/>gemma4:12b · JSON 모드<br/>통제 어휘 18개 포함"]
+  q -->|예| ext["맥: 엔티티·관계 추출<br/>gemma4:12b · JSON 모드<br/>통제 어휘 21개 포함"]
   q -->|아니오| wait["다음 시간창까지 대기"] -. 재시도 .-> chunk
   ext --> merge["병합·설명 요약 (맥)"] --> emb["임베딩<br/>EC2 · bge-m3"] --> store["워크스페이스 저장<br/>공통 / 사용자"] --> review["검수 리포트<br/>추상구조 연결 없는 개념"]
   seed["시드: 기존 JSON 그래프<br/>insert_custom_kg · 추상구조 18"] --> store
@@ -136,8 +136,8 @@ LightRAG 서버의 요청별 워크스페이스 라우팅은 아직 설계 검�
 
 | 워크스페이스 | 내용 | 쓰기 | 인스턴스 |
 | --- | --- | --- | --- |
-| `common_maplestory` | 추상구조 18개 + 메이플 가이드 문서에서 추출한 그래프 | 운영자만 (추출 큐) | 상시 로드 |
-| `common_restaurant` | 추상구조 18개(같은 `tags.json`) + 식당 노드 (D-4, T-302) | 운영자만 | 상시 로드 |
+| `common_maplestory` | 추상구조 21개 + 메이플 가이드 문서에서 추출한 그래프 | 운영자만 (추출 큐) | 상시 로드 |
+| `common_restaurant` | 추상구조 21개(같은 `tags.json`) + 식당 노드 (D-4, T-302) | 운영자만 | 상시 로드 |
 | `u_<사용자id>` | 내 메모·문서에서 추출한 노드, 손으로 넣은 노드 | 본인 (로그인) | 요청 때 로드, LRU로 내림 |
 
 | 단계 | KV · 문서 상태 | 벡터 | 그래프 | 언제 |
@@ -188,6 +188,8 @@ flowchart LR
 IFBench는 Artificial Analysis 값(API, 풀 정밀도 기준). 로컬 Q4는 이보다 낮다.
 
 **thinking은 실험으로 정한다.** LightRAG는 추출 역할의 thinking을 기본으로 끄고(`EXTRACT_OLLAMA_LLM_THINK=false`), JSON 출력 모드(`ENTITY_EXTRACTION_USE_JSON=true`)를 제공한다. 청크 20개로 네 조합(모델 2 × thinking 켬/끔)을 돌려 파싱 실패율, 청크당 트리플 수, 추상구조 연결 수, 청크당 시간을 비교한다.
+
+**T-413 중간 결과(2026-11-22, `docs/EVAL_LOG.md` "추출 A/B").** thinking 끔 두 조합 모두 관문 미달(연결률 gemma 19%, qwen 6%, 파싱 실패 5%·0%)이라 기본값은 그대로 `gemma4:12b`, thinking 끔이다. thinking 켬은 2/20청크만 쟀고(청크당 약 523초) 나머지는 밤 시간창에 돌려 다시 본다. 맥에 받은 두 모델은 Ollama MLX 러너(nvfp4)라 JSON 모드(`format: json`)를 못 해 501로 답한다. 워커는 그때 format 없이 다시 보내고 파서가 코드 펜스를 견딘다. 문법 제약이 없으니 GGUF 태그(JSON 모드 가능)도 다음 비교 후보다.
 
 ```bash
 # Ollama는 로컬에만 열고, Tailscale이 테일넷에만 노출한다(T-411, infra/mac/)
@@ -282,7 +284,7 @@ flowchart LR
   L2["L2 공통 그래프 확장<br/>가이드 문서 인덱싱<br/>검수 루프 · 평가셋 40<br/>패치·밈 최신화"]
   L3["L3 내 워크스페이스<br/>Postgres · t4g.large<br/>로그인 · 내 문서 추출"]
   L0 -->|"관문: 서버 hit@1 ≥ 브라우저"| L1
-  L1 -->|"관문: 파싱 실패 ≤ 5%, 추상구조 연결 ≥ 70%"| L2
+  L1 -->|"관문: 파싱 실패 ≤ 5%, 게임시스템 연결 ≥ 70%, 연결 청크 ≥ 80%"| L2
   L2 -->|"관문: hit@1 ≥ 75%, 근거 밖 0건"| L3
 
   classDef now fill:#fdeede,stroke:#d9650a,stroke-width:2px,color:#1c2230
@@ -292,7 +294,7 @@ flowchart LR
 | 단계 | 내용 | 다음 단계로 가는 관문 |
 | --- | --- | --- |
 | L0. 서버 전환 | EC2, `analogy-api`, bge-m3, 기존 JSON 시드 주입, 확장 서버 모드 + 로컬 대체 | 기존 평가셋에서 서버 hit@1 ≥ 브라우저 hit@1 |
-| L1. 맥 추출 노드 | Tailscale, Ollama, 20청크 A/B(모델 × thinking), 추출 큐·시간창 | 파싱 실패 5% 이하, 추상구조 연결률 70% 이상 (목표치, 실측 후 조정) |
+| L1. 맥 추출 노드 | Tailscale, Ollama, 20청크 A/B(모델 × thinking), 추출 큐·시간창 | 파싱 실패 5% 이하, 게임시스템 연결률 70% 이상, 연결 청크 80% 이상 (T-209에서 분모를 게임시스템으로 다시 정함) |
 | L2. 공통 그래프 확장 | 가이드 문서 인덱싱, 검수 루프, 평가셋 40문장, 패치 자동 반영(T-423), 밈 용어 카드(T-424) | hit@1 75% 이상, 근거 밖 사실 0건 (기존 Phase 1 관문) |
 | L3. 내 워크스페이스 | Postgres 전환(`t4g.large`), 로그인(D-2), 내 문서 추출 | 로그인 사용자의 워크스페이스가 두 기기에서 동기화 |
 
