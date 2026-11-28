@@ -367,3 +367,27 @@ test('runFollowup "다른 비유는요?": 방금 근거 개념으로 다시 답�
   assert.equal(followupProblems({ ...base, final: f, question: '왜 비슷해요?' }), null);
   assert.deepEqual(followupProblems({ ...base, final: f, question: '다른 비유는요?' }).reasons, ['same-as-prev']);
 });
+
+test('followupProblems: 개념 없이 비유를 대면 되묻기(T-231, fu10)', () => {
+  const base = { graph: GRAPH, allowed: new Set(['starforce']), factsRead: new Set(), ...PAYLOAD };
+  // fu10 실제 답: nodeId 없이 "메이플로 치면 … 같아요"
+  const fu10 = '메이플로 치면 경매장에서 구하기 어려운 아이템은 찾는 사람이 많아 가격이 오르는 것과 같아요. 다른 비유로는 검색된 개념 중 맞는 것이 없어요.';
+  assert.deepEqual(followupProblems({ ...base, final: { answer: fu10, nodeId: null, usedFact: '' } }).reasons, ['analogy-without-node']);
+  // 개념 이름 + 닮음 말
+  assert.deepEqual(followupProblems({ ...base, final: { answer: '스타포스 강화와 비슷해요.', nodeId: null, usedFact: '' } }).reasons, ['analogy-without-node']);
+  // 없다고 하면서 개념을 대며 다르다고 하는 것은 괜찮다
+  for (const answer of ['맞는 개념이 없어요. 스타포스 강화와는 구조가 달라요.', '메이플에는 비슷한 개념이 없어요. 쉽게 말하면 날짜 안내예요.', '스타포스 강화와 같지는 않아요.']) {
+    assert.equal(followupProblems({ ...base, final: { answer, nodeId: null, usedFact: '' } }), null, answer);
+  }
+  // 개념을 댄 답은 이 검사와 상관없다
+  assert.equal(followupProblems({ ...base, factsRead: new Set(['starforce']), final: { answer: '메이플로 치면 스타포스와 같아요.', nodeId: 'starforce', usedFact: SF.facts[0] } }), null);
+});
+
+test('followupProblems: 한글에 붙은 영어 낱말이면 되묻기, 원문·그래프에 있는 영어는 괜찮다(T-231)', () => {
+  const base = { graph: GRAPH, allowed: new Set(['starforce']), factsRead: new Set(['starforce']), ...PAYLOAD };
+  const f = answer => ({ answer, nodeId: 'starforce', usedFact: SF.facts[0] });
+  assert.deepEqual(followupProblems({ ...base, final: f('강화가 harder해져요.') }).reasons, ['english']);
+  assert.equal(followupProblems({ ...base, final: f('MVP처럼 HEXA를 올리는 것과 같아요.') }), null, '그래프에 있는 영어');
+  assert.equal(followupProblems({ ...base, sentence: 'ETF는 여러 종목을 묶는다.', final: f('ETF는 스타포스와 같아요.') }), null, '원문에 있는 영어');
+  assert.equal(followupProblems({ ...base, final: f('a/b 테스트처럼 같아요.') }), null, '한 글자 영어는 보지 않음');
+});

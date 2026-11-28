@@ -62,7 +62,7 @@
 
   "_agentComment": "말풍선 이어 묻기 에이전트(T-216, ADR 0017). dailyCallCap은 에이전트 LLM 호출의 하루 상한(이 기기, 날짜별 chrome.storage.local agentCalls). 호버 체인 한도와 따로 센다(사용자 결정 2026-11-28). 질문 하나에 보통 2회, 최대 4회. 교정 진단(T-220)·새 관심사 도우미(T-225, 한 번에 최대 12회)가 같은 상한을 함께 센다. 0이면 에이전트를 끈다.",
   "_agentProviderOrderComment": "에이전트(이어 묻기·교정 진단·새 관심사 도우미)만의 제공자 순서(T-222). fallbackChain에 이미 있는 항목끼리 자리만 바꾸고(목록에 없는 항목은 제자리, 로컬 Ollama는 늘 맨 뒤), 항목을 더하지 않는다. 근거: 2026-11-28 Actions 스모크에서 Groq gpt-oss-120b가 도구 목록을 보면 고유 함수 호출·없는 도구(repo_browser 등)를 내서 JSON 액션이 흔들림(EVAL_LOG T-222). 비우면 호버와 같은 순서.",
-  "agent": { "dailyCallCap": 40, "providerOrder": ["gemini", "nvidia", "groq"] },
+  "agent": { "dailyCallCap": 40, "providerOrder": ["groq", "nvidia", "gemini"] },
 
   "_preciseTagJudgeComment": "정밀 모드 전용 태그 판정(T-184, ADR 0014). 켜면 정밀 모드의 추상화 호출 한 번이 추상 구조와 태그 확률(tags.json 통제 어휘 + 없음)을 함께 돌려주고, retrieve 태그 점수에 더한다(태그 점수 = 유사도 − 감점 + weight·p). 호출 수·지연은 그대로. '없음'이 가장 높으면 판정 없음, floor(확률 하한) 아래 태그는 버린다. 일반 모드에는 영향 없음.",
   "preciseTagJudge": { "enabled": true, "mode": "combine", "weight": 0.05, "floor": 0.7 }
