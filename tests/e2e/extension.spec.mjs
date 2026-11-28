@@ -682,7 +682,7 @@ test('이어 묻기(T-216): 직접 입력 "다른 …" → 그래프 검색으�
 
   const r = await ext.send({ type: 'agent:ask', payload: { sentence: 'API 서버는 분당 요청 수에 상한을 두어 한 사용자가 자원을 독점하지 못하게 한다.' }, question: '다른 비유는요?', prev: {}, candidateIds: [] });
   expect(r.ok).toBe(true);
-  expect(r.data.debug.trace.map(t => t.type)).toEqual(['action', 'final']);
+  expect(r.data.debug.trace.map(t => t.type)).toEqual(['action', 'final', 'verify']); // 최종 답 검사(T-222)는 통과해 되묻지 않음
   expect(r.data.debug.trace[0].tool).toBe('search_graph');
   expect(r.data.debug.provider).toBe('custom/mock-model');
   expect(r.data.evidence).not.toBeNull();
