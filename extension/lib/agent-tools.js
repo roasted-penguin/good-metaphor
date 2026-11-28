@@ -229,7 +229,15 @@ export function followupProblems({ final, graph, allowed, factsRead, sentence, c
     }
     const g = checkGrounding({ analogy: text, usedFact: '', facts: [], sentence, context });
     if (!g.ok) { reasons.push(g.reason); notes.push('개념 없이 답하면 숫자는 원문 문장에 있는 것만 써요.'); }
+    // 없다면서 비유를 다시 댐(T-231, fu10). 숨기지 않고 한 번 되묻기만
+    if (analogyWithoutNode(text, graph)) {
+      reasons.push('analogy-without-node');
+      notes.push('nodeId 없이 관심사 비유를 댔어요. 비유하려면 facts를 읽은 개념의 id를 nodeId에, 그 facts 한 문장을 usedFact에 넣어요. 맞는 개념이 없으면 비유 없이 뜻만 쉽게 말해요.');
+    }
   }
+  // 한글에 붙은 영어 낱말(T-231, NVIDIA "harder해져요"). 원문·질문·그래프에 있는 영어는 괜찮다
+  const english = strayEnglish(text, [sentence, context, question].join(' '), graph);
+  if (english.length) { reasons.push('english'); notes.push(`answer에 영어 낱말(${english.join(', ')})이 섞였어요. 한국어 낱말로 바꿔요.`); }
   // "다른 비유"인데 방금 근거 개념으로 다시 답함(T-224, 프롬프트 규칙 5)
   if (nodeId && prevNodeId && nodeId === prevNodeId && asksOther(question)) {
     reasons.push('same-as-prev');
@@ -240,6 +248,31 @@ export function followupProblems({ final, graph, allowed, factsRead, sentence, c
   return { reasons, read, feedback: `${notes.join(' ')} 고친 {"final": {...}} 하나로 다시 답해요.` };
 }
 const normalizeUsed = s => String(s ?? '').replace(/\s+/g, '');
+
+// 닮음을 말하는 끝맺음. "같지 않아요"·"비슷한 개념이 없어요"는 걸리지 않는다
+const LIKENESS = /(같아요|같은 셈이에요|비슷해요|닮았어요|마찬가지예요|같은 구조예요)/;
+
+/** 개념 없는 답 안에 관심사 비유가 있나(T-231): 한 문장에 닮음 말 + ("~로 치면" 또는 그래프 개념 이름·별칭) */
+export function analogyWithoutNode(text, graph) {
+  const names = graph.nodes.flatMap(n => [n.label, ...(n.aliases || [])]).filter(s => typeof s === 'string' && s.length >= 2);
+  return String(text).split(/(?<=[.!?])\s+/).some(s => LIKENESS.test(s) && (/로 치면/.test(s) || names.some(nm => s.includes(nm))));
+}
+
+// 그래프의 라벨·별칭·사실 글(영어 허용 목록). 그래프마다 한 번
+const graphTextCache = new WeakMap();
+function graphText(graph) {
+  if (!graphTextCache.has(graph)) {
+    graphTextCache.set(graph, graph.nodes.flatMap(n => [n.label, ...(n.aliases || []), ...(n.facts || [])]).join(' ').toLowerCase());
+  }
+  return graphTextCache.get(graph);
+}
+
+/** 한글 바로 앞에 붙은 영어 낱말(두 글자 이상) 중 원문·그래프에 없는 것(T-231) */
+export function strayEnglish(text, sourceText, graph) {
+  const ok = `${String(sourceText).toLowerCase()} ${graphText(graph)}`;
+  const words = [...String(text).matchAll(/(?<![A-Za-z])([A-Za-z]{2,})(?=[가-힣])/g)].map(m => m[1]);
+  return [...new Set(words.filter(w => !ok.includes(w.toLowerCase())))];
+}
 
 // 최종 답 교정 되묻기 횟수 상한(T-222). 단계·호출 상한에도 든다
 export const FOLLOWUP_MAX_CORRECTIONS = 1;
