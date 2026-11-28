@@ -20,8 +20,9 @@ export function buildChain(primary, admin, settings) {
   return [...chain.filter(p => !p.def.local), ...chain.filter(p => p.def.local)];
 }
 
-// 다음 순서로 넘길 오류인가: 일시 오류만. 키 오류(400·401·403)는 그대로 던진다
-const passes = e => e.status === 429 || e.status === 503 || e.network || /시간이 초과/.test(e.message);
+// 다음 순서로 넘길 오류인가: 일시 오류와 모델 출력 400만. 키 오류(400·401·403)는 그대로 던진다
+// modelOutput: 모델이 정한 형식 대신 고유 함수 호출을 내 서버가 거절한 400(T-222). 그 모델 문제라 다음 순서로 넘긴다(쿨다운 없음)
+const passes = e => e.status === 429 || e.status === 503 || e.network || e.modelOutput || /시간이 초과/.test(e.message);
 
 // ── 429 쿨다운 기간(T-126) ──
 // 하루 한도인지는 제공자 id가 아니라 본문 모양으로 판정한다(규칙 7: 제공자별 분기 금지, 표 하나).

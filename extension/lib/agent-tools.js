@@ -7,11 +7,14 @@ import { runAgent, AGENT_MAX_STEPS, AGENT_MAX_CALLS, AGENT_STOP_TEXT, AGENT_CAP_
 import { REJECTED_TEXT } from './analogy-server.js';
 import { checkGrounding, GROUNDING_REJECTED_TEXT } from './grounding.js';
 import { activeTerms, applyBlocklist } from './blocklist.js';
+import { impoliteEnding } from './prompt.js';
 
 export const FOLLOWUP_QUESTIONS = { why: '왜 비슷해요?', other: '다른 비유는요?' };
 export const FOLLOWUP_TOOL_NAMES = ['get_node_facts', 'search_graph', 'search_by_tag'];
 export const QUESTION_MAX = 200;
 export const FORMAT_REJECTED_TEXT = '답을 읽지 못했어요.';
+// 프롬프트·검사 규칙 판(평가 캐시 키에 넣는다. 프롬프트나 다시 묻기 규칙을 바꾸면 올린다)
+export const FOLLOWUP_PROMPT_VERSION = 'T-222.1';
 const TAG_LIMIT = 5;
 const SEARCH_LIMIT = 3;
 
@@ -49,17 +52,20 @@ export function nodesByTag(graph, tagId, exclude = [], limit = TAG_LIMIT) {
 
 /**
  * 이어 묻기 도구 묶음. 결과로 돌려준 노드는 seen(Set)에 넣는다(최종 답 규칙 1의 허용 목록).
+ * 결과에 사실(facts)을 실어 보낸 노드는 factsRead(Set, 선택)에도 넣는다(T-222: 사실을 읽지 않고 인용하는 답을 되묻는다).
+ * 세 도구 모두 사실을 함께 돌려주므로 지금은 seen과 같지만, 사실 없는 도구가 생기면 갈린다.
  * searchGraph(text, exclude) → [{ id, label, score, tag? }] : 부르는 쪽(background)이 한 문장 임베딩 + retrieve로 만든다.
  * 사실은 검색 결과를 믿지 않고 그래프에서 다시 붙인다
  */
-export function makeFollowupTools({ graph, searchGraph, seen }) {
-  const see = list => { for (const n of list) seen.add(n.id); return list; };
+export function makeFollowupTools({ graph, searchGraph, seen, factsRead = new Set() }) {
+  const see = list => { for (const n of list) { seen.add(n.id); factsRead.add(n.id); } return list; };
   return {
     get_node_facts: {
       run: async ({ nodeId } = {}) => {
         const f = nodeFacts(graph, nodeId);
         if (!f) throw new Error('없는 개념이에요');
         seen.add(f.id);
+        factsRead.add(f.id);
         return f;
       }
     },
@@ -81,24 +87,32 @@ export function makeFollowupTools({ graph, searchGraph, seen }) {
   };
 }
 
-// 시스템·사용자 프롬프트. 후보 사실은 싣지 않는다(get_node_facts로 읽는다)
+// 시스템·사용자 프롬프트. 후보 사실은 싣지 않는다(get_node_facts로 읽는다).
+// T-222: 사실 읽기 먼저·usedFact 글자 그대로·"맞는 개념 없음" 기준과 예시를 더했다. 예시는 관심사와 상관없는 구조로 쓴다(식당 관심사도 같은 프롬프트)
 export function buildFollowupPrompt({ domain, sentence, word, context, pageTitle, question, prev = {}, candidates = [], maxSteps = AGENT_MAX_STEPS }) {
   const system = [
     `너는 사용자가 방금 본 "${domain}" 비유에 대해 이어서 묻는 질문에 답하는 도우미다.`,
-    '매 차례 JSON 객체 하나만 출력한다. 둘 중 하나다.',
+    '매 차례 JSON 객체 하나만 글자로 출력한다. 함수 호출 기능은 쓰지 않는다. 설명·코드블록 없이 둘 중 하나다.',
     '{"action": "<도구 이름>", "args": {...}}',
     '{"final": {"answer": string, "nodeId": string|null, "usedFact": string}}',
     '도구:',
     '- get_node_facts {"nodeId": string}: 개념의 사실(facts)·태그·연결',
-    '- search_graph {"text": string, "exclude": [nodeId]}: 글과 구조가 비슷한 개념 찾기(exclude는 뺄 개념)',
-    '- search_by_tag {"tagId": string, "exclude": [nodeId]}: 그 추상 태그를 가진 개념',
-    '규칙:',
-    `1. ${domain}에 관한 내용은 도구 결과의 사실(facts)만 쓴다. 근거에 없는 수치, 이름, 규칙을 지어내지 않는다.`,
-    `2. answer에 ${domain} 사실을 쓰면 그 개념 id를 nodeId에, 그 개념의 facts 문장 하나를 usedFact에 글자 그대로 옮긴다.`,
-    '3. 맞는 개념이 없으면 없다고 짧게 답하고 nodeId는 null, usedFact는 빈 문자열이다. 억지 비유는 틀린 설명보다 나쁘다.',
-    '4. answer는 해요체(~요) 1~3문장, 200자 안쪽. ~습니다·~다로 끝내지 않는다.',
-    `5. 같은 도구를 같은 인자로 두 번 부르지 않는다. 최대 ${maxSteps}차례 안에 final을 낸다.`,
-    '6. 커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.'
+    '- search_graph {"text": string, "exclude": [nodeId]}: 글과 구조가 비슷한 개념 찾기(exclude는 뺄 개념). 결과에 facts가 함께 온다',
+    '- search_by_tag {"tagId": string, "exclude": [nodeId]}: 그 추상 태그를 가진 개념. 결과에 facts가 함께 온다',
+    '근거 규칙:',
+    `1. ${domain} 개념으로 답하려면 먼저 그 개념의 facts를 도구로 읽는다. 이번에 facts를 읽지 않은 개념은 nodeId로 쓰지 않는다. 후보 목록의 이름만 보고 답하지 않는다.`,
+    '2. usedFact는 도구 결과 facts 배열의 문장 하나를 글자 그대로 복사한다. 줄이거나 바꿔 쓰거나 합치지 않는다. 개념 이름은 사실이 아니다.',
+    `3. answer의 ${domain} 내용은 도구 결과 facts에 있는 것만 쓴다. 근거에 없는 수치, 이름, 규칙을 지어내지 않는다. facts에 없는 수치를 물으면 모른다고 답한다.`,
+    '"맞는 개념 없음" 기준:',
+    '4. 문장의 핵심 구조(무엇이 무엇을 제한하거나, 키우거나, 바꾸거나, 조건으로 거는지)가 개념의 facts와 구체적으로 같을 때만 비유한다. 낱말이 겹치거나 "정해진 조건", "과정", "특별한 장소", "꾸준히 해야 함" 같은 두루뭉술한 공통점은 맞는 개념이 아니다.',
+    '   - 없음인 예: 날짜·시간·장소 안내(회의는 화요일 3층에서 열린다), 사물·동물의 성질 묘사(펭귄은 날지 못한다), 생활 수칙(찬물에 손세탁), 단순한 행동(기사가 길을 안내했다).',
+    '   - 있음인 예: 다시 하려면 정해진 시간을 기다려야 하는 제한, 실패하면 가진 것을 잃는 위험을 감수하는 시도, 많이 풀릴수록 값이 떨어지는 재화.',
+    `   없으면 {"final": {"answer": "이 문장에는 맞는 ${domain} 개념이 없어요. + 문장 뜻을 쉬운 말로 한 줄", "nodeId": null, "usedFact": ""}}로 답한다. 억지 비유는 틀린 설명보다 나쁘다. 방금 보인 비유가 억지였으면 그렇다고 말해도 된다.`,
+    '5. "다른 비유"를 물으면 방금 근거 개념을 exclude에 넣고 찾는다. 찾은 개념도 4번 기준에 맞지 않으면 없다고 답한다.',
+    '말투와 한도:',
+    '6. answer는 해요체(~요) 1~3문장, 200자 안쪽. ~습니다·~다로 끝내지 않는다.',
+    `7. 같은 도구를 같은 인자로 두 번 부르지 않는다. 최대 ${maxSteps}차례 안에 final을 낸다. 보통은 facts 읽기 한 번 뒤 바로 final이다.`,
+    '8. 커뮤니티 멸칭이나 실존 인물 이름·별명은 쓰지 않는다.'
   ].join('\n');
   const cand = candidates.map(c => `- id=${c.id} | ${c.label}${c.tag ? ` | 태그: ${c.tag.label} (id=${c.tag.id})` : ''}`);
   const user = [
@@ -152,6 +166,59 @@ export function finalizeAnswer({ final, graph, allowed, sentence, context, block
   };
 }
 
+// 다시 묻기에 실을 사실 목록(글자 그대로 옮기라고 보여 준다)
+const factsJSON = node => JSON.stringify(node?.facts || []);
+
+/**
+ * 최종 답을 보이기 전에 고칠 수 있는 문제를 찾는다(T-222). 없으면 null, 있으면 { reasons, feedback, read }.
+ * finalizeAnswer가 숨길 답(사실 안 읽음·근거 검사·후보 밖·끝맺음)을 한 번 되물어 고칠 기회를 준다.
+ * 숨기는 검사(finalizeAnswer: 규칙 1·근거 검사·금칙어)는 그대로이고, 이것은 그 앞의 교정 문구일 뿐이다.
+ * - read: 피드백에 사실을 실어 보낸 노드 id(부르는 쪽이 factsRead에 넣는다)
+ */
+export function followupProblems({ final, graph, allowed, factsRead, sentence, context }) {
+  const text = typeof final?.answer === 'string' ? final.answer.trim() : '';
+  if (!text) return null; // 형식 문제는 finalizeAnswer 문구로
+  const nodeId = typeof final.nodeId === 'string' && final.nodeId ? final.nodeId : null;
+  const usedFact = typeof final.usedFact === 'string' ? final.usedFact : '';
+  const reasons = [], notes = [], read = [];
+  if (nodeId) {
+    const node = allowed.has(nodeId) ? graph.nodes.find(n => n.id === nodeId) || null : null;
+    if (!node) {
+      reasons.push('not-allowed');
+      notes.push(`nodeId "${nodeId}"는 이번에 후보나 도구 결과로 본 개념이 아니에요. 본 개념만 쓰고, 맞는 개념이 없으면 nodeId는 null이에요.`);
+    } else {
+      const labels = [node.label, ...graph.edges.filter(e => e.from === node.id || e.to === node.id)
+        .map(e => graph.nodes.find(n => n.id === (e.from === node.id ? e.to : e.from))?.label).filter(Boolean)];
+      const g = checkGrounding({ analogy: text, usedFact, facts: node.facts || [], sentence, context, labels });
+      const unread = !factsRead.has(nodeId);
+      if (unread) reasons.push('unread');
+      if (!g.ok) reasons.push(g.reason);
+      if (!normalizeUsed(usedFact)) reasons.push('no-fact');
+      if (unread || !g.ok || !normalizeUsed(usedFact)) {
+        read.push(node.id);
+        const why = unread ? `id=${node.id}(${node.label})의 facts를 읽지 않고 답했어요.`
+          : g.reason === 'number-outside' ? 'answer에 facts·문장에 없는 숫자가 있어요. 숫자를 빼거나 facts에 있는 숫자만 써요.'
+            : g.reason === 'fact-mismatch' ? `usedFact가 id=${node.id}의 facts 문장과 달라요.` : 'usedFact가 비었어요.';
+        notes.push(`${why} 이 개념의 facts: ${factsJSON(node)}. usedFact는 이 중 한 문장을 글자 그대로 옮기고, answer는 그 사실로만 써요. 이 facts가 문장 구조와 맞지 않으면 nodeId는 null로 없다고 답해요.`);
+      }
+    }
+  } else {
+    if (normalizeUsed(usedFact)) {
+      reasons.push('fact-without-node');
+      notes.push('nodeId 없이 usedFact를 댔어요. 개념을 쓰면 nodeId에 그 id를, 맞는 개념이 없으면 usedFact는 빈 문자열이에요.');
+    }
+    const g = checkGrounding({ analogy: text, usedFact: '', facts: [], sentence, context });
+    if (!g.ok) { reasons.push(g.reason); notes.push('개념 없이 답하면 숫자는 원문 문장에 있는 것만 써요.'); }
+  }
+  if (impoliteEnding(text) !== null) { reasons.push('ending'); notes.push('answer의 모든 문장을 해요체(~요)로 끝내요.'); }
+  if (!reasons.length) return null;
+  return { reasons, read, feedback: `${notes.join(' ')} 고친 {"final": {...}} 하나로 다시 답해요.` };
+}
+const normalizeUsed = s => String(s ?? '').replace(/\s+/g, '');
+
+// 최종 답 교정 되묻기 횟수 상한(T-222). 단계·호출 상한에도 든다
+export const FOLLOWUP_MAX_CORRECTIONS = 1;
+
 export const STOP_REASON = {
   steps: '단계 상한에 닿았어요.',
   calls: '호출 상한에 닿았어요.',
@@ -179,11 +246,23 @@ export async function runFollowup({ graph, payload, question, prev = {}, candida
     });
   const allowed = new Set(candidates.map(c => c.id));
   const seen = new Set();
-  const tools = makeFollowupTools({ graph, searchGraph, seen });
+  const factsRead = new Set();
+  const tools = makeFollowupTools({ graph, searchGraph, seen, factsRead });
   const { system, user } = buildFollowupPrompt({ domain: graph.domain, ...payload, question, prev, candidates, maxSteps });
-  const run = await runAgent({ system, user, tools, ask, maxSteps, maxCalls, budget });
+  // 검증기(T-222): 고칠 수 있는 문제가 있으면 한 번만 되묻는다. 두 번째 final은 그대로 finalizeAnswer가 판정한다(숨김 포함)
+  let corrections = 0;
+  const verify = async (final, { stepsLeft = 1, callsLeft = 1 } = {}) => {
+    // 되물을 차례가 없으면 그대로 판정한다(되묻다 상한에 닿아 답을 잃지 않게)
+    if (corrections >= FOLLOWUP_MAX_CORRECTIONS || stepsLeft < 1 || callsLeft < 1) return { ok: true };
+    const p = followupProblems({ final, graph, allowed: new Set([...allowed, ...seen]), factsRead, sentence: payload.sentence, context: payload.context });
+    if (!p) return { ok: true };
+    corrections++;
+    for (const id of p.read) { factsRead.add(id); seen.add(id); }
+    return { ok: false, reason: p.reasons.join(','), feedback: p.feedback };
+  };
+  const run = await runAgent({ system, user, tools, ask, maxSteps, maxCalls, budget, verify, maxVerifies: FOLLOWUP_MAX_CORRECTIONS + 1 });
   const found = [...seen].map(id => graph.nodes.find(n => n.id === id)?.label).filter(Boolean);
-  const debug = { trace: run.trace, calls: run.calls, steps: run.steps, stop: run.stop };
+  const debug = { trace: run.trace, calls: run.calls, steps: run.steps, stop: run.stop, corrections };
   if (!run.final) {
     const capped = run.stop === 'daily-cap';
     const stopText = capped && run.calls === 0 ? AGENT_CAP_TEXT
