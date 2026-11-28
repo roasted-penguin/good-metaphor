@@ -20,5 +20,7 @@
   { "sentence": "경매장에서 아이템이 팔리면 판매 대금에서 수수료가 빠진다.", "expectNodes": ["delivery_fee", "card_fee"], "expectTag": "brokerage_fee", "group": "maple" },
   { "sentence": "주간 보스 결정석은 한 주에 팔 수 있는 개수가 정해져 있다.", "expectNodes": ["limited_menu", "lunch_peak"], "expectTag": "periodic_cap", "group": "maple" },
   { "sentence": "Airlines overbook flights because some passengers never show up and their seats would fly empty.", "expectNodes": ["no_show"], "expectTag": "loss_risk", "group": "en" },
-  { "sentence": "Gyms get packed right after office hours, so members queue for every machine.", "expectNodes": ["lunch_peak"], "expectTag": "periodic_cap", "group": "en" }
+  { "sentence": "Gyms get packed right after office hours, so members queue for every machine.", "expectNodes": ["lunch_peak"], "expectTag": "periodic_cap", "group": "en" },
+  { "sentence": "명절 기차표는 값이 그대로라 예매 첫날 먼저 접속한 사람부터 표를 가져간다.", "expectNodes": ["limited_menu", "lunch_peak"], "expectTag": "queue_rationing", "since": "T-223", "why": "값은 그대로이고 먼저 접속한 차례대로 모자란 표가 돌아간다 = 점심 피크에 손님이 줄 서서 기다림(선착순 배분)" },
+  { "sentence": "대형마트는 지자체 조례로 정한 심야 시간에는 문을 열 수 없다.", "expectNodes": ["business_hours_limit"], "expectTag": "time_window", "since": "T-223", "why": "정한 시간대 밖에는 아예 영업할 수 없다 = 조례로 음식점 영업시간을 제한" }
 ]

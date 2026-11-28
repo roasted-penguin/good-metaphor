@@ -1,0 +1,58 @@
+{
+ "interest": "maplestory",
+ "note": "T-223 새 태그 가족 후보(risk_reward_tradeoff·limited_attempts): check 통과 후보(우리 문장·출처 주소만, 원문 없음). 대체 임베더는 ghost_park_charm을 뺐지만 실제 관문 근거로 둘 다 넣음",
+ "results": [
+  {
+   "batch": 40,
+   "status": "warn",
+   "node": {
+    "id": "ghost_park_charm",
+    "label": "고스트파크 부적 강도",
+    "facts": [
+     "고스트파크 일반모드는 들어가기 전에 부적 강도를 스스로 고르는데, 강도를 올릴수록 보너스 경험치가 커지는 대신 부적마다 정해진 방해 요소가 함께 켜진다.",
+     "던전 안에서는 물약과 회복·부활 스킬을 쓸 수 없고, 남은 체력이 적을수록 경험치를 더 받는다."
+    ],
+    "tags": [
+     "risk_reward_tradeoff"
+    ],
+    "sources": [
+     "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/469",
+     "https://namu.wiki/w/%EA%B3%A0%EC%8A%A4%ED%8A%B8%ED%8C%8C%ED%81%AC"
+    ],
+    "sourceKind": "community"
+   },
+   "edges": [
+    {
+     "to": "monster_park",
+     "rel": "같은 테마파크 계열의 경험치 던전"
+    }
+   ]
+  },
+  {
+   "batch": 40,
+   "status": "warn",
+   "node": {
+    "id": "boss_death_count",
+    "label": "보스 데스카운트",
+    "facts": [
+     "보스전에는 파티가 쓰러져도 되는 횟수가 정해져 있어 누군가 죽을 때마다 하나씩 줄고, 다 떨어지면 격파에 실패한 채 보스 맵에서 쫓겨난다.",
+     "보스와 난이도마다 주어지는 횟수가 다르고, 일부 보스는 죽는 횟수 대신 따로 정한 수치가 다 차면 실패한다."
+    ],
+    "tags": [
+     "limited_attempts"
+    ],
+    "sources": [
+     "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EB%B3%B4%EC%8A%A4%20%EB%AA%AC%EC%8A%A4%ED%84%B0/%EB%B3%B4%EC%8A%A4%20%EC%BB%A8%ED%85%90%EC%B8%A0",
+     "https://www.inven.co.kr/board/maple/5974/6289207"
+    ],
+    "sourceKind": "community"
+   },
+   "edges": [
+    {
+     "to": "boss_entry",
+     "rel": "보스전에서 지켜야 하는 실패 조건"
+    }
+   ]
+  }
+ ]
+}

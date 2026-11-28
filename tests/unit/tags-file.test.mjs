@@ -20,7 +20,9 @@ const TAG_ORDER = [
   'cooldown', 'random_reroll', 'expected_value', 'shared_bonus', 'role_division', 'efficiency_metric',
   // T-171: 새 태그는 맨 뒤에만 붙인다(ADR 0012)
   'fixed_cost_leverage', 'vendor_lock_in', 'brokerage_fee', 'compliance_procedure',
-  'queue_rationing', 'self_service', 'time_window'
+  'queue_rationing', 'self_service', 'time_window',
+  // T-223: 메이플 새 구조(아직 쓰는 노드 없음)
+  'limited_attempts', 'risk_reward_tradeoff'
 ];
 const sha1 = s => createHash('sha1').update(s).digest('hex');
 
@@ -62,7 +64,7 @@ test('nodeText 스냅숏: 분리 전과 바이트 단위로 같다 (벡터 캐�
   assert.equal(sha1(text('starforce')), '5303d3c5de5c878933c1db407d87d32f8a07d9ba');
   assert.equal(sha1(text('sol_erda')), '7d32aa20155a45a6f7e367d6412601fdb8222384');
   assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), 'ee38e1174498faf6170c8474da365d66876d0461');
-  // mergeGraphs는 노드가 쓰는 태그만 남긴다. 메이플 노드는 T-171 새 태그를 쓰지 않고 T-176 brokerage_fee(trade_fee)만 써서 19개
+  // mergeGraphs는 노드가 쓰는 태그만 남긴다. 메이플 노드는 T-171 새 태그를 쓰지 않고 T-176 brokerage_fee(trade_fee)만 써서 19개(T-223 새 태그도 쓰는 노드 없음)
   assert.equal(g.tags.length, 19);
 });
 
