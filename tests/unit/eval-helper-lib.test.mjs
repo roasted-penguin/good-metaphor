@@ -199,3 +199,19 @@ test('rowLine·totals·totalLines: 방법별 한 줄과 합계(노드·문장 �
   assert.match(lines[0], /^도우미\(1개 관심사\)/);
   assert.match(lines[1], /^T-301 한 번\(1개 관심사\)/);
 });
+
+test('helperMetrics·rowLine·totalLines: 정상 종료 이유(end)와 평가 다른 제공자 수(T-229)', () => {
+  const end = { queue: [], accepted: [], dropped: [], calls: 10, stop: null, end: 'budget', evalBy: { other: 3, same: 1 } };
+  const m = helperMetrics([end], { tagCount: 25 });
+  assert.equal(m.end, 'budget');
+  assert.deepEqual(m.evalBy, { other: 3, same: 1 });
+  const row = { interest: '축구', method: 'helper', tagCount: 25, metrics: m };
+  assert.match(rowLine(row), /끝 budget/);
+  assert.match(rowLine(row), /평가 다른 제공자 3\/4/);
+  assert.match(rowLine({ ...row, metrics: { ...m, stop: 'calls' } }), /끝 상한 calls/);
+  const t = totals([row, { ...row, interest: '커피' }]);
+  assert.equal(t.helper.evalOther, 6);
+  assert.match(totalLines(t, 25)[0], /평가 다른 제공자 6\/8/);
+  // 예전 기록(evalBy 없음)은 평가 줄을 싣지 않는다
+  assert.doesNotMatch(rowLine({ ...row, metrics: { ...m, evalBy: null } }), /평가 다른 제공자/);
+});
