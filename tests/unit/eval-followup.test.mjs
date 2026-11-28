@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   validateFollowupSet, makeSearchGraph, hoverToPrev, idsFromLabels, checkResponse, runFollowupCase, scoreRow,
-  buildFollowupJudgePrompt, parseFollowupJudge, summarizeFollowup, summaryLines, followupLogRow, agentKey, judgeKey, withoutFamily, JUDGE_VERSION, withSample
+  buildFollowupJudgePrompt, parseFollowupJudge, summarizeFollowup, summaryLines, followupLogRow, agentKey, judgeKey, withoutFamily, JUDGE_VERSION, withSample, readFactsFirst
 } from '../../tools/eval-followup-lib.mjs';
 import { AGENT_TASKS, fixedPrev, checkAgentTask, summarizeAgent, agentSummaryLine, agentRowLine } from '../../tools/smoke-agent.mjs';
 import { REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
@@ -242,4 +242,40 @@ test('withSample·agentRowLine: 형식이 틀린 응답만 원문 앞부분(240�
   const line = agentRowLine({ id: 'why', ok: true, responses: 2, parsed: 1, actions: 0, toolOk: 0, argsOk: 0, final: false, stop: 'format', steps: 0, calls: 2, ms: 5, shown: false, note: '멈춤', samples: ['', '{"x":1}'] });
   assert.match(line, /↳ 원문: \(빈 응답\)/);
   assert.match(line, /↳ 원문: \{"x":1\}/);
+});
+
+test('readFactsFirst·스스로 읽음: 첫 final 전에 맞는 도구를 불렀는지, 평가 요약·스모크 줄에 보인다(T-224)', async () => {
+  const tool = { parsed: true, final: false, toolOk: true, argsOk: true };
+  const fin = { parsed: true, final: true, finalOk: true };
+  assert.equal(readFactsFirst([tool, fin]), true);
+  assert.equal(readFactsFirst([fin, fin]), false, '되묻기 뒤 답만 있으면 스스로 읽은 것이 아니다');
+  assert.equal(readFactsFirst([{ parsed: true, final: false, toolOk: false }, fin]), false);
+  assert.equal(readFactsFirst([fin, tool]), false, 'final 뒤 도구는 세지 않는다');
+  assert.equal(readFactsFirst([]), false);
+
+  const s = summarizeFollowup([
+    { id: 'a', expect: 'node', responses: [tool, fin], calls: 2, steps: 2, ms: 1, score: { final: true, shown: true } },
+    { id: 'b', expect: 'node', responses: [fin, fin], calls: 2, steps: 2, ms: 1, score: { final: true, shown: true } },
+    { id: 'c', expect: 'any', error: 'x', score: {} }
+  ]);
+  assert.deepEqual(s.selfRead, { ok: 1, n: 2 });
+  assert.match(summaryLines(s).join('\n'), /스스로 facts 읽음 1\/2/);
+
+  const why = AGENT_TASKS.find(t => t.id === 'why');
+  const node = GRAPH.nodes.find(n => n.id === why.prevNodeId);
+  const self = await checkAgentTask(scripted([
+    J({ action: 'get_node_facts', args: { nodeId: node.id } }),
+    J({ final: { answer: `${node.label}도 기다려야 해요.`, nodeId: node.id, usedFact: node.facts[0] } })
+  ]).ask, why, { graph: GRAPH, searchGraph });
+  const lazy = await checkAgentTask(scripted([
+    J({ final: { answer: '같아요.', nodeId: node.id, usedFact: '없는 사실' } }),
+    J({ final: { answer: `${node.label}도 기다려야 해요.`, nodeId: node.id, usedFact: node.facts[0] } })
+  ]).ask, why, { graph: GRAPH, searchGraph });
+  assert.equal(self.selfRead, true);
+  assert.equal(lazy.selfRead, false);
+  const none = AGENT_TASKS.find(t => !t.expectTool);
+  const nr = await checkAgentTask(scripted([J({ final: { answer: '맞는 개념이 없어요.', nodeId: null, usedFact: '' } })]).ask, none, { graph: GRAPH, searchGraph });
+  const sa = summarizeAgent([self, lazy, nr]);
+  assert.deepEqual(sa.selfRead, { ok: 1, n: 2 }, '도구가 필요한 과제(expectTool)만 센다');
+  assert.match(agentSummaryLine('groq/x', sa), /스스로 facts 읽음 1\/2/);
 });
