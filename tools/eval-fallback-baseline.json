@@ -1,7 +1,7 @@
 {
   "note": "대체 임베더(fallback-embed.js) 기준선(T-179). 혼합 기본값 문장별 1위·상위 3개. 다시 쓰기: npm run eval:fallback -- --write-baseline",
   "embedderId": "fallback:hash-ngram-4096-v2",
-  "tagsVersion": "2026.11.22-6",
+  "tagsVersion": "2026.11.28-1",
   "graphs": {
     "maplestory": "2026.11.28-2",
     "restaurant": "2026.11.28-1"
