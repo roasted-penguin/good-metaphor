@@ -108,6 +108,17 @@ test('503·네트워크 오류도 다음 순서로 (쿨다운은 남기지 않�
   assert.deepEqual(cd.peek(), {});
 });
 
+test('모델이 고유 함수 호출을 내 거절된 400(tool_use_failed, 원래 생성 없음)은 다음 순서로, 키 오류 400은 그대로(T-222)', async t => {
+  mockFetch(t, (model, url) => model === 'openai/gpt-oss-120b'
+    ? [400, { error: { message: 'Tool choice is none, but model called a tool', code: 'tool_use_failed' } }] : ok(model, url));
+  const cd = memCooldowns();
+  const chain = buildChain(providerFor('groq', 'openai/gpt-oss-120b', admin, settings), admin, settings);
+  const r = await completeWithFallback(chain, 's', 'u', { json: true }, { cooldowns: cd, cooldown: admin.cooldown, now: () => 0 });
+  assert.equal(label(r.provider), 'gemini/gemini-3.8-flash');
+  assert.deepEqual(cd.peek(), {}, '쿨다운 없음');
+  assert.match(r.fallbacks[0].reason, /called a tool/);
+});
+
 test('키 오류(401)는 체인을 타지 않고 그대로 던진다', async t => {
   const calls = mockFetch(t, () => [401, { error: { message: 'Invalid API Key' } }]);
   const chain = buildChain(providerFor('groq', 'openai/gpt-oss-120b', admin, settings), admin, settings);
