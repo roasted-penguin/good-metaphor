@@ -9,7 +9,7 @@
   "summary": {
     "maplestory/eval": {
       "n": 44,
-      "hit1": 19,
+      "hit1": 20,
       "hit3": 31,
       "negativePass": "6/6"
     },
@@ -67,7 +67,7 @@
       {"sentence":"The gym lets each member bring at most three guests a month.","kind":"hit","top3":["meso","meso_inflation","auction"],"hit1":false,"hit3":false},
       {"sentence":"Learning to code takes steady practice every day; cramming on weekends doesn't work.","kind":"hit","top3":["trade_fee","starforce","meso"],"hit1":false,"hit3":false},
       {"sentence":"In surgery, one doctor operates, another handles anesthesia, and nurses keep the instruments ready.","kind":"hit","top3":["trade_fee","meso","auction"],"hit1":false,"hit3":false},
-      {"sentence":"Farmers pick which crop to plant by comparing how much profit each acre brings in per season.","kind":"hit","top3":["combat_analysis","multi_kill","theme_dungeon"],"hit1":false,"hit3":true},
+      {"sentence":"Farmers pick which crop to plant by comparing how much profit each acre brings in per season.","kind":"hit","top3":["combat_analysis","multi_kill","theme_dungeon"],"hit1":true,"hit3":true},
       {"sentence":"After years of loose monetary policy, the same paycheck buys far fewer groceries.","kind":"hit","top3":["auction","meso","meso_inflation"],"hit1":false,"hit3":true},
       {"sentence":"Vintage watches that are no longer produced sell for many times their original price.","kind":"hit","top3":["meso","auction","meso_inflation"],"hit1":false,"hit3":true},
       {"sentence":"Miles you earn on one airline also count toward hotel upgrades with its partners.","kind":"hit","top3":["union_link","monster_collection","achievement"],"hit1":true,"hit3":true},
