@@ -125,11 +125,11 @@ test('공통 그래프 태그마다 예문 2개 이상, 평가셋·검증셋·�
   }
 });
 
-test('태그는 통제 어휘 목록 그대로 (규칙 9, T-171·T-176·T-206에서 맨 뒤에 추가)', () => {
+test('태그는 통제 어휘 목록 그대로 (규칙 9, T-171·T-176·T-206·T-219에서 맨 뒤에 추가)', () => {
   assert.deepEqual(common.tags.map(t => t.id).sort(), [
     'brokerage_fee', 'compliance_procedure', 'cooldown', 'daily_accumulation', 'diminishing_returns', 'efficiency_metric', 'escalating_cost', 'expected_value',
-    'fixed_cost_leverage', 'inflation', 'loss_risk', 'market_price', 'periodic_cap', 'prob_upgrade', 'progression_gate', 'random_reroll',
-    'role_division', 'scarcity_value', 'shared_bonus', 'temporary_multiplier', 'threshold_req', 'vendor_lock_in'
+    'fixed_cost_leverage', 'inflation', 'loss_risk', 'market_price', 'periodic_cap', 'prob_upgrade', 'progression_gate', 'queue_rationing', 'random_reroll',
+    'role_division', 'scarcity_value', 'self_service', 'shared_bonus', 'temporary_multiplier', 'threshold_req', 'time_window', 'vendor_lock_in'
   ]);
 });
 
