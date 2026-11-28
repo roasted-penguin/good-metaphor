@@ -6,6 +6,7 @@
 // 사용법 (프로젝트 루트에서, 키는 환경변수 <ID>_API_KEY 에서만 읽는다):
 //   npm run eval:followup                          # 생성만. admin.json fallbackChain 중 키가 있는 제공자로
 //   npm run eval:followup -- --judge               # + 채점(기본 JUDGE_PROVIDER=nvidia). 채점 계열(제공자)은 생성 체인에서 빠진다
+//   npm run eval:followup -- --judge --judge-provider gemini   # 채점 제공자를 인자로(JUDGE_PROVIDER보다 먼저, 워크플로용 T-231)
 //   npm run eval:followup -- --provider gemini     # 생성 제공자 강제(체인 없음). 모델은 <ID>_MODEL 또는 admin.defaultModels
 //   npm run eval:followup -- --limit 12            # 앞 12문항만(앞쪽은 문장이 겹쳐 호버 호출이 적다)
 //   npm run eval:followup -- --max-calls 40        # 생성 LLM 호출(호버 + 이어 묻기) 상한. 넘길 수 있는 문항 앞에서 멈추고 저장
@@ -13,6 +14,7 @@
 //   npm run eval:followup -- --rpm 10              # 분당 LLM 호출 상한(기본 10)
 //   npm run eval:followup -- --fresh               # 캐시를 쓰지 않고 다시
 //   npm run eval:followup -- --judge --from .tmp/eval-followup-2026-11-28.json   # 저장된 결과만 다시 채점
+// Actions: eval 워크플로 입력 followup_args(예 "--provider groq --judge")로 실제 키·실제 크롬에서 돈다(T-231). 결과는 아티팩트 eval-followup.
 // 기본 검색은 실제 확장(크롬) 안 임베딩이다. e2e·eval과 크롬을 같이 쓰므로 공용 잠금 안에서 돌린다.
 // 결과: .tmp/eval-followup-<날짜>.json, 캐시: .tmp/eval-followup-cache.json (호버·이어 묻기·채점 결과, 커밋 안 함). 키는 남기지 않는다.
 import fs from 'node:fs';
@@ -58,7 +60,7 @@ try { if (!fresh) cache = JSON.parse(fs.readFileSync(cacheFile)); } catch {}
 const saveCache = () => { fs.mkdirSync(new URL('../.tmp/', here), { recursive: true }); fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 1)); };
 
 function judgeProvider() {
-  const id = process.env.JUDGE_PROVIDER || 'nvidia';
+  const id = argAfter('--judge-provider') || process.env.JUDGE_PROVIDER || 'nvidia';
   if (!PROVIDERS[id]) throw new Error(`알 수 없는 채점 제공자: ${id}`);
   const p = providerFor(id, process.env.JUDGE_MODEL || null, admin, settings);
   if (!p.apiKey && !p.def.keyOptional) throw new Error(`채점에 쓸 ${id.toUpperCase()}_API_KEY가 없어요.`);
