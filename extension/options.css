@@ -148,6 +148,11 @@ textarea.nf-facts { font: inherit; min-height: 90px; }
 /* AI 초안 + 검수 (T-301) */
 .draft-panel > summary { font-size: 13px; font-weight: 700; color: var(--ink); margin-top: 0; }
 .draft-panel > .hint { margin: 8px 0 10px; }
+.helper-log { margin: 10px 0 0; padding-left: 20px; font-size: 12.5px; color: var(--ink); }
+.helper-log li { margin: 2px 0; }
+.helper-log li.now { font-weight: 600; }
+#helperNotes { width: 100%; box-sizing: border-box; min-height: 0; font: inherit; }
+.helper-log li.now { color: var(--accent); }
 .draft-dropped { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
 .review-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; max-height: 480px; overflow-y: auto; }
 .review-list > li { padding: 10px 12px; border-bottom: 1px solid var(--line); }

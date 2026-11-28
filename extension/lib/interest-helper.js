@@ -348,6 +348,8 @@ async function stepPlan(s, deps, limits) {
   for (const t of p.skip) if (target.includes(t) && !s.absentTags.includes(t)) s.absentTags.push(t);
   s.pending = p.concepts;
   addLog(s, 'plan', `${s.round}바퀴 계획: 개념 ${p.concepts.length}개${p.skip.length ? `, 이 관심사에 없는 구조 ${p.skip.length}개` : ''}`);
+  // 더 고를 개념이 없다고 하면 바퀴를 더 돌지 않는다(같은 질문을 되풀이해 호출을 쓰지 않게)
+  if (!p.concepts.length) { s.phase = 'write'; return; }
   next(s, limits, tagIds);
 }
 
@@ -567,10 +569,9 @@ export function helperView(s, tags = []) {
   const stopText = s.status === 'error' ? (s.error || HELPER_TEXT.writeFail) : (s.stop ? STOP_TEXT[s.stop] || '' : '');
   let doneText = '';
   if (s.status === 'done') {
-    doneText = s.written
-      ? `초안 ${s.written}개를 검수 대기에 넣었어요. 사실을 하나씩 확인해 주세요.`
-      : '쓸 수 있는 초안이 없어요. 이름을 바꿔 다시 해 보세요.';
-    if (stopText) doneText += ` ${stopText}`;
+    // 멈춤 이유가 있으면 그것만(상한인데 "이름을 바꿔 보라"고 하지 않는다), 넣은 초안이 있으면 그 뒤에 덧붙인다
+    if (s.written) doneText = `초안 ${s.written}개를 검수 대기에 넣었어요. 사실을 하나씩 확인해 주세요.${stopText ? ` ${stopText}` : ''}`;
+    else doneText = stopText || '쓸 수 있는 초안이 없어요. 이름을 바꿔 다시 해 보세요.';
   }
   return {
     status: s.status, phase: s.phase, name: s.name, mode: s.mode, round: s.round,
