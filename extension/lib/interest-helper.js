@@ -90,7 +90,7 @@ export function newHelperState({ name, notes = '', mode = 'add', now = Date.now(
     name, notes, mode: mode === 'new' ? 'new' : 'add', startedAt: now, updatedAt: now,
     calls: 0, steps: 0, round: 0,
     pending: [], queue: [], fix: [], accepted: [], dropped: [],
-    tagFails: {}, absentTags: [], log: [],
+    tagFails: {}, planFails: 0, absentTags: [], log: [],
     stop: null, error: null, written: 0
   };
 }
@@ -353,6 +353,9 @@ async function stepPlan(s, deps, limits) {
   const p = parsePlan(r.text, { tagIds, blockTerms: deps.blockTerms, avoid, n });
   if (!p) {
     addLog(s, 'plan', '계획 답을 읽지 못했어요.');
+    // 한 번은 같은 바퀴로 다시 묻는다(T-226 실측: Gemini 3.1 flash-lite가 JSON 모드에서도 따옴표 없는 값을 내 커피 첫 계획에서 멈췄다)
+    s.planFails = (s.planFails || 0) + 1;
+    if (s.planFails < 2 && limits.maxCalls - s.calls >= NEED.plan) { s.round--; return next(s, limits, tagIds); }
     if (s.round === 1) return halt(s, 'format');
     return next(s, limits, tagIds);
   }

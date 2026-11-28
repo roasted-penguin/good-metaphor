@@ -419,11 +419,28 @@ test('LLM 오류: 체인이 다 막히면 llm-error로 멈추고 통과분은 �
   assert.equal(helperView(s).stopText, HELPER_TEXT.llm);
 });
 
-test('계획 답을 못 읽으면 format으로 멈춘다', async () => {
-  const d = deps({ ask: async () => '모르겠어요' });
+test('계획 답을 두 번 못 읽으면 format으로 멈춘다(한 번은 다시 묻는다, T-226)', async () => {
+  let calls = 0;
+  const d = deps({ ask: async () => { calls++; return '모르겠어요'; } });
   const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), d);
+  assert.equal(calls, 2);
   assert.equal(s.stop, 'format');
   assert.equal(s.status, 'done');
+});
+
+test('첫 계획 답이 깨져도 다시 물어 이어 간다(같은 바퀴, T-226)', async () => {
+  const f = fakeAsk({ plan: ['오프사이드'] });
+  let first = true;
+  const ask = async (system, user, o) => {
+    if (kind(system) === 'plan' && first) { first = false; return '{"concepts": [{"label": "오프사이드", "tag": "threshold_req", "why": 따옴표 없음}]}'; }
+    return f.ask(system, user, o);
+  };
+  const d = deps({ ask });
+  const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), d);
+  assert.equal(s.stop, null);
+  assert.ok(d.writes[0].some(n => n.label === '오프사이드'));
+  assert.ok(s.round <= HELPER_LIMITS.maxRounds);
+  assert.ok(s.log.some(l => l.text === '계획 답을 읽지 못했어요.'));
 });
 
 test('평가 답을 못 읽으면 한 번 다시 묻고, 또 못 읽으면 검사 못 한 초안은 넣지 않는다', async () => {
