@@ -231,6 +231,14 @@ const KINDS = {
     recover(e, opts) {
       if (!opts.json || !isToolUseFailed(e)) return null;
       try { const g = JSON.parse(e.body).error?.failed_generation; return typeof g === 'string' && g.trim() ? g : null; } catch { return null; }
+    },
+    // 원래 생성도 없는 모델 출력 400이면 한 번만 다시 보낸다(무작위라 다음엔 맞는 일이 많다, 2026-11-28 스모크).
+    // JSON 객체 모드였으면 끄고 보낸다(검증 실패 400을 되풀이하지 않게). 두 번째도 실패하면 modelOutput으로 다음 순서
+    fallback(e, req) {
+      if (!isToolUseFailed(e) || req.resent) return false;
+      req.resent = true;
+      delete req.body.response_format;
+      return true;
     }
   },
   anthropic: {

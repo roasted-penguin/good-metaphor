@@ -20,6 +20,19 @@ export function buildChain(primary, admin, settings) {
   return [...chain.filter(p => !p.def.local), ...chain.filter(p => p.def.local)];
 }
 
+// 에이전트 전용 순서(T-222, admin.agent.providerOrder). 체인에 이미 있는 항목끼리만 자리를 바꾼다:
+// 목록에 있는 제공자들이 차지한 자리를 목록 순서대로 다시 채우고, 목록에 없는 항목(사용자가 고른 다른 제공자 등)은
+// 제자리에 둔다. 항목을 더하거나 빼지 않으므로 체인 길이와 상관없고(규칙 7), 로컬(def.local)은 목록에 있어도
+// 움직이지 않아 늘 맨 뒤다(규칙 8). order가 비었거나 배열이 아니면 체인 그대로
+export function reorderChain(chain, order) {
+  if (!Array.isArray(order) || !order.length) return chain;
+  const rank = id => { const i = order.indexOf(id); return i < 0 ? Infinity : i; };
+  const movable = p => !p.def?.local && rank(p.id) !== Infinity;
+  const picked = chain.filter(movable).sort((a, b) => rank(a.id) - rank(b.id)); // 같은 제공자 여러 모델은 원래 순서(안정 정렬)
+  let k = 0;
+  return chain.map(p => (movable(p) ? picked[k++] : p));
+}
+
 // 다음 순서로 넘길 오류인가: 일시 오류와 모델 출력 400만. 키 오류(400·401·403)는 그대로 던진다
 // modelOutput: 모델이 정한 형식 대신 고유 함수 호출을 내 서버가 거절한 400(T-222). 그 모델 문제라 다음 순서로 넘긴다(쿨다운 없음)
 const passes = e => e.status === 429 || e.status === 503 || e.network || e.modelOutput || /시간이 초과/.test(e.message);

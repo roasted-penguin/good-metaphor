@@ -20,7 +20,7 @@ import { mergeGraphs, embedItems } from '../extension/lib/graph.js';
 import { loadCommonGraphFromDisk } from './load-graph.mjs';
 import { retrieve, retrievalFor } from '../extension/lib/retrieval.js';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
-import { buildChain, completeWithFallback } from '../extension/lib/fallback.js';
+import { buildChain, completeWithFallback, reorderChain } from '../extension/lib/fallback.js';
 import { providerFor } from '../extension/lib/config.js';
 import { runAnalogy } from '../extension/lib/pipeline.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
@@ -147,13 +147,18 @@ async function generate(cases) {
     const embedQuery = async t => { if (!qcache.has(t)) qcache.set(t, (await emb.embed([t], 'query'))[0]); return qcache.get(t); };
     const searchGraph = makeSearchGraph({ graph, vecs, embedQuery, retrieval: admin.retrieval });
     const used = new Set();
-    const ask = async (system, user, opts) => {
+    const askWith = list => async (system, user, opts) => {
       if (calls >= maxCalls) throw Object.assign(new Error('--max-calls 상한'), { budget: true });
       calls++;
-      const r = await withLimitRetry(() => completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown }));
+      const r = await withLimitRetry(() => completeWithFallback(list, system, user, opts, { cooldowns, cooldown: admin.cooldown }));
       used.add(modelKey(r.provider));
       return r.text;
     };
+    // 호버는 체인 그대로, 이어 묻기는 확장 background와 같이 agent.providerOrder로 자리만 바꾼 체인(T-222)
+    const ask = askWith(chain);
+    const agentChain = reorderChain(chain, admin.agent?.providerOrder);
+    const agentAsk = askWith(agentChain);
+    if (agentChain.map(modelKey).join('>') !== gen) console.log(`이어 묻기 체인: ${agentChain.map(modelKey).join(' → ')}`);
 
     for (const [i, item] of cases.entries()) {
       // 1) 호버(문장이 같으면 캐시)
@@ -181,7 +186,7 @@ async function generate(cases) {
         // 이어 묻기는 최대 AGENT_MAX_CALLS(4)회. 상한을 넘길 수 있으면 시작하지 않는다
         if (calls + AGENT_MAX_CALLS > maxCalls) { console.log(`  --max-calls ${maxCalls}에 닿아 멈춰요`); break; }
         used.clear();
-        row = await runFollowupCase({ item, graph, prev, candidateIds, ask, searchGraph, blocklist, now: modelClock });
+        row = await runFollowupCase({ item, graph, prev, candidateIds, ask: agentAsk, searchGraph, blocklist, now: modelClock });
         row.provider = [...used].join(',');
         if (!row.error && row.stop !== 'llm-error') { cache[ak] = row; saveCache(); }
       } else row = { ...row, cached: true };

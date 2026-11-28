@@ -213,12 +213,21 @@ test('openai-compat: content 없이 tool_calls로 오면 JSON 액션 글자로 �
   assert.equal(await complete(groq, 's', 'u', { json: true }), '{"action":"get_node_facts","args":{"nodeId":"cube"}}');
 });
 
-test('openai-compat: 400 tool_use_failed에 원래 생성(failed_generation)이 있으면 그 글을 답으로, JSON을 안 바랐으면 그대로 던진다', async t => {
+test('openai-compat: 400 tool_use_failed에 원래 생성(failed_generation)이 있으면 그 글을 답으로(다시 보내지 않음)', async t => {
   const err = { error: { message: 'Tool choice is none, but model called a tool', code: 'tool_use_failed', failed_generation: '{"name":"get_node_facts","arguments":{"nodeId":"cube"}}' } };
-  const bodies = mockFetch(t, [[400, err], [400, err]]);
+  const bodies = mockFetch(t, [[400, err]]);
   assert.equal(await complete(groq, 's', 'u', { json: true }), err.error.failed_generation);
-  await assert.rejects(complete(groq, 's', 'u', {}), e => e.status === 400 && e.modelOutput === true);
-  assert.equal(bodies.length, 2, '다시 보내지 않는다');
+  assert.equal(bodies.length, 1);
+});
+
+test('openai-compat: 원래 생성 없는 모델 출력 400이면 JSON 객체 모드를 끄고 한 번만 다시, 또 실패하면 modelOutput으로 던진다', async t => {
+  const err = { error: { message: "Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details.", type: 'invalid_request_error' } };
+  const bodies = mockFetch(t, [[400, err], [200, chat('{"final":{"answer":"a"}}')], [400, err], [400, err]]);
+  assert.equal(await complete(groq, 's', 'u', { json: true, jsonObject: true }), '{"final":{"answer":"a"}}');
+  assert.deepEqual(bodies[0].response_format, { type: 'json_object' });
+  assert.equal(bodies[1].response_format, undefined, '다시 보낼 때는 끈다');
+  await assert.rejects(complete(groq, 's', 'u', { json: true, jsonObject: true }), e => e.status === 400 && e.modelOutput === true);
+  assert.equal(bodies.length, 4, '두 번째 호출도 한 번만 다시');
 });
 
 test('isToolUseFailed: 모델 출력 400만(키 오류 400은 아님)', () => {
