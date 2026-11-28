@@ -29,6 +29,7 @@ test('parseTagFit: 물은 태그만, yes/no만, 코드 울타리 허용, 꼴이 
   assert.deepEqual([...m.entries()], [['a', { verdict: 'yes', reason: '맞아요' }], ['b', { verdict: 'no', reason: '억지' }]]);
   assert.deepEqual([...parseTagFit('[{"id":"a","verdict":"no","reason":"r"}]', ['a']).keys()], ['a'], '배열만 낸 답도 받는다');
   assert.equal(parseTagFit('아무 말', ['a']), null);
+  assert.equal(parseTagFit('{"tags":[{"id":"a | 이름","verdict":"yes","reason":"r"}]}', ['a']).get('a').verdict, 'yes', '"id | 이름" 꼴 id도 받는다(T-228)');
   assert.equal(parseTagFit('{"verdict":"yes"}', ['a']), null);
 });
 

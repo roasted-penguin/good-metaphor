@@ -112,9 +112,11 @@ export function parseTagFit(text, ids) {
     const want = new Set(ids);
     const out = new Map();
     for (const x of list) {
-      if (!x || !want.has(x.id) || out.has(x.id)) continue;
+      // 모델이 프롬프트의 "id | 이름" 꼴을 id 칸에 그대로 베끼는 일이 있다(2026-11-28 nemotron, T-228). 앞 토막만 id로 본다
+      const id = x ? String(x.id ?? '').split('|')[0].trim() : '';
+      if (!x || !want.has(id) || out.has(id)) continue;
       if (x.verdict !== 'yes' && x.verdict !== 'no') continue;
-      out.set(x.id, { verdict: x.verdict, reason: String(x.reason || '').slice(0, 160) });
+      out.set(id, { verdict: x.verdict, reason: String(x.reason || '').slice(0, 160) });
     }
     return out;
   } catch { return null; }
