@@ -4,7 +4,7 @@
   "tagsVersion": "2026.11.22-6",
   "graphs": {
     "maplestory": "2026.11.28-2",
-    "restaurant": "2026.11.23-4"
+    "restaurant": "2026.11.28-1"
   },
   "summary": {
     "maplestory/eval": {
@@ -168,7 +168,7 @@
       {"sentence":"스타포스 이벤트 기간에는 강화 비용이 할인돼 유저들이 그때 몰아서 강화한다.","kind":"hit","top3":["happy_hour","fixed_variable_cost","shared_kitchen"],"hit1":true,"hit3":true},
       {"sentence":"메소 시세가 떨어져서 같은 아이템을 사려면 메소가 훨씬 더 든다.","kind":"hit","top3":["retirement_pay","startup_fund","hygiene_grade"],"hit1":false,"hit3":false},
       {"sentence":"보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.","kind":"hit","top3":["kitchen_division","labor_contract","open_prep"],"hit1":true,"hit3":true},
-      {"sentence":"경매장에서 아이템이 팔리면 판매 대금에서 수수료가 빠진다.","kind":"hit","top3":["loyalty_points","card_fee","key_money"],"hit1":false,"hit3":true},
+      {"sentence":"경매장에서 아이템이 팔리면 판매 대금에서 수수료가 빠진다.","kind":"hit","top3":["loyalty_points","card_fee","min_order_amount"],"hit1":false,"hit3":true},
       {"sentence":"주간 보스 결정석은 한 주에 팔 수 있는 개수가 정해져 있다.","kind":"hit","top3":["weekly_hour_cap","business_hours_limit","lease_renewal"],"hit1":false,"hit3":false},
       {"sentence":"Airlines overbook flights because some passengers never show up and their seats would fly empty.","kind":"hit","top3":["unfair_franchise_control","franchise_ad_cost","avg_spend"],"hit1":false,"hit3":false},
       {"sentence":"Gyms get packed right after office hours, so members queue for every machine.","kind":"hit","top3":["unfair_franchise_control","remodel_cost_share","shared_kitchen"],"hit1":false,"hit3":false}
