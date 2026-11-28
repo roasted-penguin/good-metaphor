@@ -152,7 +152,7 @@ export function finalizeAnswer({ final, graph, allowed, sentence, context, block
   };
 }
 
-const STOP_REASON = {
+export const STOP_REASON = {
   steps: '단계 상한에 닿았어요.',
   calls: '호출 상한에 닿았어요.',
   repeat: '같은 확인을 되풀이해서 멈췄어요.',
