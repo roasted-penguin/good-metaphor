@@ -721,6 +721,115 @@ test('이어 묻기(T-216): 하루 상한이면 LLM을 부르지 않고 안내 �
   expect((await agentCount(ext)).count).toBe(40);
 });
 
+/* ───────── 👎 교정 진단 (T-220, ADR 0017 에이전트 3) ─────────
+   가짜 LLM은 "왜 틀렸는지 진단" 시스템 프롬프트에 JSON 액션으로 답한다(servers.mjs diagnoseReply) */
+const dgBox = page => box(page).locator('.dg');
+const diagnoseLLMCalls = from => calls.slice(from).filter(c => c.system.includes('왜 틀렸는지 진단'));
+const DG_BTN = '왜 틀렸는지 살펴볼게요';
+
+test('교정 진단(T-220): 👎 뒤에만 버튼, 누르면 한 줄 진단 + 👎한 개념이 아닌 새 근거 비유, 보내는 글은 호버 범위, 하루 호출 수 공유', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  expect(await box(page).getByRole('button', { name: DG_BTN }).count(), '👎 전에는 없음').toBe(0);
+  const from0 = calls.length;
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => evidence(page)).not.toBe(first); // 기존 빠른 다시 비유는 그대로
+  expect(diagnoseLLMCalls(from0), '누르기 전에는 진단을 부르지 않음(기본 경로를 늦추지 않음)').toEqual([]);
+  await expect(box(page).getByRole('button', { name: DG_BTN })).toBeVisible();
+  expect(await boxClass(page)).toContain('t-maple');
+  const from = calls.length;
+  await box(page).getByRole('button', { name: DG_BTN }).click();
+  await expect.poll(() => dgBox(page).innerText()).toContain('후보 개념의 구조가 문장과 달랐어요.');
+  const text = await dgBox(page).innerText();
+  expect(text).toContain('다시 보면');
+  expect(text).toMatch(/메이플로 치면 .+와 같은 구조예요\./);
+  const label = text.match(/근거: (.+)/)?.[1]?.trim();
+  expect(label).toBeTruthy();
+  expect(label, '👎한 개념은 쓰지 않는다').not.toBe(first);
+  await expect(box(page).getByRole('button', { name: '이 비유로 고정' })).toBeVisible();
+  const sent = diagnoseLLMCalls(from);
+  expect(sent.length).toBe(2);
+  expect(sent[0].user).toContain('설명할 문장: 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  expect(sent[0].user, '같은 문단의 다음 문장은 보내지 않는다').not.toContain('고정금리');
+  expect(sent[0].user).toContain(`쓰지 말 개념: id=`);
+  expect(sent[0].user).toContain('[코드가 본 단서]');
+  expect((await agentCount(ext)).count).toBe(2);
+
+  // 고정(피드백 층 pick) → 되돌리기
+  await box(page).getByRole('button', { name: '이 비유로 고정' }).click();
+  await expect.poll(() => dgBox(page).innerText()).toContain('이 문장은 이 개념으로 고정했어요');
+  const fb = () => ext.page.evaluate(async () => (await chrome.storage.local.get('feedback')).feedback.map(r => r.vote));
+  await expect.poll(fb).toEqual(['down', 'pick']);
+  await dgBox(page).getByRole('button', { name: '되돌리기' }).click();
+  await expect.poll(fb).toEqual(['down']);
+});
+
+test('교정 진단(T-220): 후보 밖 개념만 대면 검증기가 숨기고 "여기까지 했어요"(규칙 1)', async ({ ext }) => {
+  const from = calls.length;
+  const r = await ext.send({ type: 'agent:diagnose', payload: { sentence: '후보밖진단테스트 변동금리는 기준금리를 따라 움직인다.' }, orig: { analogy: '메이플로 치면 메소와 같아요.', evidence: { nodeId: 'meso', nodeLabel: '메소' }, candidates: [{ id: 'meso' }, { id: 'starforce' }, { id: 'cube' }] }, downNodeId: 'meso' });
+  expect(r.ok).toBe(true);
+  expect(r.data.analogy).toBe('');
+  expect(r.data.evidence).toBeNull();
+  expect(r.data.stopText).toContain('여기까지 했어요.');
+  expect(r.data.rejected).toContain('근거 목록에 없는 개념');
+  expect(r.data.action).toBeNull();
+  expect(r.data.debug.stop).toBe('verify');
+  expect(r.data.debug.trace.filter(t => t.type === 'verify').map(t => t.reason)).toEqual(['rule1', 'rule1']);
+  expect(diagnoseLLMCalls(from).length).toBe(2);
+  expect(diagnoseLLMCalls(from)[1].user).toContain('[검증 실패]');
+});
+
+test('교정 진단(T-220): 하루 상한이면 LLM을 부르지 않고 안내 문구', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  await box(page).getByRole('button', { name: '안 맞아요' }).click();
+  await expect.poll(() => evidence(page)).not.toBe(first);
+  await ext.page.evaluate(async () => {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await chrome.storage.local.set({ agentCalls: { day, count: 40 } }); // 이어 묻기와 같은 agent.dailyCallCap
+  });
+  const from = calls.length;
+  await box(page).getByRole('button', { name: DG_BTN }).click();
+  await expect.poll(() => dgBox(page).innerText()).toContain('오늘 살펴보기를 다 썼어요.');
+  expect(diagnoseLLMCalls(from)).toEqual([]);
+  expect((await agentCount(ext)).count).toBe(40);
+});
+
+test('교정 진단(T-220): 로그아웃이면 내 태그 예문을 쓸 수 없고(고정만), 로그인 + 내 노드·내 태그면 확인 뒤 예문', async ({ ext }) => {
+  const { send } = ext;
+  // 로그아웃: example은 거절, pin은 피드백 층에만
+  const no = await send({ type: 'agent:diagnose-apply', kind: 'example', sentence: FOCUS_SENTENCE, downNodeId: 'meso', nodeId: 'starforce' });
+  expect(no.ok).toBe(false);
+  expect(no.error).toContain('로그인해야');
+  const pin = await send({ type: 'agent:diagnose-apply', kind: 'pin', sentence: FOCUS_SENTENCE, downNodeId: 'meso', nodeId: 'starforce' });
+  expect(pin.ok).toBe(true);
+  expect(pin.data.kind).toBe('pin');
+  await send({ type: 'feedback-undo', id: pin.data.id });
+
+  // 로그인 + 내 노드·내 태그: 진단 결과가 예문 미리보기(가린 문장)를 제안하고, 누르면 내 태그 examples에
+  await send({ type: 'auth:login', nickname: '테스터' });
+  expect((await send({ type: 'overlay:save', overlay: FOCUS_OVERLAY })).data.ok).toBe(true);
+  const r = await send({ type: 'agent:diagnose', payload: { sentence: FOCUS_SENTENCE }, orig: { analogy: '메이플로 치면 메소와 같아요.', evidence: { nodeId: 'meso', nodeLabel: '메소' }, candidates: [{ id: 'meso' }, { id: 'u:focus' }] }, downNodeId: 'meso' });
+  expect(r.ok).toBe(true);
+  expect(r.data.evidence.nodeId).toBe('u:focus');
+  expect(r.data.action).toEqual({ kind: 'example', nodeId: 'u:focus', tagId: 'u_focus', tagLabel: '몰입 시간', text: FOCUS_MASKED });
+  expect((await send({ type: 'overlay:get' })).data.tags[0].examples, '누르기 전에는 쓰지 않는다').toEqual(['손으로 적은 예문은 그대로 남아야 한다.']);
+  const ap = await send({ type: 'agent:diagnose-apply', kind: 'example', sentence: FOCUS_SENTENCE, downNodeId: 'meso', nodeId: 'u:focus' });
+  expect(ap.ok).toBe(true);
+  expect((await send({ type: 'overlay:get' })).data.tags[0].examples).toEqual(['손으로 적은 예문은 그대로 남아야 한다.', FOCUS_MASKED]);
+  // 공통 노드는 로그인이어도 예문 거절(공통 그래프·tags.json은 쓰지 않는다)
+  const common = await send({ type: 'agent:diagnose-apply', kind: 'example', sentence: FOCUS_SENTENCE, downNodeId: 'meso', nodeId: 'starforce' });
+  expect(common.ok).toBe(false);
+  expect(common.error).toContain('예문을 넣을 수 없어요');
+});
+
 /* ───────── 설정 화면 "내 피드백" 칸 (T-132) ───────── */
 const P1 = '변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.';
 const DAY_RE = /\d{4}-\d{2}-\d{2}/;
