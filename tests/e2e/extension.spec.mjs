@@ -633,6 +633,94 @@ test('피드백 UI: 자동 모드에서 말풍선으로 옮겨 가도 닫히지 
   await expect.poll(() => evidence(page), { timeout: 10000 }).not.toBe(first);
 });
 
+/* ───────── 말풍선 이어 묻기 (T-216, ADR 0017) ─────────
+   가짜 LLM은 "이어서 묻는 질문" 시스템 프롬프트에 JSON 액션으로 답한다(servers.mjs agentReply) */
+const fuBox = page => box(page).locator('.fu');
+const agentLLMCalls = from => calls.slice(from).filter(c => c.system.includes('이어서 묻는 질문'));
+const agentCount = ext => ext.page.evaluate(async () => (await chrome.storage.local.get('agentCalls')).agentCalls || null);
+
+test('이어 묻기(T-216): 결과 뒤 버튼 → 칩·입력칸, "왜 비슷해요?" → 근거 노드 사실로 답, 보내는 글은 호버 범위, 하루 호출 수', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  expect(await box(page).locator('input').count(), '열기 전에는 입력칸 없음').toBe(0);
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  await expect(box(page).getByRole('textbox', { name: '이어 묻기 질문' })).toBeVisible();
+  await expect(box(page).getByRole('button', { name: '다른 비유는요?' })).toBeVisible();
+  expect(await boxClass(page)).toContain('t-maple');
+  const from = calls.length;
+  await box(page).getByRole('button', { name: '왜 비슷해요?' }).click();
+  await expect.poll(() => fuBox(page).innerText()).toContain(`${first}도 같은 구조라서 비슷해요.`);
+  expect(await fuBox(page).innerText()).toContain(`근거: ${first}`);
+  expect(await evidence(page), '호버 결과 근거는 그대로').toBe(first);
+  const sent = agentLLMCalls(from);
+  expect(sent.map(c => c.model)).toEqual(['mock-model', 'mock-model']); // 같은 fallbackChain
+  expect(sent[0].user).toContain('설명할 문장: 변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.');
+  expect(sent[0].user, '같은 문단의 다음 문장은 보내지 않는다(문단 전송 보류)').not.toContain('고정금리');
+  expect(sent[0].user).toContain('질문: 왜 비슷해요?');
+  expect(sent[1].user).toContain('[지금까지]');
+  expect((await agentCount(ext)).count).toBe(2);
+});
+
+test('이어 묻기(T-216): 직접 입력 "다른 …" → 그래프 검색으로 다른 개념, 응답에 debug.trace', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  const first = await evidence(page);
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  await box(page).getByRole('textbox', { name: '이어 묻기 질문' }).fill('다른 개념도 있나요?');
+  await box(page).getByRole('textbox', { name: '이어 묻기 질문' }).press('Enter');
+  await expect.poll(() => fuBox(page).innerText()).toContain('도 같은 구조라서 비슷해요.');
+  const text = await fuBox(page).innerText();
+  expect(text).toContain('다른 개념도 있나요?');
+  const label = text.match(/근거: (.+)/)?.[1]?.trim();
+  expect(label).toBeTruthy();
+  expect(label, '근거로 쓴 개념은 빼고 찾는다').not.toBe(first);
+
+  const r = await ext.send({ type: 'agent:ask', payload: { sentence: 'API 서버는 분당 요청 수에 상한을 두어 한 사용자가 자원을 독점하지 못하게 한다.' }, question: '다른 비유는요?', prev: {}, candidateIds: [] });
+  expect(r.ok).toBe(true);
+  expect(r.data.debug.trace.map(t => t.type)).toEqual(['action', 'final']);
+  expect(r.data.debug.trace[0].tool).toBe('search_graph');
+  expect(r.data.debug.provider).toBe('custom/mock-model');
+  expect(r.data.evidence).not.toBeNull();
+});
+
+test('이어 묻기(T-216): 후보 밖 개념을 대면 답을 숨긴다(규칙 1), 질문이 너무 짧으면 오류', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  await box(page).getByRole('textbox', { name: '이어 묻기 질문' }).fill('후보밖테스트 이건요?');
+  await box(page).getByRole('button', { name: '묻기', exact: true }).click();
+  await expect.poll(() => fuBox(page).innerText()).toContain('근거 목록에 없는 개념');
+  expect(await fuBox(page).innerText()).not.toContain('레벨이 오를수록');
+  const short = await ext.send({ type: 'agent:ask', payload: { sentence: '문장이에요.' }, question: 'a' });
+  expect(short.ok).toBe(false);
+  expect(short.error).toContain('두 글자');
+});
+
+test('이어 묻기(T-216): 하루 상한이면 LLM을 부르지 않고 안내 문구', async ({ context, ext }) => {
+  await ext.page.evaluate(async () => {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await chrome.storage.local.set({ agentCalls: { day, count: 40 } }); // admin agent.dailyCallCap 기본 40
+  });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  const from = calls.length;
+  await box(page).getByRole('button', { name: '왜 비슷해요?' }).click();
+  await expect.poll(() => fuBox(page).innerText()).toContain('오늘 이어 묻기를 다 썼어요.');
+  expect(agentLLMCalls(from)).toEqual([]);
+  expect((await agentCount(ext)).count).toBe(40);
+});
+
 /* ───────── 설정 화면 "내 피드백" 칸 (T-132) ───────── */
 const P1 = '변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.';
 const DAY_RE = /\d{4}-\d{2}-\d{2}/;

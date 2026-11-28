@@ -203,3 +203,9 @@ test('runFollowup: 상한·반복·체인 소진이면 "여기까지 했어요" 
   assert.equal(cap.stopText, AGENT_CAP_TEXT);
   assert.equal(none.calls.length, 0);
 });
+
+test('말풍선 칩 문구(content.js FU_Q)가 FOLLOWUP_QUESTIONS와 같다', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../extension/content.js', import.meta.url), 'utf8');
+  for (const [k, q] of Object.entries(FOLLOWUP_QUESTIONS)) assert.ok(src.includes(`${k}: '${q}'`), `${k}: '${q}'`);
+});

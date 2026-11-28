@@ -11,7 +11,7 @@ export const AGENT_STOP_TEXT = '여기까지 했어요.';
 export const AGENT_CAP_TEXT = '오늘 이어 묻기를 다 썼어요. 내일 다시 물어봐 주세요.';
 
 // 관찰 하나를 프롬프트에 붙일 때의 글자 상한(긴 검색 결과가 요청을 키우지 않게)
-const OBS_MAX = 1500;
+const OBS_MAX = 2500;
 // trace에 남길 인자 요약 글자 상한
 const ARGS_MAX = 80;
 

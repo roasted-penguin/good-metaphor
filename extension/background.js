@@ -17,6 +17,8 @@ import { buildDraftPrompt } from './lib/prompt.js';
 import { parseDraft, validDraftName, draftNameError, demoDraftText, withDeadline, draftError, DRAFT_DEADLINE_MS } from './lib/draft.js';
 import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크립트와 같은 파일)
 import { loadErrorReason } from './lib/embed-status.js';
+import { takeDailyCall } from './lib/agent.js';
+import { runFollowup, cleanQuestion } from './lib/agent-tools.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -431,6 +433,65 @@ async function serverPermission(url) {
   return { granted, key: granted ? 'server-ok' : 'server-denied' };
 }
 
+/* ───────────── 말풍선 이어 묻기 에이전트 (T-216, ADR 0017) ───────────── */
+
+// 에이전트 LLM 호출의 하루 상한(admin agent.dailyCallCap). 호버 체인 한도와 따로 센다(사용자 결정 2026-11-28).
+// 이 기기 chrome.storage.local agentCalls = { day, count }. 동시에 여러 질문이 와도 빠지지 않게 차례로 쓴다
+const AGENT_DAILY_CAP_DEFAULT = 40;
+let agentQueue = Promise.resolve();
+function takeAgentCall(cap) {
+  const job = agentQueue.then(async () => {
+    const { agentCalls } = await chrome.storage.local.get('agentCalls');
+    const r = takeDailyCall(agentCalls || null, localDay(Date.now()), cap);
+    if (r.ok) await chrome.storage.local.set({ agentCalls: r.state });
+    return r.ok;
+  });
+  agentQueue = job.catch(() => {});
+  return job;
+}
+
+const str = (v, n) => String(v ?? '').slice(0, n);
+
+// 이어 묻기 한 번. 보내는 글은 호버와 같은 범위(문장·단어·앞 문장·제목)만 받는다(문단은 받지 않는다, ADR 0017 열린 결정 1).
+// LLM은 explain과 같은 길(사용자 제공자 → fallbackChain, 429 쿨다운 공유, 규칙 7·8)로 부른다. 호버 결과 캐시·피드백 기록은 건드리지 않는다
+async function followup({ payload, question, prev, candidateIds }) {
+  const t0 = Date.now();
+  const q = cleanQuestion(question);
+  if (!q) throw new Error('질문을 두 글자 이상 적어 주세요.');
+  const [settings, admin, provider, { graph }, blocklist] = await Promise.all([getSettings(), getAdminConfig(), resolveProvider(), getMergedGraph(), loadBlocklist()]);
+  const base = { answer: '', evidence: null, rejected: null, capped: false, found: [], theme: graph.theme, domain: graph.domain };
+  if (provider.def.kind === 'demo') return { ...base, stopText: '데모 모드에서는 이어 묻기를 쓸 수 없어요.', debug: { trace: [], calls: 0 } };
+  const p = { sentence: str(payload?.sentence, 1000), word: str(payload?.word, 100), context: str(payload?.context, 1000), pageTitle: str(payload?.pageTitle, 120) };
+  if (!p.sentence.trim()) throw new Error('물어볼 문장이 없어요.');
+  const pv = { meaning: str(prev?.meaning, 300), analogy: str(prev?.analogy, 300), evidence: prev?.evidence?.nodeId ? { nodeId: str(prev.evidence.nodeId, 100), nodeLabel: str(prev.evidence.nodeLabel, 100) } : null };
+  const cap = admin.agent?.dailyCallCap ?? AGENT_DAILY_CAP_DEFAULT;
+
+  const chain = buildChain(provider, admin, settings);
+  let answered = provider;
+  const fallbacks = [];
+  const ask = async (system, user, opts) => {
+    const r = await completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown });
+    answered = r.provider;
+    fallbacks.push(...r.fallbacks);
+    return r.text;
+  };
+  // search_graph 도구: 한 문장 임베딩(오프스크린, 한 문장씩) + retrieve. 제보로 빠진 공통 노드(T-118)는 호버처럼 뺀다
+  const searchGraph = async (text, exclude) => {
+    const { vecs } = await ensureGraphVectors(graph);
+    const { vectors: [v] } = await offscreen('embed', { texts: [text], kind: 'query' });
+    const reported = reportedNodes(feedbackForGraph(await feedbackStore.get(), graph), graph);
+    const topK = (admin.retrieval?.topK ?? 3) + exclude.length + reported.size;
+    return retrieve(v, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK, aliasText: text })
+      .filter(c => !exclude.includes(c.id) && !reported.has(c.id));
+  };
+  const r = await keepAlive(runFollowup({
+    graph, payload: p, question: q, prev: pv,
+    candidateIds: Array.isArray(candidateIds) ? candidateIds.slice(0, 10).map(id => str(id, 100)) : [],
+    ask, searchGraph, blocklist, budget: { take: () => takeAgentCall(cap) }
+  }));
+  return { ...base, ...r, question: q, debug: { ...r.debug, provider: `${answered.id}/${answered.model}`, fallbacks, ms: Date.now() - t0 } };
+}
+
 /* ───────────── 메시지 ───────────── */
 
 // 이중 방어(T-107): content.js가 막지만, 보낸 탭 호스트가 제외 목록이면 임베딩·LLM 없이 끝낸다.
@@ -632,6 +693,8 @@ const handlers = {
     return { ok: true, text: text.trim().slice(0, 80), provider: `${provider.id}/${provider.model}` };
   },
   async explain(payload, sender) { await assertSiteAllowed(sender, payload?.topHost); countHover(); return explain(payload); },
+  // 말풍선 이어 묻기(T-216). 제외 사이트 이중 방어는 explain과 같다
+  async 'agent:ask'(msg, sender) { await assertSiteAllowed(sender, msg.payload?.topHost); return followup(msg); },
   // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
   async feedback({ record, rerun }, sender) {
     await assertSiteAllowed(sender, record?.topHost || rerun?.topHost);

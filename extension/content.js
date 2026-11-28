@@ -459,6 +459,18 @@
         .chip.reason { color: var(--muted); }
         .chip.ver { background: transparent; color: var(--muted); padding-left: 2px; padding-right: 2px; }
         .chip.alt:hover, .chip.reason:hover { background: var(--chip-bg); }
+        /* 이어 묻기 (T-216, ADR 0017): 같은 테마 토큰을 쓴다(관심사 테마를 따름, 규칙 6) */
+        .fu { max-height: 240px; overflow-y: auto; }
+        .fu-q { font-size: 12px; color: var(--muted); margin: 6px 0 2px; }
+        .fu-q::before { content: "Q. "; font-weight: 700; color: var(--label); }
+        .fu-a { margin: 0 0 4px; }
+        .chip.fuq { cursor: pointer; padding: 3px 10px; background: transparent; border: 1px solid var(--line); color: var(--ink); }
+        .chip.fuq:hover { background: var(--chip-bg); }
+        .fu-form { display: flex; gap: 6px; margin-top: 6px; }
+        .fu-in { flex: 1; min-width: 0; box-sizing: border-box; font: inherit; font-size: 12.5px; color: var(--ink); background: transparent;
+          border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; outline: none; }
+        .fu-in:focus { border-color: var(--accent); }
+        .fu-in::placeholder { color: var(--muted); }
       </style>
       <div class="box" role="dialog" aria-live="polite"></div>`;
     box = shadow.querySelector('.box');
@@ -520,6 +532,8 @@
   }
   const THUMB = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v11H3V10h4z"/><path d="M7 10l4-8a3 3 0 0 1 3 3v4h5.5a2 2 0 0 1 2 2.3l-1.3 8a2 2 0 0 1-2 1.7H7"/></svg>';
   const REASON_CHIPS = [['forced', '비유가 억지예요'], ['meaning', '뜻이 틀렸어요'], ['fact', '사실이 틀렸어요']];
+  // 이어 묻기 칩 질문(T-216). lib/agent-tools.js FOLLOWUP_QUESTIONS 와 같은 문구(단위 테스트가 대조)
+  const FU_Q = { why: '왜 비슷해요?', other: '다른 비유는요?' };
 
   /* ───────── 원클릭 피드백 (T-106, ADR 0010) ─────────
      글자 입력 없음. 👎 → 그 자리에서 다른 비유, 칩은 선택. 되돌리기 5초, 칩은 3초 뒤 접힘(말풍선 위에 있으면 유지) */
@@ -585,6 +599,51 @@
     }
   }
 
+  /* ───────── 말풍선 이어 묻기 (T-216, ADR 0017) ─────────
+     결과 뒤 "이어 묻기" → 칩 두 개 + 입력칸. 보내는 글은 호버와 같은 범위(current.payload)와 방금 결과뿐이다.
+     답은 background 에이전트가 규칙 1·근거 검사·금칙어를 거쳐 돌려준다. 최근 세 개만 보인다 */
+  async function onFollowup(kind, text) {
+    if (!current || !view?.result || view.fu?.busy) return;
+    const question = kind === 'free' ? String(text || '').trim() : FU_Q[kind];
+    if (!question || question.length < 2) return;
+    const key = current.key, r = view.result;
+    const fu = { open: true, busy: true, items: [...(view.fu?.items || [])] };
+    render({ ...view, fu });
+    const res = await ask('agent:ask', {
+      payload: current.payload, question,
+      prev: { meaning: r.meaning, analogy: r.analogy, evidence: r.evidence },
+      candidateIds: (r.debug?.candidates || []).map(c => c.id)
+    });
+    if (!current || current.key !== key || view?.fu !== fu) return; // 그사이 닫았거나 피드백으로 바뀜
+    const d = res?.ok ? res.data : null;
+    const item = d
+      ? { q: d.question || question, answer: d.answer, evidence: d.evidence, note: d.rejected || d.stopText || '', found: d.answer ? [] : (d.found || []) }
+      : { q: question, answer: '', note: res?.error || '답을 받지 못했어요.', found: [] };
+    render({ ...view, fu: { open: true, busy: false, items: [...fu.items, item].slice(-3) } });
+  }
+  function fuHtml(state) {
+    const fu = state.fu;
+    const r = state.result;
+    let h = '<div class="sep"></div><div class="fu">';
+    for (const it of fu.items) {
+      h += `<div class="fu-q">${esc(it.q)}</div>`;
+      if (it.answer) {
+        h += `<div class="fu-a">${esc(it.answer)}</div>`;
+        if (it.evidence) h += `<div class="chips"><span class="chip ${it.evidence.source === 'user' ? 'user' : ''}">근거: ${esc(it.evidence.nodeLabel)}</span></div>`;
+      } else {
+        h += `<div class="fu-a muted">${esc(it.note)}</div>`;
+        if (it.found?.length) h += `<div class="muted note">살펴본 개념: ${esc(it.found.join(', '))}</div>`;
+      }
+    }
+    if (fu.busy) h += '<div class="muted"><span class="spin"></span>알아보는 중…</div>';
+    else {
+      const chips = [r.analogy && r.evidence ? 'why' : null, 'other'].filter(Boolean);
+      h += `<div class="chips">${chips.map(k => `<button class="chip fuq" data-act="fu-ask" data-kind="${k}">${FU_Q[k]}</button>`).join('')}</div>`;
+      h += '<form class="fu-form"><input class="fu-in" type="text" maxlength="200" placeholder="더 궁금한 걸 물어보세요" aria-label="이어 묻기 질문"><button type="submit">묻기</button></form>';
+    }
+    return h + '</div>';
+  }
+
   // 고른 글이 상한을 넘어 앞부분만 보냈을 때 한 줄(T-182)
   const noteHtml = () => (current?.note ? `<div class="muted note">${esc(current.note)}</div>` : '');
 
@@ -632,7 +691,9 @@
         ? '<span class="thanks">고마워요</span>'
         : `<button class="fbtn up" data-act="up" aria-label="잘 맞아요" title="잘 맞아요">${THUMB}</button>${r.evidence && r.analogy ? `<button class="fbtn down" data-act="down" aria-label="안 맞아요" title="안 맞아요">${THUMB}</button>` : ''}`;
       html += noteHtml();
-      html += `<div class="foot"><span>${esc(r.debug?.provider || '')}${SOURCE_TEXT[r.source] || ''}${r.cached ? ' · 캐시' : ''}</span><span class="fb">${state.busy || !r.analogy ? '' : thumbs}<button data-act="options">설정</button></span></div>`;
+      if (state.fu?.open && !state.busy) html += fuHtml(state);
+      const fuBtn = state.busy || state.fu?.open ? '' : '<button data-act="fu-open">이어 묻기</button>';
+      html += `<div class="foot"><span>${esc(r.debug?.provider || '')}${SOURCE_TEXT[r.source] || ''}${r.cached ? ' · 캐시' : ''}</span><span class="fb">${state.busy || !r.analogy ? '' : thumbs}${fuBtn}<button data-act="options">설정</button></span></div>`;
     }
     box.innerHTML = html;
     view = state;
@@ -641,8 +702,17 @@
       const act = b.dataset.act;
       if (act === 'close') hideTooltip();
       else if (act === 'options') chrome.runtime.sendMessage({ type: 'open-options' });
+      else if (act === 'fu-open') { render({ ...view, fu: { open: true, busy: false, items: [] } }); box.querySelector('.fu-in')?.focus(); }
+      else if (act === 'fu-ask') onFollowup(b.dataset.kind);
       else onFeedback(act, b.dataset);
     }));
+    const fuForm = box.querySelector('.fu-form');
+    if (fuForm) {
+      const input = fuForm.querySelector('.fu-in');
+      fuForm.addEventListener('submit', e => { e.preventDefault(); onFollowup('free', input.value); });
+      // 입력 중 글자가 페이지 단축키로 새지 않게(버블 단계). Esc는 문서 캡처 단계에서 먼저 받아 말풍선을 닫는다
+      for (const t of ['keydown', 'keyup', 'keypress']) input.addEventListener(t, e => e.stopPropagation());
+    }
     if (current) place(current);
     requestAnimationFrame(() => box.classList.add('show'));
   }
