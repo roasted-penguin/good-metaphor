@@ -5,7 +5,7 @@ import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
-import { addRecord, removeRecord, setReason, REASONS, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
+import { addRecord, removeRecord, setReason, REASONS, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, summarizeAgentFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown, cacheEntryFor, readCacheEntry } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked, activeTerms } from './lib/blocklist.js';
@@ -499,6 +499,11 @@ async function followup({ payload, question, prev, candidateIds }) {
     candidateIds: Array.isArray(candidateIds) ? candidateIds.slice(0, 10).map(id => str(id, 100)) : [],
     ask: deps.ask, searchGraph: deps.searchGraph, blocklist, budget: deps.budget
   }));
+  // 보인 답 수(날짜별, T-218 👎 비율의 분모). 14일만 남긴다
+  if (r.answer) {
+    const { agentAnswerCounts } = await chrome.storage.local.get('agentAnswerCounts');
+    await chrome.storage.local.set({ agentAnswerCounts: bumpHover(agentAnswerCounts || {}, localDay(Date.now())) });
+  }
   return { ...base, ...r, question: q, debug: { ...r.debug, provider: deps.providerText(), fallbacks: deps.state.fallbacks, ms: Date.now() - t0 } };
 }
 
@@ -769,6 +774,8 @@ const handlers = {
     const r = { ...record, id: crypto.randomUUID(), ts: Date.now(), sentenceHash: await sentenceHashOf(record.sentence) };
     delete r.vec; // 벡터는 받지 않고 여기서 만든다
     delete r.topHost; // 검사용일 뿐 기록·내보내기에 남기지 않는다(T-111)
+    // 이어 묻기 답을 본 뒤 남긴 피드백인지(T-218, 👎 비율 집계용). 참일 때만 남긴다
+    if (record?.afterAgent === true) r.afterAgent = true; else delete r.afterAgent;
     if (r.vote === 'down' || r.vote === 'pick') {
       const vec = await queryVector(record.sentence);
       if (vec) r.vec = vec;
@@ -808,8 +815,10 @@ const handlers = {
     return { items, share: settings.feedbackShare === true };
   },
   async 'feedback:stats'() {
-    const { hoverCounts } = await chrome.storage.local.get('hoverCounts');
-    return summarizeFeedback(await feedbackStore.get(), hoverCounts || {}, localDay(Date.now()));
+    const { hoverCounts, agentAnswerCounts } = await chrome.storage.local.get(['hoverCounts', 'agentAnswerCounts']);
+    const records = await feedbackStore.get(), today = localDay(Date.now());
+    // agent: 이어 묻기 뒤 👎 비율(T-218)
+    return { ...summarizeFeedback(records, hoverCounts || {}, today), agent: summarizeAgentFeedback(records, hoverCounts || {}, agentAnswerCounts || {}, today) };
   },
   // 근거 검사 주간 집계(T-146, "내 피드백" 아래)
   async 'grounding:stats'() {

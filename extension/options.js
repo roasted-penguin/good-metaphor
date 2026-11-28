@@ -1,4 +1,4 @@
-import { localDay, formatFeedbackStats } from './lib/feedback.js';
+import { localDay, formatFeedbackStats, formatAgentFeedbackStats } from './lib/feedback.js';
 import { formatGroundingStats, GROUNDING_REASON_LABEL, FALSE_POSITIVE } from './lib/grounding-log.js';
 import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.js';
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
@@ -718,6 +718,10 @@ async function loadFeedback() {
   if (seq !== fbLoadSeq) return;
   fbItems = list.items;
   $('#fbStats').textContent = formatFeedbackStats(st);
+  // 이어 묻기 뒤 👎 비율(T-218). 이어 묻기 답이 없으면 감춘다
+  const agentLine = formatAgentFeedbackStats(st.agent);
+  $('#fbAgentStats').hidden = !agentLine;
+  $('#fbAgentStats').textContent = agentLine || '';
   renderGrounding(gst);
   $('#fbList').innerHTML = fbItems.map(it => {
     // 라벨이 없으면(고른 개념 없음 등) 날짜만. 구분점이 홀로 남지 않게

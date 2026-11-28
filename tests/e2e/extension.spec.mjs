@@ -830,6 +830,31 @@ test('교정 진단(T-220): 로그아웃이면 내 태그 예문을 쓸 수 없�
   expect(common.error).toContain('예문을 넣을 수 없어요');
 });
 
+test('이어 묻기 뒤 👎 비율(T-218): 이어 묻기 답을 본 뒤 👎는 afterAgent로 기록, 설정 화면에 두 비율', async ({ context, ext }) => {
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:8766/');
+  await altHover(page, '#p1');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click(); // 호버 뒤 👎
+  await expect.poll(() => tooltip(page)).toContain('내 피드백 반영');
+  await page.keyboard.press('Escape');
+  await altHover(page, '#p2');
+  await expect.poll(() => tooltip(page)).toContain('메이플로 치면');
+  await box(page).getByRole('button', { name: '이어 묻기' }).click();
+  await box(page).getByRole('button', { name: '왜 비슷해요?' }).click();
+  await expect.poll(() => fuBox(page).innerText()).toContain('같은 구조라서 비슷해요.');
+  await box(page).getByRole('button', { name: '안 맞아요' }).click(); // 이어 묻기 답 뒤 👎
+  await expect.poll(() => ext.page.evaluate(async () => ((await chrome.storage.local.get('feedback')).feedback || []).map(r => `${r.vote}:${r.afterAgent === true}`))).toEqual(['down:false', 'down:true']);
+  const st = (await ext.send({ type: 'feedback:stats' })).data;
+  expect(st.agent.answers).toBe(1);
+  expect(st.agent.downAfter).toBe(1);
+  expect(st.agent.downHover).toBe(1);
+  const op = ext.page;
+  await op.reload();
+  await expect(op.locator('#fbAgentStats')).toBeVisible();
+  await expect(op.locator('#fbAgentStats')).toContainText('이어 묻기 답 1번 뒤 👎 1 (100%)');
+});
+
 /* ───────── 설정 화면 "내 피드백" 칸 (T-132) ───────── */
 const P1 = '변동금리 대출은 기준금리가 오르면 매달 내는 이자도 함께 늘어난다.';
 const DAY_RE = /\d{4}-\d{2}-\d{2}/;

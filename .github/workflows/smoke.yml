@@ -17,6 +17,10 @@ on:
         description: '정밀 모드 합친 호출(추상 구조 + 태그 판정 JSON, T-184)을 고정 8문장으로 확인(T-186). 실패로 세지 않고 제공자별 한 줄 요약'
         type: boolean
         default: false
+      agent:
+        description: '이어 묻기(T-216) JSON 액션 형식을 고정 4과제로 확인(T-218). 과제당 LLM 최대 4회, 실패로 세지 않고 제공자별 한 줄 요약'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,4 +44,5 @@ jobs:
           ALL_MODELS: ${{ inputs.all_models && '--all-models' || '' }}
           COMPARE: ${{ inputs.compare }}
           PRECISE_JUDGE: ${{ inputs.precise_judge && 'true' || '' }}
+          AGENT_SMOKE: ${{ inputs.agent && 'true' || '' }}
         run: npm run smoke:providers -- $ALL_MODELS

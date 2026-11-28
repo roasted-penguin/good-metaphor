@@ -558,6 +558,7 @@
     if (!current || !view?.result) return;
     const key = current.key, r = view.result, fb = view.fb || {};
     const sent = { sentence: current.payload.sentence, provider: r.debug?.provider || '', topHost }; // topHost: rerun 없는 👍도 background가 검사(T-111)
+    if (view.fu?.items?.some(it => it.answer)) sent.afterAgent = true; // 이어 묻기 답을 본 뒤(T-218 👎 비율)
     const stillHere = () => current && current.key === key;
     const done = (res, nextFb, extra = {}) => {
       if (!stillHere()) return;
