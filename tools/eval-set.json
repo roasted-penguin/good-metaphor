@@ -30,7 +30,7 @@
   { "sentence": "The gym lets each member bring at most three guests a month.", "expectNodes": ["weekly_boss", "arcane_symbol", "guild_contribution"], "expectTag": "periodic_cap", "since": "T-103" },
   { "sentence": "Learning to code takes steady practice every day; cramming on weekends doesn't work.", "expectNodes": ["arcane_symbol", "sol_erda", "trait"], "expectTag": "daily_accumulation", "since": "T-103" },
   { "sentence": "In surgery, one doctor operates, another handles anesthesia, and nurses keep the instruments ready.", "expectNodes": ["party"], "expectTag": "role_division", "since": "T-103" },
-  { "sentence": "Farmers pick which crop to plant by comparing how much profit each acre brings in per season.", "expectNodes": ["hunting", "weekly_boss", "theme_dungeon"], "expectTag": "efficiency_metric", "since": "T-103" },
+  { "sentence": "Farmers pick which crop to plant by comparing how much profit each acre brings in per season.", "expectNodes": ["hunting", "weekly_boss", "theme_dungeon", "combat_analysis"], "expectTag": "efficiency_metric", "since": "T-103" },
   { "sentence": "After years of loose monetary policy, the same paycheck buys far fewer groceries.", "expectNodes": ["meso_inflation", "meso"], "expectTag": "inflation", "group": "finance", "since": "T-103" },
   { "sentence": "Vintage watches that are no longer produced sell for many times their original price.", "expectNodes": ["auction"], "expectTag": "scarcity_value", "group": "finance", "since": "T-103" },
   { "sentence": "Miles you earn on one airline also count toward hotel upgrades with its partners.", "expectNodes": ["union_link", "monster_collection", "union_artifact", "symbol_catalyst", "achievement", "quest_story_skip_id"], "expectTag": "shared_bonus", "since": "T-103" },
