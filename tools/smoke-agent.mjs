@@ -52,7 +52,8 @@ export async function checkAgentTask(ask, task, { graph, searchGraph, blocklist 
     answer: row.answer || '',
     note: row.rejected || row.stopText || '',
     steps: row.steps ?? 0, calls: row.calls ?? rs.length, stop: row.stop ?? null, ms: row.ms,
-    error: llmError ? String(llmError).slice(0, 160) : null
+    error: llmError ? String(llmError).slice(0, 160) : null,
+    samples: rs.filter(x => x.sample != null).map(x => x.sample)
   };
 }
 
@@ -76,7 +77,9 @@ export function agentRowLine(r) {
   if (!r.ok) return `  ${r.id.padEnd(6)} ✗ 호출 실패 ${r.ms}ms  ${r.error}`;
   const fmt = `JSON ${r.parsed}/${r.responses} · 도구 ${r.toolOk}/${r.actions} · 인자 ${r.argsOk}/${r.actions}`;
   const end = r.final ? (r.finalOk ? '최종 답 ○' : '최종 답 형식 ✗') : `멈춤(${r.stop})`;
-  return `  ${r.id.padEnd(6)} ${fmt} · ${end} · 단계 ${r.steps} · 호출 ${r.calls} · ${r.ms}ms  ${r.shown ? `→ ${r.answer.slice(0, 60)}` : r.note}`;
+  const head = `  ${r.id.padEnd(6)} ${fmt} · ${end} · 단계 ${r.steps} · 호출 ${r.calls} · ${r.ms}ms  ${r.shown ? `→ ${r.answer.slice(0, 60)}` : r.note}`;
+  // 형식이 틀린 응답 원문 앞부분(T-222): 제공자마다 어떻게 어기는지 보려고
+  return [head, ...(r.samples || []).map(x => `         ↳ 원문: ${x || '(빈 응답)'}`)].join('\n');
 }
 
 export function agentSummaryLine(label, s) {

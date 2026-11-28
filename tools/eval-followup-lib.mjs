@@ -73,6 +73,13 @@ export function checkResponse(text, graph) {
   return { parsed: true, final: false, tool: act.name, toolOk, argsOk };
 }
 
+// 형식이 틀린 응답(JSON으로 안 읽힘·도구 이름·인자 틀림)은 원문 앞부분을 남긴다(T-222, 원인 진단용. 키는 응답에 없다)
+export const SAMPLE_MAX = 240;
+export function withSample(check, text) {
+  const bad = !check.parsed || check.toolOk === false || check.argsOk === false;
+  return bad ? { ...check, sample: String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, SAMPLE_MAX) } : check;
+}
+
 /**
  * 이어 묻기 한 문항. ask를 감싸 응답 원문을 모두 남긴다(형식 점검, 걸러지기 전 최종 답 채점용).
  * 돌려주는 값: 결과 행 { id, question, prev, candidateIds, answer, evidence, rejected, stopText, rawFinal, foundIds,
@@ -94,13 +101,13 @@ export async function runFollowupCase({ item, graph, prev, candidateIds, ask, se
       answer: r.answer, evidence: r.evidence, rejected: r.rejected, stopText: r.stopText,
       rawFinal: r.debug.stop ? null : lastFinal?.final || null,
       foundIds: idsFromLabels(graph, r.found),
-      responses: texts.map(t => checkResponse(t, graph)),
+      responses: texts.map(t => withSample(checkResponse(t, graph), t)),
       calls: r.debug.calls, steps: r.debug.steps, stop: r.debug.stop, trace: r.debug.trace,
       ...(r.debug.grounding ? { grounding: r.debug.grounding } : {}),
       ms: now() - t0
     };
   } catch (e) {
-    return { ...base, error: String(e?.message || e).slice(0, 200), responses: texts.map(t => checkResponse(t, graph)), calls: texts.length, ms: now() - t0 };
+    return { ...base, error: String(e?.message || e).slice(0, 200), responses: texts.map(t => withSample(checkResponse(t, graph), t)), calls: texts.length, ms: now() - t0 };
   }
 }
 
