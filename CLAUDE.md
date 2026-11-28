@@ -90,8 +90,9 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/blocklist.js           금칙어 필터(`applyBlocklist`): 출력 직전·스트리밍 뜻·서버 결과·정밀 모드 추상화까지. 확장·서버 같은 규칙 (T-114)
   lib/grounding-log.js       근거 검사로 숨긴 비유를 이 기기에 기록(가린 문장, 금칙어 제외, 300건)·7일 집계·오탐 표시, 보내기 동의 시 운영자 내보내기에 샘플 (T-146)
   lib/prompt.js              프롬프트, 데모 응답, 조사 처리
-  lib/agent.js               제품 안 에이전트 루프(T-216, ADR 0017): JSON 액션 ReAct(`{action,args}`/`{final}`), 단계·호출 상한(4·4), 같은 도구·인자 반복 멈춤, 형식 틀리면 한 번 다시, `debug.trace`, 하루 호출 상한 `takeDailyCall`. chrome.* 없음, ask·도구·budget 주입. 제공자 고유 function calling 안 씀(규칙 7)
+  lib/agent.js               제품 안 에이전트 루프(T-216, ADR 0017): JSON 액션 ReAct(`{action,args}`/`{final}`), 단계·호출 상한(4·4), 같은 도구·인자 반복 멈춤, 형식 틀리면 한 번 다시, `debug.trace`, 하루 호출 상한 `takeDailyCall`, 선택 검증기 훅 `verify`(지면 실패 이유를 관찰로 붙여 다시, `maxVerifies`면 `stop: 'verify'`, T-220). chrome.* 없음, ask·도구·budget 주입. 제공자 고유 function calling 안 씀(규칙 7)
   lib/agent-tools.js         에이전트 1 "말풍선 이어 묻기": 읽기 전용 도구(get_node_facts·search_graph·search_by_tag), 프롬프트(호버와 같은 범위만, 문단 전송 보류), 최종 답 검사 `finalizeAnswer`(규칙 1: 호버 후보 ∪ 도구로 본 노드만 → 근거 검사 → 금칙어), `runFollowup`. background `agent:ask`가 부르고, 하루 상한은 admin `agent.dailyCallCap`(호버 한도와 따로, `chrome.storage.local` `agentCalls`)
+  lib/agent-diagnose.js      에이전트 3 "👎 교정 진단"(T-220): 원인 7개(structure·tag·facts·tone·number·meaning·none, 말풍선엔 고정 문구), 원래 결과 기록에서 코드 단서(`diagnoseHints`), 검증기 `verifyDiagnosis`(👎 개념 금지 → 규칙 1 → 근거 검사 → 금칙어 → 해요체), `runDiagnose`(5단계·LLM 4회·검증 2회, 이어 묻기 도구·하루 상한 공유), 쓰기 제안 `diagnoseAction`(고정, 로그인 + 내 노드·내 태그면 가린 예문 미리보기). 이 모듈은 쓰지 않는다
   lib/fallback-embed.js      모델 없을 때 쓰는 글자 n-gram 임베더
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)
   data/common/tags.json     추상 태그 22개(통제 어휘, 규칙 9)의 원본. 새 태그는 맨 뒤에만(T-171: fixed_cost_leverage·vendor_lock_in, T-176: brokerage_fee, T-206: compliance_procedure). 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
@@ -112,6 +113,8 @@ scripts/                     build, prepare-e2e
 호버 한 번의 흐름: content.js가 문장(커서가 고른 범위 위면 고른 글, 단어는 빈 값, T-182)·단어·앞 문장을 포트(`explain`)로 보냄 → background가 그래프 병합 → 미리 계산 벡터(동봉 파일, T-193)·벡터 캐시 확인(없으면 offscreen에서 임베딩) → 문장 임베딩 → `retrieve()` 상위 후보 → 그 문장 피드백 적용(👎 제외·고정) → 3개 → LLM 1회(정밀 모드는 2회) → nodeId 검증 → 근거 검사(usedFact·숫자) → 결과 캐시(session) → 단계별 `stage` 메시지, 스트리밍 중 뜻이 완성되면 `partial`(meaning만), 마지막에 `result`를 포트로 돌려줌.
 
 이어 묻기(T-216): 결과 말풍선의 `이어 묻기` → 칩(왜 비슷해요?·다른 비유는요?)·입력칸 → content.js가 `agent:ask`(같은 payload + 방금 결과 + 후보 id) → background `followup()`이 같은 fallback 체인으로 `runFollowup`(LLM 최대 4회, 호출마다 하루 상한 차감) → 최종 답 검사 → 말풍선 아래 Q/A(최근 3개). 호버 결과 캐시·피드백 기록은 건드리지 않는다.
+
+교정 진단(T-220): 👎 → 지금처럼 빠른 다시 비유(기본 경로 그대로) → 말풍선에 `왜 틀렸는지 살펴볼게요`(opt-in) → content.js가 `agent:diagnose`(같은 payload + 👎한 결과 기록(후보·점수·근거 검사·끝맺음·이유 칩) + 다시 만든 비유 + 👎 개념 id) → background `diagnose()`가 같은 fallback 체인으로 `runDiagnose`(읽기 도구 → final → 검증기, 지면 이유를 넣어 다시) → 한 줄 진단 + 새 비유, 아니면 "여기까지 했어요" + 이유. 쓰기는 버튼을 눌러야만 `agent:diagnose-apply`: 피드백 층 pick(고정), 로그인 + 내 노드·내 태그면 같은 pick을 `syncCorrections`가 내 태그 예문으로(서버 측에서 제안을 다시 계산, 로그아웃이면 예문 거절). 공통 그래프는 쓰지 않는다.
 
 ## 지켜야 할 규칙
 
