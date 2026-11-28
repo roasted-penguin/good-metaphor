@@ -3,15 +3,14 @@
 // T-118·D-5(공식 출처)·D-8(커뮤니티 출처는 교차 확인·베낌 검사, ADR 0016), 기존 그래프 단위 테스트(사실 2~3개 "다."로 끝, 식당은 숫자·영문·별칭 없음).
 // 순수 함수(출처 응답 확인만 fetcher 주입). 리뷰 시트(md + json)도 여기서 만든다.
 import { findBlocked } from '../../extension/lib/blocklist.js';
-import { hashEmbed } from '../../extension/lib/fallback-embed.js';
+// 수치·구조 먼저·중복 검사는 확장 새 관심사 도우미(T-225)와 같이 쓰는 순수 함수라 확장 lib에 둔다(번들 안, 규칙 4)
+import { changingNumbers, structureFirst, dupIndex, normLabel, DUP_WARN, DUP_FAIL } from '../../extension/lib/node-checks.js';
+export { changingNumbers, structureFirst, dupIndex, DUP_WARN, DUP_FAIL };
 import { PAGE_DRAFT_LIMITS, longestCommonRun, bigramOverlap } from './draft.mjs';
 import { isArticleSource, contentMarkers } from './sources.mjs';
 import { htmlToText } from './web.mjs';
 import { corroboration } from '../source-policy.mjs';
 
-// 대체 임베더(글자 n-그램) 코사인. 기존 그래프의 서로 다른 노드끼리 최고값은 메이플 0.47·식당 0.40(2026-11-22 측정)
-export const DUP_WARN = 0.5;   // 이 이상이면 "비슷한 노드가 있어요"(사람이 보고 판단)
-export const DUP_FAIL = 0.75;  // 이 이상이면 사실상 같은 노드
 export const COPY_WARN = 25;   // 원문과 공백 뺀 글자 25자 이상 그대로면 "베낌 의심"(D-5: 우리 말로)
 export const COPY_FAIL = 40;
 export const OVERLAP_WARN = 0.5; // 사실 2그램 중 페이지에 있는 비율이 이보다 낮으면 페이지 밖 지식일 수 있다
@@ -97,61 +96,7 @@ export function lawLabelGrounded(sig, { label = '', facts = [] } = {}) {
 }
 const LAW_WHY = { body: '핵심 낱말이 모두 조문에 있음', titles: '핵심 낱말이 장·조 제목과 조문에 있음', article: '조 제목과 맞음', cites: '조를 직접 가리킴' };
 
-/* ───── 수치(규칙 2) ───── */
-
-// 숫자 종류별 패턴. 숫자가 남아 있는데 아무 패턴에도 안 맞으면 'digit'
-const NUMBER_KINDS = [
-  ['percent', /\d\s*(%|％|퍼센트|프로)|퍼센트|확률표/],
-  ['version', /\d+\.\d+(\.\d+)?|v\d+|ver\.?\s*\d+/i],
-  ['date', /\d{2,4}\s*[.\-/년]\s*\d{1,2}|\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}\s*시\s*\d{0,2}/],
-  ['price', /\d[\d,]*\s*(원|메소|억|만|천|포인트|캐시)/],
-  ['level', /\d+\s*(레벨|lv|단계|성|강|등급|단|층)|(레벨|lv\.?|최대)\s*\d+/i],
-  ['count', /\d+\s*(회|번|개|명|배|시간|분|초|일|주|개월|칸|마리|장)/]
-];
-
-// 글 → 걸린 수치 종류 목록(빈 배열이면 통과). allow 패턴(예: "6차")은 먼저 지운다
-export function changingNumbers(text, { numberAllow = [] } = {}) {
-  let s = String(text ?? '').normalize('NFKC');
-  for (const re of numberAllow) s = s.replace(new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g'), ' ');
-  const kinds = NUMBER_KINDS.filter(([, re]) => re.test(s)).map(([k]) => k);
-  if (!kinds.length && /\d/.test(s)) kinds.push('digit');
-  return kinds;
-}
-
-/* ───── 구조 먼저(휴리스틱) ───── */
-
-// 움직임을 드러내는 표지: 조건·비례·변화·대가·제약. 하나도 없으면 "정의에 가깝다"고 본다
-const STRUCTURE_MARKERS = /수록|(으)?면[ ,]|하려면|해야|따라|만큼|대신|위해|때문|늘어|줄어|커지|작아|오르|내리|높아|낮아|바뀌|달라|생기|사라|쌓|모아|소모|소비|들인|든다|드는|비용|얻|잃|나누|나눠|정해|제한|넘으|넘기|이상|이하|조건|되면|하면|올리|올라|떨어|깎|돌려|반복|다시|기다|막|풀리|열리|잠기/;
-export function structureFirst(fact) {
-  return STRUCTURE_MARKERS.test(String(fact ?? ''));
-}
-
-/* ───── 중복 ───── */
-
-const normLabel = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/[\s·・\-_()（）[\]]/g, '');
-const nodeVecText = n => `${n.label} ${(n.facts || []).join(' ')}`;
-const cosine = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
-
-// 기존 노드 색인(대체 임베더 벡터 + 이름). 후보끼리도 같은 색인에 넣어 묶음 안 중복을 잡는다
-export function dupIndex(nodes = []) {
-  const items = nodes.map(n => ({ id: n.id, label: n.label, key: normLabel(n.label), vec: hashEmbed(nodeVecText(n)) }));
-  return {
-    items,
-    add(n) { items.push({ id: n.id, label: n.label, key: normLabel(n.label), vec: hashEmbed(nodeVecText(n)) }); },
-    // 가장 비슷한 노드 { id, label, score, sameLabel, contains }
-    nearest(n) {
-      const v = hashEmbed(nodeVecText(n)), key = normLabel(n.label);
-      let best = null;
-      for (const it of items) {
-        const score = cosine(v, it.vec);
-        if (!best || score > best.score) best = { id: it.id, label: it.label, score: Math.round(score * 1000) / 1000 };
-      }
-      const same = items.find(it => it.key && it.key === key);
-      const contains = items.find(it => it.key.length >= 2 && key.length >= 2 && it.key !== key && (it.key.includes(key) || key.includes(it.key)));
-      return { best, same: same ? { id: same.id, label: same.label } : null, contains: contains ? { id: contains.id, label: contains.label } : null };
-    }
-  };
-}
+/* ───── 수치(규칙 2)·구조 먼저·중복: extension/lib/node-checks.js (위에서 다시 내보냄) ───── */
 
 /* ───── 출처 ───── */
 
