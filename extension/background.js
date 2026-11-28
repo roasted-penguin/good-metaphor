@@ -20,6 +20,7 @@ import { loadErrorReason } from './lib/embed-status.js';
 import { takeDailyCall } from './lib/agent.js';
 import { runFollowup, cleanQuestion } from './lib/agent-tools.js';
 import { runDiagnose, diagnoseAction } from './lib/agent-diagnose.js';
+import { newHelperState, runHelper, helperView, mergeHelperDrafts, cleanNotes, HELPER_TEXT } from './lib/interest-helper.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -548,6 +549,57 @@ async function diagnose({ payload, orig, rerun, downNodeId }) {
   return { ...base, ...r, action, downNodeId: down || null, debug: { ...r.debug, provider: deps.providerText(), fallbacks: deps.state.fallbacks, ms: Date.now() - t0 } };
 }
 
+/* ───────────── 새 관심사 만들기 도우미 (T-225, ADR 0017 에이전트 2) ───────────── */
+
+// 상태는 chrome.storage.session interestHelper 하나. 단계마다 저장하고, 서비스 워커가 깨면(아래 맨 끝, helper:status) 이어 간다.
+// LLM·하루 상한은 다른 에이전트와 같은 agentDeps(agent.providerOrder 체인, agentCalls 공유).
+// 쓰기는 마지막 단계 한 번: 로그인한 같은 사용자의 오버레이 뒤에 검수 대기(draft) 노드만 붙인다(규칙 3). 공통 그래프는 읽기만
+const HELPER_KEY = 'interestHelper';
+let helperRun = null;
+
+const readHelper = async () => (await chrome.storage.session.get(HELPER_KEY))[HELPER_KEY] || null;
+
+async function helperDeps(st) {
+  const [{ overlay }, common, blockTerms, agent] = await Promise.all([getSessionAndOverlay(), loadChosenCommon(), loadBlocklist(), agentDeps(null)]);
+  const ov = normalizeOverlay(overlay);
+  const existing = [...(ov.nodes || []), ...(st.mode === 'add' ? common.nodes : [])];
+  return {
+    ask: agent.ask, budget: agent.budget, tags: common.tags, blockTerms, existing,
+    reservedIds: common.nodes.map(n => n.id),
+    write: async nodes => {
+      const { store, session, overlay: fresh } = await getSessionAndOverlay();
+      if (!session || (st.user && session.name !== st.user)) throw new Error(HELPER_TEXT.loggedOut);
+      const next = mergeHelperDrafts(normalizeOverlay(fresh), nodes, { name: st.name, mode: st.mode, reservedIds: common.nodes.map(n => n.id) });
+      if (validateOverlay(next).length) throw new Error(HELPER_TEXT.writeFail);
+      await store.saveOverlay(session, next);
+      return { written: nodes.length };
+    }
+  };
+}
+
+// 돌고 있지 않으면 세션 상태에서 이어 돈다(한 서비스 워커 안에서 하나만)
+function kickHelper() {
+  if (helperRun) return helperRun;
+  helperRun = keepAlive((async () => {
+    const st = await readHelper();
+    if (st?.status !== 'running') return;
+    const deps = await helperDeps(st);
+    await runHelper(st, deps, { save: s => chrome.storage.session.set({ [HELPER_KEY]: s }) });
+  })()).catch(async e => {
+    console.warn('[helper] 도우미가 멈췄어요', e);
+    const st = await readHelper();
+    if (st?.status === 'running') await chrome.storage.session.set({ [HELPER_KEY]: { ...st, status: 'error', phase: 'done', error: String(e?.message || e).slice(0, 200) } });
+  }).finally(() => { helperRun = null; });
+  return helperRun;
+}
+
+async function helperStatus() {
+  const st = await readHelper();
+  if (st?.status === 'running') kickHelper();
+  const common = await loadChosenCommon();
+  return helperView(st, common.tags);
+}
+
 /* ───────────── 메시지 ───────────── */
 
 // 이중 방어(T-107): content.js가 막지만, 보낸 탭 호스트가 제외 목록이면 임베딩·LLM 없이 끝낸다.
@@ -716,6 +768,24 @@ const handlers = {
     const parsed = parseDraft(text, { tags: common.tags, existingIds, blockTerms });
     return { ...parsed, name: n, mode: mode === 'new' ? 'new' : 'add', provider: answered };
   },
+  // 새 관심사 만들기 도우미(T-225). 로그인 사용자만. 시작만 하고 바로 돌려준다(진행은 helper:status로 본다)
+  async 'helper:start'({ name, notes, mode }) {
+    const { session } = await getSessionAndOverlay();
+    if (!session) throw new Error(HELPER_TEXT.loggedOut);
+    const [blockTerms, provider] = await Promise.all([loadBlocklist(), resolveProvider()]);
+    const nameErr = draftNameError(name, blockTerms);
+    if (nameErr) throw new Error(nameErr);
+    const memo = cleanNotes(notes, blockTerms);
+    if (memo === null) throw new Error(HELPER_TEXT.notesBlocked);
+    if (provider.def.kind === 'demo') throw new Error(HELPER_TEXT.demo);
+    const cur = await readHelper();
+    if (cur?.status === 'running') { kickHelper(); throw new Error(HELPER_TEXT.running); }
+    const st = { ...newHelperState({ name: validDraftName(name), notes: memo, mode }), user: session.name };
+    await chrome.storage.session.set({ [HELPER_KEY]: st });
+    kickHelper();
+    return helperStatus();
+  },
+  async 'helper:status'() { return helperStatus(); },
   async 'graph:info'() {
     // 설정 화면 "공통 저장소"·팝업·말풍선 테마 미리 받기가 쓴다. 고른 공통 관심사(T-302)
     const common = await loadChosenCommon();
@@ -877,6 +947,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   h(msg, sender).then(r => sendResponse({ ok: true, data: r }), e => sendResponse({ ok: false, error: String(e?.message || e) }));
   return true;
 });
+
+// 서비스 워커가 다시 뜨면 하다 만 도우미를 이어 간다(T-225)
+readHelper().then(st => { if (st?.status === 'running') kickHelper(); }).catch(() => {});
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason !== 'install') return;

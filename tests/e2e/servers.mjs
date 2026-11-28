@@ -17,6 +17,10 @@
 // 👎 교정 진단 에이전트(T-220): 시스템 프롬프트가 "왜 틀렸는지 진단"이면 JSON 액션으로 답한다(diagnoseReply).
 //   첫 차례: 후보 개념이 있으면 첫 후보로 get_node_facts, 없으면 search_graph(쓰지 말 개념 제외).
 //   관찰이 있으면 cause "structure" + 그 노드 첫 fact로 새 비유 final. 문장에 "후보밖진단테스트"면 매번 후보 밖 노드로 final(검증기가 숨김)
+// 새 관심사 도우미(T-225): 시스템 프롬프트 표시어(HELPER_MARK)로 계획·초안·평가·고쳐 쓰기에 답한다(helperReply).
+//   계획(첫 바퀴): HELPER_CONCEPTS + skip vendor_lock_in, 다음 바퀴는 빈 목록. 초안: 개념 이름별 HELPER_FACTS("경기 시간"은 숫자 사실 → 코드가 고쳐 쓰기로).
+//   평가: "억지 태그 개념"만 태그 no. 고쳐 쓰기: "억지 태그 개념"은 drop, 그 밖은 숫자 없는 사실.
+//   관심사가 "도우미지연테스트"면 응답마다 HELPER_SLOW_MS 늦춘다(서비스 워커를 멈췄다 이어 가는 시험)
 export const BLOCKED_IN_ANALOGY = '리.선.족';
 export const BLOCKED_IN_MEANING = '쌀 숭이';
 import http from 'node:http';
@@ -29,6 +33,37 @@ export const DRAFT_NODES = [
   { label: '없는 태그 개념', facts: ['목록 밖 태그만 붙은 개념이다.'], tags: ['made_up_tag'] },
   { label: '금칙 사실 개념', facts: [`${BLOCKED_IN_ANALOGY}는 쓰면 안 되는 말이다.`, '이 사실은 남는다.'], tags: ['role_division', 'made_up_tag'] }
 ];
+
+export const HELPER_CONCEPTS = [['오프사이드', 'threshold_req'], ['이적 시장', 'market_price'], ['억지 태그 개념', 'prob_upgrade'], ['경기 시간', 'periodic_cap']];
+export const HELPER_FACTS = {
+  '오프사이드': { facts: ['공격수가 마지막 수비수보다 앞에서 공을 받으면 반칙이 된다.'], tags: ['threshold_req'], source: 'https://example.com/laws' },
+  '이적 시장': { facts: ['인기 선수는 데려가려는 구단이 몰릴수록 몸값이 오른다.'], tags: ['market_price', 'scarcity_value'] },
+  '억지 태그 개념': { facts: ['선수들은 경기 전에 몸을 푼다.'], tags: ['prob_upgrade'] },
+  '경기 시간': { facts: ['한 경기는 전후반 90분 동안 한다.'], tags: ['periodic_cap'] }
+};
+export const HELPER_FIXED_FACT = '한 경기는 정해진 시간이 끝나면 더 뛰지 않는다.';
+export const HELPER_SLOW_MS = 1500;
+function helperReply(system, user) {
+  const out = o => JSON.stringify(o);
+  const blocks = () => user.split('\n[노드] ').slice(1).map(b => ({ id: b.match(/^id=(\S+)/)[1], label: b.match(/^id=\S+ \| (.+)/)[1], tags: [...b.matchAll(/^  태그 (\S+) \|/gm)].map(m => m[1]) }));
+  if (system.includes('개념 목록을 계획하는 도우미')) {
+    const first = user.includes('개념 수: 많아야 10개'); // 첫 바퀴(firstPlan)만 개념을 낸다
+    return out(first ? { concepts: HELPER_CONCEPTS.map(([label, tag]) => ({ label, tag, why: '팬이면 다 알아요' })), skip: ['vendor_lock_in'] } : { concepts: [], skip: [] });
+  }
+  if (system.includes('계획한 개념마다 노드 초안을 쓰는 도우미')) {
+    const labels = [...user.matchAll(/^- (.+?) \| 태그 /gm)].map(m => m[1]);
+    return '```json\n' + out({ nodes: labels.map(l => ({ label: l, ...(HELPER_FACTS[l] || { facts: [`${l}은 연습할수록 는다.`], tags: ['daily_accumulation'] }) })) }) + '\n```';
+  }
+  if (system.includes('초안 노드를 검사하는 도우미')) {
+    return out({ nodes: blocks().map(b => ({ id: b.id, tags: b.tags.map(t => ({ id: t, verdict: b.label === '억지 태그 개념' ? 'no' : 'yes', reason: '판정' })), familiar: 'yes', named: 'no', reason: '' })) });
+  }
+  if (system.includes('검사에 걸린 노드를 고쳐 쓰는 도우미')) {
+    return out({ nodes: blocks().map(b => b.label === '억지 태그 개념'
+      ? { id: b.id, drop: true, reason: '이 관심사에는 이 구조가 없어요.' }
+      : { id: b.id, label: b.label, facts: b.label === '경기 시간' ? [HELPER_FIXED_FACT] : HELPER_FACTS[b.label]?.facts || ['고친 사실이 생기면 달라진다.'], tags: HELPER_FACTS[b.label]?.tags || ['threshold_req'] }) });
+  }
+  return null;
+}
 
 export const calls = [];
 // 후보 밖 final용: 그래프에 있는 노드 중 프롬프트 후보에 없는 첫 노드(T-216)
@@ -102,6 +137,7 @@ function mockLLM(req, res) {
     }
     else if (system.includes('이어서 묻는 질문')) content = agentReply(user);
     else if (system.includes('왜 틀렸는지 진단')) content = diagnoseReply(system, user);
+    else if (system.includes('도우미다.') && helperReply(system, user) !== null) content = helperReply(system, user);
     else if (user.includes('연결 성공')) content = '연결 성공';
     else {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
@@ -127,6 +163,7 @@ function mockLLM(req, res) {
     };
     if (user.includes('로딩지연테스트')) return void setTimeout(out, SLOW_MS);
     // AI 초안 전체 마감 확인용(T-301): e2e 사본의 마감(admin.draft.deadlineMs)보다 늦게 답한다
+    if (user.includes('관심사: 도우미지연테스트')) return void setTimeout(() => { if (!res.destroyed) out(); }, HELPER_SLOW_MS);
     if (user.includes('관심사: 초안지연테스트')) return void setTimeout(() => { if (!res.destroyed) out(); }, DRAFT_SLOW_MS);
     out();
   });

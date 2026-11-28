@@ -641,6 +641,98 @@ $('#draftRun').addEventListener('click', async () => {
   }
 });
 
+/* ───────── 새 관심사 만들기 도우미 (T-225) ─────────
+   background helper:start → 계획·초안·평가·고쳐 쓰기를 background가 돌리고(서비스 워커가 잠들어도 세션 상태로 이어 감),
+   여기서는 helper:status를 짧게 물어 단계 줄을 그린다. 끝나면 background가 저장한 검수 대기 노드를 화면 ov로 가져온다 */
+let helperTimer = null;
+const HELPER_POLL_MS = 800;
+
+function renderHelper(v) {
+  const log = $('#helperLog');
+  const lines = v?.log || [];
+  log.replaceChildren(...lines.map((l, i) => el('li', { class: v.status === 'running' && i === lines.length - 1 ? 'now' : '', text: l.text })));
+  log.hidden = !lines.length;
+  const absent = v?.absentTags || [];
+  $('#helperAbsent').textContent = absent.length ? `이 관심사에 없는 구조로 본 태그: ${absent.map(t => t.label).join(', ')}` : '';
+  $('#helperAbsent').hidden = !absent.length;
+  const dl = $('#draftDropped');
+  const dropped = v?.dropped || [];
+  dl.replaceChildren(...dropped.map(d => el('li', { text: d.label ? `${d.label}: ${d.reason}` : d.reason })));
+  dl.hidden = !dropped.length;
+}
+
+// 도우미가 저장한 검수 대기 노드를 화면 ov로. 저장 안 한 편집이 없으면 다시 읽고, 있으면 새 노드만 붙여 편집을 지킨다
+async function pullHelperDrafts() {
+  const dirty = $('#overlayStatus').classList.contains('warn');
+  if (!dirty || !ov) return loadStore();
+  const fresh = normalizeOverlay(await send('overlay:get'));
+  const have = new Set((ov.nodes || []).map(n => n.id));
+  const added = draftNodes(fresh).filter(n => !have.has(n.id));
+  ov = { ...ov, useCommon: fresh.useCommon, domain: fresh.domain, analogyPrefix: fresh.analogyPrefix, theme: fresh.theme, nodes: [...(ov.nodes || []), ...added] };
+  renderOverlayEditor();
+  markDirty();
+}
+
+function helperBusy(on) {
+  $('#helperRun').disabled = on;
+  $('#draftRun').disabled = on;
+}
+
+async function pollHelper() {
+  clearTimeout(helperTimer);
+  let v;
+  try { v = await send('helper:status'); }
+  catch (e) { helperBusy(false); return setStatus($('#draftStatus'), e.message, 'err'); }
+  if (!v) return helperBusy(false);
+  renderHelper(v);
+  if (v.status === 'running') {
+    helperBusy(true);
+    setStatus($('#draftStatus'), `도우미가 만드는 중이에요… (AI ${v.calls}회)`);
+    helperTimer = setTimeout(pollHelper, HELPER_POLL_MS);
+    return;
+  }
+  helperBusy(false);
+  if (helperWatching) {
+    helperWatching = false;
+    if (v.written) await pullHelperDrafts();
+    setStatus($('#draftStatus'), v.status === 'error' ? v.stopText : v.doneText, v.status === 'done' && v.written ? 'ok' : v.status === 'done' && !v.stop ? 'warn' : 'err');
+    if (v.written) $('#reviewBox').scrollIntoView({ block: 'nearest' });
+  }
+}
+let helperWatching = false;
+
+$('#helperRun').addEventListener('click', async () => {
+  if (!ov) return;
+  const status = $('#draftStatus');
+  const blockTerms = await loadBlocklist();
+  const nameErr = draftNameError($('#draftName').value, blockTerms);
+  if (nameErr) return setStatus(status, nameErr, 'err');
+  const name = validDraftName($('#draftName').value);
+  const mode = document.querySelector('input[name=draftMode]:checked')?.value === 'new' ? 'new' : 'add';
+  const existing = (ov.nodes || []).length;
+  if (mode === 'new' && existing && !confirm(`기존 내 노드 ${existing}개가 있어요. 초안을 더할까요?`)) {
+    return setStatus(status, '초안 만들기를 그만뒀어요.');
+  }
+  helperBusy(true);
+  renderHelper(null);
+  setStatus(status, '도우미를 시작했어요…');
+  try {
+    const v = await send('helper:start', { name, notes: $('#helperNotes').value, mode });
+    helperWatching = true;
+    renderHelper(v);
+    pollHelper();
+  } catch (e) {
+    helperBusy(false);
+    setStatus(status, e.message, 'err');
+  }
+});
+
+// 설정 화면을 다시 열었을 때 돌고 있는 도우미가 있으면 이어서 보인다
+async function resumeHelperView() {
+  const v = await send('helper:status').catch(() => null);
+  if (v?.status === 'running') { helperWatching = true; pollHelper(); }
+}
+
 /* ───────── 임베딩 ───────── */
 let pollTimer = null;
 async function pollEmbed() {
@@ -865,5 +957,6 @@ $('#fbShare').addEventListener('change', async () => {
   renderServerPermission().catch(e => console.warn('서버 권한 확인 실패', e));
   loadFeedback().catch(e => setStatus($('#fbStatus'), '피드백을 불러오지 못했어요: ' + e.message, 'err'));
   await loadStore().catch(e => { $('#commonTitle').textContent = '불러오기 실패: ' + e.message; });
+  resumeHelperView();
   pollEmbed();
 })();

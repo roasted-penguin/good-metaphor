@@ -10,54 +10,9 @@
 //   - 이미 실패한 후보는 묻지 않는다(한도 아끼기)
 // 순수 함수 + 주입한 complete(system, user) → 답 글. 캐시·호출 수는 cli의 cachedComplete가 맡는다.
 
-const TAG_EXAMPLES = 3;
-
-/**
- * @param {{ node: { id, label, facts }, tags: Array<{ id, label, desc, examples? }> }} p  tags = 이 후보가 단 태그(목록 안)의 정의
- * @returns {{ system: string, user: string }}
- */
-export function buildTagFitPrompt({ node, tags }) {
-  const system = [
-    '너는 비유 검색용 개념 그래프의 태그를 검수하는 도우미다. 추상 태그는 "무엇이 무엇에 따라 어떻게 바뀌는가"라는 구조를 뜻하고, 예문은 그 구조를 다른 분야에서 보인 것이다.',
-    '아래 개념의 사실만 읽고, 태그마다 그 구조가 사실에 실제로 드러나는지 판단한다.',
-    '규칙: 사실에 없는 내용을 보태지 않는다. 겉으로 비슷한 낱말이 아니라 구조가 같은지 본다. 구조의 일부만 겨우 맞거나 억지로 끌어대야 하면 no.',
-    'JSON 객체만 출력한다. 형식: {"tags": [{"id": "태그 id", "verdict": "yes" 또는 "no", "reason": "한국어 한 문장, 80자 이내"}]}'
-  ].join('\n');
-  const user = [
-    `[개념] ${node.label || node.id}`,
-    ...(node.facts || []).map(f => `- ${f}`),
-    '',
-    '[태그]',
-    ...tags.map(t => [
-      `${t.id} | ${t.label || ''} — ${t.desc || ''}`,
-      ...(t.examples || []).slice(0, TAG_EXAMPLES).map(e => `  예: ${e}`)
-    ].join('\n'))
-  ].join('\n');
-  return { system, user };
-}
-
-/**
- * @param {string} text  LLM 답
- * @param {string[]} ids  물은 태그 id
- * @returns {Map<string, { verdict: 'yes'|'no', reason: string }> | null}  꼴이 틀리면 null, 답이 없는 태그는 Map에 없음
- */
-export function parseTagFit(text, ids) {
-  try {
-    const t = String(text || '').replace(/```(?:json)?/gi, '').trim();
-    // 모델이 {"tags": [...]} 대신 배열만 내는 일이 있다(2026-11-22 gemini-3.5-flash-lite 3번). 배열도 받는다
-    const v = t.startsWith('[') ? JSON.parse(t.slice(0, t.lastIndexOf(']') + 1)) : JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1));
-    const list = Array.isArray(v) ? v : Array.isArray(v.tags) ? v.tags : null;
-    if (!list) return null;
-    const want = new Set(ids);
-    const out = new Map();
-    for (const x of list) {
-      if (!x || !want.has(x.id) || out.has(x.id)) continue;
-      if (x.verdict !== 'yes' && x.verdict !== 'no') continue;
-      out.set(x.id, { verdict: x.verdict, reason: String(x.reason || '').slice(0, 160) });
-    }
-    return out;
-  } catch { return null; }
-}
+// 프롬프트·답 읽기는 확장 도우미(T-225)와 같이 쓰는 순수 함수라 확장 lib에 둔다
+import { buildTagFitPrompt, parseTagFit, TAG_FIT_RULES } from '../../extension/lib/node-checks.js';
+export { buildTagFitPrompt, parseTagFit, TAG_FIT_RULES };
 
 // 한도 초과 표시(cachedComplete가 상한을 넘는 새 호출에서 던진다)
 export class BudgetError extends Error {
