@@ -83,6 +83,13 @@ test('pickPages: 초안 안 한 페이지만, 종류 순서대로, 개수 제한
   assert.deepEqual(pickPages(es, { kindOrder: [], limit: 9, only: ['notice'] }).map(e => e.url), ['a']);
   const ups = [{ url: 'u1', kind: 'update', title: '클라이언트 업데이트 안내 (스킬 조정)' }, { url: 'u2', kind: 'update', title: '클라이언트 업데이트 안내' }];
   assert.deepEqual(pickPages(ups, { pageSkip: maple.pageSkip }).map(e => e.url), ['u2'], '건너뛸 제목(스킬 조정)은 고르지 않는다');
+  const more = [
+    { url: 'u3', kind: 'update', title: '클라이언트 1.2.411 업데이트 안내 (솔 헤카테, 스킬 조정)' },
+    { url: 'u4', kind: 'update', title: '클라이언트 1.2.343(2) 서버점검 안내' },
+    { url: 'u5', kind: 'notice', title: '5월 지속 가능한 보안캠페인 진행 안내' },
+    { url: 'u6', kind: 'update', title: '(수정2) 클라이언트 1.2.402 업데이트 안내 (스킬 조정)' }
+  ];
+  assert.deepEqual(pickPages(more, { pageSkip: maple.pageSkip }).map(e => e.url), ['u3'], 'T-211: 괄호에 콘텐츠 이름이 함께 있으면 초안, 서버 점검·보안 캠페인은 뺀다');
 });
 
 /* ───── draft ───── */
