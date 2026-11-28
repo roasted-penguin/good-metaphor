@@ -18,7 +18,7 @@
 //   첫 차례: 후보 개념이 있으면 첫 후보로 get_node_facts, 없으면 search_graph(쓰지 말 개념 제외).
 //   관찰이 있으면 cause "structure" + 그 노드 첫 fact로 새 비유 final. 문장에 "후보밖진단테스트"면 매번 후보 밖 노드로 final(검증기가 숨김)
 // 새 관심사 도우미(T-225): 시스템 프롬프트 표시어(HELPER_MARK)로 계획·초안·평가·고쳐 쓰기에 답한다(helperReply).
-//   계획(첫 바퀴): HELPER_CONCEPTS + skip vendor_lock_in, 다음 바퀴는 빈 목록. 초안: 개념 이름별 HELPER_FACTS("경기 시간"은 숫자 사실 → 코드가 고쳐 쓰기로).
+//   계획(첫 바퀴): HELPER_CONCEPTS + skip vendor_lock_in, 다음 바퀴는 빈 목록 + 같은 skip(두 번 skip이라 없음, T-226). 초안: 개념 이름별 HELPER_FACTS("경기 시간"은 숫자 사실 → 코드가 고쳐 쓰기로).
 //   평가: "억지 태그 개념"만 태그 no. 고쳐 쓰기: "억지 태그 개념"은 drop, 그 밖은 숫자 없는 사실.
 //   관심사가 "도우미지연테스트"면 응답마다 HELPER_SLOW_MS 늦춘다(서비스 워커를 멈췄다 이어 가는 시험)
 export const BLOCKED_IN_ANALOGY = '리.선.족';
@@ -48,7 +48,7 @@ function helperReply(system, user) {
   const blocks = () => user.split('\n[노드] ').slice(1).map(b => ({ id: b.match(/^id=(\S+)/)[1], label: b.match(/^id=\S+ \| (.+)/)[1], tags: [...b.matchAll(/^  태그 (\S+) \|/gm)].map(m => m[1]) }));
   if (system.includes('개념 목록을 계획하는 도우미')) {
     const first = user.includes('개념 수: 많아야 10개'); // 첫 바퀴(firstPlan)만 개념을 낸다
-    return out(first ? { concepts: HELPER_CONCEPTS.map(([label, tag]) => ({ label, tag, why: '팬이면 다 알아요' })), skip: ['vendor_lock_in'] } : { concepts: [], skip: [] });
+    return out(first ? { concepts: HELPER_CONCEPTS.map(([label, tag]) => ({ label, tag, why: '팬이면 다 알아요' })), skip: ['vendor_lock_in'] } : { concepts: [], skip: ['vendor_lock_in'] });
   }
   if (system.includes('계획한 개념마다 노드 초안을 쓰는 도우미')) {
     const labels = [...user.matchAll(/^- (.+?) \| 태그 /gm)].map(m => m[1]);

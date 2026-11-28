@@ -90,7 +90,7 @@ export function newHelperState({ name, notes = '', mode = 'add', now = Date.now(
     name, notes, mode: mode === 'new' ? 'new' : 'add', startedAt: now, updatedAt: now,
     calls: 0, steps: 0, round: 0,
     pending: [], queue: [], fix: [], accepted: [], dropped: [],
-    tagFails: {}, absentTags: [], log: [],
+    tagFails: {}, planFails: 0, absentTags: [], log: [],
     stop: null, error: null, written: 0
   };
 }
@@ -111,7 +111,7 @@ export function buildPlanPrompt({ name, notes = '', tags, targetTags, avoid = []
     '규칙:',
     `1. "${name}"을 즐기는 사람이면 누구나 바로 떠올리는 익숙한 개념만 고른다. 전문가만 아는 용어·제도는 고르지 않는다.`,
     '2. 개념마다 [채울 태그] 중 하나(tag)를 정한다. 그 개념이 "무엇이 무엇에 따라 어떻게 바뀌는가"라는 태그의 구조를 실제로 가져야 한다. 서로 다른 태그를 넓게 덮는다.',
-    `3. 이 관심사에 그 구조가 정말 없으면 억지로 만들지 말고 그 태그 id를 skip에 넣는다.`,
+    `3. 개념은 ${n}개를 채우는 것이 먼저다. skip은 이번에 고르지 않은 태그가 아니라, "${name}"에 그 구조를 가진 익숙한 개념이 아예 없다고 확신하는 태그만 넣는다(억지로 만들지는 않는다).`,
     `4. [피할 이름]과 같거나 거의 같은 개념은 고르지 않는다. 개념은 많아야 ${n}개.`,
     ...COMMON_RULES.map((r, i) => `${i + 5}. ${r}`),
     `${COMMON_RULES.length + 5}. JSON 객체만 출력한다. 형식: {"concepts": [{"label": "개념 이름(40자 이내)", "tag": "태그 id", "why": "한 줄"}], "skip": ["태그 id"]}`
@@ -208,14 +208,28 @@ const readObj = text => {
   const j = parseJSONLoose(String(text ?? '').replace(/```(?:json)?/gi, ''));
   return isObj(j) ? j : null;
 };
+// {key: [...]} 또는 감싸기 없는 최상위 배열 [...] → 배열 | null.
+// T-226 실측: Gemini 3.1 flash-lite가 평가 답을 {"nodes": [...]} 대신 [...]로 내서 두 번 다 못 읽고 노드 5개를 잃었다
+export function readList(text, key) {
+  const t = String(text ?? '').replace(/```(?:json)?/gi, '').trim();
+  const j = parseJSONLoose(t);
+  if (Array.isArray(j)) return j;
+  if (isObj(j) && Array.isArray(j[key])) return j[key];
+  const a = t.indexOf('['), b = t.lastIndexOf(']');
+  if (a >= 0 && b > a && (j === null || !isObj(j) || !(key in j))) {
+    try { const arr = JSON.parse(t.slice(a, b + 1)); if (Array.isArray(arr) && arr.every(isObj)) return arr; } catch {}
+  }
+  return null;
+}
 
 // 계획 답 → { concepts: [{label, tag, why}], skip, dropped } | null. 목록 밖 태그·금칙어 이름·중복·피할 이름은 버린다
 export function parsePlan(text, { tagIds, blockTerms = [], avoid = [], n = HELPER_LIMITS.firstPlan } = {}) {
   const j = readObj(text);
-  if (!j || !Array.isArray(j.concepts)) return null;
+  const list = readList(text, 'concepts');
+  if (!list) return null;
   const seen = new Set(avoid.map(normLabel));
   const concepts = [], dropped = [];
-  for (const c of j.concepts) {
+  for (const c of list) {
     const label = typeof c?.label === 'string' ? c.label.trim() : '';
     if (!label || label.length > DRAFT_LIMITS.label) continue;
     if (findBlocked(label, blockTerms)) { dropped.push({ label: '(가림)', reason: PROBLEM_TEXT.blocked }); continue; }
@@ -226,14 +240,13 @@ export function parsePlan(text, { tagIds, blockTerms = [], avoid = [], n = HELPE
     if (concepts.length >= n) break;
     concepts.push({ label, tag: c.tag, why: clip(c.why, 120) });
   }
-  const skip = [...new Set(Array.isArray(j.skip) ? j.skip : [])].filter(id => tagIds.has(id));
+  const skip = [...new Set(Array.isArray(j?.skip) ? j.skip : [])].filter(id => tagIds.has(id));
   return { concepts, skip, dropped };
 }
 
 // 평가 답 → Map(id → { tags: Map(tagId → {verdict, reason}), familiar, named, reason }) | null
 export function parseEval(text) {
-  const j = readObj(text);
-  const list = Array.isArray(j?.nodes) ? j.nodes : null;
+  const list = readList(text, 'nodes');
   if (!list) return null;
   const out = new Map();
   for (const x of list) {
@@ -254,8 +267,7 @@ export function parseEval(text) {
 
 // 고쳐 쓰기 답 → Map(id → { drop, reason } | { label, facts, tags, source }) | null
 export function parseRewrite(text) {
-  const j = readObj(text);
-  const list = Array.isArray(j?.nodes) ? j.nodes : null;
+  const list = readList(text, 'nodes');
   if (!list) return null;
   const out = new Map();
   for (const x of list) {
@@ -341,11 +353,15 @@ async function stepPlan(s, deps, limits) {
   const p = parsePlan(r.text, { tagIds, blockTerms: deps.blockTerms, avoid, n });
   if (!p) {
     addLog(s, 'plan', '계획 답을 읽지 못했어요.');
+    // 한 번은 같은 바퀴로 다시 묻는다(T-226 실측: Gemini 3.1 flash-lite가 JSON 모드에서도 따옴표 없는 값을 내 커피 첫 계획에서 멈췄다)
+    s.planFails = (s.planFails || 0) + 1;
+    if (s.planFails < 2 && limits.maxCalls - s.calls >= NEED.plan) { s.round--; return next(s, limits, tagIds); }
     if (s.round === 1) return halt(s, 'format');
     return next(s, limits, tagIds);
   }
   s.dropped.push(...p.dropped);
-  for (const t of p.skip) if (target.includes(t) && !s.absentTags.includes(t)) s.absentTags.push(t);
+  // skip은 실패 1로만 센다(T-226: 첫 계획이 태그 25개 중 21개를 skip해 바로 "없음"이 되던 문제). 두 번이면 "이 관심사에 없음"
+  for (const t of p.skip) if (target.includes(t)) failTag(s, t, limits);
   s.pending = p.concepts;
   addLog(s, 'plan', `${s.round}바퀴 계획: 개념 ${p.concepts.length}개${p.skip.length ? `, 이 관심사에 없는 구조 ${p.skip.length}개` : ''}`);
   // 더 고를 개념이 없다고 하면 바퀴를 더 돌지 않는다(같은 질문을 되풀이해 호출을 쓰지 않게)
@@ -361,7 +377,7 @@ async function stepDraft(s, deps, limits) {
   if (r.stop) return halt(s, r.stop, r.error);
   s.pending = s.pending.slice(batch.length);
   const parsed = parseDraft(r.text, { tags: deps.tags, existingIds: takenIds(s, deps), blockTerms: deps.blockTerms, rand: deps.rand });
-  const raw = readObj(r.text)?.nodes;
+  const raw = readList(r.text, 'nodes');
   const sourceOf = label => {
     const it = Array.isArray(raw) ? raw.find(x => isObj(x) && typeof x.label === 'string' && x.label.trim() === label) : null;
     return it && typeof it.source === 'string' && httpUrl(it.source.trim()) ? it.source.trim() : null;

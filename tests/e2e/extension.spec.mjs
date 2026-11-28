@@ -2938,7 +2938,8 @@ test('도우미(T-225): 로그아웃이면 막힘 → 계획·초안·평가·�
   expect(hc[0].user).toContain('사용자 메모: 국내 리그 위주');
   expect(hc[2].user).not.toContain('90분');
   expect(hc[5].user).not.toContain('- threshold_req |');
-  expect(hc[5].user).not.toContain('- vendor_lock_in |');
+  // skip 한 번은 실패 1이라 다음 바퀴에 다시 묻는다(T-226). 두 번째 skip에 "없음"
+  expect(hc[5].user).toContain('- vendor_lock_in |');
   const st = (await send({ type: 'helper:status' })).data;
   expect(st).toMatchObject({ status: 'done', written: 3, calls: 6, stop: null });
 
