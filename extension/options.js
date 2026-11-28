@@ -2,6 +2,7 @@ import { localDay, formatFeedbackStats, formatAgentFeedbackStats } from './lib/f
 import { formatGroundingStats, GROUNDING_REASON_LABEL, FALSE_POSITIVE } from './lib/grounding-log.js';
 import { validateOverlay, normalizeOverlay, loadBlocklist } from './lib/stores.js';
 import { formToNode, nodeToForm, upsertNode, removeNode, setHidden, setBoost, clampBoost, tagChoices, SAMPLE_FORM, BOOST_MIN, BOOST_MAX } from './lib/overlay-form.js';
+import { reviewDelta, addReviewStats, reviewStatsLine, REVIEW_STATS_KEY } from './lib/review-stats.js';
 import { confirmFact, confirmAllFacts, removeFact, reviewAfterEdit, addDraftNodes, startNewInterest, draftNodes, hasNumber, validDraftName, draftNameError, DRAFT_LIMITS } from './lib/draft.js';
 import { COMMON_INTERESTS, DEFAULT_INTEREST } from './lib/graph.js';
 import { embedStatusText, modelSizeText, statusKind } from './lib/embed-status.js';
@@ -390,11 +391,31 @@ function updateNode(id, fn) {
   const n = (ov.nodes || []).find(x => x.id === id);
   if (!n) return;
   const next = fn(n);
+  recordReview(reviewDelta(n, next));
   ov = next ? upsertNode(ov, next) : removeNode(ov, id);
   if (!next && editingId === id) resetNodeForm();
   renderMyNodes();
   markDirty();
 }
+
+/* 검수 기록(T-229): 초안 사실을 확인·지움·고침한 수만 이 기기 chrome.storage.local에 센다(글자는 싣지 않음).
+   저장 버튼과 상관없이 누른 순간 센다. 차례로 써서 빠르게 눌러도 빠지지 않게 */
+let reviewQueue = Promise.resolve();
+function recordReview(delta) {
+  if (!delta.confirmed && !delta.deleted && !delta.edited) return;
+  reviewQueue = reviewQueue.then(async () => {
+    const cur = (await chrome.storage.local.get(REVIEW_STATS_KEY))[REVIEW_STATS_KEY];
+    const next = addReviewStats(cur, delta);
+    await chrome.storage.local.set({ [REVIEW_STATS_KEY]: next });
+    showReviewStats(next);
+  }).catch(e => console.warn('검수 기록을 남기지 못했어요', e));
+}
+function showReviewStats(stats) {
+  const line = reviewStatsLine(stats);
+  $('#reviewStats').textContent = line;
+  $('#reviewStats').hidden = !line;
+}
+chrome.storage.local.get(REVIEW_STATS_KEY).then(r => showReviewStats(r[REVIEW_STATS_KEY])).catch(() => {});
 
 function renderReview() {
   const drafts = draftNodes(ov);
@@ -517,6 +538,7 @@ function applyNodeForm() {
   if (!formed) return false;
   // 초안 노드를 고쳤으면 고친 사실은 확인된 것으로(T-301). 모두 확인되면 일반 노드가 된다
   const node = reviewAfterEdit(prev, formed);
+  recordReview(reviewDelta(prev, node, 'edit'));
   ov = upsertNode(ov, node);
   resetNodeForm();
   renderMyNodes();
@@ -525,6 +547,7 @@ function applyNodeForm() {
 }
 function deleteNode(id) {
   if (!confirm('이 노드를 지울까요?')) return;
+  recordReview(reviewDelta((ov.nodes || []).find(x => x.id === id), null));
   ov = removeNode(ov, id);
   if (editingId === id) resetNodeForm();
   renderMyNodes();
