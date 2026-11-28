@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.28-1",
+  "version": "2026.11.28-2",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -36,7 +36,8 @@
       ],
       "tags": [
         "periodic_cap",
-        "efficiency_metric"
+        "efficiency_metric",
+        "queue_rationing"
       ],
       "sources": [
         "https://www.sbiz.or.kr/smst/notice/view.do?key=2111306004395&notcSn=55",
@@ -1054,7 +1055,8 @@
         "제한을 어기면 영업정지나 영업소 폐쇄 같은 처분을 받을 수 있다."
       ],
       "tags": [
-        "periodic_cap"
+        "periodic_cap",
+        "time_window"
       ],
       "sources": [
         "https://m.easylaw.go.kr/MOB/CsmInfoRetrieve.laf?csmSeq=840&ccfNo=1&cciNo=1&cnpClsNo=1"

@@ -97,7 +97,7 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/node-checks.js         노드 검사 순수 함수(수치 `changingNumbers`·구조 먼저·대체 임베더 근접 중복 `dupIndex`·태그 적합성 프롬프트/답 읽기). `tools/node-pipeline/check.mjs`·`tag-fit.mjs`는 다시 내보내기만, 도우미와 같은 기준(T-225)
   lib/fallback-embed.js      모델 없을 때 쓰는 글자 n-gram 임베더
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)
-  data/common/tags.json     추상 태그 25개(통제 어휘, 규칙 9)의 원본. 새 태그는 맨 뒤에만(T-171: fixed_cost_leverage·vendor_lock_in, T-176: brokerage_fee, T-206: compliance_procedure, T-219: queue_rationing·self_service·time_window, 아직 쓰는 노드 없음). 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
+  data/common/tags.json     추상 태그 27개(통제 어휘, 규칙 9)의 원본. 새 태그는 맨 뒤에만(T-171: fixed_cost_leverage·vendor_lock_in, T-176: brokerage_fee, T-206: compliance_procedure, T-219: queue_rationing·self_service·time_window(T-223에서 lunch_peak·business_hours_limit이 씀, self_service는 쓰는 노드 없음), T-223: limited_attempts·risk_reward_tradeoff(쓰는 노드 없음)). 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
   data/common/maplestory.json 공통 저장소 그래프 (노드 81, 엣지 78, 태그는 id만, T-172·T-191). 노드 `aliases`(게임 은어)는 임베딩하지 않고 문장에 그대로 있을 때 `retrieval.aliasBoost`만 더함 (T-114). 약한 별칭(`weakAliases`)은 그래프 `cueWords`(메이플 단서 명시 목록, `cueWordProblems`로 일반어·다른 관심사 낱말 검사)가 문장에 있을 때만 (T-199)
   data/common/restaurant.json 두 번째 공통 관심사 "식당" 그래프 (노드 66, 엣지 53, T-196·T-207·T-192에서 넓힘, 공통 태그 id만(T-168·T-171), 수치 없음, 중립 테마, `noMatchText`). 팝업·설정 "관심사"(설정 `interest`)로 로그인 없이 고른다. 서버는 메이플만 알아 식당이면 로컬 (T-302)
   data/vectors/<관심사>.json  미리 계산한 공통 그래프 벡터(데이터, 규칙 4). `npm run build:vectors`가 만든다. 직접 고치지 말 것 (T-193)

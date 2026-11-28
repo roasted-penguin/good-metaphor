@@ -1,10 +1,10 @@
 {
   "note": "대체 임베더(fallback-embed.js) 기준선(T-179). 혼합 기본값 문장별 1위·상위 3개. 다시 쓰기: npm run eval:fallback -- --write-baseline",
   "embedderId": "fallback:hash-ngram-4096-v2",
-  "tagsVersion": "2026.11.28-1",
+  "tagsVersion": "2026.11.28-2",
   "graphs": {
     "maplestory": "2026.11.28-2",
-    "restaurant": "2026.11.28-1"
+    "restaurant": "2026.11.28-2"
   },
   "summary": {
     "maplestory/eval": {
@@ -24,14 +24,14 @@
       "hit3": 20
     },
     "restaurant/eval": {
-      "n": 22,
-      "hit1": 11,
-      "hit3": 14
+      "n": 24,
+      "hit1": 12,
+      "hit3": 16
     },
     "restaurant/holdout": {
-      "n": 9,
-      "hit1": 6,
-      "hit3": 7
+      "n": 11,
+      "hit1": 7,
+      "hit3": 8
     }
   },
   "sets": {
@@ -150,16 +150,16 @@
       {"sentence":"The central bank flooded the economy with newly created money, and a year later nearly every price tag in town had crept up.","kind":"hit","top3":["meso","auction","meso_inflation"],"hit1":true,"hit3":true}
     ],
     "restaurant/eval": [
-      {"sentence":"통신망은 퇴근길 저녁 시간대에 접속이 몰려 속도가 느려진다.","kind":"hit","top3":["lunch_peak","market_saturation","card_sales_credit"],"hit1":true,"hit3":true},
+      {"sentence":"통신망은 퇴근길 저녁 시간대에 접속이 몰려 속도가 느려진다.","kind":"hit","top3":["lunch_peak","market_saturation","business_hours_limit"],"hit1":true,"hit3":true},
       {"sentence":"기름값이 뛰자 택배 회사들이 결국 배송비를 올렸다.","kind":"hit","top3":["franchise_termination","produce_supply","ingredient_cost"],"hit1":false,"hit3":true},
-      {"sentence":"영화관은 관객이 적은 평일 아침 상영을 조조할인으로 싸게 판다.","kind":"hit","top3":["limited_menu","market_saturation","loyalty_points"],"hit1":false,"hit3":false},
+      {"sentence":"영화관은 관객이 적은 평일 아침 상영을 조조할인으로 싸게 판다.","kind":"hit","top3":["lunch_peak","limited_menu","market_saturation"],"hit1":false,"hit3":false},
       {"sentence":"콘서트 굿즈는 준비한 물량이 바닥나면 그날 판매가 끝난다.","kind":"hit","top3":["limited_menu","retirement_pay","card_sales_credit"],"hit1":true,"hit3":true},
-      {"sentence":"항공 마일리지는 탈 때마다 쌓이고 제휴사에서도 쓸 수 있지만 기한을 넘기면 없어진다.","kind":"hit","top3":["loyalty_points","hygiene_grade","startup_fund"],"hit1":true,"hit3":true},
+      {"sentence":"항공 마일리지는 탈 때마다 쌓이고 제휴사에서도 쓸 수 있지만 기한을 넘기면 없어진다.","kind":"hit","top3":["business_hours_limit","loyalty_points","hygiene_grade"],"hit1":false,"hit3":true},
       {"sentence":"오픈마켓은 판매자가 물건을 팔 때마다 판매 금액의 일부를 떼어 간다.","kind":"hit","top3":["card_fee","delivery_fee","franchise_fee_refund"],"hit1":true,"hit3":true},
-      {"sentence":"진료 예약을 하고 나타나지 않으면 병원은 그 시간을 다른 환자에게 줄 수 없어 손해를 본다.","kind":"hit","top3":["market_saturation","no_show","no_smoking_zone"],"hit1":false,"hit3":true},
+      {"sentence":"진료 예약을 하고 나타나지 않으면 병원은 그 시간을 다른 환자에게 줄 수 없어 손해를 본다.","kind":"hit","top3":["business_hours_limit","market_saturation","no_show"],"hit1":false,"hit3":true},
       {"sentence":"편의점 직원은 유통기한이 가까운 우유를 진열대 앞줄로 꺼내 놓는다.","kind":"hit","top3":["market_saturation","hygiene_grade","key_money"],"hit1":false,"hit3":false},
       {"sentence":"어린이집은 평가에서 기준 점수를 넘겨야 인증을 받고, 인증 뒤에도 관리 점검을 받는다.","kind":"hit","top3":["open_prep","key_money","loyalty_points"],"hit1":false,"hit3":false},
-      {"sentence":"운전면허 시험은 안전 교육을 먼저 이수해야 응시할 수 있다.","kind":"hit","top3":["open_prep","hygiene_grade","restaurant_category"],"hit1":true,"hit3":true},
+      {"sentence":"운전면허 시험은 안전 교육을 먼저 이수해야 응시할 수 있다.","kind":"hit","top3":["open_prep","hygiene_grade","business_hours_limit"],"hit1":true,"hit3":true},
       {"sentence":"같은 곳에 불법 주차를 거듭할수록 처분이 점점 무거워진다.","kind":"hit","top3":["hygiene_inspection","market_saturation","lunch_peak"],"hit1":true,"hit3":true},
       {"sentence":"영화 촬영장에서는 촬영, 조명, 편집 팀이 일을 나눠 맡고 감독이 전체를 지휘한다.","kind":"hit","top3":["kitchen_division","open_prep","price_board"],"hit1":true,"hit3":true},
       {"sentence":"유튜브 채널을 넘길 때는 그동안 쌓은 구독자의 가치까지 값으로 쳐서 받는다.","kind":"hit","top3":["key_money","loyalty_points","business_succession"],"hit1":true,"hit3":true},
@@ -169,9 +169,11 @@
       {"sentence":"메소 시세가 떨어져서 같은 아이템을 사려면 메소가 훨씬 더 든다.","kind":"hit","top3":["retirement_pay","startup_fund","hygiene_grade"],"hit1":false,"hit3":false},
       {"sentence":"보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.","kind":"hit","top3":["kitchen_division","labor_contract","open_prep"],"hit1":true,"hit3":true},
       {"sentence":"경매장에서 아이템이 팔리면 판매 대금에서 수수료가 빠진다.","kind":"hit","top3":["loyalty_points","card_fee","min_order_amount"],"hit1":false,"hit3":true},
-      {"sentence":"주간 보스 결정석은 한 주에 팔 수 있는 개수가 정해져 있다.","kind":"hit","top3":["weekly_hour_cap","business_hours_limit","lease_renewal"],"hit1":false,"hit3":false},
+      {"sentence":"주간 보스 결정석은 한 주에 팔 수 있는 개수가 정해져 있다.","kind":"hit","top3":["weekly_hour_cap","lease_renewal","foreign_worker"],"hit1":false,"hit3":false},
       {"sentence":"Airlines overbook flights because some passengers never show up and their seats would fly empty.","kind":"hit","top3":["unfair_franchise_control","franchise_ad_cost","avg_spend"],"hit1":false,"hit3":false},
-      {"sentence":"Gyms get packed right after office hours, so members queue for every machine.","kind":"hit","top3":["unfair_franchise_control","remodel_cost_share","shared_kitchen"],"hit1":false,"hit3":false}
+      {"sentence":"Gyms get packed right after office hours, so members queue for every machine.","kind":"hit","top3":["unfair_franchise_control","remodel_cost_share","shared_kitchen"],"hit1":false,"hit3":false},
+      {"sentence":"명절 기차표는 값이 그대로라 예매 첫날 먼저 접속한 사람부터 표를 가져간다.","kind":"hit","top3":["lunch_peak","limited_menu","lease_renewal"],"hit1":true,"hit3":true},
+      {"sentence":"대형마트는 지자체 조례로 정한 심야 시간에는 문을 열 수 없다.","kind":"hit","top3":["business_hours_limit","retirement_pay","yellow_umbrella"],"hit1":true,"hit3":true}
     ],
     "restaurant/holdout": [
       {"sentence":"썬데이 메이플에는 그날 하루만 경험치와 아이템 드롭 혜택이 커진다.","kind":"hit","top3":["happy_hour","limited_menu","hygiene_inspection"],"hit1":true,"hit3":true},
@@ -182,7 +184,9 @@
       {"sentence":"미용실은 커트와 염색 요금을 손님이 볼 수 있게 가게 안에 붙여 둔다.","kind":"hit","top3":["lost_item_liability","no_show","lunch_peak"],"hit1":false,"hit3":false},
       {"sentence":"임대료가 오르자 동네 학원들이 줄줄이 수강료를 인상했다.","kind":"hit","top3":["happy_hour","market_saturation","ingredient_cost"],"hit1":false,"hit3":true},
       {"sentence":"숙소 예약 사이트는 방이 팔릴 때마다 숙박비의 일정 비율을 호텔에서 수수료로 가져간다.","kind":"hit","top3":["card_fee","delivery_fee","limited_menu"],"hit1":true,"hit3":true},
-      {"sentence":"노래방을 차리려면 시설을 갖춘 뒤 구청에 영업 등록을 마쳐야 손님을 받을 수 있다.","kind":"hit","top3":["open_prep","deposit_return","cash_flow_gap"],"hit1":true,"hit3":true}
+      {"sentence":"노래방을 차리려면 시설을 갖춘 뒤 구청에 영업 등록을 마쳐야 손님을 받을 수 있다.","kind":"hit","top3":["open_prep","deposit_return","cash_flow_gap"],"hit1":true,"hit3":true},
+      {"sentence":"동네 소아과는 예약을 받지 않고 접수한 순서대로 진료해서 늦게 온 아이는 한참 기다린다.","kind":"hit","top3":["weekly_holiday_pay","card_sales_credit","no_smoking_zone"],"hit1":false,"hit3":false},
+      {"sentence":"공사장은 구청 규정 때문에 이른 아침과 밤에는 소음이 나는 작업을 할 수 없다.","kind":"hit","top3":["business_hours_limit","card_sales_credit","limited_menu"],"hit1":true,"hit3":true}
     ]
   }
 }
