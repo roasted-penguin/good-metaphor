@@ -12,7 +12,7 @@ index → draft → check → (승인 id 고르기) → gate(fallback) → gate(
 
 - **원문 저장 금지(D-5).** 페이지 본문은 초안 호출 동안 메모리에만 있다. 디스크에는 URL, 제목, 가져온 시각, 본문 해시, 우리 말로 쓴 사실, 겹침 지표(숫자)만 남는다.
 - **수집은 공식 출처만.** 목록·초안은 메이플 `maplestory.nexon.com`, 식당 `*.go.kr`, `www.korea.kr`, `www.sbiz.or.kr`(`sources.mjs` `allowHost`)만 돈다. 출처 주소는 LLM이 아니라 파이프라인이 붙인다.
-- **커뮤니티 출처는 확인용(D-8, ADR 0016).** 정책 원본 `tools/source-policy.json`(메이플: 나무위키 `/w/`·인벤 메이플, 식당: 나무위키·티스토리·브런치·다음 뉴스). 커뮤니티 페이지는 색인·초안하지 않고, 사람·에이전트가 읽고 우리 문장으로 쓴 후보(수동 초안 파일 `.tmp/node-pipeline/<관심사>-batch-N.draft.json`의 `candidates`, `grounding` 없이)의 `sources`에 URL로만 들어온다. check가 ① 교차 확인(공식 1개 이상 또는 서로 다른 커뮤니티 사이트 2곳, 같은 플랫폼 두 글은 한 곳) ② 출처 페이지를 한 쪽씩 가져와(robots·1초 간격) 베낌(최장 복사 40자 실패·25자 확인)·겹침을 재고(글은 메모리에만, 결과엔 숫자만) ③ 노드에 `sourceKind: "community"`를 붙인다. 커뮤니티 출처는 `--no-probe`로 통과할 수 없다. 공식과 어긋나면 공식 우선(리뷰 판정).
+- **커뮤니티 출처는 확인용(D-8, ADR 0016).** 정책 원본 `tools/source-policy.json`(메이플: 나무위키 `/w/`·인벤 메이플, 식당: 나무위키·티스토리·브런치). 커뮤니티 페이지는 색인·초안하지 않고, 사람·에이전트가 읽고 우리 문장으로 쓴 후보(수동 초안 파일 `.tmp/node-pipeline/<관심사>-batch-N.draft.json`의 `candidates`, `grounding` 없이)의 `sources`에 URL로만 들어온다. check가 ① 교차 확인(공식 1개 이상 또는 서로 다른 커뮤니티 사이트 2곳, 같은 플랫폼 두 글은 한 곳) ② 출처 페이지를 한 쪽씩 가져와(robots·1초 간격) 베낌(최장 복사 40자 실패·25자 확인)·겹침을 재고(글은 메모리에만, 결과엔 숫자만) ③ 노드에 `sourceKind: "community"`를 붙인다. 커뮤니티 출처는 `--no-probe`로 통과할 수 없다. 공식과 어긋나면 공식 우선(리뷰 판정).
 - **예의 바른 수집.** 호스트마다 1초에 1번 이하, robots.txt를 지키고(가장 긴 규칙 우선), UA에 도구 이름을 밝힌다. 메이플 가이드 목록은 스크립트로 그려진다. T-207까지는 공식 가이드 검색을 주제어로 돌렸는데 쪽당 5개라 겹침이 많았고, T-208부터는 가이드 첫 화면 분류가 부르는 사이트 자체 목록 API(`POST /guide/n23gameinformation/articles?boardId=…`, robots 허용 경로, `sources.mjs` `MAPLE_GUIDE_BOARDS`)로 분류 9개 × 1번이면 가이드 107글 전부를 얻는다(검색으로 모은 100글을 모두 포함, 2026-11-23). 응답의 본문 칸은 버리고 글 번호·제목만 쓴다(`fetcher.postJson`, 목록 항목 `json.links`).
 - **규칙 2·9·11.** 자주 바뀌는 수치(확률, 판본, 날짜, 가격, 레벨, 횟수)는 실패로 친다(메이플은 `6차` 같은 차수만 허용, 식당은 숫자가 하나라도 있으면 실패). 태그는 `tags.json` 목록 안의 것만 받는다. 금칙어는 `blocklist.json`에서 `승인` 상태인 카드만 쓴다.
 - **회귀 0.** 실제 그래프에는 실제 확장 관문(`gate --embedder browser`)을 통과한 노드만 쓴다(`apply --write-real`은 `--gate browser`일 때만 동작).
@@ -74,6 +74,22 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 - **기관:** 공정위 가맹 안내, 최저임금위원회 제도·자주 묻는 질문, 국세청 사업자 세무(카드·현금영수증 포함).
 - **넣지 않은 것(2026-11-22):** 생활법령(easylaw) 503 지속(씨앗은 남겨 두고 `probe.ok=false`로 맨 뒤), 공정위 가맹사업거래(`franchise.ftc.go.kr`) 403, 소상공인24(`sbiz24.kr`)·소상공인시장진흥공단(`semas.or.kr`)은 허용 호스트 밖(식당 그래프 출처 테스트와 같은 기준이라 넓히지 않음), 식약처 게시판(첨부 파일 위주라 본문이 짧음), 고용노동부 정책안내(목록이 스크립트 링크), 정책브리핑 정책위키(2022년에 멈춘 기록 문서).
 
+## 식당 장면 초안 (T-213, D-9)
+
+사용자 결정(D-9, 2026-11-23): 비유의 받는 쪽은 익숙해야 한다. 법령 조문(간이과세·소액부징수)은 그 자체가 낯설어 식당 후보에서 뺐고, **누구나 겪어 본 식당 장면**(웨이팅·브레이크 타임·품절 마감·셀프 코너·서빙 로봇·최소주문금액 등)을 고른다.
+
+```bash
+# 장면 파일 tools/node-pipeline/scenes/<관심사>-*.json = { scenes: [{ id, scene, sources: [URL…], hint?: [태그 id] }] } (본문 없음)
+npm run node-pipeline:draft-scenes -- --interest restaurant [--scenes restaurant-t213.json] [--only id,id] [--redo] [--provider gemini|nvidia] [--model ...]
+npm run node-pipeline:check -- --interest restaurant --batch N --provider nvidia   # 익숙함 검사가 함께 돈다(rules.familiarity)
+```
+
+- **출처는 출처 정책(ADR 0016) 그대로.** 장면 출처 주소는 `tools/source-policy.json` 안 주소만(식당: 공공 + 나무위키·티스토리·브런치). 정책 밖 주소는 초안이 가져오지도 않는다(`policy`). 목록·검색 순회는 하지 않고 장면 파일에 적은 쪽만 가져온다(robots·1초 1번).
+- **독립 출처 2곳 이상.** 사이트 = 정책의 site id(같은 플랫폼 두 글은 한 곳, 공공은 한 곳). 초안은 LLM에 자료 번호만 고르게 하고(주소는 파이프라인이 붙임), 후보 전체가 사이트 2곳 이상을 쓰고 적어도 한 사실(핵심)을 사이트 2곳이 받쳐야 남긴다(`scenes.mjs` `sceneCandidates`). 최종 판정은 check의 교차 확인(`communityUncorroborated`)·베낌 검사.
+- **hint(선택):** 사람이 그 장면에서 볼 만하다고 적은 태그 구조. 프롬프트에 "자료가 받쳐 줄 때만"으로 넣는다. hint 없이 돌린 묶음은 사실이 태그 구조를 드러내지 않아 태그 적합성에서 거의 다 떨어졌다(2026-11-28: 12개 중 0개).
+- **익숙함 검사(`familiar.mjs`):** 후보마다 LLM 한 번 "보통 성인 손님이 이 장면을 바로 떠올리나"(familiar)와 "특정 가게·브랜드·앱·실존 인물 이름이 있나"(named). familiar no면 실패 `unfamiliar`, named yes면 실패 `storeName`, 못 물으면 확인 `familiarPending`. 태그 적합성 다음, 실패 후보에는 묻지 않는다.
+- 2026-11-28 다음 뉴스(`v.daum.net`) robots가 `User-agent: *` `Disallow: /`로 바뀌어 출처 정책에서 뺐다(메인 판정, ADR 0016 표). 장면 출처는 나무위키·브런치·공공으로 골랐다.
+
 ## 자동 검사 (check)
 
 | 판정 | 사유 |
@@ -130,6 +146,8 @@ npm run node-pipeline:apply -- --interest maplestory --batch N --approve ids.jso
 | `run.mjs` | index(목록 → 색인), draft(페이지 → 후보), 씨앗 확인(`probeSeeds`·`markProbes`), 이름 신호 다시 재기(`regroundLabels`, T-205) |
 | `draft.mjs` | 페이지 초안 프롬프트(T-301 `buildDraftPrompt` 꼴), 답 파싱·태그 없음 버림, 근거 지표(겹침·최장 복사), 절 나누기 |
 | `check.mjs` | 자동 검사, 리뷰 시트 |
+| `scenes.mjs` | 식당 장면 초안(T-213): 장면 + 출처 2곳 → LLM, 사이트 2곳 받침만 남김, 정책 밖 출처는 안 가져옴 |
+| `familiar.mjs` | 익숙함 검사(T-213): 보통 사람이 바로 떠올리나·가게 이름 있나(LLM) |
 | `tag-fit.mjs` | 태그 적합성 LLM 검사(프롬프트·답 파싱·결과 반영, T-197) |
 | `near-dup.mjs` | 근접 중복 관문(바닥 = 기존 노드끼리 최고 코사인, 같은 사실 재사용)·태그 밀도 상한(T-197, ADR 0015) |
 | `dedupe.mjs` | 묶음 사이 id·이름 중복 무리 찾기·하나만 남기기(T-205) |

@@ -10,9 +10,21 @@
 // - sectionSkip: 긴 글을 절로 나눌 때(T-195) 건너뛸 절 제목 정규식(없으면 모두 초안)
 // - rules: 사실 검사 규칙(규칙 2·기존 그래프 단위 테스트와 맞춘다)
 
+import { readdirSync, readFileSync } from 'node:fs';
 import { classifySource, isOfficialHost } from '../source-policy.mjs';
 
 const MAPLE = 'https://maplestory.nexon.com';
+
+// 장면 파일(T-213, D-9): tools/node-pipeline/scenes/<관심사>-*.json = 누구나 겪어 본 장면 + 그 장면을 설명한 출처 주소(본문 없음).
+// 출처 주소는 출처 정책(tools/source-policy.json, ADR 0016)을 따른다. 허용·교차 확인 판정은 check가 정책으로 한다
+export const SCENES_DIR = new URL('./scenes/', import.meta.url);
+export function sceneFiles(interest) {
+  try { return readdirSync(SCENES_DIR).filter(f => f.startsWith(interest + '-') && f.endsWith('.json')).sort(); } catch { return []; }
+}
+export function loadScenes(interest, file = null) {
+  const files = file ? [file] : sceneFiles(interest);
+  return files.flatMap(f => JSON.parse(readFileSync(new URL(f, SCENES_DIR), 'utf8')).scenes || []);
+}
 
 // 국가법령정보센터(T-198): 사람이 여는 주소(https://www.law.go.kr/법령/식품위생법)는 껍데기이고 조문은 스크립트가 lsInfoR.do로 불러온다.
 // 껍데기에서 현행 판 번호(lsiSeq)·시행일(efYd)을 읽어 본문 주소를 만든다(판이 바뀌어도 씨앗 주소는 그대로). 출처 주소는 껍데기 주소를 쓴다
@@ -81,7 +93,7 @@ export const INTERESTS = {
     id: 'restaurant',
     domain: '식당',
     // 목록·초안은 공공·공식 자료만: *.go.kr(표준국어대사전 포함), 정책브리핑, 소상공인시장진흥공단.
-    // 커뮤니티·블로그·뉴스(나무위키·티스토리·브런치·다음 뉴스, ADR 0016)는 수집하지 않고 확인용 출처로만(allowSource)
+    // 커뮤니티·블로그·뉴스(나무위키·티스토리·브런치, ADR 0016. 다음 뉴스는 robots 막힘으로 뺌 T-213)는 수집하지 않고 확인용 출처로만(allowSource)
     allowHost: h => isOfficialHost(h, 'restaurant'),
     allowSource: url => classifySource(url, 'restaurant'),
     listings: [
@@ -167,7 +179,8 @@ export const INTERESTS = {
       allowLatin: false,   // 영문은 브랜드일 수 있어 실패
       labelNoDigits: true, // 이름에도 숫자 없음(restaurant.test.mjs)
       numberAllow: [],     // 숫자는 하나도 안 된다
-      storeNameReview: true // 커뮤니티 출처 후보는 특정 가게 이름 확인(ADR 0016, 경고)
+      storeNameReview: true, // 커뮤니티 출처 후보는 특정 가게 이름 확인(ADR 0016, 경고)
+      familiarity: true      // 익숙함 검사(T-213, D-9): 보통 사람이 바로 떠올리는 장면이 아니면 실패
     }
   }
 };

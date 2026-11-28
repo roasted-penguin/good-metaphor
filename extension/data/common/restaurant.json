@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "restaurant",
-  "version": "2026.11.23-4",
+  "version": "2026.11.28-1",
   "domain": "식당",
   "analogyPrefix": "식당으로 비유하자면",
   "theme": "neutral",
@@ -1092,6 +1092,24 @@
         "https://www.law.go.kr/LSW/lsLinkProc.do?lsNm=가맹사업거래의 공정화에 관한 법률&joLnkStr=제6조의5&mode=11"
       ],
       "verifiedAt": "2026-11-22"
+    },
+    {
+      "id": "min_order_amount",
+      "label": "최소 주문 금액",
+      "facts": [
+        "최소 주문 금액을 넘겨야 배달 주문이 가능해진다.",
+        "주문 금액이 적으면 가게에 손해가 발생할 수 있다.",
+        "금액을 채우지 않으면 주문할 수 없어 배달이 어려워진다."
+      ],
+      "tags": [
+        "threshold_req"
+      ],
+      "sources": [
+        "https://namu.wiki/w/%EB%B0%B0%EB%8B%AC",
+        "https://brunch.co.kr/@imcpo/29"
+      ],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
     }
   ],
   "edges": [
