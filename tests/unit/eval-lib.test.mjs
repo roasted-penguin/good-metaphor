@@ -231,6 +231,8 @@ test('marginsOf: 비유 없음·음성 문장은 빼고 문장별 여유를 순�
   assert.deepEqual(ms.map(m => m.sentence), ['가', '나']);
   assert.ok(Math.abs(ms[0].margin - 0.001) < 1e-9);
   assert.ok(Math.abs(ms[1].margin - -0.1) < 1e-9);
+  // 경쟁자(T-192): 맞히면 기대 밖 최고 노드, 틀리면 1위 노드
+  assert.deepEqual(ms.map(m => m.rival), ['x', 'x']);
 });
 
 test('lowMargins: 맞힌 문장(여유 ≥ 0) 중 임계값 미만만, 작은 순서로', () => {

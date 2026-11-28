@@ -73,8 +73,13 @@ export function marginsOf(cases, rank) {
   const out = [];
   cases.forEach((c, i) => {
     if (c.forbidNodes?.length || !c.expectNodes?.length) return;
-    const margin = marginOf(rank(c, i), c.expectNodes);
-    if (margin !== null) out.push({ sentence: c.sentence, margin });
+    const ranked = rank(c, i);
+    const margin = marginOf(ranked, c.expectNodes);
+    if (margin === null) return;
+    // 경쟁자(T-192): 맞혔으면 기대 밖 최고 노드, 틀렸으면 1위 노드. 노드를 더할 때 누가 여유를 깎는지 보려고
+    const isExp = x => c.expectNodes.includes(x.id);
+    const rival = isExp(ranked[0]) ? ranked.find(x => !isExp(x))?.id : ranked[0].id;
+    out.push({ sentence: c.sentence, margin, rival });
   });
   return out;
 }

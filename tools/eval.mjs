@@ -356,7 +356,7 @@ if (!serverOnly) for (const [modeName, mode] of queryModes) for (const { name, c
       mixedResult = r;
       dumpTop1(name, mode ? `혼합 · ${modeName}` : '혼합', cases, cases.map((c, i) => rank(c, i)[0]?.id));
       margins = marginsOf(cases, rank);
-      if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…`);
+      if (verbose) for (const m of margins) console.log(`  여유 ${fmtMargin(m.margin)}  ${m.sentence.slice(0, 32)}…${m.rival ? `  (경쟁 ${m.rival})` : ''}`);
       // 음성 문장(T-149): 1위가 금지 노드가 아니면 통과. hit@1 분모와 따로
       if (r.negative.n) {
         console.log(`  alias-negative ${r.negative.pass}/${r.negative.n}`);
