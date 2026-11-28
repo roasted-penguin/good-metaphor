@@ -44,7 +44,7 @@ export function buildScenePrompt({ domain, scene, docs, tags, existing = [] }) {
     '5. 숫자·가격·시간·비율·날짜는 쓰지 않는다. 숫자 대신 구조와 규칙을 쓴다.',
     '6. 특정 가게·브랜드·앱·회사 이름, 실존 인물의 이름, 멸칭은 쓰지 않는다. "어떤 가게", "배달앱"처럼 일반 명사로 쓴다.',
     '7. 첫 사실은 그 장면이 어떻게 움직이는지(무엇이 무엇에 따라 어떻게 바뀌는가, 무엇을 해야 무엇이 되는가)를 쓴다. 이름만 풀어 쓴 정의로 시작하지 않는다.',
-    '8. tags에는 아래 [추상 태그] 목록의 id만 쓰고, 사실에 그 구조가 실제로 드러나는 태그만 단다. 맞는 태그가 없으면 그 개념은 넣지 않는다.',
+    '8. tags에는 아래 [추상 태그] 목록의 id만 쓴다. 태그를 먼저 고르고, 첫 사실은 그 태그의 구조(설명과 예문이 보여 주는 "무엇이 무엇에 따라 어떻게 되는가")를 이 장면의 말로 직접 드러내야 한다. 예문은 다른 분야라 낱말은 베끼지 말고 구조만 맞춘다. 장면이 그 구조를 실제로 갖지 않으면 태그를 달지 않고, 맞는 태그가 하나도 없으면 그 개념은 넣지 않는다(억지로 끌어대지 않는다).',
     `9. edges에는 [이미 있는 개념]과의 관계를 0~${L.edges}개, {"to": id, "rel": "짧은 동사구"}로 적는다.`,
     '10. [이미 있는 개념]과 같은 개념은 다시 내지 않는다.',
     '11. JSON 객체만 출력한다. 형식: {"nodes": [{"id": string, "label": string, "facts": [{"text": string, "support": [number]}], "tags": [string], "edges": [{"to": string, "rel": string}]}]}'
@@ -53,12 +53,14 @@ export function buildScenePrompt({ domain, scene, docs, tags, existing = [] }) {
     `관심사: ${domain}`,
     '',
     '[추상 태그]',
-    ...(tags || []).map(t => `- ${t.id} | ${t.label} — ${t.desc || ''}`),
+    ...(tags || []).map(t => `- ${t.id} | ${t.label} — ${t.desc || ''}${(t.examples || []).length ? ` (예: ${t.examples.slice(0, 2).join(' / ')})` : ''}`),
     '',
     '[이미 있는 개념]',
     ...existing.map(n => `- ${n.id} | ${n.label}`),
     '',
     `[장면] ${scene.scene}`,
+    // 장면 파일의 hint(선택): 사람이 이 장면에서 볼 만하다고 적은 태그 구조. 자료가 받쳐 줄 때만 쓰게 한다(억지 태그 방지는 check 태그 적합성이 다시 본다)
+    ...((scene.hint || []).length ? [`[볼 만한 구조] ${(scene.hint || []).map(id => { const t = (tags || []).find(x => x.id === id); return t ? `${id}(${t.desc})` : id; }).join(', ')} — 자료가 이 구조를 받쳐 줄 때만 이 태그를 쓰고, 첫 사실에 그 구조를 장면의 말로 드러낸다. 받쳐 주지 않으면 쓰지 않는다.`] : []),
     '',
     ...docs.flatMap(d => [`[자료 ${d.n}] (${d.site}) ${d.title || ''}`, d.text, ''])
   ].join('\n');
