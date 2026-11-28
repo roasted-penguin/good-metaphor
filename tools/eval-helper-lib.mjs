@@ -51,7 +51,9 @@ export function helperMetrics(states, { tagCount }) {
     calls: end.calls,
     steps: end.steps,
     rounds: end.round,
-    stop: end.stop || null
+    stop: end.stop || null,
+    end: end.end || null, // 정상 종료 이유(T-229)
+    evalBy: end.evalBy ? { ...end.evalBy } : null // 평가를 쓴 쪽과 다른 제공자가 했는지(T-229)
   };
 }
 
@@ -195,7 +197,9 @@ export function rowLine(r) {
     `초안 ${m.drafted} → 남음 ${m.accepted}`,
     ...(r.method === 'helper' ? [`첫 통과 ${pct(m.firstPassRate)}`, `최종 통과 ${pct(m.passRate)}`, `고쳐 씀 ${m.rewritten}`] : [`코드 검사 걸림 수치 ${m.flags.number}·구조 ${m.flags.structure}·중복 ${m.flags.dup}`]),
     `태그 ${m.covered}/${r.tagCount}`,
-    `호출 ${m.calls}`
+    `호출 ${m.calls}`,
+    ...(r.method === 'helper' ? [`끝 ${m.stop ? `상한 ${m.stop}` : m.end || '—'}`] : []),
+    ...(m.evalBy && (m.evalBy.other + m.evalBy.same) ? [`평가 다른 제공자 ${m.evalBy.other}/${m.evalBy.other + m.evalBy.same}`] : [])
   ];
   if (j) parts.push(`채점 그럴듯 ${pct(j.plausible)} · 지울 사실 ${pct(j.flaggedFacts)}(틀림 ${pct(j.wrongFacts)}) · 익숙 ${f1(j.familiar)} · 태그맞음 ${pct(j.tagFit)}`);
   if (e) parts.push(`expectTag 1위 ${e.hit}/${e.n}(${pct(e.all)}), 덮은 태그 안 ${e.coveredHit}/${e.coveredN}(${pct(e.covered)})`);
@@ -216,6 +220,7 @@ export function totals(rows) {
       interests: rs.length,
       drafted: sum(r => r.metrics.drafted), accepted: sum(r => r.metrics.accepted), calls: sum(r => r.metrics.calls),
       firstPass: method === 'helper' ? sum(r => r.metrics.firstPass) : null,
+      evalOther: sum(r => r.metrics.evalBy?.other), evalSame: sum(r => r.metrics.evalBy?.same),
       covered: sum(r => r.metrics.covered) / rs.length,
       plausible: w(j => j.plausible ?? 0),
       flaggedFacts: facts ? sum(r => (r.judge ? (r.judge.flaggedFacts ?? 0) * r.judge.facts : 0)) / facts : null,
@@ -234,6 +239,7 @@ export function totalLines(t, tagCount) {
   for (const [method, x] of Object.entries(t)) {
     const name = method === 'helper' ? '도우미' : 'T-301 한 번';
     lines.push(`${name}(${x.interests}개 관심사): 초안 ${x.drafted} → 남음 ${x.accepted}${x.firstPass != null ? ` · 첫 통과 ${pct(x.drafted ? x.firstPass / x.drafted : null)} · 최종 통과 ${pct(x.drafted ? x.accepted / x.drafted : null)}` : ''} · 평균 태그 ${f1(x.covered)}/${tagCount} · 호출 ${x.calls}`
+      + (x.evalOther + x.evalSame ? ` · 평가 다른 제공자 ${x.evalOther}/${x.evalOther + x.evalSame}` : '')
       + ` · 그럴듯 ${pct(x.plausible)} · 지울 사실 ${pct(x.flaggedFacts)}(틀림 ${pct(x.wrongFacts)}) · 익숙 ${f1(x.familiar)} · 태그맞음 ${pct(x.tagFit)}`
       + ` · expectTag 1위 ${x.expectHit}/${x.expectN}(${pct(x.expectN ? x.expectHit / x.expectN : null)}) · 덮은 태그 안 ${x.coveredHit}/${x.coveredN}(${pct(x.coveredN ? x.coveredHit / x.coveredN : null)})`);
   }

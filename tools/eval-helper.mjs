@@ -14,12 +14,16 @@
 //   npm run eval:helper -- --max-calls 120            # 이번 실행 실제 LLM 호출(생성 + 채점, 캐시 제외) 상한. 기본 120
 //   npm run eval:helper -- --rpm 10                   # 분당 호출 상한(기본 10)
 //   npm run eval:helper -- --fresh                    # 캐시를 쓰지 않고 다시
+//   npm run eval:helper -- --judge-overlap-ok         # 채점 모델이 도우미 평가 체인에 있어도 돌린다(결과에 judgeOverlap 표시)
+//   npm run eval:helper -- --rejudge <결과.json>       # 예전 결과 파일의 도우미 노드를 지금 채점자로 다시 채점만(생성 없음, T-229 비교용)
+// 도우미 평가 단계(T-229)는 확장처럼 노드를 쓴 제공자를 피한다: 평가 체인 = 생성 체인 + 키 있는 다른 fallbackChain 항목(채점 계열 포함)을
+// agent.providerOrder로 줄 세운 뒤 preferOthers. 채점 모델이 평가 체인 모델과 같으면 멈춘다(JUDGE_MODEL로 다른 모델을 고른다)
 // 결과: .tmp/eval-helper-<날짜>.json, 캐시: .tmp/eval-helper-cache.json(호출 글 → 답, 프롬프트가 바뀌면 자연히 새로 부른다). 커밋 안 함.
 import fs from 'node:fs';
 import { loadCommonGraphFromDisk, loadInterestGraph } from './load-graph.mjs';
 import { mergeGraphs } from '../extension/lib/graph.js';
 import { PROVIDERS, complete } from '../extension/lib/providers.js';
-import { buildChain, completeWithFallback, reorderChain } from '../extension/lib/fallback.js';
+import { buildChain, completeWithFallback, reorderChain, preferOthers } from '../extension/lib/fallback.js';
 import { providerFor } from '../extension/lib/config.js';
 import { hashEmbed } from '../extension/lib/fallback-embed.js';
 import { newHelperState, helperStep, HELPER_LIMITS } from '../extension/lib/interest-helper.js';
@@ -48,6 +52,7 @@ const rpm = Number(argAfter('--rpm')) || 10;
 const maxCalls = Number(argAfter('--max-calls')) || 120;
 const forced = argAfter('--provider');
 const only = argAfter('--only');
+const rejudge = argAfter('--rejudge');
 const interests = (argAfter('--interests') || DEFAULT_INTERESTS.join(',')).split(',').map(s => s.trim()).filter(Boolean);
 const today = new Date().toLocaleDateString('sv-SE');
 const outFile = new URL(`../.tmp/eval-helper-${today}.json`, here);
@@ -95,6 +100,19 @@ async function generationChain(judge) {
   return finish(reorderChain(chain, admin.agent?.providerOrder));
 }
 
+// 도우미 평가 단계 체인(T-229): 생성 체인 뒤에 키 있는 다른 fallbackChain 항목(채점 계열도)을 붙여 agent.providerOrder로.
+// 확장 agentDeps의 체인처럼 평가 때 preferOthers로 쓴 제공자를 뒤로 미룬다
+async function evaluatorChain(gen) {
+  const out = [...gen];
+  for (const { provider, model } of admin.fallbackChain || []) {
+    if (!PROVIDERS[provider]) continue;
+    const p = providerFor(provider, model, admin, settings);
+    if (out.some(x => modelKey(x) === modelKey(p))) continue;
+    if (p.def.local ? await reachable(p.baseUrl) : !!p.apiKey) out.push(p);
+  }
+  return reorderChain([...out.filter(p => !p.def.local), ...out.filter(p => p.def.local)], admin.agent?.providerOrder);
+}
+
 // 호출 간격과 한도 재시도(eval-followup과 같은 방식). waited는 지연 지표에서 뺀다
 let lastCall = 0, waited = 0, liveCalls = 0;
 async function paced(fn) {
@@ -120,20 +138,24 @@ const cooldowns = { get: async () => ({ ...cooldownState }), set: async obj => {
 // 같은 글이면 캐시. 실제 호출만 상한에 센다.
 // 같은 글을 한 실행에서 두 번 부르면(평가 답을 못 읽어 다시 묻기) 두 번째는 다른 칸(#1)이라 캐시가 같은 실패를 되풀이하지 않는다
 const asked = new Map();
-function cachedAsk(chain, used) {
-  const ck = chain.map(modelKey).join('>');
-  return async (system, user, opts) => {
+// last: 답한 제공자 id를 적어 둘 곳(도우미 lastProvider). evalChain이 있으면 route.avoid가 온 호출(평가)은 그 체인을 preferOthers로
+function cachedAsk(chain, used, { evalChain = null, last = null } = {}) {
+  return async (system, user, opts, route) => {
+    const ch = route?.avoid && evalChain ? preferOthers(evalChain, route.avoid) : chain;
+    const ck = ch.map(modelKey).join('>');
     const base = callKey(ck, system, user);
     const nth = asked.get(base) || 0;
     asked.set(base, nth + 1);
     const key = nth ? `${base}#${nth}` : base;
-    if (cache[key]) { used.add(cache[key].model + ' (캐시)'); return cache[key].text; }
+    const note = m => { if (last) last.id = String(m).split('/')[0]; };
+    if (cache[key]) { used.add(cache[key].model + ' (캐시)'); note(cache[key].model); return cache[key].text; }
     if (liveCalls >= maxCalls) throw Object.assign(new Error('--max-calls 상한'), { budget: true });
     liveCalls++;
-    const r = await withLimitRetry(() => completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown }));
+    const r = await withLimitRetry(() => completeWithFallback(ch, system, user, opts, { cooldowns, cooldown: admin.cooldown }));
     cache[key] = { model: modelKey(r.provider), text: r.text };
     saveCache();
     used.add(modelKey(r.provider));
+    note(modelKey(r.provider));
     return r.text;
   };
 }
@@ -144,10 +166,11 @@ function seeded(str) {
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-async function runHelperFor(name, chain) {
+async function runHelperFor(name, chain, evalChain) {
   const used = new Set();
+  const last = { id: null };
   const deps = {
-    ask: cachedAsk(chain, used), tags, blockTerms, existing: [], reservedIds: common.nodes.map(n => n.id),
+    ask: cachedAsk(chain, used, { evalChain, last }), lastProvider: () => last.id, tags, blockTerms, existing: [], reservedIds: common.nodes.map(n => n.id),
     write: async nodes => ({ written: nodes.length }), rand: seeded(`helper:${name}`), now: () => 0
   };
   let s = newHelperState({ name, mode: 'new', now: 0 });
@@ -163,7 +186,7 @@ async function runHelperFor(name, chain) {
   return {
     metrics, ms: Date.now() - t0 - (waited - w0), provider: [...used],
     nodes: s.accepted.map(n => ({ id: n.id, label: n.label, facts: n.facts, tags: n.tags, target: n.target, rewrites: n.rewrites })),
-    dropped: s.dropped, absentTags: s.absentTags, log: s.log, error: s.status === 'error' ? s.error : null
+    dropped: s.dropped, absentTags: s.absentTags, log: s.log, end: s.end || null, evalBy: s.evalBy || null, error: s.status === 'error' ? s.error : null
   };
 }
 
@@ -206,12 +229,37 @@ const embed = t => hashEmbed(t);
 const rows = [];
 const save = meta => { fs.mkdirSync(new URL('../.tmp/', here), { recursive: true }); fs.writeFileSync(outFile, JSON.stringify({ date: today, ...meta, rows }, null, 2)); };
 
-const judge = doJudge ? judgeProvider() : null;
+const judge = doJudge || rejudge ? judgeProvider() : null;
+
+// 예전 결과의 도우미 노드를 지금 채점자로 다시 채점만 한다(생성·expectTag는 파일 그대로)
+if (rejudge) {
+  const old = JSON.parse(fs.readFileSync(rejudge));
+  console.log(`다시 채점: ${rejudge} · 채점 ${modelKey(judge)} · 호출 상한 ${maxCalls}(캐시 제외)`);
+  for (const row of old.rows.filter(r => r.method === (only || 'helper') && r.nodes?.length)) {
+    delete row.judge; delete row.judgeError;
+    await judgeRow(row, judge);
+    rows.push(row);
+    console.log('  ' + rowLine(row) + (row.judgeError ? ` · 채점 오류 ${row.judgeError}` : ''));
+  }
+  const rf = new URL(`../.tmp/eval-helper-rejudge-${today}.json`, here);
+  fs.writeFileSync(rf, JSON.stringify({ date: today, from: rejudge, judge: modelKey(judge), rows }, null, 2));
+  console.log(`\n결과 저장: ${rf.pathname} · 실제 채점 호출 ${liveCalls}회`);
+  for (const l of totalLines(totals(rows), tags.length)) console.log('  ' + l);
+  process.exit(0);
+}
+
 const chain = await generationChain(judge);
-console.log(`생성 체인(에이전트 순서): ${chain.map(modelKey).join(' → ')}${judge ? ` · 채점: ${modelKey(judge)}` : ''}`);
+const evalChain = await evaluatorChain(chain);
+// 채점 모델이 도우미 평가자와 같으면 태그맞음이 후해질 수 있다. 다른 무료 모델이 없을 때만 --judge-overlap-ok로 허용하고 결과에 적는다
+const judgeOverlap = !!judge && evalChain.some(p => modelKey(p) === modelKey(judge));
+if (judgeOverlap && !has('--judge-overlap-ok')) {
+  throw new Error(`채점 모델(${modelKey(judge)})이 도우미 평가 체인에 있어요. JUDGE_MODEL로 다른 모델을 고르거나, 알고 쓰려면 --judge-overlap-ok.`);
+}
+if (judgeOverlap) console.log(`※ 채점 모델이 도우미 평가 체인에 있어요(${modelKey(judge)}). 태그맞음·익숙함이 후하게 나올 수 있어요.`);
+console.log(`생성 체인(에이전트 순서): ${chain.map(modelKey).join(' → ')} · 도우미 평가 체인(쓴 제공자는 뒤로): ${evalChain.map(modelKey).join(' → ')}${judge ? ` · 채점: ${modelKey(judge)}` : ''}`);
 console.log(`관심사 ${interests.join(', ')} · 호출 상한 ${maxCalls}(캐시 제외) · 분당 ${rpm}회 · expectTag 문장 ${items.length}개(대체 임베더)`);
 const methods = only ? [only] : ['helper', 'oneshot'];
-const meta = { chain: chain.map(modelKey), judge: judge ? modelKey(judge) : null, embedder: 'fallback-ngram(대체 임베더, 실제 모델 아님)', maxCalls, helperLimits: HELPER_LIMITS };
+const meta = { chain: chain.map(modelKey), evalChain: evalChain.map(modelKey), judgeOverlap, judge: judge ? modelKey(judge) : null, embedder: 'fallback-ngram(대체 임베더, 실제 모델 아님)', maxCalls, helperLimits: HELPER_LIMITS };
 
 for (const name of interests) {
   for (const method of methods) {
@@ -220,7 +268,7 @@ for (const name of interests) {
     console.log(`\n${name} · ${method === 'helper' ? '도우미' : 'T-301 한 번'}`);
     let row;
     try {
-      const r = method === 'helper' ? await runHelperFor(name, chain) : await runOneShotFor(name, chain);
+      const r = method === 'helper' ? await runHelperFor(name, chain, evalChain) : await runOneShotFor(name, chain);
       row = { interest: name, method, tagCount: tags.length, ...r };
     } catch (e) {
       row = { interest: name, method, tagCount: tags.length, error: String(e.message).slice(0, 160), metrics: null };
@@ -231,7 +279,7 @@ for (const name of interests) {
     }
     rows.push(row);
     save(meta);
-    console.log('  ' + (row.metrics ? rowLine(row) : `오류 ${row.error}`));
+    console.log('  ' + (row.metrics ? rowLine(row) : `오류 ${row.error}`) + (row.judgeError ? ` · 채점 오류 ${row.judgeError}` : ''));
   }
 }
 

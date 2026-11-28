@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   newHelperState, helperStep, runHelper, helperView, helperDraftNodes, mergeHelperDrafts,
   buildPlanPrompt, parsePlan, buildConceptDraftPrompt, buildEvalPrompt, parseEval, buildRewritePrompt, parseRewrite,
-  HELPER_LIMITS, HELPER_TEXT, PROBLEM_TEXT, HELPER_MARK, cleanNotes, readList
+  HELPER_LIMITS, HELPER_TEXT, PROBLEM_TEXT, HELPER_MARK, END_TEXT, cleanNotes, readList
 } from '../../extension/lib/interest-helper.js';
 import { DRAFT_LIMITS } from '../../extension/lib/draft.js';
 import { mergeGraphs } from '../../extension/lib/graph.js';
@@ -377,7 +377,7 @@ test('초안 상한: 개념이 많아도 20개(DRAFT_LIMITS.max)를 넘기지 �
 
 /* ───── 상한·실패 ───── */
 
-test('호출 상한: 다 쓰면 평가를 마친 초안만 넣고 "여기까지", 평가 못 할 초안은 쓰지 않는다', async () => {
+test('호출 상한: 다 쓰면 평가를 마친 초안만 넣고 상한 문구, 평가 못 할 초안은 쓰지 않는다', async () => {
   const f = fakeAsk({ plan: ['오프사이드', '이적 시장', '체력 안배', '경고 누적', '억지 개념', '숫자 개념'] });
   const d = deps({ ask: f.ask, limits: { maxCalls: 3, batch: 2 } });
   const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), d);
@@ -385,7 +385,7 @@ test('호출 상한: 다 쓰면 평가를 마친 초안만 넣고 "여기까지"
   assert.equal(s.stop, 'calls');
   // 계획 1 + 초안 1 + 평가 1: 평가를 거친 2개만
   assert.equal(d.writes[0].length, 2);
-  assert.match(helperView(s).doneText, /여기까지 했어요/);
+  assert.match(helperView(s).doneText, new RegExp(HELPER_TEXT.calls));
   for (const x of f.log.filter(x => x.k === 'draft')) assert.ok(x, '초안 호출 뒤에는 늘 평가 호출 자리가 남아 있었다');
   assert.equal(f.log.filter(x => x.k === 'draft').length, 1);
 });
@@ -556,4 +556,77 @@ test('helperView: 진행 줄·뺀 목록·없음 태그 이름, 내부 노드 �
   assert.ok(!JSON.stringify(v).includes(FACT['오프사이드'].facts[0]));
   assert.equal(v.name, '축구');
   assert.equal(typeof v.calls, 'number');
+});
+
+/* ───── T-229: 정상 종료 문구 · 평가자 다른 제공자 · 넓게 덮기 ───── */
+
+test('정상 종료: 할 일을 다 마치면 stop 없이 end, 화면에 상한 문구 대신 덮은 태그 수(T-229)', async () => {
+  const f = fakeAsk({ plan: ['오프사이드', '이적 시장'], plan2: [] });
+  const d = deps({ ask: f.ask });
+  const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), d);
+  assert.equal(s.stop, null);
+  assert.equal(s.end, 'noMore');
+  const v = helperView(s, TAGS);
+  assert.doesNotMatch(v.doneText, /상한/);
+  assert.match(v.doneText, new RegExp(`태그 ${TAGS.length}개 중 3개를 덮었어요`));
+  assert.equal(v.endText, END_TEXT.noMore);
+  assert.equal(v.covered, 3);
+  assert.ok(s.log.some(l => l.phase === 'end' && l.text === END_TEXT.noMore));
+});
+
+test('정상 종료: 다음 바퀴에 쓸 호출이 모자라면 budget(상한 멈춤 아님, 버린 초안 없음)', async () => {
+  const f = fakeAsk({ plan: ['오프사이드'] });
+  // 계획 1 + 초안 1 + 평가 1 = 3, 남은 2 < 계획 몫 3
+  const d = deps({ ask: f.ask, limits: { maxCalls: 5 } });
+  const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), d);
+  assert.equal(s.calls, 3);
+  assert.equal(s.stop, null);
+  assert.equal(s.end, 'budget');
+  assert.ok(!s.dropped.some(x => x.reason === PROBLEM_TEXT.unchecked));
+  assert.doesNotMatch(helperView(s, TAGS).doneText, new RegExp(HELPER_TEXT.calls));
+});
+
+test('정상 종료: 덮을 태그가 없으면 covered, 초안 상한이면 full', async () => {
+  const one = [{ id: 'threshold_req', label: '문턱', desc: '' }];
+  const f = fakeAsk({ plan: ['오프사이드'] });
+  const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), deps({ ask: f.ask, tags: one }));
+  assert.equal(s.end, 'covered');
+  const f2 = fakeAsk({ plan: ['오프사이드', '이적 시장'] });
+  const { s: s2 } = await run(newHelperState({ name: '축구', mode: 'add' }), deps({ ask: f2.ask, limits: { maxNodes: 2 } }));
+  assert.equal(s2.end, 'full');
+});
+
+test('평가자: 노드를 쓴 제공자를 avoid로 넘기고, 다른 제공자가 평가하면 evalBy.other(T-229)', async () => {
+  const f = fakeAsk({ plan: ['오프사이드', '이적 시장'], plan2: [] });
+  let last = null;
+  const seen = [];
+  const ask = async (system, user, opts, route) => {
+    const k = kind(system);
+    seen.push({ k, route });
+    // 체인 흉내: avoid에 든 제공자는 뒤로 미루니 평가는 nvidia가 받는다
+    last = route?.avoid?.includes('gemini') ? 'nvidia' : 'gemini';
+    return f.ask(system, user, opts);
+  };
+  const d = deps({ ask, lastProvider: () => last });
+  const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), d);
+  const ev = seen.filter(x => x.k === 'evaluate');
+  assert.ok(ev.length >= 1);
+  for (const x of ev) assert.deepEqual(x.route, { avoid: ['gemini'] });
+  for (const x of seen.filter(x => x.k !== 'evaluate')) assert.equal(x.route, undefined, '평가 말고는 체인 그대로');
+  assert.equal(s.evalBy.other, ev.length);
+  assert.equal(s.evalBy.same, 0);
+  // 내부 필드 by는 검수 대기 노드에 싣지 않는다
+  for (const n of d.writes[0]) assert.equal(n.by, undefined);
+});
+
+test('평가자: 제공자가 하나뿐이면 같은 쪽이 평가하고 evalBy.same으로 센다, lastProvider가 없으면 avoid 없이 예전처럼', async () => {
+  const f = fakeAsk({ plan: ['오프사이드'], plan2: [] });
+  const d = deps({ ask: f.ask, lastProvider: () => 'gemini' });
+  const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), d);
+  assert.equal(s.evalBy.same, 1);
+  const routes = [];
+  const f2 = fakeAsk({ plan: ['오프사이드'], plan2: [] });
+  const { s: s2 } = await run(newHelperState({ name: '축구', mode: 'add' }), deps({ ask: async (a, b, o, r) => { routes.push(r); return f2.ask(a, b, o); } }));
+  assert.ok(routes.every(r => r === undefined));
+  assert.deepEqual(s2.evalBy, { other: 0, same: 0 });
 });

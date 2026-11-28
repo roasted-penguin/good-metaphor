@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildChain, completeWithFallback, isDailyLimit, cooldownMsFor, reorderChain } from '../../extension/lib/fallback.js';
+import { buildChain, completeWithFallback, isDailyLimit, cooldownMsFor, reorderChain, preferOthers } from '../../extension/lib/fallback.js';
 import { providerFor } from '../../extension/lib/config.js';
 import { retryPolicy } from '../../extension/lib/providers.js';
 
@@ -388,4 +388,20 @@ test('admin.json agent.providerOrder: fallbackChain에 있는 제공자 id만, �
   const inChain = new Set(a.fallbackChain.map(e => e.provider));
   for (const id of order) assert.ok(inChain.has(id), id);
   assert.ok(!order.includes('ollama'));
+});
+
+test('preferOthers(도우미 평가자, T-229): 피할 제공자 항목을 로컬 앞 맨 뒤로, 길이 그대로, 하나뿐이면 같은 쪽', () => {
+  const P = (id, model = 'm', local = false) => ({ id, model, def: { local } });
+  const key = c => c.map(p => `${p.id}/${p.model}`);
+  const chain = [P('gemini', 'a'), P('gemini', 'b'), P('nvidia'), P('groq'), P('ollama', 'g', true)];
+  assert.deepEqual(key(preferOthers(chain, ['gemini'])), ['nvidia/m', 'groq/m', 'gemini/a', 'gemini/b', 'ollama/g']);
+  assert.deepEqual(key(preferOthers(chain, ['gemini', 'nvidia'])), ['groq/m', 'gemini/a', 'gemini/b', 'nvidia/m', 'ollama/g']);
+  // 로컬은 피할 목록에 있어도 맨 뒤 그대로(규칙 8)
+  assert.deepEqual(key(preferOthers(chain, ['ollama'])), key(chain));
+  // 하나뿐이면 같은 쪽이 받는다(빼지 않는다)
+  const one = [P('gemini', 'a')];
+  assert.deepEqual(key(preferOthers(one, ['gemini'])), ['gemini/a']);
+  // 비었거나 배열이 아니면 같은 배열
+  assert.equal(preferOthers(chain, []), chain);
+  assert.equal(preferOthers(chain, undefined), chain);
 });

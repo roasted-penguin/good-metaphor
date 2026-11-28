@@ -2791,6 +2791,9 @@ test('AI 초안(T-301): 로그아웃이면 패널·메시지 모두 막힘 → �
   page.once('dialog', d => { expect(d.message()).toBe('이 노드를 지울까요?'); d.accept(); });
   await reviewNode(page, '금칙 사실 개념').locator('.rv-del-node').click();
   await expect(page.locator('#reviewBox')).toBeHidden();
+  // 검수 기록(T-229): 확인 2(오프사이드 첫 사실·이적 시장) · 지움 2(오프사이드 둘째 사실·금칙 사실 개념 노드) · 고침 1(경기 시간)
+  await expect(page.locator('#reviewStats')).toHaveText('검수 기록: 사실 5개 중 지움 2개(40%) · 고침 1개(20%) · 확인 2개. 이 기기에만 남아요.');
+  expect(await page.evaluate(async () => (await chrome.storage.local.get('reviewStats')).reviewStats)).toMatchObject({ confirmed: 2, deleted: 2, edited: 1 });
   await page.click('#saveOverlay');
   await expect(page.locator('#overlayStatus')).toContainText('저장했어요');
 
