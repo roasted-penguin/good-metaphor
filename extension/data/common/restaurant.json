@@ -1110,23 +1110,6 @@
       ],
       "sourceKind": "community",
       "verifiedAt": "2026-11-28"
-    },
-    {
-      "id": "serving_robot",
-      "label": "서빙 로봇",
-      "facts": [
-        "음식점에서는 사람이 직접 음식을 나르는 대신 로봇이 자율주행으로 테이블까지 조리된 메뉴를 운반하고 직원은 응대 업무를 맡아 역할을 나눈다.",
-        "센서로 주변 장애물을 피하며 이동하고, 목적지에 도착한 뒤 화면을 통해 손님이 직접 확인을 누르거나 식기를 담는 방식으로 상호작용한다."
-      ],
-      "tags": [
-        "role_division"
-      ],
-      "sources": [
-        "https://namu.wiki/w/%EC%84%9C%EB%B9%99%EB%A1%9C%EB%B4%87",
-        "https://www.korea.kr/multi/visualNewsView.do?newsId=148929374"
-      ],
-      "sourceKind": "community",
-      "verifiedAt": "2026-11-28"
     }
   ],
   "edges": [
@@ -1394,11 +1377,6 @@
       "from": "franchise_escrow",
       "to": "franchise_fee",
       "rel": "낸 가맹금을 영업 시작 전까지 맡겨 둠"
-    },
-    {
-      "from": "serving_robot",
-      "to": "kitchen_division",
-      "rel": "분담"
     }
   ]
 }

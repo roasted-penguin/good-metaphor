@@ -25,12 +25,12 @@
     },
     "restaurant/eval": {
       "n": 22,
-      "hit1": 10,
+      "hit1": 11,
       "hit3": 14
     },
     "restaurant/holdout": {
       "n": 9,
-      "hit1": 5,
+      "hit1": 6,
       "hit3": 7
     }
   },
@@ -161,13 +161,13 @@
       {"sentence":"어린이집은 평가에서 기준 점수를 넘겨야 인증을 받고, 인증 뒤에도 관리 점검을 받는다.","kind":"hit","top3":["open_prep","key_money","loyalty_points"],"hit1":false,"hit3":false},
       {"sentence":"운전면허 시험은 안전 교육을 먼저 이수해야 응시할 수 있다.","kind":"hit","top3":["open_prep","hygiene_grade","restaurant_category"],"hit1":true,"hit3":true},
       {"sentence":"같은 곳에 불법 주차를 거듭할수록 처분이 점점 무거워진다.","kind":"hit","top3":["hygiene_inspection","market_saturation","lunch_peak"],"hit1":true,"hit3":true},
-      {"sentence":"영화 촬영장에서는 촬영, 조명, 편집 팀이 일을 나눠 맡고 감독이 전체를 지휘한다.","kind":"hit","top3":["kitchen_division","serving_robot","open_prep"],"hit1":true,"hit3":true},
+      {"sentence":"영화 촬영장에서는 촬영, 조명, 편집 팀이 일을 나눠 맡고 감독이 전체를 지휘한다.","kind":"hit","top3":["kitchen_division","open_prep","price_board"],"hit1":true,"hit3":true},
       {"sentence":"유튜브 채널을 넘길 때는 그동안 쌓은 구독자의 가치까지 값으로 쳐서 받는다.","kind":"hit","top3":["key_money","loyalty_points","business_succession"],"hit1":true,"hit3":true},
       {"sentence":"주유소는 도로에서 잘 보이도록 기름값을 큰 판에 걸어 둔다.","kind":"hit","top3":["limited_menu","loyalty_points","retirement_pay"],"hit1":false,"hit3":false},
       {"sentence":"학원을 열려면 교육청에 먼저 등록해야 하고, 등록하지 않고 수업하면 폐쇄 명령을 받는다.","kind":"hit","top3":["open_prep","health_certificate_rule","price_board"],"hit1":true,"hit3":true},
       {"sentence":"스타포스 이벤트 기간에는 강화 비용이 할인돼 유저들이 그때 몰아서 강화한다.","kind":"hit","top3":["happy_hour","fixed_variable_cost","shared_kitchen"],"hit1":true,"hit3":true},
       {"sentence":"메소 시세가 떨어져서 같은 아이템을 사려면 메소가 훨씬 더 든다.","kind":"hit","top3":["retirement_pay","startup_fund","hygiene_grade"],"hit1":false,"hit3":false},
-      {"sentence":"보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.","kind":"hit","top3":["serving_robot","kitchen_division","labor_contract"],"hit1":false,"hit3":true},
+      {"sentence":"보스 파티에서는 탱커, 딜러, 서포터가 역할을 나눠 공략한다.","kind":"hit","top3":["kitchen_division","labor_contract","open_prep"],"hit1":true,"hit3":true},
       {"sentence":"경매장에서 아이템이 팔리면 판매 대금에서 수수료가 빠진다.","kind":"hit","top3":["loyalty_points","card_fee","min_order_amount"],"hit1":false,"hit3":true},
       {"sentence":"주간 보스 결정석은 한 주에 팔 수 있는 개수가 정해져 있다.","kind":"hit","top3":["weekly_hour_cap","business_hours_limit","lease_renewal"],"hit1":false,"hit3":false},
       {"sentence":"Airlines overbook flights because some passengers never show up and their seats would fly empty.","kind":"hit","top3":["unfair_franchise_control","franchise_ad_cost","avg_spend"],"hit1":false,"hit3":false},
@@ -175,7 +175,7 @@
     ],
     "restaurant/holdout": [
       {"sentence":"썬데이 메이플에는 그날 하루만 경험치와 아이템 드롭 혜택이 커진다.","kind":"hit","top3":["happy_hour","limited_menu","hygiene_inspection"],"hit1":true,"hit3":true},
-      {"sentence":"파티 퀘스트에서 한 명은 몬스터를 모으고 다른 사람들은 모인 몬스터를 한꺼번에 처치한다.","kind":"hit","top3":["serving_robot","kitchen_division","loyalty_points"],"hit1":false,"hit3":true},
+      {"sentence":"파티 퀘스트에서 한 명은 몬스터를 모으고 다른 사람들은 모인 몬스터를 한꺼번에 처치한다.","kind":"hit","top3":["kitchen_division","loyalty_points","yellow_umbrella"],"hit1":true,"hit3":true},
       {"sentence":"The museum shop printed only a small batch of posters, and once they are gone there will be no reprint.","kind":"hit","top3":["limited_menu","unfair_franchise_control","franchise_termination"],"hit1":true,"hit3":true},
       {"sentence":"도서관 책을 거듭 늦게 반납할수록 대출 정지 기간이 길어진다.","kind":"hit","top3":["hygiene_inspection","lunch_peak","market_saturation"],"hit1":true,"hit3":true},
       {"sentence":"물류 창고는 오래 쌓인 상자부터 내보내고 날짜가 지난 물건은 골라서 버린다.","kind":"hit","top3":["annual_leave","hygiene_inspection","retirement_pay"],"hit1":false,"hit3":false},
