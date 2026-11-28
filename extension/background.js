@@ -5,7 +5,7 @@ import { buildChain, completeWithFallback } from './lib/fallback.js';
 import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
-import { addRecord, removeRecord, setReason, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
+import { addRecord, removeRecord, setReason, REASONS, applyFeedback, similarMemory, feedbackKey, maskSentence, bumpHover, summarizeFeedback, localDay, boostForNode, reportedNodes, feedbackForGraph } from './lib/feedback.js';
 import { callAnalogyServer, serverSkipReason, getInstallToken, serverOriginPattern, shouldCacheLocal, nextServerCooldown, inServerCooldown, cacheEntryFor, readCacheEntry } from './lib/analogy-server.js';
 import { runAbstract, runAnalogy } from './lib/pipeline.js';
 import { applyBlocklist, findBlocked, activeTerms } from './lib/blocklist.js';
@@ -19,6 +19,7 @@ import './lib/site-filter.js'; // globalThis.AnalogySiteFilter (콘텐츠 스크
 import { loadErrorReason } from './lib/embed-status.js';
 import { takeDailyCall } from './lib/agent.js';
 import { runFollowup, cleanQuestion } from './lib/agent-tools.js';
+import { runDiagnose, diagnoseAction } from './lib/agent-diagnose.js';
 
 /* ───────────── 오프스크린(임베딩) ───────────── */
 
@@ -452,30 +453,19 @@ function takeAgentCall(cap) {
 
 const str = (v, n) => String(v ?? '').slice(0, n);
 
-// 이어 묻기 한 번. 보내는 글은 호버와 같은 범위(문장·단어·앞 문장·제목)만 받는다(문단은 받지 않는다, ADR 0017 열린 결정 1).
-// LLM은 explain과 같은 길(사용자 제공자 → fallbackChain, 429 쿨다운 공유, 규칙 7·8)로 부른다. 호버 결과 캐시·피드백 기록은 건드리지 않는다
-async function followup({ payload, question, prev, candidateIds }) {
-  const t0 = Date.now();
-  const q = cleanQuestion(question);
-  if (!q) throw new Error('질문을 두 글자 이상 적어 주세요.');
-  const [settings, admin, provider, { graph }, blocklist] = await Promise.all([getSettings(), getAdminConfig(), resolveProvider(), getMergedGraph(), loadBlocklist()]);
-  const base = { answer: '', evidence: null, rejected: null, capped: false, found: [], theme: graph.theme, domain: graph.domain };
-  if (provider.def.kind === 'demo') return { ...base, stopText: '데모 모드에서는 이어 묻기를 쓸 수 없어요.', debug: { trace: [], calls: 0 } };
-  const p = { sentence: str(payload?.sentence, 1000), word: str(payload?.word, 100), context: str(payload?.context, 1000), pageTitle: str(payload?.pageTitle, 120) };
-  if (!p.sentence.trim()) throw new Error('물어볼 문장이 없어요.');
-  const pv = { meaning: str(prev?.meaning, 300), analogy: str(prev?.analogy, 300), evidence: prev?.evidence?.nodeId ? { nodeId: str(prev.evidence.nodeId, 100), nodeLabel: str(prev.evidence.nodeLabel, 100) } : null };
-  const cap = admin.agent?.dailyCallCap ?? AGENT_DAILY_CAP_DEFAULT;
-
+// 에이전트 공통 준비(T-216·T-220): LLM은 explain과 같은 길(사용자 제공자 → fallbackChain, 429 쿨다운 공유, 규칙 7·8),
+// search_graph 도구는 한 문장 임베딩(오프스크린, 한 문장씩) + retrieve. 제보로 빠진 공통 노드(T-118)는 호버처럼 뺀다.
+// 하루 상한은 이어 묻기·교정 진단이 같은 agentCalls를 센다
+async function agentDeps(graph) {
+  const [settings, admin, provider] = await Promise.all([getSettings(), getAdminConfig(), resolveProvider()]);
   const chain = buildChain(provider, admin, settings);
-  let answered = provider;
-  const fallbacks = [];
+  const state = { answered: provider, fallbacks: [] };
   const ask = async (system, user, opts) => {
     const r = await completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown });
-    answered = r.provider;
-    fallbacks.push(...r.fallbacks);
+    state.answered = r.provider;
+    state.fallbacks.push(...r.fallbacks);
     return r.text;
   };
-  // search_graph 도구: 한 문장 임베딩(오프스크린, 한 문장씩) + retrieve. 제보로 빠진 공통 노드(T-118)는 호버처럼 뺀다
   const searchGraph = async (text, exclude) => {
     const { vecs } = await ensureGraphVectors(graph);
     const { vectors: [v] } = await offscreen('embed', { texts: [text], kind: 'query' });
@@ -484,12 +474,72 @@ async function followup({ payload, question, prev, candidateIds }) {
     return retrieve(v, graph, vecs, { ...retrievalFor(admin.retrieval, graph), topK, aliasText: text })
       .filter(c => !exclude.includes(c.id) && !reported.has(c.id));
   };
+  const cap = admin.agent?.dailyCallCap ?? AGENT_DAILY_CAP_DEFAULT;
+  const providerText = () => `${state.answered.id}/${state.answered.model}`;
+  return { provider, ask, searchGraph, budget: { take: () => takeAgentCall(cap) }, state, providerText };
+}
+const cleanPayload = payload => ({ sentence: str(payload?.sentence, 1000), word: str(payload?.word, 100), context: str(payload?.context, 1000), pageTitle: str(payload?.pageTitle, 120) });
+const cleanEvidence = ev => (ev?.nodeId ? { nodeId: str(ev.nodeId, 100), nodeLabel: str(ev.nodeLabel, 100) } : null);
+
+// 이어 묻기 한 번. 보내는 글은 호버와 같은 범위(문장·단어·앞 문장·제목)만 받는다(문단은 받지 않는다, ADR 0017 열린 결정 1).
+// 호버 결과 캐시·피드백 기록은 건드리지 않는다
+async function followup({ payload, question, prev, candidateIds }) {
+  const t0 = Date.now();
+  const q = cleanQuestion(question);
+  if (!q) throw new Error('질문을 두 글자 이상 적어 주세요.');
+  const [{ graph }, blocklist] = await Promise.all([getMergedGraph(), loadBlocklist()]);
+  const base = { answer: '', evidence: null, rejected: null, capped: false, found: [], theme: graph.theme, domain: graph.domain };
+  const deps = await agentDeps(graph);
+  if (deps.provider.def.kind === 'demo') return { ...base, stopText: '데모 모드에서는 이어 묻기를 쓸 수 없어요.', debug: { trace: [], calls: 0 } };
+  const p = cleanPayload(payload);
+  if (!p.sentence.trim()) throw new Error('물어볼 문장이 없어요.');
+  const pv = { meaning: str(prev?.meaning, 300), analogy: str(prev?.analogy, 300), evidence: cleanEvidence(prev?.evidence) };
   const r = await keepAlive(runFollowup({
     graph, payload: p, question: q, prev: pv,
     candidateIds: Array.isArray(candidateIds) ? candidateIds.slice(0, 10).map(id => str(id, 100)) : [],
-    ask, searchGraph, blocklist, budget: { take: () => takeAgentCall(cap) }
+    ask: deps.ask, searchGraph: deps.searchGraph, blocklist, budget: deps.budget
   }));
-  return { ...base, ...r, question: q, debug: { ...r.debug, provider: `${answered.id}/${answered.model}`, fallbacks, ms: Date.now() - t0 } };
+  return { ...base, ...r, question: q, debug: { ...r.debug, provider: deps.providerText(), fallbacks: deps.state.fallbacks, ms: Date.now() - t0 } };
+}
+
+/* ───────────── 👎 교정 진단 에이전트 (T-220, ADR 0017 에이전트 3) ───────────── */
+
+// 원래 결과(👎한 결과) 기록 다듬기. 콘텐츠 스크립트가 준 값은 진단 단서로만 쓰고, 노드 사실은 늘 그래프에서 읽는다
+const num = v => (Number.isFinite(v) ? v : null);
+function cleanOrig(orig) {
+  const cands = Array.isArray(orig?.candidates) ? orig.candidates.slice(0, 10) : [];
+  return {
+    meaning: str(orig?.meaning, 300),
+    analogy: str(orig?.analogy, 300),
+    evidence: cleanEvidence(orig?.evidence),
+    candidates: cands.filter(c => typeof c?.id === 'string').map(c => ({ id: str(c.id, 100), label: str(c.label, 100), score: num(c.score), tagId: typeof c.tagId === 'string' ? str(c.tagId, 100) : null, tagSim: num(c.tagSim) })),
+    grounding: orig?.grounding ? { ok: orig.grounding.ok === true, reason: str(orig.grounding.reason, 40) } : null,
+    ending: orig?.ending ? { ok: orig.ending.ok !== false } : null,
+    reason: REASONS.includes(orig?.reason) ? orig.reason : null
+  };
+}
+
+// 진단 한 번. 쓰기는 하지 않는다(제안 action만 돌려주고, 사용자가 누르면 agent:diagnose-apply)
+async function diagnose({ payload, orig, rerun, downNodeId }) {
+  const t0 = Date.now();
+  const [{ graph, session }, blocklist, common] = await Promise.all([getMergedGraph(), loadBlocklist(), loadChosenCommon()]);
+  const base = { diagnosis: null, analogy: '', evidence: null, rejected: null, note: null, capped: false, found: [], action: null, theme: graph.theme, domain: graph.domain };
+  const deps = await agentDeps(graph);
+  if (deps.provider.def.kind === 'demo') return { ...base, stopText: '데모 모드에서는 살펴보기를 쓸 수 없어요.', debug: { trace: [], calls: 0 } };
+  const p = cleanPayload(payload);
+  if (!p.sentence.trim()) throw new Error('살펴볼 문장이 없어요.');
+  const o = cleanOrig(orig);
+  const down = str(downNodeId || o.evidence?.nodeId, 100);
+  const r = await keepAlive(runDiagnose({
+    graph, payload: p, orig: o,
+    rerun: rerun ? { analogy: str(rerun.analogy, 300), evidence: cleanEvidence(rerun.evidence) } : null,
+    downNodeIds: down ? [down] : [],
+    ask: deps.ask, searchGraph: deps.searchGraph, blocklist, budget: deps.budget
+  }));
+  const action = r.analogy && r.evidence
+    ? diagnoseAction({ graph, nodeId: r.evidence.nodeId, sentence: p.sentence, loggedIn: !!session, commonTagIds: new Set(common.tags.map(t => t.id)), blockTerms: blocklist })
+    : null;
+  return { ...base, ...r, action, downNodeId: down || null, debug: { ...r.debug, provider: deps.providerText(), fallbacks: deps.state.fallbacks, ms: Date.now() - t0 } };
 }
 
 /* ───────────── 메시지 ───────────── */
@@ -695,6 +745,24 @@ const handlers = {
   async explain(payload, sender) { await assertSiteAllowed(sender, payload?.topHost); countHover(); return explain(payload); },
   // 말풍선 이어 묻기(T-216). 제외 사이트 이중 방어는 explain과 같다
   async 'agent:ask'(msg, sender) { await assertSiteAllowed(sender, msg.payload?.topHost); return followup(msg); },
+  // 👎 교정 진단(T-220). 사용자가 "왜 틀렸는지 살펴볼게요"를 눌렀을 때만. 쓰기 없음
+  async 'agent:diagnose'(msg, sender) { await assertSiteAllowed(sender, msg.payload?.topHost); return diagnose(msg); },
+  // 진단 뒤 사용자가 누른 쓰기 하나: 피드백 층 고정(pick) 또는 로그인 + 내 노드·내 태그면 내 태그 예문(같은 pick 기록을
+  // syncCorrections가 corrections.js 거름으로 반영, T-131). 제안은 여기서 다시 계산해 콘텐츠 스크립트 값을 믿지 않는다.
+  // 공통 그래프는 어떤 길로도 쓰지 않는다(규칙 3·9)
+  async 'agent:diagnose-apply'({ kind, sentence, downNodeId, nodeId, provider, topHost }, sender) {
+    await assertSiteAllowed(sender, topHost);
+    if (kind !== 'pin' && kind !== 'example') throw new Error('알 수 없는 조치예요.');
+    const s = str(sentence, 1000);
+    if (!s.trim()) throw new Error('문장이 없어요.');
+    const [{ graph, session }, blockTerms, common] = await Promise.all([getMergedGraph(), loadBlocklist(), loadChosenCommon()]);
+    const action = diagnoseAction({ graph, nodeId: str(nodeId, 100), sentence: s, loggedIn: !!session, commonTagIds: new Set(common.tags.map(t => t.id)), blockTerms });
+    if (!action) throw new Error('지금 그래프에 없는 개념이에요.');
+    if (kind === 'example' && action.kind !== 'example') throw new Error(session ? '이 개념에는 내 태그 예문을 넣을 수 없어요.' : '로그인해야 내 태그 예문을 넣을 수 있어요.');
+    const down = str(downNodeId, 100);
+    const res = await handlers.feedback({ record: { sentence: s, nodeId: down && graph.nodes.some(n => n.id === down) ? down : null, tagId: null, vote: 'pick', pickedNodeId: action.nodeId, pickedTagId: action.tagId, provider: str(provider, 100) } }, sender);
+    return { id: res.id, kind: action.kind };
+  },
   // 피드백 기록 → 같은 문장을 바로 다시 비유(rerun이 있으면). 결과의 feedbackApplied로 반영 여부를 보인다
   async feedback({ record, rerun }, sender) {
     await assertSiteAllowed(sender, record?.topHost || rerun?.topHost);

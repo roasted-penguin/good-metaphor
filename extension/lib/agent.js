@@ -59,19 +59,24 @@ const FORMAT_NOTE = '\n\n[형식 오류] 앞 답은 정한 JSON이 아니었어�
  * - budget: { take: async () => bool } (선택). LLM 호출마다 먼저 부르고, false면 'daily-cap'으로 멈춘다.
  * - 형식이 틀리면 한 번 다시 묻고(교정 문구), 또 틀리면 'format'으로 멈춘다. 다시 묻기도 호출 상한에 든다.
  * - 같은 도구를 같은 인자로 다시 부르면 'repeat'으로 멈춘다(도구는 돌리지 않는다).
- * 돌려주는 값: { final, stop, error, trace, calls, steps, observations }
- *   stop: null(final) | 'steps' | 'calls' | 'repeat' | 'format' | 'llm-error' | 'daily-cap'
- *   trace: [{ step, type: 'action'|'final'|'format'|'stop', tool?, args?, ms, error? }] (debug.trace, 평가 도구가 읽는다)
+ * - verify(final) (선택, T-220 에이전트 3의 검증기): { ok, reason?, feedback?, value? }를 돌려준다. 지면 실패 답과
+ *   "[검증 실패] feedback"을 기록에 붙여 다시 묻는다(Reflexion식). maxVerifies번 지면 'verify'로 멈춘다.
+ *   다시 묻기도 단계·호출 상한에 든다.
+ * 돌려주는 값: { final, stop, error, trace, calls, steps, observations, verified, lastFinal }
+ *   stop: null(final) | 'steps' | 'calls' | 'repeat' | 'format' | 'llm-error' | 'daily-cap' | 'verify'
+ *   trace: [{ step, type: 'action'|'final'|'verify'|'format'|'stop', tool?, args?, ok?, reason?, ms, error? }] (debug.trace, 평가 도구가 읽는다)
+ *   verified: 마지막 verify 결과(검증기가 없으면 null), lastFinal: 마지막으로 받은 final(검증에 진 것 포함)
  */
-export async function runAgent({ system, user, tools = {}, ask, maxSteps = AGENT_MAX_STEPS, maxCalls = AGENT_MAX_CALLS, budget = null, now = Date.now }) {
+export async function runAgent({ system, user, tools = {}, ask, maxSteps = AGENT_MAX_STEPS, maxCalls = AGENT_MAX_CALLS, budget = null, verify = null, maxVerifies = 2, now = Date.now }) {
   const trace = [];
   const observations = [];
   const history = [];
   const tried = new Set();
-  let calls = 0, steps = 0;
+  let calls = 0, steps = 0, verifies = 0;
+  let verified = null, lastFinal = null;
   const done = (final, stop, error = null) => {
     if (stop) trace.push({ step: steps, type: 'stop', reason: stop, ms: 0, ...(error ? { error } : {}) });
-    return { final, stop, error, trace, calls, steps, observations };
+    return { final, stop, error, trace, calls, steps, observations, verified, lastFinal };
   };
   const prompt = (note = '') => {
     if (!history.length) return user + note;
@@ -102,7 +107,18 @@ export async function runAgent({ system, user, tools = {}, ask, maxSteps = AGENT
     steps++;
     if (act.type === 'final') {
       trace.push({ step: steps, type: 'final', ms: now() - t0 });
-      return done(act.final, null);
+      lastFinal = act.final;
+      if (!verify) return done(act.final, null);
+      const t1 = now();
+      verified = (await verify(act.final)) || { ok: false };
+      trace.push({ step: steps, type: 'verify', ok: !!verified.ok, ...(verified.ok ? {} : { reason: verified.reason || null }), ms: now() - t1 });
+      if (verified.ok) return done(act.final, null);
+      if (++verifies >= maxVerifies) return done(null, 'verify');
+      history.push({
+        action: clip(JSON.stringify({ final: act.final }), OBS_MAX),
+        result: `[검증 실패] ${verified.feedback || '검증을 통과하지 못했어요.'}`
+      });
+      continue;
     }
     const key = actionKey(act.name, act.args);
     const argsText = clip(JSON.stringify(act.args), ARGS_MAX);

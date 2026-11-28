@@ -14,6 +14,9 @@
 // 이어 묻기 에이전트(T-216): 시스템 프롬프트가 "이어서 묻는 질문"이면 JSON 액션으로 답한다(agentReply).
 //   첫 차례: 질문에 "다른"이 있으면 search_graph(근거 개념 제외), 아니면 get_node_facts(근거 개념).
 //   관찰이 있으면 그 결과 첫 노드의 첫 fact로 final. 질문에 "후보밖테스트"면 첫 차례에 후보 밖(그래프에는 있는) 노드로 final(규칙 1)
+// 👎 교정 진단 에이전트(T-220): 시스템 프롬프트가 "왜 틀렸는지 진단"이면 JSON 액션으로 답한다(diagnoseReply).
+//   첫 차례: 후보 개념이 있으면 첫 후보로 get_node_facts, 없으면 search_graph(쓰지 말 개념 제외).
+//   관찰이 있으면 cause "structure" + 그 노드 첫 fact로 새 비유 final. 문장에 "후보밖진단테스트"면 매번 후보 밖 노드로 final(검증기가 숨김)
 export const BLOCKED_IN_ANALOGY = '리.선.족';
 export const BLOCKED_IN_MEANING = '쌀 숭이';
 import http from 'node:http';
@@ -51,6 +54,26 @@ function agentReply(user) {
   if (!id || !fact) return out({ final: { answer: '딱 맞는 다른 개념은 없어요.', nodeId: null, usedFact: '' } });
   return out({ final: { answer: `${id[2]}도 같은 구조라서 비슷해요.`, nodeId: id[1], usedFact: JSON.parse(`"${fact}"`) } });
 }
+function diagnoseReply(system, user) {
+  const out = o => JSON.stringify(o);
+  const sentence = user.match(/설명할 문장: (.+)/)?.[1] || '';
+  const prefix = system.match(/answer는 "([^"]+)"로 시작/)?.[1] ?? '메이플로 치면';
+  if (sentence.includes('후보밖진단테스트')) {
+    const id = OUTSIDE_IDS.find(x => !user.includes(`id=${x} `));
+    return out({ final: { diagnosis: { cause: 'structure' }, answer: `${prefix} 레벨이 오를수록 더 많이 필요한 것과 같아요.`, nodeId: id, usedFact: '' } });
+  }
+  const results = [...user.matchAll(/결과: (.+)/g)].map(m => m[1]).filter(r => !r.startsWith('[검증 실패]'));
+  if (!results.length) {
+    const first = user.match(/후보 개념:\n- id=(\S+) \|/)?.[1];
+    const ex = [...(user.match(/쓰지 말 개념: (.+)/)?.[1] || '').matchAll(/id=([^\s,|]+)/g)].map(m => m[1]);
+    return first ? out({ action: 'get_node_facts', args: { nodeId: first } }) : out({ action: 'search_graph', args: { text: sentence, exclude: ex } });
+  }
+  const last = results.at(-1);
+  const id = last.match(/"id":"([^"]+)","label":"([^"]+)"/);
+  const fact = last.match(/"facts":\["((?:[^"\\]|\\.)*)"/)?.[1];
+  if (!id || !fact) return out({ final: { diagnosis: { cause: 'none' }, answer: '', nodeId: null, usedFact: '' } });
+  return out({ final: { diagnosis: { cause: 'structure' }, answer: `${prefix} ${id[2]}와 같은 구조예요.`, nodeId: id[1], usedFact: JSON.parse(`"${fact}"`) } });
+}
 export const analogyCalls = []; // 가짜 analogy-api 요청 기록 { headers, body }
 export const STREAM_GAP_MS = 1500;
 // 문장에 "로딩지연테스트"가 있으면 응답을 이만큼 늦춘다(로딩 말풍선을 붙잡아 두는 용도, T-108)
@@ -78,6 +101,7 @@ function mockLLM(req, res) {
       content = system.includes('"tags"') ? JSON.stringify({ abstract, tags: [{ id: 'prob_upgrade', p: 0.9 }, { id: 'none', p: 0.05 }] }) : abstract;
     }
     else if (system.includes('이어서 묻는 질문')) content = agentReply(user);
+    else if (system.includes('왜 틀렸는지 진단')) content = diagnoseReply(system, user);
     else if (user.includes('연결 성공')) content = '연결 성공';
     else {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
