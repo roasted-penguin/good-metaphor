@@ -93,6 +93,8 @@ extension/                   크롬에 로드되는 폴더. 빌드 결과(offscr
   lib/agent.js               제품 안 에이전트 루프(T-216, ADR 0017): JSON 액션 ReAct(`{action,args}`/`{final}`), 단계·호출 상한(4·4), 같은 도구·인자 반복 멈춤, 형식 틀리면 한 번 다시, `debug.trace`, 하루 호출 상한 `takeDailyCall`, 선택 검증기 훅 `verify`(지면 실패 이유를 관찰로 붙여 다시, `maxVerifies`면 `stop: 'verify'`, T-220). chrome.* 없음, ask·도구·budget 주입. 제공자 고유 function calling 안 씀(규칙 7)
   lib/agent-tools.js         에이전트 1 "말풍선 이어 묻기": 읽기 전용 도구(get_node_facts·search_graph·search_by_tag), 프롬프트(호버와 같은 범위만, 문단 전송 보류), 최종 답 검사 `finalizeAnswer`(규칙 1: 호버 후보 ∪ 도구로 본 노드만 → 근거 검사 → 금칙어), `runFollowup`. background `agent:ask`가 부르고, 하루 상한은 admin `agent.dailyCallCap`(호버 한도와 따로, `chrome.storage.local` `agentCalls`)
   lib/agent-diagnose.js      에이전트 3 "👎 교정 진단"(T-220): 원인 7개(structure·tag·facts·tone·number·meaning·none, 말풍선엔 고정 문구), 원래 결과 기록에서 코드 단서(`diagnoseHints`), 검증기 `verifyDiagnosis`(👎 개념 금지 → 규칙 1 → 근거 검사 → 금칙어 → 해요체), `runDiagnose`(5단계·LLM 4회·검증 2회, 이어 묻기 도구·하루 상한 공유), 쓰기 제안 `diagnoseAction`(고정, 로그인 + 내 노드·내 태그면 가린 예문 미리보기). 이 모듈은 쓰지 않는다
+  lib/interest-helper.js     에이전트 2 "새 관심사 만들기 도우미"(T-225): 코드가 순서를 쥐는 Plan-and-Execute + 평가자-개선자 상태 머신 `helperStep`(한 단계 = LLM 많아야 1회). 계획(못 덮은 통제 어휘 태그를 채울 익숙한 개념, 없는 구조는 skip) → 초안(`parseDraft` 거름, 출처 URL은 있으면 `sources`) → 평가(코드: 금칙어·수치·근접 중복 / LLM: 태그 적합성·익숙함·이름) → 고쳐 쓰기(노드당 1회, drop 가능) → 빈 태그 남으면 다시 계획(3바퀴) → 쓰기. 상한 초안 20·LLM 12·단계 30, 같은 태그 2번 실패면 "이 관심사에 없음". 상태는 JSON 하나, 쓰기는 `deps.write`로 검수 대기 노드만(`helperDraftNodes`·`mergeHelperDrafts`). chrome.* 없음
+  lib/node-checks.js         노드 검사 순수 함수(수치 `changingNumbers`·구조 먼저·대체 임베더 근접 중복 `dupIndex`·태그 적합성 프롬프트/답 읽기). `tools/node-pipeline/check.mjs`·`tag-fit.mjs`는 다시 내보내기만, 도우미와 같은 기준(T-225)
   lib/fallback-embed.js      모델 없을 때 쓰는 글자 n-gram 임베더
   config/admin.json          배포자 설정 (기본 제공자·모델, 허용 목록, 잠금, 저장소 주소, 가중치)
   data/common/tags.json     추상 태그 25개(통제 어휘, 규칙 9)의 원본. 새 태그는 맨 뒤에만(T-171: fixed_cost_leverage·vendor_lock_in, T-176: brokerage_fee, T-206: compliance_procedure, T-219: queue_rationing·self_service·time_window, 아직 쓰는 노드 없음). 관심사 그래프는 태그 id만 참조하고, 로더가 합친다 (T-304, ADR 0012)
@@ -115,6 +117,8 @@ scripts/                     build, prepare-e2e
 이어 묻기(T-216): 결과 말풍선의 `이어 묻기` → 칩(왜 비슷해요?·다른 비유는요?)·입력칸 → content.js가 `agent:ask`(같은 payload + 방금 결과 + 후보 id) → background `followup()`이 같은 fallback 체인으로 `runFollowup`(LLM 최대 4회, 호출마다 하루 상한 차감) → 최종 답 검사 → 말풍선 아래 Q/A(최근 3개). 호버 결과 캐시·피드백 기록은 건드리지 않는다.
 
 교정 진단(T-220): 👎 → 지금처럼 빠른 다시 비유(기본 경로 그대로) → 말풍선에 `왜 틀렸는지 살펴볼게요`(opt-in) → content.js가 `agent:diagnose`(같은 payload + 👎한 결과 기록(후보·점수·근거 검사·끝맺음·이유 칩) + 다시 만든 비유 + 👎 개념 id) → background `diagnose()`가 같은 fallback 체인으로 `runDiagnose`(읽기 도구 → final → 검증기, 지면 이유를 넣어 다시) → 한 줄 진단 + 새 비유, 아니면 "여기까지 했어요" + 이유. 쓰기는 버튼을 눌러야만 `agent:diagnose-apply`: 피드백 층 pick(고정), 로그인 + 내 노드·내 태그면 같은 pick을 `syncCorrections`가 내 태그 예문으로(서버 측에서 제안을 다시 계산, 로그아웃이면 예문 거절). 공통 그래프는 쓰지 않는다.
+
+새 관심사 도우미(T-225): 설정 "AI로 초안 만들기"(로그인만) `도우미로 만들기`(이름 + 메모 선택 + 시작 방식) → background `helper:start`가 `chrome.storage.session` `interestHelper`에 상태를 만들고 `runHelper`를 돌림(단계마다 저장, 서비스 워커가 깨면 맨 끝 `readHelper`·`helper:status`가 이어 감, LLM은 `agentDeps` 체인 `agent.providerOrder`, 호출마다 `agentCalls` 하루 상한 차감) → 설정 화면은 `helper:status`를 0.8초마다 물어 단계 줄·뺀 이유·없는 태그를 보임 → 끝나면 background가 로그인한 같은 사용자 오버레이 뒤에 검수 대기 노드만 붙여 저장, 화면은 다시 읽음(저장 안 한 편집이 있으면 새 노드만 붙임). 데모 제공자면 안내만, `한 번에 만들기`(T-301 `graph:draft`)는 그대로.
 
 ## 지켜야 할 규칙
 
