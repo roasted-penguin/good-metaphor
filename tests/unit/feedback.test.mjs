@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, feedbackPercent, formatFeedbackStats, similarMemory, boostForNode, reportedNodes, feedbackForGraph } from '../../extension/lib/feedback.js';
+import { addRecord, removeRecord, setReason, applyFeedback, feedbackKey, FEEDBACK_MAX, maskSentence, bumpHover, summarizeFeedback, summarizeAgentFeedback, formatAgentFeedbackStats, feedbackPercent, formatFeedbackStats, similarMemory, boostForNode, reportedNodes, feedbackForGraph } from '../../extension/lib/feedback.js';
 
 // 검색 후보(retrieve 결과 모양만 흉내)
 const cands = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, label: id.toUpperCase(), score: 1 - i * 0.1 }));
@@ -158,6 +158,32 @@ test('summarizeFeedback: 오늘 포함 지난 7일만 센다', () => {
   ];
   const counts = { '2026-11-01': 5, '2026-11-02': 3, '2026-11-08': 2 };
   assert.deepEqual(summarizeFeedback(records, counts, '2026-11-08'), { hovers: 5, up: 1, down: 2, pick: 1 });
+});
+
+test('summarizeAgentFeedback: 이어 묻기 답 뒤 👎(afterAgent)와 호버 뒤 👎를 나눠 7일 창으로 센다 (T-218)', () => {
+  const at = (day) => new Date(2026, 10, day, 12).getTime();
+  const records = [
+    rec({ ts: at(8), vote: 'down', afterAgent: true }),
+    rec({ ts: at(7), vote: 'down' }),
+    rec({ ts: at(6), vote: 'down' }),
+    rec({ ts: at(6), vote: 'up', afterAgent: true }), // 👍는 세지 않음
+    rec({ ts: at(1), vote: 'down', afterAgent: true }), // 범위 밖
+  ];
+  const hovers = { '2026-11-01': 9, '2026-11-06': 30, '2026-11-08': 10 };
+  const agent = { '2026-11-01': 3, '2026-11-08': 4 };
+  assert.deepEqual(summarizeAgentFeedback(records, hovers, agent, '2026-11-08'),
+    { answers: 4, downAfter: 1, agentPct: 25, hovers: 40, downHover: 2, hoverPct: 5 });
+  assert.deepEqual(summarizeAgentFeedback([], {}, {}, '2026-11-08'),
+    { answers: 0, downAfter: 0, agentPct: null, hovers: 0, downHover: 0, hoverPct: null });
+});
+
+test('formatAgentFeedbackStats: 이어 묻기 답이 없으면 null, 있으면 두 비율을 한 줄로 (T-218)', () => {
+  assert.equal(formatAgentFeedbackStats(null), null);
+  assert.equal(formatAgentFeedbackStats({ answers: 0, downAfter: 0, agentPct: null, hovers: 5, downHover: 1, hoverPct: 20 }), null);
+  assert.equal(formatAgentFeedbackStats({ answers: 4, downAfter: 1, agentPct: 25, hovers: 40, downHover: 2, hoverPct: 5 }),
+    '이어 묻기 답 4번 뒤 👎 1 (25%) · 호버 40번 뒤 👎 2 (5%)');
+  assert.equal(formatAgentFeedbackStats({ answers: 2, downAfter: 0, agentPct: 0, hovers: 0, downHover: 0, hoverPct: null }),
+    '이어 묻기 답 2번 뒤 👎 0 (0%) · 호버 0번 뒤 👎 0');
 });
 
 test('summarizeFeedback: 빈 입력이면 모두 0', () => {
