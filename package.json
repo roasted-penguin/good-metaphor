@@ -29,7 +29,8 @@
     "node-pipeline:apply": "node tools/node-pipeline/cli.mjs apply",
     "node-pipeline:accept-alt": "node tools/node-pipeline/cli.mjs accept-alt",
     "node-pipeline:explain-alt": "node tools/node-pipeline/cli.mjs explain-alt",
-    "check:vectors": "node tools/build-vectors.mjs --check"
+    "check:vectors": "node tools/build-vectors.mjs --check",
+    "eval:helper": "node tools/eval-helper.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0"
