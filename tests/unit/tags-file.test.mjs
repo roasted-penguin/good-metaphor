@@ -61,7 +61,7 @@ test('nodeText 스냅숏: 분리 전과 바이트 단위로 같다 (벡터 캐�
   // T-215: 커뮤니티 출처 묶음 노드 13개를 더해 전체 해시가 바뀐다(starforce·sol_erda는 그대로)
   assert.equal(sha1(text('starforce')), '5303d3c5de5c878933c1db407d87d32f8a07d9ba');
   assert.equal(sha1(text('sol_erda')), '7d32aa20155a45a6f7e367d6412601fdb8222384');
-  assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), '6e1ea56df9ff103d411bfe87a0a9d3d333eea61f');
+  assert.equal(sha1(g.nodes.map(n => nodeText(n, tagMap)).join('\n')), 'ee38e1174498faf6170c8474da365d66876d0461');
   // mergeGraphs는 노드가 쓰는 태그만 남긴다. 메이플 노드는 T-171 새 태그를 쓰지 않고 T-176 brokerage_fee(trade_fee)만 써서 19개
   assert.equal(g.tags.length, 19);
 });
