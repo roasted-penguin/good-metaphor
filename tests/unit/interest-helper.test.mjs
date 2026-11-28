@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   newHelperState, helperStep, runHelper, helperView, helperDraftNodes, mergeHelperDrafts,
   buildPlanPrompt, parsePlan, buildConceptDraftPrompt, buildEvalPrompt, parseEval, buildRewritePrompt, parseRewrite,
-  HELPER_LIMITS, HELPER_TEXT, PROBLEM_TEXT, HELPER_MARK, cleanNotes
+  HELPER_LIMITS, HELPER_TEXT, PROBLEM_TEXT, HELPER_MARK, cleanNotes, readList
 } from '../../extension/lib/interest-helper.js';
 import { DRAFT_LIMITS } from '../../extension/lib/draft.js';
 import { mergeGraphs } from '../../extension/lib/graph.js';
@@ -162,6 +162,33 @@ test('parseEval·parseRewrite: id로 묶고 꼴이 틀리면 null', () => {
   assert.equal(parseRewrite('x'), null);
 });
 
+test('감싸기 없는 최상위 배열도 읽는다(T-226 실측: Gemini 3.1 flash-lite 평가 답이 [...])', () => {
+  const arr = [{ id: 'u:a', tags: [{ id: 'cooldown', verdict: 'yes', reason: 'x' }], familiar: 'no', named: 'no' }];
+  assert.equal(parseEval(J(arr)).get('u:a').familiar, 'no');
+  assert.equal(parseEval('검사 결과:\n```json\n' + J(arr) + '\n```').get('u:a').tags.get('cooldown').verdict, 'yes');
+  assert.equal(parseEval('답: ' + J([...arr, { id: 'u:b', tags: [], familiar: 'yes', named: 'no' }]) + ' 끝').size, 2, '앞뒤 글이 있어도 둘 다');
+  assert.equal(parseRewrite(J([{ id: 'u:a', drop: true }])).get('u:a').drop, true);
+  const p = parsePlan(J([{ label: '오프사이드', tag: 'threshold_req', why: 'x' }]), { tagIds: new Set(TAGS.map(t => t.id)) });
+  assert.deepEqual(p.concepts.map(c => c.label), ['오프사이드']);
+  assert.deepEqual(p.skip, []);
+  assert.deepEqual(readList(J({ nodes: [{ a: 1 }] }), 'nodes'), [{ a: 1 }]);
+  assert.equal(readList(J({ x: [1, 2] }), 'nodes'), null, '숫자 배열은 노드 목록이 아니다');
+  assert.equal(readList(J({ nodes: 'x' }), 'nodes'), null);
+  assert.equal(readList('없음', 'nodes'), null);
+});
+
+test('초안 답이 최상위 배열이어도 출처를 받는다', async () => {
+  const f = fakeAsk({ plan: ['오프사이드'] });
+  const ask = async (system, user, opts) => {
+    const t = await f.ask(system, user, opts);
+    if (system.includes(HELPER_MARK.draft)) return J(JSON.parse(t).nodes.map(n => ({ ...n, source: 'https://example.com/a' })));
+    return t;
+  };
+  const d = deps({ ask });
+  await run(newHelperState({ name: '축구', mode: 'add' }), d);
+  assert.deepEqual(d.writes[0][0].sources, ['https://example.com/a']);
+});
+
 test('cleanNotes: 300자로 자르고 금칙어가 있으면 null', () => {
   assert.equal(cleanNotes('  메모  ', blockTerms), '메모');
   assert.equal(cleanNotes('가'.repeat(400), blockTerms).length, HELPER_LIMITS.notes);
@@ -291,17 +318,35 @@ test('금칙어: 초안 사실의 금칙어는 빠지고 이름의 금칙어면 
   assert.ok(!JSON.stringify(s).includes(BLOCKED));
 });
 
-test('빈 태그 루프: 다음 바퀴 계획은 덮지 못한 태그만 묻고, 계획이 skip한 태그는 "이 관심사에 없음"', async () => {
+test('빈 태그 루프: 다음 바퀴 계획은 덮지 못한 태그만 묻고, 계획이 두 번 skip한 태그는 "이 관심사에 없음"', async () => {
   const f = fakeAsk({ plan: ['오프사이드'], plan2: ['체력 안배'], skip: ['vendor_lock_in'] });
   const d = deps({ ask: f.ask });
   const { s } = await run(newHelperState({ name: '축구', mode: 'add' }), d);
   const plans = f.log.filter(x => x.k === 'plan');
   assert.ok(plans.length >= 2);
   assert.ok(!plans[1].user.includes('- threshold_req |'), '이미 덮은 태그는 다시 묻지 않는다');
-  assert.ok(!plans[1].user.includes('- vendor_lock_in |'), '없다고 한 태그도 다시 묻지 않는다');
+  // T-226: skip 한 번은 실패 1(첫 계획이 못 고른 태그를 몽땅 skip하던 문제). 다음 바퀴에 다시 묻고, 두 번째 skip에 없음
+  assert.ok(plans[1].user.includes('- vendor_lock_in |'), 'skip 한 번으로는 다시 묻는다');
+  if (plans[2]) assert.ok(!plans[2].user.includes('- vendor_lock_in |'), '두 번 skip하면 다시 묻지 않는다');
+  assert.equal(s.tagFails.vendor_lock_in, 2);
   assert.ok(s.absentTags.includes('vendor_lock_in'));
   assert.ok(plans.length <= HELPER_LIMITS.maxRounds);
   assert.deepEqual(d.writes[0].map(n => n.label).sort(), ['오프사이드', '체력 안배'].sort());
+});
+
+test('계획 skip 한 번은 "없음"이 아니다(실패 1, T-226)', async () => {
+  const f = fakeAsk({ plan: ['오프사이드'], plan2: [], skip: ['vendor_lock_in', 'brokerage_fee'] });
+  const d = deps({ ask: f.ask });
+  const s = await helperStep(newHelperState({ name: '축구', mode: 'add' }), d);
+  assert.deepEqual(s.absentTags, []);
+  assert.equal(s.tagFails.vendor_lock_in, 1);
+  assert.equal(s.tagFails.brokerage_fee, 1);
+});
+
+test('계획 프롬프트: 개수를 먼저 채우고 skip은 아예 없는 구조만(T-226)', () => {
+  const { system } = buildPlanPrompt({ name: '축구', tags: TAGS, targetTags: TAGS.map(t => t.id), avoid: [], n: 10 });
+  assert.match(system, /10개를 채우는 것이 먼저/);
+  assert.match(system, /이번에 고르지 않은 태그가 아니라/);
 });
 
 test('같은 태그가 두 번 실패하면 그 태그는 이 관심사에 없음으로 보고 다시 묻지 않는다', async () => {
