@@ -2,7 +2,8 @@
 // Plan-and-Execute + 평가자-개선자 루프. 자율 ReAct가 아니라 코드가 순서를 쥔다(목표·평가가 정해져 있어 호출 수를 통제하기 쉽다).
 //   plan     LLM: 아직 못 덮은 통제 어휘 태그(규칙 9)를 채울 개념 목록(그 관심사 팬이면 아는 것), 없는 구조는 skip
 //   draft    LLM: 개념마다 노드 초안(구조 먼저, 우리 말, 수치·인물·멸칭 없음, 출처 URL은 있으면) → draft.js parseDraft 거름
-//   evaluate 코드: 금칙어·수치·근접 중복(오버레이·초안 안) → LLM: 태그 적합성(노드 파이프라인과 같은 기준)·익숙함·이름
+//   evaluate 코드: 금칙어·수치·근접 중복(오버레이·초안 안) → LLM: 태그 적합성(노드 파이프라인과 같은 기준)·익숙함·이름.
+//            평가 LLM은 그 노드를 쓴 제공자를 피한다(deps.ask 넷째 인자 { avoid }, T-229)
 //   optimize LLM: 걸린 노드를 고쳐 쓰거나 포기(drop). 노드당 1회, 고친 노드는 다시 평가
 //   (빈 태그가 남고 예산이 남으면 plan으로) → write: 통과한 노드만 검수 대기(draft: true)로 → done
 // helperStep 한 번에 LLM은 많아야 한 번이다. 상태는 JSON 하나라 background가 단계마다 chrome.storage.session에 저장하고,
@@ -19,8 +20,8 @@ export const HELPER_LIMITS = {
   maxSteps: 30,               // 단계(LLM 없는 단계 포함) 안전 상한
   maxRounds: 3,               // 계획 바퀴
   firstPlan: 10,              // 첫 계획 개념 수
-  laterPlan: 6,               // 다음 바퀴 개념 수
-  batch: 5,                   // 초안·평가·고쳐 쓰기 한 번에 다루는 노드 수
+  laterPlan: 10,              // 다음 바퀴 개념 수 상한(빈 태그마다 하나씩, T-229)
+  batch: 10,                  // 초안·평가·고쳐 쓰기 한 번에 다루는 노드 수(T-229: 5 → 10, 같은 호출로 개념을 두 배)
   rewrites: 1,                // 노드당 고쳐 쓰기
   tagFails: 2,                // 같은 태그가 이만큼 실패하면 "이 관심사에 없음"
   notes: 300,                 // 메모 글자
@@ -28,6 +29,8 @@ export const HELPER_LIMITS = {
 };
 // 남은 호출이 이보다 적으면 그 단계를 시작하지 않는다. 쓴 초안은 늘 평가를 거치게(초안 1 + 평가 1)
 const NEED = { plan: 3, draft: 2, optimize: 2, evaluate: 1 };
+// 한 번에 10개를 다루므로 답이 길다(노드당 약 300토큰)
+const MAX_TOKENS = 6000;
 
 export const HELPER_STATE_VERSION = 1;
 // 가짜 LLM(e2e)·평가 도구가 단계를 알아보는 표시어. 시스템 프롬프트 첫 줄에 들어간다
@@ -40,7 +43,7 @@ export const HELPER_MARK = {
 
 export const HELPER_TEXT = {
   cap: '오늘 AI 도우미를 다 썼어요. 내일 다시 해 주세요.',
-  calls: '호출 상한에 닿아 여기까지 했어요.',
+  calls: '호출 상한에 닿아 계획한 개념 일부는 넣지 못했어요.',
   steps: '단계 상한에 닿아 여기까지 했어요.',
   llm: '지금은 AI를 부를 수 없어서 여기까지 했어요.',
   format: 'AI 답을 읽지 못해서 여기까지 했어요.',
@@ -49,6 +52,14 @@ export const HELPER_TEXT = {
   running: '이미 만들고 있어요. 끝나면 다시 해 주세요.',
   notesBlocked: '메모에 쓸 수 없는 표현이 있어요.',
   demo: '데모 모드에서는 도우미를 쓸 수 없어요. "한 번에 만들기"를 써 주세요.'
+};
+// 정상 종료 이유(T-229). 상한 멈춤(stop)과 달리 버린 초안이 없다. 화면에는 덮은 태그 수와 함께 보인다
+export const END_TEXT = {
+  covered: '찾을 수 있는 태그를 모두 찾았어요.',
+  full: `초안 상한 ${DRAFT_LIMITS.max}개를 채웠어요.`,
+  rounds: '정해 둔 계획 바퀴를 다 돌았어요.',
+  budget: '정해 둔 AI 호출 수 안에서 마쳤어요.',
+  noMore: '더 고를 개념이 없다고 해서 마쳤어요.'
 };
 const STOP_TEXT = { 'daily-cap': HELPER_TEXT.cap, calls: HELPER_TEXT.calls, steps: HELPER_TEXT.steps, 'llm-error': HELPER_TEXT.llm, format: HELPER_TEXT.format };
 
@@ -91,7 +102,8 @@ export function newHelperState({ name, notes = '', mode = 'add', now = Date.now(
     calls: 0, steps: 0, round: 0,
     pending: [], queue: [], fix: [], accepted: [], dropped: [],
     tagFails: {}, planFails: 0, absentTags: [], log: [],
-    stop: null, error: null, written: 0
+    stop: null, end: null, error: null, written: 0,
+    evalBy: { other: 0, same: 0 } // 평가를 쓴 쪽과 다른 제공자가 했는지(T-229)
   };
 }
 
@@ -104,14 +116,17 @@ const COMMON_RULES = [
   '사실을 지어내지 않는다. 널리 알려진 확실한 것만 쓰고, 모르면 뺀다.'
 ];
 
-export function buildPlanPrompt({ name, notes = '', tags, targetTags, avoid = [], n }) {
+// perTag(T-229, 둘째 바퀴부터): 남은 태그마다 개념 하나씩. 첫 바퀴는 개수 먼저(T-226)
+export function buildPlanPrompt({ name, notes = '', tags, targetTags, avoid = [], n, perTag = false }) {
   const want = new Set(targetTags);
   const system = [
     `너는 사용자의 관심사 "${name}"의 ${HELPER_MARK.plan}다. 이 개념들은 나중에 낯선 문장을 그 관심사에 빗대 설명할 때 근거로 쓰인다.`,
     '규칙:',
     `1. "${name}"을 즐기는 사람이면 누구나 바로 떠올리는 익숙한 개념만 고른다. 전문가만 아는 용어·제도는 고르지 않는다.`,
     '2. 개념마다 [채울 태그] 중 하나(tag)를 정한다. 그 개념이 "무엇이 무엇에 따라 어떻게 바뀌는가"라는 태그의 구조를 실제로 가져야 한다. 서로 다른 태그를 넓게 덮는다.',
-    `3. 개념은 ${n}개를 채우는 것이 먼저다. skip은 이번에 고르지 않은 태그가 아니라, "${name}"에 그 구조를 가진 익숙한 개념이 아예 없다고 확신하는 태그만 넣는다(억지로 만들지는 않는다).`,
+    perTag
+      ? `3. [채울 태그]마다 그 구조를 가진 익숙한 개념을 하나씩 고른다(태그 하나에 개념 하나, 서로 다른 태그). skip에는 "${name}"에 그 구조를 가진 익숙한 개념이 아예 없다고 확신하는 태그만 넣는다(억지로 만들지는 않는다).`
+      : `3. 개념은 ${n}개를 채우는 것이 먼저다. skip은 이번에 고르지 않은 태그가 아니라, "${name}"에 그 구조를 가진 익숙한 개념이 아예 없다고 확신하는 태그만 넣는다(억지로 만들지는 않는다).`,
     `4. [피할 이름]과 같거나 거의 같은 개념은 고르지 않는다. 개념은 많아야 ${n}개.`,
     ...COMMON_RULES.map((r, i) => `${i + 5}. ${r}`),
     `${COMMON_RULES.length + 5}. JSON 객체만 출력한다. 형식: {"concepts": [{"label": "개념 이름(40자 이내)", "tag": "태그 id", "why": "한 줄"}], "skip": ["태그 id"]}`
@@ -119,7 +134,7 @@ export function buildPlanPrompt({ name, notes = '', tags, targetTags, avoid = []
   const user = [
     `관심사: ${name}`,
     ...(notes ? [`사용자 메모: ${notes}`] : []),
-    `개념 수: 많아야 ${n}개`,
+    perTag ? `개념 수: [채울 태그]마다 하나, 많아야 ${n}개` : `개념 수: 많아야 ${n}개`,
     '',
     '[채울 태그]',
     ...tags.filter(t => want.has(t.id)).map(tagLine),
@@ -223,21 +238,24 @@ export function readList(text, key) {
 }
 
 // 계획 답 → { concepts: [{label, tag, why}], skip, dropped } | null. 목록 밖 태그·금칙어 이름·중복·피할 이름은 버린다
-export function parsePlan(text, { tagIds, blockTerms = [], avoid = [], n = HELPER_LIMITS.firstPlan } = {}) {
+// perTag면 태그마다 첫 개념만 받는다(넓게 덮기, T-229)
+export function parsePlan(text, { tagIds, blockTerms = [], avoid = [], n = HELPER_LIMITS.firstPlan, perTag = false } = {}) {
   const j = readObj(text);
   const list = readList(text, 'concepts');
   if (!list) return null;
   const seen = new Set(avoid.map(normLabel));
-  const concepts = [], dropped = [];
+  const concepts = [], dropped = [], usedTags = new Set();
   for (const c of list) {
     const label = typeof c?.label === 'string' ? c.label.trim() : '';
     if (!label || label.length > DRAFT_LIMITS.label) continue;
     if (findBlocked(label, blockTerms)) { dropped.push({ label: '(가림)', reason: PROBLEM_TEXT.blocked }); continue; }
     if (!tagIds.has(c.tag)) continue;
+    if (perTag && usedTags.has(c.tag)) continue;
     const key = normLabel(label);
     if (seen.has(key)) continue;
     seen.add(key);
     if (concepts.length >= n) break;
+    usedTags.add(c.tag);
     concepts.push({ label, tag: c.tag, why: clip(c.why, 120) });
   }
   const skip = [...new Set(Array.isArray(j?.skip) ? j.skip : [])].filter(id => tagIds.has(id));
@@ -300,13 +318,17 @@ function drop(s, node, reason, limits) {
   if (TAG_FAULT.has(reason)) failTag(s, node.target, limits);
 }
 
-// LLM 한 번. { text } 또는 { stop }. 호출 상한 → 하루 상한(budget) 순으로 본다
-async function callLLM(s, deps, limits, system, user) {
+// LLM 한 번. { text, by } 또는 { stop }. 호출 상한 → 하루 상한(budget) 순으로 본다.
+// avoid(T-229): 평가 단계가 피할 제공자 id(그 노드를 쓴 쪽). deps.ask가 체인에서 그 제공자를 뒤로 미룬다(하나뿐이면 같은 쪽).
+// by: 답한 제공자 id(deps.lastProvider, 없으면 null). 노드에 적어 두었다가 평가 때 피한다
+async function callLLM(s, deps, limits, system, user, { avoid = [] } = {}) {
   if (s.calls >= limits.maxCalls) return { stop: 'calls' };
   if (deps.budget && !(await deps.budget.take())) return { stop: 'daily-cap' };
   s.calls++;
-  try { return { text: await deps.ask(system, user, { json: true, jsonObject: true, maxTokens: 4000 }) }; }
-  catch (e) { return { stop: 'llm-error', error: String(e?.message || e).slice(0, 200) }; }
+  try {
+    const text = await deps.ask(system, user, { json: true, jsonObject: true, maxTokens: MAX_TOKENS }, avoid.length ? { avoid } : undefined);
+    return { text, by: deps.lastProvider?.() || null };
+  } catch (e) { return { stop: 'llm-error', error: String(e?.message || e).slice(0, 200) }; }
 }
 
 // 멈춤: 평가를 거치지 않은 초안은 넣지 않고(뺀 목록에 이유) 쓰기 단계로
@@ -331,12 +353,21 @@ function next(s, limits, tagIds) {
   }
   else if (s.pending.length) s.phase = left >= NEED.draft ? 'draft' : 'halt:calls';
   else {
+    // 할 일이 다 끝났다. 다음 바퀴를 못 도는 것은 상한 멈춤이 아니라 정상 종료다(T-229: 늘 "호출 상한에 닿아"가 보이던 문제).
+    // 버린 초안이 없으니 stop은 비워 두고 end에 이유만 남긴다
     const target = targetTags(s, tagIds);
     const room = limits.maxNodes - liveCount(s);
-    if (!target.length || room <= 0 || s.round >= limits.maxRounds) s.phase = 'write';
-    else s.phase = left >= NEED.plan ? 'plan' : 'halt:calls';
+    const end = !target.length ? 'covered' : room <= 0 ? 'full' : s.round >= limits.maxRounds ? 'rounds' : left < NEED.plan ? 'budget' : null;
+    if (end) finish(s, end);
+    else s.phase = 'plan';
   }
   if (s.phase === 'halt:calls') halt(s, 'calls');
+}
+
+function finish(s, end) {
+  s.end = end;
+  s.phase = 'write';
+  addLog(s, 'end', END_TEXT[end]);
 }
 
 const targetTags = (s, tagIds) => { const c = covered(s); return [...tagIds].filter(t => !c.has(t) && !s.absentTags.includes(t)); };
@@ -344,13 +375,15 @@ const targetTags = (s, tagIds) => { const c = covered(s); return [...tagIds].fil
 async function stepPlan(s, deps, limits) {
   const tagIds = tagIdSet(deps);
   const target = targetTags(s, tagIds);
-  const n = Math.min(s.round === 0 ? limits.firstPlan : limits.laterPlan, limits.maxNodes - liveCount(s));
+  // 둘째 바퀴부터는 남은 태그마다 하나씩(T-229: 늦은 바퀴가 6개만 골라 태그 절반이 손도 못 댄 채 끝났다)
+  const perTag = s.round > 0;
+  const n = Math.min(perTag ? Math.min(limits.laterPlan, target.length) : limits.firstPlan, limits.maxNodes - liveCount(s));
   const avoid = [...(deps.existing || []).map(x => x.label), ...s.accepted.map(x => x.label), ...s.dropped.map(x => x.label).filter(l => l !== '(가림)')];
-  const { system, user } = buildPlanPrompt({ name: s.name, notes: s.notes, tags: deps.tags, targetTags: target, avoid: [...new Set(avoid)], n });
+  const { system, user } = buildPlanPrompt({ name: s.name, notes: s.notes, tags: deps.tags, targetTags: target, avoid: [...new Set(avoid)], n, perTag });
   const r = await callLLM(s, deps, limits, system, user);
   if (r.stop) return halt(s, r.stop, r.error);
   s.round++;
-  const p = parsePlan(r.text, { tagIds, blockTerms: deps.blockTerms, avoid, n });
+  const p = parsePlan(r.text, { tagIds, blockTerms: deps.blockTerms, avoid, n, perTag });
   if (!p) {
     addLog(s, 'plan', '계획 답을 읽지 못했어요.');
     // 한 번은 같은 바퀴로 다시 묻는다(T-226 실측: Gemini 3.1 flash-lite가 JSON 모드에서도 따옴표 없는 값을 내 커피 첫 계획에서 멈췄다)
@@ -365,7 +398,7 @@ async function stepPlan(s, deps, limits) {
   s.pending = p.concepts;
   addLog(s, 'plan', `${s.round}바퀴 계획: 개념 ${p.concepts.length}개${p.skip.length ? `, 이 관심사에 없는 구조 ${p.skip.length}개` : ''}`);
   // 더 고를 개념이 없다고 하면 바퀴를 더 돌지 않는다(같은 질문을 되풀이해 호출을 쓰지 않게)
-  if (!p.concepts.length) { s.phase = 'write'; return; }
+  if (!p.concepts.length) return finish(s, 'noMore');
   next(s, limits, tagIds);
 }
 
@@ -392,7 +425,7 @@ async function stepDraft(s, deps, limits) {
     got.add(normLabel(c.label));
     if (liveCount(s) >= limits.maxNodes) { s.dropped.push({ label: nd.label, reason: PROBLEM_TEXT.overMax }); continue; }
     const src = sourceOf(nd.label);
-    s.queue.push({ id: nd.id, label: nd.label, facts: nd.facts, tags: nd.tags, ...(src ? { sources: [src] } : {}), target: c.tag, rewrites: 0, evalTries: 0 });
+    s.queue.push({ id: nd.id, label: nd.label, facts: nd.facts, tags: nd.tags, ...(src ? { sources: [src] } : {}), target: c.tag, rewrites: 0, evalTries: 0, ...(r.by ? { by: r.by } : {}) });
     added++;
   }
   for (const d of parsed.dropped) s.dropped.push(d);
@@ -448,8 +481,12 @@ async function stepEvaluate(s, deps, limits) {
   let verdicts = new Map(), unread = false;
   if (toAsk.length) {
     const { system, user } = buildEvalPrompt({ name: s.name, nodes: toAsk, tags: deps.tags });
-    const r = await callLLM(s, deps, limits, system, user);
+    // 평가자는 쓴 쪽과 다른 제공자로(T-229: 같은 Gemini가 쓰고 평가해 늦은 바퀴 억지 태그 13건이 통과했다)
+    const avoid = [...new Set(toAsk.map(n => n.by).filter(Boolean))];
+    const r = await callLLM(s, deps, limits, system, user, { avoid });
     if (r.stop) { s.queue = [...toAsk, ...s.queue]; for (const n of batch.filter(b => !toAsk.includes(b))) settle(s, n, codeOf.get(n.id), limits); return halt(s, r.stop, r.error); }
+    if (!s.evalBy) s.evalBy = { other: 0, same: 0 };
+    if (r.by && avoid.length) s.evalBy[avoid.includes(r.by) ? 'same' : 'other']++;
     const v = parseEval(r.text);
     if (!v) {
       unread = true;
@@ -498,7 +535,7 @@ async function stepOptimize(s, deps, limits) {
     const nd = p.nodes[0];
     if (!nd) { drop(s, node, p.dropped.some(d => /표현/.test(d.reason)) ? 'blocked' : problems[0], limits); continue; }
     const src = typeof x.source === 'string' && httpUrl(x.source.trim()) ? [x.source.trim()] : node.sources;
-    s.queue.push({ id: node.id, label: nd.label, facts: nd.facts, tags: nd.tags, ...(src ? { sources: src } : {}), target: node.target, rewrites: node.rewrites + 1, evalTries: 0 });
+    s.queue.push({ id: node.id, label: nd.label, facts: nd.facts, tags: nd.tags, ...(src ? { sources: src } : {}), target: node.target, rewrites: node.rewrites + 1, evalTries: 0, ...(r.by ? { by: r.by } : {}) });
     rewritten++;
   }
   addLog(s, 'optimize', `고쳐 쓰기 ${rewritten}개${gaveUp ? ` · 포기 ${gaveUp}개` : ''}`);
@@ -583,10 +620,13 @@ export function helperView(s, tags = []) {
   if (!s) return null;
   const label = new Map(tags.map(t => [t.id, t.label]));
   const stopText = s.status === 'error' ? (s.error || HELPER_TEXT.writeFail) : (s.stop ? STOP_TEXT[s.stop] || '' : '');
+  const coveredN = new Set((s.accepted || []).flatMap(n => n.tags || [])).size;
+  // 정상 종료(T-229): 상한 문구 대신 덮은 태그 수. 상한 멈춤(stop)일 때만 "상한에 닿아"
+  const endText = !s.stop && s.end && tags.length && s.written ? `태그 ${tags.length}개 중 ${coveredN}개를 덮었어요.` : '';
   let doneText = '';
   if (s.status === 'done') {
     // 멈춤 이유가 있으면 그것만(상한인데 "이름을 바꿔 보라"고 하지 않는다), 넣은 초안이 있으면 그 뒤에 덧붙인다
-    if (s.written) doneText = `초안 ${s.written}개를 검수 대기에 넣었어요. 사실을 하나씩 확인해 주세요.${stopText ? ` ${stopText}` : ''}`;
+    if (s.written) doneText = `초안 ${s.written}개를 검수 대기에 넣었어요. 사실을 하나씩 확인해 주세요.${stopText ? ` ${stopText}` : endText ? ` ${endText}` : ''}`;
     else doneText = stopText || '쓸 수 있는 초안이 없어요. 이름을 바꿔 다시 해 보세요.';
   }
   return {
@@ -594,6 +634,7 @@ export function helperView(s, tags = []) {
     calls: s.calls, steps: s.steps, accepted: s.accepted.length, waiting: s.pending.length + s.queue.length + s.fix.length,
     written: s.written, log: s.log.map(l => ({ ...l })), dropped: s.dropped.map(d => ({ ...d })),
     absentTags: s.absentTags.map(id => ({ id, label: label.get(id) || id })),
-    stop: s.stop, stopText, doneText, updatedAt: s.updatedAt
+    stop: s.stop, end: s.end || null, endText: s.end ? END_TEXT[s.end] || '' : '', covered: coveredN,
+    evalBy: { ...(s.evalBy || { other: 0, same: 0 }) }, stopText, doneText, updatedAt: s.updatedAt
   };
 }

@@ -1,7 +1,7 @@
 // 서비스 워커: 저장소 병합 → 임베딩 → 그래프 검색 → LLM 비유 생성
 import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './lib/config.js';
 import { complete, PROVIDERS } from './lib/providers.js';
-import { buildChain, completeWithFallback, reorderChain } from './lib/fallback.js';
+import { buildChain, completeWithFallback, reorderChain, preferOthers } from './lib/fallback.js';
 import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
@@ -462,8 +462,9 @@ async function agentDeps(graph) {
   // 에이전트는 JSON 액션 형식을 잘 지키는 순서로(T-222, admin agent.providerOrder). 체인 항목끼리 자리만 바꾼다
   const chain = reorderChain(buildChain(provider, admin, settings), admin.agent?.providerOrder);
   const state = { answered: chain[0] || provider, fallbacks: [] };
-  const ask = async (system, user, opts) => {
-    const r = await completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown });
+  // route.avoid(T-229, 도우미 평가자): 그 제공자를 체인 뒤로 미룬다(preferOthers, 하나뿐이면 같은 쪽)
+  const ask = async (system, user, opts, route) => {
+    const r = await completeWithFallback(preferOthers(chain, route?.avoid), system, user, opts, { cooldowns, cooldown: admin.cooldown });
     state.answered = r.provider;
     state.fallbacks.push(...r.fallbacks);
     return r.text;
@@ -478,7 +479,7 @@ async function agentDeps(graph) {
   };
   const cap = admin.agent?.dailyCallCap ?? AGENT_DAILY_CAP_DEFAULT;
   const providerText = () => `${state.answered.id}/${state.answered.model}`;
-  return { provider, ask, searchGraph, budget: { take: () => takeAgentCall(cap) }, state, providerText };
+  return { provider, ask, searchGraph, budget: { take: () => takeAgentCall(cap) }, state, providerText, lastProvider: () => state.answered?.id || null };
 }
 const cleanPayload = payload => ({ sentence: str(payload?.sentence, 1000), word: str(payload?.word, 100), context: str(payload?.context, 1000), pageTitle: str(payload?.pageTitle, 120) });
 const cleanEvidence = ev => (ev?.nodeId ? { nodeId: str(ev.nodeId, 100), nodeLabel: str(ev.nodeLabel, 100) } : null);
@@ -564,7 +565,7 @@ async function helperDeps(st) {
   const ov = normalizeOverlay(overlay);
   const existing = [...(ov.nodes || []), ...(st.mode === 'add' ? common.nodes : [])];
   return {
-    ask: agent.ask, budget: agent.budget, tags: common.tags, blockTerms, existing,
+    ask: agent.ask, lastProvider: agent.lastProvider, budget: agent.budget, tags: common.tags, blockTerms, existing,
     reservedIds: common.nodes.map(n => n.id),
     write: async nodes => {
       const { store, session, overlay: fresh } = await getSessionAndOverlay();

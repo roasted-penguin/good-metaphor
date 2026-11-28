@@ -33,6 +33,16 @@ export function reorderChain(chain, order) {
   return chain.map(p => (movable(p) ? picked[k++] : p));
 }
 
+// 다른 제공자 먼저(T-229, 새 관심사 도우미 평가자): avoid에 든 제공자(id) 항목을 로컬 앞, 맨 뒤로 미룬다.
+// 쓴 쪽과 다른 모델이 평가하게 하되, 다른 제공자가 없거나 모두 막히면 같은 쪽이 받는다(빼지 않는다).
+// 항목을 더하거나 빼지 않아 체인 길이와 상관없고(규칙 7), 로컬(def.local)은 늘 맨 뒤다(규칙 8)
+export function preferOthers(chain, avoid) {
+  if (!Array.isArray(avoid) || !avoid.length) return chain;
+  const local = p => !!p.def?.local;
+  const hit = p => !local(p) && avoid.includes(p.id);
+  return [...chain.filter(p => !local(p) && !hit(p)), ...chain.filter(hit), ...chain.filter(local)];
+}
+
 // 다음 순서로 넘길 오류인가: 일시 오류와 모델 출력 400만. 키 오류(400·401·403)는 그대로 던진다
 // modelOutput: 모델이 정한 형식 대신 고유 함수 호출을 내 서버가 거절한 400(T-222). 그 모델 문제라 다음 순서로 넘긴다(쿨다운 없음)
 const passes = e => e.status === 429 || e.status === 503 || e.network || e.modelOutput || /시간이 초과/.test(e.message);
