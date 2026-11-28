@@ -11,6 +11,9 @@
 // 비유 문구는 시스템 프롬프트의 analogyPrefix("4. analogy는 "…" 문구로 시작")를 따른다(T-302, 관심사별 말머리 확인용)
 // AI 초안(T-301): 시스템 프롬프트가 "개념 노드 목록으로 정리"면 DRAFT_NODES 를 코드블록 JSON으로 답한다.
 //   쓸 수 있는 노드 4개(숫자 경고 1) + 목록 밖 태그만 있는 노드 1(버림) + 금칙어 사실 1개가 섞인 노드(그 사실만 버림)
+// 이어 묻기 에이전트(T-216): 시스템 프롬프트가 "이어서 묻는 질문"이면 JSON 액션으로 답한다(agentReply).
+//   첫 차례: 질문에 "다른"이 있으면 search_graph(근거 개념 제외), 아니면 get_node_facts(근거 개념).
+//   관찰이 있으면 그 결과 첫 노드의 첫 fact로 final. 질문에 "후보밖테스트"면 첫 차례에 후보 밖(그래프에는 있는) 노드로 final(규칙 1)
 export const BLOCKED_IN_ANALOGY = '리.선.족';
 export const BLOCKED_IN_MEANING = '쌀 숭이';
 import http from 'node:http';
@@ -25,6 +28,29 @@ export const DRAFT_NODES = [
 ];
 
 export const calls = [];
+// 후보 밖 final용: 그래프에 있는 노드 중 프롬프트 후보에 없는 첫 노드(T-216)
+const OUTSIDE_IDS = ['level_exp', 'quick_pass', 'trait', 'profession'];
+function agentReply(user) {
+  const out = o => JSON.stringify(o);
+  const q = user.match(/질문: (.+)/)?.[1] || '';
+  const ev = user.match(/근거 개념: id=(\S+)/)?.[1] || user.match(/- id=(\S+) \|/)?.[1] || null;
+  const sentence = user.match(/설명할 문장: (.+)/)?.[1] || '';
+  if (q.includes('후보밖테스트')) {
+    const id = OUTSIDE_IDS.find(x => !user.includes(`id=${x} `));
+    return out({ final: { answer: '레벨이 오를수록 더 많이 필요한 것과 같아요.', nodeId: id, usedFact: '' } });
+  }
+  const results = [...user.matchAll(/결과: (.+)/g)].map(m => m[1]);
+  if (!results.length) {
+    return q.includes('다른')
+      ? out({ action: 'search_graph', args: { text: sentence, exclude: ev ? [ev] : [] } })
+      : out({ action: 'get_node_facts', args: { nodeId: ev } });
+  }
+  const last = results.at(-1);
+  const id = last.match(/"id":"([^"]+)","label":"([^"]+)"/);
+  const fact = last.match(/"facts":\["((?:[^"\\]|\\.)*)"/)?.[1];
+  if (!id || !fact) return out({ final: { answer: '딱 맞는 다른 개념은 없어요.', nodeId: null, usedFact: '' } });
+  return out({ final: { answer: `${id[2]}도 같은 구조라서 비슷해요.`, nodeId: id[1], usedFact: JSON.parse(`"${fact}"`) } });
+}
 export const analogyCalls = []; // 가짜 analogy-api 요청 기록 { headers, body }
 export const STREAM_GAP_MS = 1500;
 // 문장에 "로딩지연테스트"가 있으면 응답을 이만큼 늦춘다(로딩 말풍선을 붙잡아 두는 용도, T-108)
@@ -51,6 +77,7 @@ function mockLLM(req, res) {
       // 정밀 모드 태그 판정이 켜져 있으면(T-184) 같은 호출이 JSON으로 추상 구조와 태그 확률을 함께 돌려준다
       content = system.includes('"tags"') ? JSON.stringify({ abstract, tags: [{ id: 'prob_upgrade', p: 0.9 }, { id: 'none', p: 0.05 }] }) : abstract;
     }
+    else if (system.includes('이어서 묻는 질문')) content = agentReply(user);
     else if (user.includes('연결 성공')) content = '연결 성공';
     else {
       const [, id, label] = user.match(/\[1\] id=(\S+) \| (.+)/);
