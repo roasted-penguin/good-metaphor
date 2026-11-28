@@ -426,6 +426,13 @@ test('이어 가기: 평가 단계 중간 상태에서 시작해도 끝까지 �
   assert.equal(s.status, 'done');
 });
 
+test('계획이 더 고를 개념이 없다고 하면 바퀴를 더 돌지 않는다', async () => {
+  const f = fakeAsk({ plan: ['오프사이드'], plan2: [] });
+  const d = deps({ ask: f.ask });
+  await run(newHelperState({ name: '축구', mode: 'add' }), d);
+  assert.equal(f.log.filter(x => x.k === 'plan').length, 2);
+});
+
 test('끝난 상태는 더 돌지 않는다', async () => {
   const f = fakeAsk();
   const d = deps({ ask: f.ask });
