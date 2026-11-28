@@ -4,7 +4,7 @@ import { test as base, expect, chromium } from '@playwright/test';
 import { mkdtempSync, readFileSync, cpSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { startServers, calls, analogyCalls, SERVER_ANALOGY, GHOST_NODE, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES } from './servers.mjs';
+import { startServers, calls, analogyCalls, SERVER_ANALOGY, GHOST_NODE, BLOCKED_IN_ANALOGY, BLOCKED_IN_MEANING, DRAFT_NODES, HELPER_FACTS, HELPER_FIXED_FACT } from './servers.mjs';
 import { loadCommonGraphFromDisk } from '../../tools/load-graph.mjs';
 import { COMMON_INTERESTS } from '../../extension/lib/graph.js';
 import { openBrowserEmbedder } from '../../tools/browser-embedder.mjs';
@@ -2871,7 +2871,7 @@ test('AI 초안 수정 1회차(T-301): 저장 안내 한 줄, 금칙어 이름�
   await send({ type: 'auth:login', nickname: '마감' });
   await page.reload();
   await openDraftPanel(page);
-  await expect(page.locator('#draftPanel')).toContainText('초안 만들기를 누르면 검수 대기에 넣고 바로 저장해요.');
+  await expect(page.locator('#draftPanel')).toContainText('어느 쪽이든 만든 초안은 검수 대기에 넣고 바로 저장해요.');
 
   let since = calls.length;
   await page.fill('#draftName', `${BLOCKED_IN_ANALOGY} 게임`);
@@ -2891,6 +2891,135 @@ test('AI 초안 수정 1회차(T-301): 저장 안내 한 줄, 금칙어 이름�
   expect(draftCalls(since)).toHaveLength(1);
   expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
   await expect(page.locator('#draftRun')).toBeEnabled();
+});
+
+/* ───────── 새 관심사 만들기 도우미 (T-225) ───────── */
+const helperCalls = since => calls.slice(since).filter(c => /개념 목록을 계획하는 도우미|노드 초안을 쓰는 도우미|초안 노드를 검사하는 도우미|검사에 걸린 노드를 고쳐 쓰는 도우미/.test(c.system));
+const helperKind = c => (c.system.includes('계획하는') ? 'plan' : c.system.includes('초안을 쓰는') ? 'draft' : c.system.includes('검사하는') ? 'evaluate' : 'rewrite');
+const waitHelperDone = (send, timeout = 20_000) => expect.poll(async () => (await send({ type: 'helper:status' })).data?.status, { timeout }).not.toBe('running');
+
+test('도우미(T-225): 로그아웃이면 막힘 → 계획·초안·평가·고쳐 쓰기 → 검수 대기, 약한 태그 노드는 빠지고 숫자는 고쳐 씀, 공통 그래프 그대로', async ({ ext }) => {
+  const { page, send } = ext;
+  await expect(page.locator('#draftPanel')).toBeHidden();
+  const denied = await send({ type: 'helper:start', name: '축구', mode: 'add' });
+  expect(denied.ok).toBe(false);
+  expect(denied.error).toBe('로그인이 필요해요.');
+  const commonBefore = (await send({ type: 'graph:info' })).data.common.nodes;
+
+  await send({ type: 'auth:login', nickname: '도우미' });
+  await page.reload();
+  await openDraftPanel(page);
+  await page.click('#helperRun');
+  await expect(page.locator('#draftStatus')).toHaveText('관심사 이름을 1~30자로 적어 주세요.');
+  await page.fill('#helperNotes', `${BLOCKED_IN_ANALOGY} 얘기`);
+  await page.fill('#draftName', '축구');
+  await page.click('#helperRun');
+  await expect(page.locator('#draftStatus')).toHaveText('메모에 쓸 수 없는 표현이 있어요.');
+
+  const since = calls.length;
+  await page.fill('#helperNotes', '국내 리그 위주');
+  await page.click('#helperRun');
+  await expect(page.locator('#draftStatus')).toContainText('초안 3개를 검수 대기에 넣었어요.', { timeout: 20_000 });
+  // 단계 줄: 계획 → 초안 → 검사 → 고쳐 쓰기 → 넣기
+  const log = page.locator('#helperLog');
+  await expect(log).toContainText('1바퀴 계획: 개념 4개');
+  await expect(log).toContainText('초안 4개를 썼어요.');
+  await expect(log).toContainText('고쳐 쓰기');
+  await expect(log).toContainText('검수 대기에 3개를 넣었어요.');
+  await expect(page.locator('#draftDropped')).toContainText('억지 태그 개념: 이 관심사에 맞는 구조가 없어요.');
+  await expect(page.locator('#helperAbsent')).toContainText('이 관심사에 없는 구조로 본 태그');
+  // 검수 대기 화면에 바로 보인다
+  await expect(page.locator('#reviewList > li')).toHaveCount(3);
+  await expect(page.locator('#myNodeList > li')).toHaveCount(0);
+
+  // 호출: 계획(메모 포함) → 초안 → 검사(숫자 노드는 빼고) → 고쳐 쓰기 → 다시 검사 → 다음 바퀴 계획, 모두 가짜 LLM(에이전트 체인)
+  const hc = helperCalls(since);
+  expect(hc.map(helperKind)).toEqual(['plan', 'draft', 'evaluate', 'rewrite', 'evaluate', 'plan']);
+  expect(hc[0].user).toContain('사용자 메모: 국내 리그 위주');
+  expect(hc[2].user).not.toContain('90분');
+  expect(hc[5].user).not.toContain('- threshold_req |');
+  expect(hc[5].user).not.toContain('- vendor_lock_in |');
+  const st = (await send({ type: 'helper:status' })).data;
+  expect(st).toMatchObject({ status: 'done', written: 3, calls: 6, stop: null });
+
+  // 저장: 초안 노드만, 검수 전, 출처는 있으면 sources, 공통 그래프는 그대로
+  const ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.useCommon).toBe(true);
+  expect(ov.nodes.map(n => n.label)).toEqual(['오프사이드', '이적 시장', '경기 시간']);
+  for (const n of ov.nodes) {
+    expect(n.draft, n.label).toBe(true);
+    expect(n.factsReviewed, n.label).toEqual(n.facts.map(() => false));
+    expect(n.id).toMatch(/^u:/);
+  }
+  expect(ov.nodes[0].sources).toEqual([HELPER_FACTS['오프사이드'].source]);
+  expect(ov.nodes[2].facts).toEqual([HELPER_FIXED_FACT]);
+  const info = (await send({ type: 'graph:info' })).data;
+  expect(info.common.nodes).toBe(commonBefore);
+  expect(info.merged.userNodes).toBe(0);
+  // 검수 전 초안은 검색 후보에 없다(규칙 1)
+  const r = await send({ type: 'explain', sentence: HELPER_FACTS['이적 시장'].facts[0], noCache: true });
+  expect(r.data.debug.candidates.map(c => c.id)).not.toContain(ov.nodes[1].id);
+});
+
+test('도우미(T-225): 에이전트 하루 상한을 다 쓰면 LLM 없이 상한 문구, 데모 제공자면 안내', async ({ ext }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '상한' });
+  await page.evaluate(async () => {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await chrome.storage.local.set({ agentCalls: { day, count: 9999 } });
+  });
+  await page.reload();
+  await openDraftPanel(page);
+  const since = calls.length;
+  await page.fill('#draftName', '축구');
+  await page.click('#helperRun');
+  await expect(page.locator('#draftStatus')).toHaveText('오늘 AI 도우미를 다 썼어요. 내일 다시 해 주세요.', { timeout: 10_000 });
+  expect(helperCalls(since)).toHaveLength(0);
+  expect((await send({ type: 'helper:status' })).data.stop).toBe('daily-cap');
+  expect((await send({ type: 'overlay:get' })).data.nodes).toEqual([]);
+
+  await ext.setSettings({ provider: 'demo' });
+  const demo = await send({ type: 'helper:start', name: '축구', mode: 'add' });
+  expect(demo.ok).toBe(false);
+  expect(demo.error).toContain('데모 모드에서는 도우미를 쓸 수 없어요.');
+});
+
+test('도우미(T-225): 세션 저장소의 중간 상태에서 이어 가고, 서비스 워커를 멈췄다 깨워도 끝까지 간다', async ({ ext, context }) => {
+  const { page, send } = ext;
+  await send({ type: 'auth:login', nickname: '이어' });
+  // (1) 평가 단계 중간 상태를 넣고 상태를 물으면 background가 그 자리부터 이어 간다(계획·초안을 다시 부르지 않음)
+  let since = calls.length;
+  await page.evaluate(async node => {
+    await chrome.storage.session.set({ interestHelper: {
+      v: 1, status: 'running', phase: 'evaluate', name: '축구', notes: '', mode: 'add', user: '이어', startedAt: 0, updatedAt: 0,
+      calls: 2, steps: 2, round: 1, pending: [], queue: [node], fix: [], accepted: [], dropped: [],
+      tagFails: {}, absentTags: ['vendor_lock_in'], log: [{ phase: 'plan', text: '1바퀴 계획: 개념 1개' }], stop: null, error: null, written: 0
+    } });
+  }, { id: 'u:resume1', label: '이적 시장', facts: HELPER_FACTS['이적 시장'].facts, tags: ['market_price'], target: 'market_price', rewrites: 0, evalTries: 0 });
+  await send({ type: 'helper:status' });
+  await waitHelperDone(send);
+  expect(helperCalls(since).map(helperKind)[0]).toBe('evaluate');
+  let ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes.map(n => n.id)).toEqual(['u:resume1']);
+  expect(ov.nodes[0].draft).toBe(true);
+
+  // (2) 실제 서비스 워커 정지: 느린 가짜 LLM으로 시작해 첫 호출이 나간 뒤 멈추고, 상태를 물어 깨우면 이어서 끝난다
+  since = calls.length;
+  const started = await send({ type: 'helper:start', name: '도우미지연테스트', mode: 'add' });
+  expect(started.ok).toBe(true);
+  await expect.poll(() => helperCalls(since).length, { timeout: 10_000 }).toBeGreaterThan(0);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('ServiceWorker.enable');
+  await cdp.send('ServiceWorker.stopAllWorkers');
+  await waitHelperDone(send, 40_000);
+  const st = (await send({ type: 'helper:status' })).data;
+  expect(st.status).toBe('done');
+  expect(st.written).toBe(2); // 이미 있는 "이적 시장"은 계획에서 피하고, 억지 태그 개념은 빠진다
+  // 첫 계획 호출 도중 워커가 멈춰 그 단계를 다시 돌았다(저장된 앞 단계에서 이어 감)
+  expect(helperCalls(since).filter(c => helperKind(c) === 'plan' && c.user.includes('많아야 10개')).length).toBe(2);
+  ov = (await send({ type: 'overlay:get' })).data;
+  expect(ov.nodes.filter(n => n.draft).map(n => n.label)).toEqual(['이적 시장', '오프사이드', '경기 시간']);
 });
 
 /* ───────── 공통 관심사 선택: 메이플 / 식당 (T-302) ───────── */
