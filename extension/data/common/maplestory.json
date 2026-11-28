@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "maplestory",
-  "version": "2026.11.23-5",
+  "version": "2026.11.28-1",
   "domain": "메이플스토리",
   "analogyPrefix": "메이플로 치면",
   "theme": "maple",
@@ -1476,6 +1476,154 @@
       "tags": ["periodic_cap"],
       "sources": ["https://maplestory.nexon.com/news/update/678"],
       "verifiedAt": "2026-11-23"
+    },
+    {
+      "id": "combo_kill", "label": "콤보킬",
+      "facts": [
+        "몬스터를 끊기지 않고 연달아 처치하면 콤보가 쌓이고, 한동안 처치가 없거나 채널을 옮기면 콤보가 끊긴다.",
+        "콤보가 정해진 수만큼 쌓일 때마다 경험치 구슬이 생기고, 누적 콤보가 클수록 구슬도 단계가 올라 더 많은 경험치를 준다.",
+        "구슬 경험치는 몬스터 기본 경험치를 기준으로 정해져 있어, 다른 경험치 보너스가 많은 고레벨로 갈수록 전체에서 차지하는 비중이 줄어든다."
+      ],
+      "tags": ["threshold_req", "diminishing_returns"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/453", "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "growth_potion", "label": "성장의 비약",
+      "facts": [
+        "성장의 비약은 정해진 레벨 범위 안의 캐릭터가 쓰면 그 자리에서 레벨을 하나 올려 준다.",
+        "범위보다 높은 레벨에서 쓰면 범위 끝 레벨 하나를 올리는 만큼의 경험치만 주므로, 레벨이 높아질수록 같은 비약으로 오르는 비율이 작아진다."
+      ],
+      "tags": ["diminishing_returns"],
+      "sources": ["https://maplestory.nexon.com/News/Notice/138894", "https://www.inven.co.kr/board/maple/2304/18586"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "drop_meso_rate", "label": "아이템 드롭률과 메소 획득량", "aliases": ["드메"],
+      "facts": [
+        "아이템 드롭률과 메소 획득량 옵션은 사냥과 보스에서 얻는 아이템과 메소를 늘리지만, 장비 잠재능력으로 올릴 수 있는 양에는 상한이 있다.",
+        "드롭률이 일정 수준을 넘으면 메소 주머니가 거의 확실히 떨어져서, 그 기준까지는 드롭률을 먼저 맞추고 그 뒤로는 메소 획득량을 올리는 순서를 따진다.",
+        "이 옵션 장비는 전투 능력을 덜어 내는 대신 수입을 늘리므로 사냥할 때만 바꿔 끼기도 한다."
+      ],
+      "tags": ["efficiency_metric"],
+      "sources": ["https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4", "https://www.inven.co.kr/board/maple/2304/11607"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "damage_stacking", "label": "데미지 합연산과 곱연산",
+      "facts": [
+        "데미지와 보스 몬스터 데미지 옵션은 모두 더해서 한 번에 적용되는 합연산이라, 이미 많이 가진 상태에서 같은 양을 더하면 실제로 늘어나는 비율이 점점 작아진다.",
+        "최종 데미지는 다른 옵션과 따로 곱해지는 곱연산이라, 이미 가진 양과 상관없이 붙은 비율만큼 피해가 늘어난다."
+      ],
+      "tags": ["diminishing_returns"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/390", "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "fame_points", "label": "인기도",
+      "facts": [
+        "인기도는 다른 플레이어가 올리거나 내려 줄 수 있는 수치로, 한 캐릭터는 하루에 한 번만 남의 인기도를 바꿀 수 있다.",
+        "같은 상대에게는 한 번 올려 준 뒤 다음 달이 되어야 다시 올려 줄 수 있다.",
+        "인기도가 오르면 매력 성향도 함께 올라서, 거래 상대의 신뢰도를 가늠하는 지표나 매력 레벨을 채우는 수단으로 쓰인다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://namu.wiki/w/%EC%9D%B8%EA%B8%B0%EB%8F%84", "https://maplestory.nexon.com/guide/n23gameinformation/articles/382"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "maple_homework", "label": "메할일(일일·주간 숙제)", "aliases": ["메할일"],
+      "facts": [
+        "매일 하는 일일 퀘스트와 매주 하는 주간 보스·주간 퀘스트처럼 정해진 주기로 반복하는 일과를 흔히 숙제나 메할일이라 부른다.",
+        "일일 숙제는 자정에, 주간 숙제는 정해진 요일에 초기화되어 그 전에 끝내지 못하면 그 주기의 몫은 사라진다."
+      ],
+      "tags": ["periodic_cap"],
+      "sources": ["https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4", "https://www.inven.co.kr/board/maple/2304/39607"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "boss_gear_generation", "label": "보스 장비 세대",
+      "facts": [
+        "보스 방어구와 무기 세트는 루타비스, 앱솔랩스, 아케인셰이드, 에테르넬처럼 더 강한 보스에서 나오는 다음 세대로 이어지고, 세대가 오를수록 착용 레벨과 성능이 높아진다.",
+        "다음 세대가 널리 쓰이면 이전 세대 장비는 매물이 넘쳐 아주 싼값에 거래되고, 새로 키우는 캐릭터가 잠깐 거쳐 가는 장비가 된다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://namu.wiki/w/%EC%95%84%EC%BC%80%EC%9D%B8%EC%85%B0%EC%9D%B4%EB%93%9C%20%EC%84%B8%ED%8A%B8", "https://maplestory.nexon.com/guide/n23gameinformation/articles/459"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "combat_analysis", "label": "전투분석",
+      "facts": [
+        "정해진 시간 동안 캐릭터가 준 데미지, 얻은 메소와 경험치, 처치한 몬스터 수를 재서 보여 주는 기능이다.",
+        "같은 시간 동안 사냥터나 스킬 배치를 바꿔 가며 재면 어느 쪽이 더 많이 버는지 숫자로 비교할 수 있다.",
+        "스킬별로 준 데미지와 사용 횟수도 따로 보여 줘서, 어떤 스킬이 딜에서 얼마를 차지하는지 확인하는 데 쓴다."
+      ],
+      "tags": ["efficiency_metric"],
+      "sources": ["https://maplestory.nexon.com/news/update/407", "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "sol_erda_fragment", "label": "솔 에르다 조각 시세",
+      "facts": [
+        "솔 에르다 조각은 HEXA 코어를 강화하는 데 꼭 필요한 재료로, 사냥과 보스에서 얻고 다른 사람과 거래할 수 있다.",
+        "모두가 필요로 해서 경매장 가격이 수요와 공급에 따라 오르내리고, 새 6차 스킬 소식이나 획득량을 늘리는 이벤트가 있으면 값이 크게 흔들린다."
+      ],
+      "tags": ["market_price"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/405", "https://www.inven.co.kr/board/maple/5974/6801760"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "wonderberry", "label": "위습의 원더베리",
+      "facts": [
+        "캐시로 사는 위습의 원더베리를 쓰면 원더 펫이나 펫 관련 소비 아이템 가운데 하나가 정해진 확률로 무작위로 나온다.",
+        "원하는 펫이 나올 때까지 여러 개를 쓰는 경우가 많고, 얻은 펫은 한 번 교환할 수 있어 시장에서 거래된다."
+      ],
+      "tags": ["random_reroll"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/437", "https://namu.wiki/w/%EC%9C%84%EC%8A%B5%EC%9D%98%20%EC%9B%90%EB%8D%94%EB%B2%A0%EB%A6%AC"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "genesis_liberation", "label": "제네시스 무기 해방",
+      "facts": [
+        "제네시스 무기 해방 퀘스트는 검은 마법사 군단장 보스들을 차례로 잡아 어둠의 흔적을 정해진 만큼 모아야 다음 단계로 넘어간다.",
+        "어둠의 흔적은 주간 보스에서 얻어 일주일에 모을 수 있는 양이 정해져 있어서, 해방까지 여러 주가 걸린다.",
+        "모든 단계를 마치면 봉인이 풀린 제네시스 무기를 얻는다."
+      ],
+      "tags": ["progression_gate", "periodic_cap"],
+      "sources": ["https://maplestory.nexon.com/news/update/762", "https://namu.wiki/w/%EC%A0%9C%EB%84%A4%EC%8B%9C%EC%8A%A4%20%EB%AC%B4%EA%B8%B0"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "multi_kill", "label": "멀티킬",
+      "facts": [
+        "한 번에 처치한 몬스터 수가 많을수록 보너스 경험치가 커지는 구조라, 몬스터를 모아 한꺼번에 잡는 쪽이 같은 시간에 더 많은 경험치를 번다.",
+        "한 번의 공격으로 여러 마리를 동시에 처치하면 처치 수에 따라 추가 경험치가 붙는데, 이를 멀티킬이라 한다."
+      ],
+      "tags": ["efficiency_metric"],
+      "sources": ["https://maplestory.nexon.com/guide/n23gameinformation/articles/453", "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
+    },
+    {
+      "id": "budget_gear", "label": "흙템(가성비 장비)",
+      "facts": [
+        "강화 단계가 높을수록 한 단계 올리는 비용은 급격히 커지는데 늘어나는 성능은 비슷해서, 상위 장비를 낮은 단계까지만 강화해 쓰는 흙템이 가성비가 좋다.",
+        "흙템은 완성 수준 장비보다 훨씬 싼 값으로 최소한의 성능을 챙긴 장비를 가리킨다."
+      ],
+      "tags": ["diminishing_returns"],
+      "sources": ["https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4", "https://www.inven.co.kr/board/maple/2304/40365"],
+      "sourceKind": "community",
+      "verifiedAt": "2026-11-28"
     }
   ],
   "edges": [
@@ -1590,6 +1738,18 @@
     { "from": "union_rank_expansion", "to": "union_start", "rel": "확장하는" },
     { "from": "kalos_boss", "to": "boss_entry", "rel": "입장 조건을 갖춘" },
     { "from": "inventory_item_crafting", "to": "profession", "rel": "제작 기술 활용" },
-    { "from": "protect_esfera", "to": "arcane_symbol", "rel": "보상으로 획득" }
+    { "from": "protect_esfera", "to": "arcane_symbol", "rel": "보상으로 획득" },
+    { "from": "combo_kill", "to": "hunting", "rel": "사냥 경험치를 더함" },
+    { "from": "growth_potion", "to": "level_exp", "rel": "레벨업 요구 경험치에 따라 효과가 달라짐" },
+    { "from": "drop_meso_rate", "to": "hunting", "rel": "사냥 수입을 늘림" },
+    { "from": "fame_points", "to": "trait", "rel": "매력 성향을 올림" },
+    { "from": "maple_homework", "to": "weekly_boss", "rel": "주간 숙제의 하나" },
+    { "from": "boss_gear_generation", "to": "set_effect", "rel": "같은 세대끼리 세트 효과" },
+    { "from": "combat_analysis", "to": "hunting", "rel": "사냥 효율을 잼" },
+    { "from": "sol_erda_fragment", "to": "sol_erda", "rel": "함께 쓰는 강화 재료" },
+    { "from": "genesis_liberation", "to": "genesis_pass", "rel": "흔적 획득을 늘리는 패스" },
+    { "from": "genesis_liberation", "to": "weekly_boss", "rel": "주간 보스에서 흔적을 얻음" },
+    { "from": "multi_kill", "to": "hunting", "rel": "사냥 효율을 높임" },
+    { "from": "budget_gear", "to": "starforce", "rel": "강화 단계를 어디서 멈출지 정함" }
   ]
 }

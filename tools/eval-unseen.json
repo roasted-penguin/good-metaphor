@@ -29,7 +29,7 @@
   { "sentence": "직원을 계속 늘려도 공장 생산량은 처음만큼 늘지 않는다.", "expectNodes": ["level_exp"], "expectTag": "diminishing_returns", "since": "T-155", "batch": "T-155" },
   { "sentence": "주유소가 오늘 하루만 리터당 할인을 크게 해 줘서 차들이 길게 줄을 섰다.", "expectNodes": ["exp_coupon", "hunting", "starforce_event"], "expectTag": "temporary_multiplier", "since": "T-155", "batch": "T-155" },
   { "sentence": "항공사 마일리지는 가족끼리 합산해서 한 사람의 항공권을 끊는 데 쓸 수 있다.", "expectNodes": ["union_link", "symbol_catalyst", "achievement", "world_archive", "quest_story_skip_id"], "expectTag": "shared_bonus", "since": "T-155", "batch": "T-155" },
-  { "sentence": "택배 무료 반품은 한 달에 두 번까지만 신청할 수 있다.", "expectNodes": ["weekly_boss", "arcane_symbol", "custom_illustration_ticket"], "expectTag": "periodic_cap", "since": "T-155", "batch": "T-155" },
+  { "sentence": "택배 무료 반품은 한 달에 두 번까지만 신청할 수 있다.", "expectNodes": ["weekly_boss", "arcane_symbol", "custom_illustration_ticket", "genesis_liberation"], "expectTag": "periodic_cap", "since": "T-155", "batch": "T-155" },
   { "sentence": "은퇴한 선수가 마지막 경기에서 친 공은 세상에 하나뿐이라 수집가들이 수억 원을 부른다.", "expectNodes": ["auction"], "expectTag": "scarcity_value", "since": "T-155", "batch": "T-155" },
   { "sentence": "이사철인 봄에는 이삿짐 센터를 찾는 집이 몰려 견적이 비싸지고, 한겨울에는 값이 내려간다.", "expectNodes": ["auction"], "expectTag": "market_price", "group": "finance", "since": "T-186", "batch": "T-186" },
   { "sentence": "올해 귤 농사가 풍년이라 시장에 귤이 넘쳐 한 박스 값이 작년의 절반으로 떨어졌다.", "expectNodes": ["auction"], "expectTag": "market_price", "group": "finance", "since": "T-186", "batch": "T-186" },
