@@ -261,7 +261,7 @@ function toolCallText(calls) {
 
 // 모델이 선언되지 않은 도구를 불러 서버가 거절한 400(Groq tool_use_failed). 키 오류가 아니라 모델 출력 문제다
 export function isToolUseFailed(e) {
-  return e?.status === 400 && /tool_use_failed|called a tool|json_validate_failed/i.test(`${e.body || ''} ${e.message || ''}`);
+  return e?.status === 400 && /tool_use_failed|called a tool|json_validate_failed|failed to validate json/i.test(`${e.body || ''} ${e.message || ''}`);
 }
 
 // 스트림 도중 온 error 이벤트(Gemini {"error":{"code":503,...}}, OpenAI 호환·Anthropic {"error":{"message"}})를

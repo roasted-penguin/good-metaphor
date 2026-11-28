@@ -224,6 +224,7 @@ test('openai-compat: 400 tool_use_failed에 원래 생성(failed_generation)이 
 test('isToolUseFailed: 모델 출력 400만(키 오류 400은 아님)', () => {
   assert.equal(isToolUseFailed({ status: 400, message: '400 Tool choice is none, but model called a tool' }), true);
   assert.equal(isToolUseFailed({ status: 400, message: '400 bad', body: '{"error":{"code":"json_validate_failed"}}' }), true);
+  assert.equal(isToolUseFailed({ status: 400, message: "400 Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details." }), true, 'Groq JSON 객체 모드 검증 실패(2026-11-28 Actions 스모크 원문)');
   assert.equal(isToolUseFailed({ status: 400, message: '400 API key not valid.' }), false);
   assert.equal(isToolUseFailed({ status: 429, message: 'called a tool' }), false);
 });
