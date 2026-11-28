@@ -1,7 +1,7 @@
 // 이어 묻기 에이전트 도구·프롬프트·최종 답 검사(T-216, ADR 0017 에이전트 1)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nodeFacts, nodesByTag, makeFollowupTools, buildFollowupPrompt, finalizeAnswer, runFollowup, cleanQuestion, followupProblems, FOLLOWUP_QUESTIONS, FOLLOWUP_TOOL_NAMES, FOLLOWUP_MAX_CORRECTIONS } from '../../extension/lib/agent-tools.js';
+import { nodeFacts, nodesByTag, makeFollowupTools, buildFollowupPrompt, finalizeAnswer, runFollowup, cleanQuestion, followupProblems, FOLLOWUP_QUESTIONS, FOLLOWUP_TOOL_NAMES, FOLLOWUP_MAX_CORRECTIONS, asksOther } from '../../extension/lib/agent-tools.js';
 import { AGENT_STOP_TEXT, AGENT_CAP_TEXT } from '../../extension/lib/agent.js';
 import { REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
 import { GROUNDING_REJECTED_TEXT } from '../../extension/lib/grounding.js';
@@ -342,4 +342,28 @@ test('buildFollowupPrompt: 첫 차례는 facts 읽기 도구 호출이라는 안
   assert.ok(c.includes('"nodeId": "cube"'));
   const n = buildFollowupPrompt({ domain: 'd', sentence: 's', question: 'q' }).user;
   assert.ok(n.includes('"action": "search_graph"'));
+  // "다른 비유"면 방금 근거를 읽게 하지 않고 exclude에 넣은 검색을 예시로
+  for (const q of [FOLLOWUP_QUESTIONS.other, '다른 개념도 있어요?']) {
+    const o = buildFollowupPrompt({ domain: 'd', sentence: 's', question: q, prev: PREV, candidates: [{ id: 'cube', label: '큐브' }] }).user;
+    assert.ok(o.includes('"action": "search_graph", "args": {"text": "<문장의 핵심 구조>", "exclude": ["starforce"]}'), q);
+    assert.ok(!o.includes('"get_node_facts", "args": {"nodeId": "starforce"}'), q);
+  }
+  assert.equal(asksOther('왜 비슷해요?'), false);
+});
+
+test('runFollowup "다른 비유는요?": 방금 근거 개념으로 다시 답하면 한 번 되묻는다(T-224)', async () => {
+  const { ask, calls } = scripted([
+    { action: 'get_node_facts', args: { nodeId: 'starforce' } },
+    { final: { answer: '실패하면 손해를 보는 점이 같아요.', nodeId: 'starforce', usedFact: SF.facts[2] } },
+    { final: { answer: '이 문장에는 맞는 다른 개념이 없어요.', nodeId: null, usedFact: '' } }
+  ]);
+  const r = await runFollowup({ ...BASE, question: '다른 비유는요?', ask });
+  assert.equal(calls.length, 3);
+  assert.match(r.debug.trace.find(t => t.type === 'verify' && !t.ok).reason, /same-as-prev/);
+  assert.equal(r.evidence, null);
+  // "왜 비슷해요?"는 같은 개념이 맞다
+  const base = { graph: GRAPH, allowed: new Set(['starforce']), factsRead: new Set(['starforce']), ...PAYLOAD, prevNodeId: 'starforce' };
+  const f = { answer: '같아요.', nodeId: 'starforce', usedFact: SF.facts[0] };
+  assert.equal(followupProblems({ ...base, final: f, question: '왜 비슷해요?' }), null);
+  assert.deepEqual(followupProblems({ ...base, final: f, question: '다른 비유는요?' }).reasons, ['same-as-prev']);
 });
