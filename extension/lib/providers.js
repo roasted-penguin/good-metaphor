@@ -33,7 +33,8 @@ export const PROVIDERS = {
     baseUrl: 'https://integrate.api.nvidia.com/v1',
     // 2026-10-18 실제 키로 확인: /v1/models 에 있음. deepseek-v4.1-flash·nemotron-3.5-lightning 은 20초 넘게 응답 없음이라 뺐다.
     // 무료는 키당 분당 약 40회(모든 모델 공유), 개발·시험용 약관
-    models: ['nvidia/nemotron-3.5-super-vl-120b-a12b', 'nvidia/nemotron-3-super-120b-a12b'],
+    // nemotron-3-super-120b-a12b 는 2026-10-03 단종(410, T-229에서 확인)이라 뺐다
+    models: ['nvidia/nemotron-3.5-super-vl-120b-a12b'],
     defaultModel: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
     // Nemotron 은 기본으로 생각부터 해서 첫 글자까지 14~30초. 끄면 0.2~0.4초(2026-10-18 측정)
     extraBody: { chat_template_kwargs: { enable_thinking: false } },
