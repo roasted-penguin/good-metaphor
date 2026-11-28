@@ -142,3 +142,45 @@ test('takeDailyCall: 같은 날은 늘리고 상한이면 거절, 날이 바뀌�
   assert.deepEqual(takeDailyCall(full.state, '2026-11-29', 2), { ok: true, state: { day: '2026-11-29', count: 1 } });
   assert.equal(takeDailyCall(null, '2026-11-28', 0).ok, false);
 });
+
+// 검증기 훅(T-220, ADR 0017 에이전트 3: Reflexion식). final이 검증에 지면 실패 이유를 관찰로 붙여 다시 묻는다
+test('runAgent verify: 통과하면 final, trace에 verify(ok)', async () => {
+  const { ask } = scripted([{ final: { answer: '좋아요' } }]);
+  const r = await runAgent({ system: 'S', user: 'U', ask, verify: async f => ({ ok: true, value: { ...f, checked: true } }) });
+  assert.equal(r.stop, null);
+  assert.deepEqual(r.final, { answer: '좋아요' });
+  assert.deepEqual(r.verified.value, { answer: '좋아요', checked: true });
+  assert.deepEqual(r.trace.map(t => t.type), ['final', 'verify']);
+  assert.equal(r.trace[1].ok, true);
+});
+
+test('runAgent verify: 실패 이유가 다음 요청에 붙고, 고친 final이 통과하면 끝', async () => {
+  const { ask, calls } = scripted([{ final: { answer: '틀림' } }, { final: { answer: '고침' } }]);
+  const verify = async f => (f.answer === '고침' ? { ok: true } : { ok: false, reason: 'rule1', feedback: '후보에 없는 개념이에요.' });
+  const r = await runAgent({ system: 'S', user: 'U', ask, verify });
+  assert.equal(r.stop, null);
+  assert.equal(r.final.answer, '고침');
+  assert.equal(r.calls, 2);
+  assert.match(calls[1].user, /\[검증 실패\] 후보에 없는 개념이에요\./);
+  assert.match(calls[1].user, /틀림/, '실패한 답도 기록에');
+  assert.deepEqual(r.trace.filter(t => t.type === 'verify').map(t => [t.ok, t.reason ?? null]), [[false, 'rule1'], [true, null]]);
+});
+
+test('runAgent verify: 시도 상한(maxVerifies)이면 verify로 멈추고 마지막 final·검증 결과를 돌려준다', async () => {
+  const { ask } = scripted([{ final: { answer: '틀림' } }]);
+  const r = await runAgent({ system: 'S', user: 'U', ask, maxVerifies: 2, verify: async () => ({ ok: false, reason: 'grounding', feedback: '근거 밖' }) });
+  assert.equal(r.stop, 'verify');
+  assert.equal(r.final, null);
+  assert.equal(r.calls, 2);
+  assert.deepEqual(r.lastFinal, { answer: '틀림' });
+  assert.equal(r.verified.reason, 'grounding');
+  assert.equal(r.trace.at(-1).reason, 'verify');
+});
+
+test('runAgent verify: 검증 실패 재시도도 호출 상한 안', async () => {
+  const { ask } = scripted([{ final: { answer: '틀림' } }]);
+  const r = await runAgent({ system: 'S', user: 'U', ask, maxCalls: 1, maxVerifies: 3, verify: async () => ({ ok: false, feedback: 'x' }) });
+  assert.equal(r.stop, 'calls');
+  assert.equal(r.calls, 1);
+  assert.deepEqual(r.lastFinal, { answer: '틀림' });
+});
