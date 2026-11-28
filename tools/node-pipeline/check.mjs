@@ -67,7 +67,11 @@ export const REASONS = {
   factReused: '기존 노드(또는 앞선 후보)의 사실 문장을 그대로 다시 썼어요.',
   tagDense: '이 태그를 단 노드가 상한(노드 수의 10%, 최소 5)을 넘어요(ADR 0015 제안 3, 경고).',
   // 묶음 사이 중복(T-205, dedupe.mjs)
-  dupCross: '같은 id나 이름이 다른 묶음에도 있어 그쪽 하나만 남겨요(묶음 사이 중복).'
+  dupCross: '같은 id나 이름이 다른 묶음에도 있어 그쪽 하나만 남겨요(묶음 사이 중복).',
+  // 익숙함(T-213, familiar.mjs)
+  unfamiliar: '보통 사람이 바로 떠올리는 장면이 아니에요(LLM 익숙함 no). 비유의 받는 쪽은 익숙해야 해요.',
+  storeName: '특정 가게·브랜드·앱 이름이나 실존 인물이 들어 있어요.',
+  familiarPending: '익숙함 검사를 아직 못 했어요(호출 상한·오류, 다시 돌리면 캐시로 이어 가요).'
 };
 
 /* ───── 조문 꼴 출처의 이름 근거 (T-205) ───── */
@@ -378,6 +382,9 @@ export function renderSheet({ interest, batch, results, pages, generatedAt, near
     if (r.nearDup) lines.push(`- 근접 중복: 가장 가까운 ${r.nearDup.best.id} ${r.nearDup.best.score} (바닥 ${r.nearDup.floor.score}, ${r.nearDup.embedderId})${r.nearDup.reusedFrom ? ` · 같은 사실: ${r.nearDup.reusedFrom.join(', ')}` : ''}`);
     if (r.tagFit?.status === 'done') for (const v of r.tagFit.verdicts) lines.push(`- 태그 적합성 ${v.id}: ${v.verdict === 'yes' ? 'yes' : v.verdict === 'no' ? 'no(뺌)' : '답 없음'}${v.reason ? ` — ${esc(v.reason)}` : ''}`);
     else if (r.tagFit?.status === 'pending') lines.push(`- 태그 적합성: 못 함(${r.tagFit.note || ''})`);
+    if (r.familiar?.status === 'done') lines.push(`- 익숙함: ${r.familiar.familiar}${r.familiar.named === 'yes' ? ' · 가게·인물 이름 있음' : ''}${r.familiar.reason ? ` — ${esc(r.familiar.reason)}` : ''}`);
+    else if (r.familiar?.status === 'pending') lines.push(`- 익숙함: 못 함(${r.familiar.note || ''})`);
+    if (r.node.sources?.length > 1) lines.push(`- 출처 전체: ${r.node.sources.join(' · ')}`);
     r.node.facts.forEach((f, i) => lines.push(`- 사실 ${i + 1}: ${f}${r.grounding ? ` (겹침 ${r.grounding.factOverlap?.[i] ?? '-'}, 최장 복사 ${r.grounding.copiedRun?.[i] ?? '-'}자)` : ''}`));
     if (r.edges?.length) lines.push(`- 엣지: ${r.edges.map(e => `→ ${e.to} (${e.rel})`).join(', ')}`);
     lines.push('');

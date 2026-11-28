@@ -22,6 +22,7 @@
     "check:corrections": "node tools/check-corrections.mjs",
     "node-pipeline:index": "node tools/node-pipeline/cli.mjs index",
     "node-pipeline:draft": "node tools/node-pipeline/cli.mjs draft",
+    "node-pipeline:draft-scenes": "node tools/node-pipeline/cli.mjs draft-scenes",
     "node-pipeline:check": "node tools/node-pipeline/cli.mjs check",
     "node-pipeline:gate": "node tools/node-pipeline/cli.mjs gate",
     "node-pipeline:apply": "node tools/node-pipeline/cli.mjs apply",

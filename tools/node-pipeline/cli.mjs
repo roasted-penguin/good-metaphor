@@ -2,6 +2,7 @@
 // 노드 파이프라인(T-194) 명령줄. 사용법은 같은 폴더 README.md.
 //   node tools/node-pipeline/cli.mjs index  --interest maplestory [--pages 1] [--probe-seeds]
 //   node tools/node-pipeline/cli.mjs draft  --interest maplestory [--limit 10] [--max-calls 40] [--kind guide,update] [--provider gemini] [--model ...]
+//   node tools/node-pipeline/cli.mjs draft-scenes --interest restaurant [--scenes restaurant-t213.json] [--only id,id] [--limit 40] [--max-calls 40] [--redo]
 //   node tools/node-pipeline/cli.mjs check  --interest maplestory [--batch N] [--no-probe] [--no-reground] [--no-near-dup] [--dup-embedder e5|fallback] [--no-tag-fit] [--max-calls 14] [--provider gemini]
 //   node tools/node-pipeline/cli.mjs gate   --interest maplestory --batch N|all [--approve ids.json] [--embedder fallback|browser] [--margin 0.005] [--strict-margin] [--cases-dir 경로] [--explain [--explain-max 30]] [--results 입력.json] [--regate]
 //   node tools/node-pipeline/cli.mjs accept-alt <대안 표 .alt-*.json> [--dir tools] [--all]
@@ -13,7 +14,9 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PROVIDERS, complete as providerComplete } from '../../extension/lib/providers.js';
 import { loadInterestGraph, commonGraphPath } from '../load-graph.mjs';
-import { interestConfig } from './sources.mjs';
+import { interestConfig, loadScenes } from './sources.mjs';
+import { draftScenes } from './scenes.mjs';
+import { applyFamiliar } from './familiar.mjs';
 import { politeFetcher } from './web.mjs';
 import { buildIndex, pickPages, draftPages, indexKey, probeSeeds, markProbes, regroundLabels } from './run.mjs';
 import { resolveCrossBatch, describeGroups } from './dedupe.mjs';
@@ -141,6 +144,28 @@ async function cmdDraft() {
   console.log(`[draft] → ${batchFile(n, '.draft.json')}`);
 }
 
+// 장면 초안(T-213): tools/node-pipeline/scenes/<관심사>-*.json의 장면마다 출처를 가져와(메모리) LLM 한 번. 앞 묶음에서 초안한 장면은 건너뜀(--redo면 다시)
+async function cmdDraftScenes() {
+  let scenes = loadScenes(interest, arg('scenes', null));
+  if (!scenes.length) throw new Error(`장면 파일이 없어요: tools/node-pipeline/scenes/${interest}-*.json`);
+  const done = new Set(flag('redo') ? [] : batches().flatMap(b => (readJson(batchFile(b, '.draft.json')).pages || []).filter(p => p.status === 'ok' && String(p.url).startsWith('scene:')).map(p => p.url.slice(6))));
+  const only = arg('only') ? new Set(arg('only').split(',')) : null;
+  scenes = scenes.filter(s => !done.has(s.id) && (!only || only.has(s.id))).slice(0, Number(arg('limit', Infinity)));
+  if (!scenes.length) { console.log('[draft-scenes] 초안할 새 장면이 없어요.'); return; }
+  const p = provider();
+  const graph = loadInterestGraph(interest);
+  const fetcher = politeFetcher({ log });
+  const maxCalls = Number(arg('max-calls', Infinity));
+  const complete = cachedComplete(p, { maxCalls });
+  console.log(`[draft-scenes] ${interest}: 장면 ${scenes.length}개 · ${p.id}/${p.model} · 호출 상한 ${maxCalls}`);
+  const { candidates, dropped, pages } = await draftScenes({ cfg, scenes, fetcher, complete, graph, tags: graph.tags, log, maxCalls });
+  const n = (batches().at(-1) || 0) + 1;
+  writeJson(batchFile(n, '.draft.json'), { interest, batch: n, kind: 'scene', createdAt: new Date().toISOString(), provider: p.id, model: p.model, llmCalls: complete.calls(), cacheHits: complete.hits(), pages, candidates, dropped });
+  const st = pages.reduce((m, r) => ({ ...m, [r.status]: (m[r.status] || 0) + 1 }), {});
+  console.log(`[draft-scenes] 후보 ${candidates.length}개 · 버림 ${dropped.length}(${JSON.stringify(dropped.reduce((m, d) => ({ ...m, [d.reason]: (m[d.reason] || 0) + 1 }), {}))}) · 장면 상태 ${JSON.stringify(st)} (LLM 호출 ${complete.calls()}번, 캐시 ${complete.hits()}번)`);
+  console.log(`[draft-scenes] → ${batchFile(n, '.draft.json')}`);
+}
+
 async function cmdCheck() {
   const n = batchArg();
   const draft = readJson(batchFile(n, '.draft.json'));
@@ -174,6 +199,16 @@ async function cmdCheck() {
     tagFit = { ...stat, model: p?.model || null, calls: p ? complete.calls() : 0, cacheHits: p ? complete.hits() : 0 };
     console.log(`[check] 태그 적합성: 물은 후보 ${stat.asked} · 태그 yes ${stat.yes} · no ${stat.no} · 태그 다 빠져 실패 ${stat.failed} · 못 함 ${stat.pending} (LLM 호출 ${tagFit.calls}번, 캐시 ${tagFit.cacheHits}번)`);
   }
+  // 익숙함(T-213): 관심사 설정 rules.familiarity면 후보마다 LLM 한 번(캐시). no면 실패(unfamiliar), 가게·인물 이름이면 실패(storeName)
+  let familiar = null;
+  if (cfg.rules?.familiarity && !flag('no-familiar')) {
+    let p = null;
+    try { p = provider(); } catch (e) { console.log(`[check] 익숙함 건너뜀: ${e.message}`); }
+    const complete = p ? cachedComplete(p, { maxCalls: Number(arg('max-calls', Infinity)) }) : async () => { throw new BudgetError(); };
+    const stat = await applyFamiliar(results, { complete, domain: cfg.domain, model: p?.model || '', log });
+    familiar = { ...stat, model: p?.model || null, calls: p ? complete.calls() : 0, cacheHits: p ? complete.hits() : 0 };
+    console.log(`[check] 익숙함: 물은 후보 ${stat.asked} · yes ${stat.yes} · no ${stat.no} · 이름 들어감 ${stat.named} · 못 함 ${stat.pending} (LLM 호출 ${familiar.calls}번, 캐시 ${familiar.cacheHits}번)`);
+  }
   // 태그 밀도 상한(T-197, ADR 0015 제안 3, 경고만): 태그 적합성으로 태그가 바뀐 뒤에 센다
   const density = applyTagDensity(results, { graphNodes: graph.nodes, prior });
   const dense = density.counts.filter(c => c[2] > density.cap);
@@ -186,7 +221,7 @@ async function cmdCheck() {
   if (crossBatch.length) { console.log(`[check] 묶음 사이 중복 ${crossBatch.length}무리:`); for (const l of describeGroups(crossBatch)) console.log('  ' + l); }
   const sum = summarize(results);
   const pagesOk = draft.pages.filter(p => p.status === 'ok').length;
-  writeJson(batchFile(n, '.json'), { interest, batch: n, checkedAt: new Date().toISOString(), graphVersion: graph.version, probed: !!probe, nearDup, density, tagFit, crossBatch, summary: sum, pages: draft.pages, dropped: draft.dropped || [], results });
+  writeJson(batchFile(n, '.json'), { interest, batch: n, checkedAt: new Date().toISOString(), graphVersion: graph.version, probed: !!probe, nearDup, density, tagFit, familiar, crossBatch, summary: sum, pages: draft.pages, dropped: draft.dropped || [], results });
   writeFileSync(batchFile(n, '.md'), renderSheet({ interest, batch: n, results, pages: pagesOk, generatedAt: new Date().toISOString(), nearDup, density }));
   const nd = (draft.dropped || []).length;
   console.log(`[check] 묶음 ${n}: 후보 ${sum.total} (통과 ${sum.pass} · 확인 ${sum.warn} · 실패 ${sum.fail}) · 초안에서 태그 없음으로 버림 ${nd} · 페이지당 ${(sum.total / Math.max(1, pagesOk)).toFixed(1)}개`);
@@ -416,7 +451,7 @@ async function cmdExplainAlt() {
   console.log(`[explain-alt] ${(table.rows || []).filter(r => r.llm).length}/${(table.rows || []).length}줄 · LLM 호출 ${complete.calls()}번(캐시 ${complete.hits()}번) → ${file}`);
 }
 
-const CMDS = { index: cmdIndex, draft: cmdDraft, check: cmdCheck, gate: cmdGate, apply: cmdApply, 'accept-alt': cmdAcceptAlt, 'explain-alt': cmdExplainAlt };
+const CMDS = { index: cmdIndex, draft: cmdDraft, 'draft-scenes': cmdDraftScenes, check: cmdCheck, gate: cmdGate, apply: cmdApply, 'accept-alt': cmdAcceptAlt, 'explain-alt': cmdExplainAlt };
 if (!CMDS[cmd]) {
   console.error('사용법: node tools/node-pipeline/cli.mjs <index|draft|check|gate|apply|accept-alt|explain-alt> --interest <maplestory|restaurant> ... (README.md)');
   process.exit(2);
