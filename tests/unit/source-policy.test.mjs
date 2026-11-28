@@ -41,9 +41,9 @@ test('classifySource 식당(2026-11-23 확대): 나무위키·티스토리·브�
   assert.deepEqual(k(NAMU), { kind: 'community', site: 'namuwiki' });
   assert.deepEqual(k('https://someone.tistory.com/123'), { kind: 'community', site: 'tistory' });
   assert.deepEqual(k('https://brunch.co.kr/@writer/12'), { kind: 'community', site: 'brunch' });
-  assert.deepEqual(k('https://v.daum.net/v/20261101000000000'), { kind: 'community', site: 'daumnews' });
   assert.deepEqual(k('https://stdict.korean.go.kr/search/searchView.do?word_no=1'), { kind: 'official', site: 'official' });
   for (const u of [
+    'https://v.daum.net/v/20261101000000000',  // robots: * Disallow / (2026-11-28, T-213에서 뺌)
     'https://blog.naver.com/someone/1',        // robots: RAG 목적 봇 접근 금지 명시
     'https://n.news.naver.com/article/001/1',  // robots: Disallow /
     'https://cafe.naver.com/x/1',

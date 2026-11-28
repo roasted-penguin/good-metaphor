@@ -93,7 +93,7 @@ export const INTERESTS = {
     id: 'restaurant',
     domain: '식당',
     // 목록·초안은 공공·공식 자료만: *.go.kr(표준국어대사전 포함), 정책브리핑, 소상공인시장진흥공단.
-    // 커뮤니티·블로그·뉴스(나무위키·티스토리·브런치·다음 뉴스, ADR 0016)는 수집하지 않고 확인용 출처로만(allowSource)
+    // 커뮤니티·블로그·뉴스(나무위키·티스토리·브런치, ADR 0016. 다음 뉴스는 robots 막힘으로 뺌 T-213)는 수집하지 않고 확인용 출처로만(allowSource)
     allowHost: h => isOfficialHost(h, 'restaurant'),
     allowSource: url => classifySource(url, 'restaurant'),
     listings: [

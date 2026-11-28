@@ -12,8 +12,9 @@ const rest = INTERESTS.restaurant;
 const graph = loadInterestGraph('restaurant');
 const tagIds = new Set(graph.tags.map(t => t.id));
 
-test('siteKey·articleText: 사이트 = 출처 정책 site id(다음 뉴스는 한 곳, 공공은 official), 정책 밖은 null, 짧은 메뉴 줄은 버림', () => {
-  assert.equal(siteKey('https://v.daum.net/v/a'), siteKey('https://v.daum.net/v/b'));
+test('siteKey·articleText: 사이트 = 출처 정책 site id(같은 플랫폼은 한 곳, 공공은 official), 정책 밖은 null, 짧은 메뉴 줄은 버림', () => {
+  assert.equal(siteKey('https://a.tistory.com/1'), siteKey('https://b.tistory.com/2'));
+  assert.equal(siteKey('https://v.daum.net/v/a'), null, '다음 뉴스는 robots 막힘으로 정책에서 뺌');
   assert.equal(siteKey('https://namu.wiki/w/x'), 'namuwiki');
   assert.equal(siteKey('https://mediahub.seoul.go.kr/archives/1'), 'official');
   assert.equal(siteKey('https://blog.naver.com/x/1'), null, '네이버 블로그는 정책 밖(RAG 금지)');
@@ -37,8 +38,8 @@ test('장면 파일(T-213): 출처는 모두 출처 정책 안, 장면마다 서
 
 const DOCS = [
   { n: 1, url: 'https://namu.wiki/w/x', site: 'namuwiki', title: '', text: '손님이 몰리면 자리가 모자라 온 순서대로 이름을 적고 기다린다. 앱으로 미리 줄을 설 수도 있다.' },
-  { n: 2, url: 'https://v.daum.net/v/a', site: 'daumnews', title: '', text: '인기 가게는 손님이 몰려 순서대로 기다리게 하고, 앱으로 줄을 서게 한다.' },
-  { n: 3, url: 'https://v.daum.net/v/b', site: 'daumnews', title: '', text: '같은 사이트의 다른 글이다. 기다리는 손님이 많다.' }
+  { n: 2, url: 'https://a.tistory.com/1', site: 'tistory', title: '', text: '인기 가게는 손님이 몰려 순서대로 기다리게 하고, 앱으로 줄을 서게 한다.' },
+  { n: 3, url: 'https://b.tistory.com/2', site: 'tistory', title: '', text: '같은 사이트의 다른 글이다. 기다리는 손님이 많다.' }
 ];
 const scene = { id: 'waiting', scene: '인기 식당 웨이팅' };
 const ans = nodes => JSON.stringify({ nodes });
@@ -48,7 +49,7 @@ test('buildScenePrompt: 장면·자료 번호·사이트, 독립 출처·수치�
   assert.match(system, /서로 다른 자료 두 곳 이상/);
   assert.match(system, /특정 가게·브랜드·앱·회사 이름/);
   assert.match(system, /숫자·가격/);
-  assert.match(user, /\[자료 2\] \(daumnews\)/);
+  assert.match(user, /\[자료 2\] \(tistory\)/);
   assert.match(user, /lunch_peak \| 점심 피크/);
   assert.equal(user.includes('https://'), false, '주소는 LLM에 주지 않는다(파이프라인이 붙임)');
 });
@@ -58,7 +59,7 @@ test('sceneCandidates: 핵심 사실 하나가 사이트 2곳 + 전체 2곳이�
     facts: [{ text: '손님이 몰리면 온 순서대로 기다린다.', support: [1, 2] }, { text: '앱으로 미리 줄을 선다.', support: [1] }, { text: '받침 없는 사실이다.', support: [] }] }]), { scene, docs: DOCS, tagIds });
   assert.equal(good.candidates.length, 1);
   const c = good.candidates[0];
-  assert.deepEqual(c.sources, ['https://namu.wiki/w/x', 'https://v.daum.net/v/a']);
+  assert.deepEqual(c.sources, ['https://namu.wiki/w/x', 'https://a.tistory.com/1']);
   assert.deepEqual(c.facts, ['손님이 몰리면 온 순서대로 기다린다.', '앱으로 미리 줄을 선다.']);
   assert.equal(c.scene, 'waiting');
   assert.equal(c.weakFactsDropped, 1);
@@ -81,15 +82,15 @@ test('draftScenes: robots·실패 출처는 빼고, 사이트 2곳이 안 되면
   const para = s => `<p>${s} ${'가'.repeat(220)}</p>`;
   const pages = {
     'https://namu.wiki/w/a': para('손님이 몰리면 순서대로 기다린다.'),
-    'https://v.daum.net/v/a': para('인기 가게는 손님을 순서대로 기다리게 한다.'),
+    'https://a.tistory.com/1': para('인기 가게는 손님을 순서대로 기다리게 한다.'),
     'https://namu.wiki/w/b': para('혼자뿐인 출처다.')
   };
   const fetcher = { get: async url => pages[url] ? { ok: true, status: 200, url, html: pages[url] } : { ok: false, status: 403, url } };
   const users = [];
   const complete = async (system, user) => { users.push(user); return ans([{ id: 'waiting_line', label: '맛집 웨이팅', tags: ['scarcity_value'], facts: [{ text: '손님이 몰리면 순서대로 기다린다.', support: [1, 2] }, { text: '자리가 나면 차례로 들어간다.', support: [2] }] }]); };
   const scenes = [
-    { id: 'waiting', scene: '웨이팅', sources: ['https://namu.wiki/w/a', 'https://v.daum.net/v/a', 'https://v.daum.net/v/gone', 'https://blog.naver.com/x/1'] },
-    { id: 'lonely', scene: '혼자', sources: ['https://namu.wiki/w/b', 'https://v.daum.net/v/gone2'] }
+    { id: 'waiting', scene: '웨이팅', sources: ['https://namu.wiki/w/a', 'https://a.tistory.com/1', 'https://a.tistory.com/gone', 'https://blog.naver.com/x/1'] },
+    { id: 'lonely', scene: '혼자', sources: ['https://namu.wiki/w/b', 'https://a.tistory.com/gone2'] }
   ];
   const r = await draftScenes({ cfg: rest, scenes, fetcher, complete, graph, tags: graph.tags, now: () => 'T' });
   assert.equal(users.length, 1, '출처 1곳 장면은 부르지 않음');
@@ -103,8 +104,8 @@ test('draftScenes: robots·실패 출처는 빼고, 사이트 2곳이 안 되면
 test('check(T-213): 장면 후보 출처는 출처 정책(ADR 0016)으로 판정, 커뮤니티 사이트 2곳이면 교차 확인 통과·sourceKind community, 1곳이면 실패', async () => {
   const base = { label: '맛집 웨이팅', facts: ['손님이 몰리면 온 순서대로 기다린다.', '앱으로 미리 줄을 선다.'], tags: ['scarcity_value'] };
   const cands = [
-    { ...base, id: 'scene_ok', scene: 'waiting', sources: ['https://namu.wiki/w/%EC%9B%A8%EC%9D%B4%ED%8C%85', 'https://v.daum.net/v/EYW2X9rO1I'] },
-    { ...base, id: 'one_site', label: '둘째 이름', scene: 'waiting', sources: ['https://v.daum.net/v/a', 'https://v.daum.net/v/b'] },
+    { ...base, id: 'scene_ok', scene: 'waiting', sources: ['https://namu.wiki/w/%EC%9B%A8%EC%9D%B4%ED%8C%85', 'https://brunch.co.kr/@6621bf6c864f4e9/16'] },
+    { ...base, id: 'one_site', label: '둘째 이름', scene: 'waiting', sources: ['https://a.tistory.com/1', 'https://b.tistory.com/2'] },
     { ...base, id: 'off_policy', label: '셋째 이름', scene: 'waiting', sources: ['https://namu.wiki/w/x', 'https://www.mt.co.kr/a'] }
   ];
   const res = await checkBatch(cands, { cfg: rest, graph, tags: graph.tags });

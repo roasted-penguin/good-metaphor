@@ -16,7 +16,7 @@ D-5(2026-10-11)는 "원문 인덱싱은 공식만, 나무위키·인벤은 참�
 5. **충돌 시 공식 우선.** 공식 출처와 커뮤니티 출처가 다르면 공식 문장을 따른다. 커뮤니티에만 있는 사실이 공식과 어긋나면 그 사실은 버린다. 이 판정은 자동으로 못 하므로 리뷰(메인 판정)가 한다.
 6. **규칙 2·9·11 그대로.** 자주 바뀌는 수치·패치 번호 금지(커뮤니티 문서는 확률표·가격이 많다), 태그는 통제 어휘만, 멸칭·실존 인물 금지. 커뮤니티 페이지에는 멸칭·실존 인물 언급이 흔하므로 금칙어 검사(`data/common/blocklist.json`)는 생략할 수 없다(파이프라인 check가 항상 돈다).
 7. **식당도 같은 규칙(사용자 2026-11-23 확대).** 공공 출처 밖(뉴스, 블로그, 커뮤니티, 표준국어대사전)에서 확인한 사실도 쓴다. 식당 그래프 방향이 법령 조문에서 **누구나 겪어 본 식당 장면**(웨이팅, 점심 피크, 회전율 등)으로 바뀌었기 때문이다(T-213). 추가 규칙: **특정 가게·브랜드 이름 금지**(파이프라인은 커뮤니티 출처 식당 후보에 `storeNameReview` 경고, 영문은 원래 실패), 수치·가격 금지(식당은 숫자 하나도 안 됨, 그대로), 멸칭·실존 인물 금지. 표준국어대사전(`stdict.korean.go.kr`)은 `*.go.kr`이라 공공(official)으로 친다.
-8. **독립 출처 단위는 사이트(플랫폼).** 같은 플랫폼의 두 글(티스토리 블로그 둘, 나무위키 두 쪽)은 한 곳으로 친다(보수적 판정: 서로 베꼈을 가능성이 크고, 작성자 독립성을 기계로 가릴 수 없다). 다음 뉴스는 언론사가 달라도 한 곳이다. 공식(공공) 출처 하나는 독립 출처 한 곳이다.
+8. **독립 출처 단위는 사이트(플랫폼).** 같은 플랫폼의 두 글(티스토리 블로그 둘, 나무위키 두 쪽)은 한 곳으로 친다(보수적 판정: 서로 베꼈을 가능성이 크고, 작성자 독립성을 기계로 가릴 수 없다). 공식(공공) 출처 하나는 독립 출처 한 곳이다.
 
 ## 법·약관·robots 확인 (2026-11-23)
 
@@ -27,7 +27,7 @@ D-5(2026-10-11)는 "원문 인덱싱은 공식만, 나무위키·인벤은 참�
 | `maplestory.inven.co.kr` | 도메인 없음(NXDOMAIN). 메이플 인벤은 `www.inven.co.kr/maple/`·`/board/maple/` | | 정책 호스트는 `www.inven.co.kr`만(모바일 `m.` 주소는 받지 않음, 데스크톱 주소로 남긴다) |
 | 티스토리 `*.tistory.com`(식당) | 블로그마다 따로. 예 `notice.tistory.com`: `*`는 `/guestbook`, `/manage`, `/owner`, `/admin`, `/search`만 금지, 글은 허용 | 글마다 작성자 저작권 | 글 한 쪽 검사 허용(블로그마다 robots를 다시 읽는다) |
 | 브런치 `brunch.co.kr`(식당) | AI 학습 크롤러(GPTBot·ClaudeBot·anthropic-ai·CCBot 등)는 `Disallow: /`. `*`·Claude-User 등은 `/write`, `/search`, `/api/` 등만 금지, 글 `/@작가/번호` 허용 | 글마다 작성자 저작권 | 글 한 쪽 검사 허용. 학습용 수집이 아니라 사실 확인 한 쪽만 |
-| 다음 뉴스 `v.daum.net`(식당) | robots.txt 없음(404 HTML) = 규칙 없음 | 기사마다 언론사 저작권 | 기사 한 쪽 검사 허용, 사실만 |
+| **받지 않음:** 다음 뉴스 `v.daum.net`(식당) | 2026-11-23엔 robots.txt 없음(404 HTML)이었으나 **robots `*` Disallow: / (2026-11-28 확인)**, AI 봇 목록도 전부 금지 | 기사마다 언론사 저작권 | **뺌**(T-213). 정책 밖(자동·수동 모두 출처로 쓰지 않음) |
 | 표준국어대사전 `stdict.korean.go.kr`(식당) | robots.txt 없음(HTML이 옴) = 규칙 없음 | 누리집 저작권 국립국어원 | 공공(official). 뜻풀이 문장은 옮기지 않는다(베낌 검사 같음) |
 | **받지 않음:** 네이버 블로그 `blog.naver.com` | `*`는 `/PostList.nhn`만 금지지만 파일에 **"BOT ACCESS FOR THE PURPOSES OF AI TRAINING AND RETRIEVAL-AUGMENTED GENERATION (RAG) IS STRICTLY PROHIBITED"** 명시, ClaudeBot 등 `Disallow: /` | | 이 앱은 그래프 RAG라 운영자 의사에 정면으로 걸린다 → 정책 밖(자동·수동 모두 출처로 쓰지 않음) |
 | **받지 않음:** 네이버 뉴스 `n.news.naver.com` | `User-agent: *` `Disallow: /` + 같은 RAG 금지 문구 | | 정책 밖 |
@@ -43,7 +43,7 @@ D-5(2026-10-11)는 "원문 인덱싱은 공식만, 나무위키·인벤은 참�
 - robots·약관이 바뀌어 자동 가져오기가 금지되면 check의 출처 확인이 실패하므로 그 출처는 쓸 수 없다. 이때는 이 ADR을 고쳐 "사람 확인 기록"(확인 날짜·확인자) 방식으로 바꿀지 다시 정한다. 그 전까지 가져오지 못한 커뮤니티 출처는 받지 않는다.
 
 ## 품질 안전장치 (구현)
-- **출처 정책 원본 한 곳:** `tools/source-policy.json`(관심사별 공식·커뮤니티 호스트(`host` 또는 `suffix`)·경로, 커뮤니티는 사이트 id). 메이플 커뮤니티 = `namu.wiki` `/w/`, `www.inven.co.kr` `/board/maple/`·`/maple/`. 식당 커뮤니티 = `namu.wiki` `/w/`, `*.tistory.com`, `brunch.co.kr` `/@`, `v.daum.net` `/v/`. 사이트를 더하려면 위 robots·약관 표에 한 줄을 먼저 쓴다. 판정 함수는 `tools/source-policy.mjs`(`classifySource`·`corroboration`·`checkNodeSources`), 서버 테스트는 같은 JSON을 읽어 같은 판정을 한다.
+- **출처 정책 원본 한 곳:** `tools/source-policy.json`(관심사별 공식·커뮤니티 호스트(`host` 또는 `suffix`)·경로, 커뮤니티는 사이트 id). 메이플 커뮤니티 = `namu.wiki` `/w/`, `www.inven.co.kr` `/board/maple/`·`/maple/`. 식당 커뮤니티 = `namu.wiki` `/w/`, `*.tistory.com`, `brunch.co.kr` `/@`(다음 뉴스 `v.daum.net`은 2026-11-28 robots 막힘으로 뺌, T-213). 사이트를 더하려면 위 robots·약관 표에 한 줄을 먼저 쓴다. 판정 함수는 `tools/source-policy.mjs`(`classifySource`·`corroboration`·`checkNodeSources`), 서버 테스트는 같은 JSON을 읽어 같은 판정을 한다.
 - **그래프 테스트:** 예전 "메이플 출처는 maplestory.nexon.com만"·"식당은 공공만"은 "모든 노드가 `checkNodeSources` 통과"로 바뀌었다(확장 `tests/unit/graph.test.mjs`·`restaurant.test.mjs`, 서버 `server/tests/test_seed.py`). 허용 밖 주소, 교차 확인 없음(`communityUncorroborated`), 커뮤니티인데 `sourceKind` 없음(`sourceKindMissing`), 공식만인데 `community`(`sourceKindMismatch`)는 실패.
 - **`validateGraph`:** `sourceKind`는 없거나 `official`·`community`만. 호스트 판정은 하지 않는다(관심사별 정책은 tools 쪽, 확장 런타임은 출처를 쓰지 않는다).
 - **파이프라인 check(`tools/node-pipeline/check.mjs`):**
