@@ -180,6 +180,7 @@ jobs:
             .tmp/eval-followup.log
             .tmp/eval-followup-*.json
           if-no-files-found: ignore
+          include-hidden-files: true # .tmp는 숨은 폴더라 v4 기본값이면 빠진다(T-231 첫 실행)
       - name: 노드 관문 결과 올리기
         if: always() && inputs.gate_args
         uses: actions/upload-artifact@v4
