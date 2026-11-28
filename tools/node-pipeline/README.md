@@ -111,6 +111,7 @@ npm run node-pipeline:check -- --interest restaurant --batch N --provider nvidia
 - 임베더는 Node e5(`admin.embedding` 모델, 한 문장씩, 벡터는 `.tmp/node-pipeline/cache/vec-*.json`)이고, 모델을 못 쓰면 대체 임베더로 같은 규칙이다(`--dup-embedder fallback`). 미리 계산 벡터 파일(`extension/data/vectors/`, 크롬)은 섞지 않는다. 같은 글을 Node와 크롬에서 임베딩하면 코사인이 0.95~0.97뿐이라(2026-11-22) 0.9 근처를 재기에 잡음이 크다.
 - 기준값은 데이터에서 잰다: 기존 노드끼리 가장 가까운 쌍(2026-11-22 Node e5: 메이플 0.895 world_trade_group~meso_market, 식당 0.864 hygiene_inspection~open_prep). 근거는 시트 "근접 중복 관문" 절과 후보마다 "근접 중복" 줄, `.json` `nearDup`에 남는다.
 - 앞 묶음에서 실패 안 한 후보도 비교 대상이다(묶음 번호 순서로 check를 돌린다). `--no-near-dup`이면 건너뜀.
+- 판정 기준은 그래프 노드다(메인 판정, T-217). 예전 묶음에서 채택되지 않은 후보(관문에 가지 않았거나 승인 안 된 것)는 그래프에 없으므로, 같은 개념을 새 출처로 다시 쓸 때는 그 묶음 파일을 check 동안 `.tmp/node-pipeline` 밖으로 옮겨 비교에서 빼도 된다(끝나면 되돌린다). 그래프 노드와의 근접 중복 검사는 그대로 돈다.
 
 **묶음 사이 중복(T-205).** 묶음마다 따로 check를 돌려서 같은 개념이 묶음 5·8에 모두 살아 있으면 `--batch all`로 합칠 때 노드가 둘 들어갔다(T-198 `franchise_dispute_mediation`). `dedupe.mjs`가 같은 id 또는 같은 이름(공백·가운뎃점 무시)을 한 무리로 묶고(이름·id로 이어지면 셋 이상도 한 무리), 하나만 남긴다. 남길 순서: ① 검사 판정(통과 > 확인 > 실패, 이 표시 전 판정) ② 사실이 많은 쪽 ③ 앞 묶음. 나머지는 실패 `dupCross` + 남긴 후보를 적은 메모, `.json` `dupCross`(원래 판정·남긴 후보·같은 id/같은 이름). check는 다른 묶음(앞·뒤 모두) `.json`과 대조해 그 묶음 결과에 적고(시트·`.json` `crossBatch`), `gate`·`apply --batch all`은 합칠 때 다시 판정한다(나중 묶음이 이긴 경우 앞 묶음 파일은 그대로라 합칠 때 정리). 한 묶음 안 중복은 예전처럼 check(`idDupBatch`·`labelDupBatch`)가 뒤쪽을 실패로.
 
