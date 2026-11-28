@@ -16,6 +16,7 @@
     "eval:fallback": "node tools/eval.mjs --fallback",
     "eval:ci": "node tools/eval-ci.mjs",
     "eval:gen": "node tools/eval-gen.mjs",
+    "eval:followup": "node tools/eval-followup.mjs",
     "smoke:providers": "node tools/smoke-providers.mjs",
     "check:embed": "node tools/check-real-embed.mjs",
     "sim:feedback": "node tools/feedback-sim.mjs",
