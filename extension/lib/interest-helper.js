@@ -20,8 +20,10 @@ export const HELPER_LIMITS = {
   maxSteps: 30,               // 단계(LLM 없는 단계 포함) 안전 상한
   maxRounds: 3,               // 계획 바퀴
   firstPlan: 10,              // 첫 계획 개념 수
-  laterPlan: 10,              // 다음 바퀴 개념 수 상한(빈 태그마다 하나씩, T-229)
-  batch: 10,                  // 초안·평가·고쳐 쓰기 한 번에 다루는 노드 수(T-229: 5 → 10, 같은 호출로 개념을 두 배)
+  laterPlan: 6,               // 다음 바퀴 개념 수
+  batch: 5,                   // 초안·평가·고쳐 쓰기 한 번에 다루는 노드 수
+  // T-229에서 둘째 바퀴 "태그마다 하나" + 묶음 10을 실측했다가 되돌렸다: 노드는 60 → 74였지만 원래 25태그 커버리지 12.4 → 11.8,
+  // 그럴듯 88 → 77%, 태그맞음 84 → 78%(둘째 바퀴 노드 71%·73%). ADR 0017 T-229 측정
   rewrites: 1,                // 노드당 고쳐 쓰기
   tagFails: 2,                // 같은 태그가 이만큼 실패하면 "이 관심사에 없음"
   notes: 300,                 // 메모 글자
@@ -29,8 +31,7 @@ export const HELPER_LIMITS = {
 };
 // 남은 호출이 이보다 적으면 그 단계를 시작하지 않는다. 쓴 초안은 늘 평가를 거치게(초안 1 + 평가 1)
 const NEED = { plan: 3, draft: 2, optimize: 2, evaluate: 1 };
-// 한 번에 10개를 다루므로 답이 길다(노드당 약 300토큰)
-const MAX_TOKENS = 6000;
+const MAX_TOKENS = 4000;
 
 export const HELPER_STATE_VERSION = 1;
 // 가짜 LLM(e2e)·평가 도구가 단계를 알아보는 표시어. 시스템 프롬프트 첫 줄에 들어간다
@@ -116,17 +117,14 @@ const COMMON_RULES = [
   '사실을 지어내지 않는다. 널리 알려진 확실한 것만 쓰고, 모르면 뺀다.'
 ];
 
-// perTag(T-229, 둘째 바퀴부터): 남은 태그마다 개념 하나씩. 첫 바퀴는 개수 먼저(T-226)
-export function buildPlanPrompt({ name, notes = '', tags, targetTags, avoid = [], n, perTag = false }) {
+export function buildPlanPrompt({ name, notes = '', tags, targetTags, avoid = [], n }) {
   const want = new Set(targetTags);
   const system = [
     `너는 사용자의 관심사 "${name}"의 ${HELPER_MARK.plan}다. 이 개념들은 나중에 낯선 문장을 그 관심사에 빗대 설명할 때 근거로 쓰인다.`,
     '규칙:',
     `1. "${name}"을 즐기는 사람이면 누구나 바로 떠올리는 익숙한 개념만 고른다. 전문가만 아는 용어·제도는 고르지 않는다.`,
     '2. 개념마다 [채울 태그] 중 하나(tag)를 정한다. 그 개념이 "무엇이 무엇에 따라 어떻게 바뀌는가"라는 태그의 구조를 실제로 가져야 한다. 서로 다른 태그를 넓게 덮는다.',
-    perTag
-      ? `3. [채울 태그]마다 그 구조를 가진 익숙한 개념을 하나씩 고른다(태그 하나에 개념 하나, 서로 다른 태그). skip에는 "${name}"에 그 구조를 가진 익숙한 개념이 아예 없다고 확신하는 태그만 넣는다(억지로 만들지는 않는다).`
-      : `3. 개념은 ${n}개를 채우는 것이 먼저다. skip은 이번에 고르지 않은 태그가 아니라, "${name}"에 그 구조를 가진 익숙한 개념이 아예 없다고 확신하는 태그만 넣는다(억지로 만들지는 않는다).`,
+    `3. 개념은 ${n}개를 채우는 것이 먼저다. skip은 이번에 고르지 않은 태그가 아니라, "${name}"에 그 구조를 가진 익숙한 개념이 아예 없다고 확신하는 태그만 넣는다(억지로 만들지는 않는다).`,
     `4. [피할 이름]과 같거나 거의 같은 개념은 고르지 않는다. 개념은 많아야 ${n}개.`,
     ...COMMON_RULES.map((r, i) => `${i + 5}. ${r}`),
     `${COMMON_RULES.length + 5}. JSON 객체만 출력한다. 형식: {"concepts": [{"label": "개념 이름(40자 이내)", "tag": "태그 id", "why": "한 줄"}], "skip": ["태그 id"]}`
@@ -134,7 +132,7 @@ export function buildPlanPrompt({ name, notes = '', tags, targetTags, avoid = []
   const user = [
     `관심사: ${name}`,
     ...(notes ? [`사용자 메모: ${notes}`] : []),
-    perTag ? `개념 수: [채울 태그]마다 하나, 많아야 ${n}개` : `개념 수: 많아야 ${n}개`,
+    `개념 수: 많아야 ${n}개`,
     '',
     '[채울 태그]',
     ...tags.filter(t => want.has(t.id)).map(tagLine),
@@ -238,24 +236,21 @@ export function readList(text, key) {
 }
 
 // 계획 답 → { concepts: [{label, tag, why}], skip, dropped } | null. 목록 밖 태그·금칙어 이름·중복·피할 이름은 버린다
-// perTag면 태그마다 첫 개념만 받는다(넓게 덮기, T-229)
-export function parsePlan(text, { tagIds, blockTerms = [], avoid = [], n = HELPER_LIMITS.firstPlan, perTag = false } = {}) {
+export function parsePlan(text, { tagIds, blockTerms = [], avoid = [], n = HELPER_LIMITS.firstPlan } = {}) {
   const j = readObj(text);
   const list = readList(text, 'concepts');
   if (!list) return null;
   const seen = new Set(avoid.map(normLabel));
-  const concepts = [], dropped = [], usedTags = new Set();
+  const concepts = [], dropped = [];
   for (const c of list) {
     const label = typeof c?.label === 'string' ? c.label.trim() : '';
     if (!label || label.length > DRAFT_LIMITS.label) continue;
     if (findBlocked(label, blockTerms)) { dropped.push({ label: '(가림)', reason: PROBLEM_TEXT.blocked }); continue; }
     if (!tagIds.has(c.tag)) continue;
-    if (perTag && usedTags.has(c.tag)) continue;
     const key = normLabel(label);
     if (seen.has(key)) continue;
     seen.add(key);
     if (concepts.length >= n) break;
-    usedTags.add(c.tag);
     concepts.push({ label, tag: c.tag, why: clip(c.why, 120) });
   }
   const skip = [...new Set(Array.isArray(j?.skip) ? j.skip : [])].filter(id => tagIds.has(id));
@@ -375,15 +370,13 @@ const targetTags = (s, tagIds) => { const c = covered(s); return [...tagIds].fil
 async function stepPlan(s, deps, limits) {
   const tagIds = tagIdSet(deps);
   const target = targetTags(s, tagIds);
-  // 둘째 바퀴부터는 남은 태그마다 하나씩(T-229: 늦은 바퀴가 6개만 골라 태그 절반이 손도 못 댄 채 끝났다)
-  const perTag = s.round > 0;
-  const n = Math.min(perTag ? Math.min(limits.laterPlan, target.length) : limits.firstPlan, limits.maxNodes - liveCount(s));
+  const n = Math.min(s.round === 0 ? limits.firstPlan : limits.laterPlan, limits.maxNodes - liveCount(s));
   const avoid = [...(deps.existing || []).map(x => x.label), ...s.accepted.map(x => x.label), ...s.dropped.map(x => x.label).filter(l => l !== '(가림)')];
-  const { system, user } = buildPlanPrompt({ name: s.name, notes: s.notes, tags: deps.tags, targetTags: target, avoid: [...new Set(avoid)], n, perTag });
+  const { system, user } = buildPlanPrompt({ name: s.name, notes: s.notes, tags: deps.tags, targetTags: target, avoid: [...new Set(avoid)], n });
   const r = await callLLM(s, deps, limits, system, user);
   if (r.stop) return halt(s, r.stop, r.error);
   s.round++;
-  const p = parsePlan(r.text, { tagIds, blockTerms: deps.blockTerms, avoid, n, perTag });
+  const p = parsePlan(r.text, { tagIds, blockTerms: deps.blockTerms, avoid, n });
   if (!p) {
     addLog(s, 'plan', '계획 답을 읽지 못했어요.');
     // 한 번은 같은 바퀴로 다시 묻는다(T-226 실측: Gemini 3.1 flash-lite가 JSON 모드에서도 따옴표 없는 값을 내 커피 첫 계획에서 멈췄다)

@@ -630,34 +630,3 @@ test('평가자: 제공자가 하나뿐이면 같은 쪽이 평가하고 evalBy.
   assert.ok(routes.every(r => r === undefined));
   assert.deepEqual(s2.evalBy, { other: 0, same: 0 });
 });
-
-test('넓게 덮기: 둘째 바퀴 계획은 남은 태그마다 하나씩 묻고, 한 태그에 개념이 여럿이면 첫 것만(T-229)', async () => {
-  const { system, user } = buildPlanPrompt({ name: '축구', tags: TAGS, targetTags: ['loss_risk', 'market_price'], avoid: [], n: 2, perTag: true });
-  assert.match(system, /\[채울 태그\]마다 그 구조를 가진 익숙한 개념을 하나씩/);
-  assert.match(user, /\[채울 태그\]마다 하나, 많아야 2개/);
-  const text = J({ concepts: [{ label: '가', tag: 'loss_risk' }, { label: '나', tag: 'loss_risk' }, { label: '다', tag: 'market_price' }] });
-  const tagIds = new Set(TAGS.map(t => t.id));
-  assert.deepEqual(parsePlan(text, { tagIds, n: 5, perTag: true }).concepts.map(c => c.label), ['가', '다']);
-  assert.deepEqual(parsePlan(text, { tagIds, n: 5 }).concepts.map(c => c.label), ['가', '나', '다']);
-
-  const f = fakeAsk({ plan: ['오프사이드'], plan2: ['체력 안배'] });
-  await run(newHelperState({ name: '축구', mode: 'add' }), deps({ ask: f.ask }));
-  const plans = f.log.filter(x => x.k === 'plan');
-  assert.doesNotMatch(plans[0].system, /마다 그 구조를 가진/);
-  assert.match(plans[1].system, /마다 그 구조를 가진/);
-  // 남은 태그 수(25 - 1)와 다음 바퀴 상한(10) 중 작은 것
-  assert.match(plans[1].user, new RegExp(`많아야 ${Math.min(HELPER_LIMITS.laterPlan, TAGS.length - 1)}개`));
-});
-
-test('묶음 10개: 첫 계획 10개는 초안 한 번·평가 한 번에 다룬다(T-229)', async () => {
-  const SY = '가나다라마바사아자차';
-  const WORDS = ['훈련', '전술', '관중', '응원', '경기장', '유니폼', '심판', '주장', '골키퍼', '드리블'];
-  const ten = WORDS.map((w, k) => `${w} ${SY[k]}`);
-  ten.forEach((l, k) => { FACT[l] = { facts: [`${WORDS[k]}에 ${SY[k]}${SY[(k + 3) % 10]} 방식으로 힘을 쏟을수록 ${WORDS[(k + 5) % 10]} 결과가 달라진다.`], tags: [TAGS[k].id] }; });
-  const f = fakeAsk({ plan: ten, plan2: [] });
-  await run(newHelperState({ name: '축구', mode: 'add' }), deps({ ask: f.ask }));
-  for (const l of ten) delete FACT[l];
-  assert.equal(HELPER_LIMITS.batch, 10);
-  assert.deepEqual(f.log.map(x => x.k).slice(0, 3), ['plan', 'draft', 'evaluate']);
-  assert.equal(f.log.filter(x => x.k === 'draft').length, 1);
-});

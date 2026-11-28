@@ -14,6 +14,7 @@
 //   npm run eval:helper -- --max-calls 120            # 이번 실행 실제 LLM 호출(생성 + 채점, 캐시 제외) 상한. 기본 120
 //   npm run eval:helper -- --rpm 10                   # 분당 호출 상한(기본 10)
 //   npm run eval:helper -- --fresh                    # 캐시를 쓰지 않고 다시
+//   npm run eval:helper -- --judge-overlap-ok         # 채점 모델이 도우미 평가 체인에 있어도 돌린다(결과에 judgeOverlap 표시)
 //   npm run eval:helper -- --rejudge <결과.json>       # 예전 결과 파일의 도우미 노드를 지금 채점자로 다시 채점만(생성 없음, T-229 비교용)
 // 도우미 평가 단계(T-229)는 확장처럼 노드를 쓴 제공자를 피한다: 평가 체인 = 생성 체인 + 키 있는 다른 fallbackChain 항목(채점 계열 포함)을
 // agent.providerOrder로 줄 세운 뒤 preferOthers. 채점 모델이 평가 체인 모델과 같으면 멈춘다(JUDGE_MODEL로 다른 모델을 고른다)
@@ -249,13 +250,16 @@ if (rejudge) {
 
 const chain = await generationChain(judge);
 const evalChain = await evaluatorChain(chain);
-if (judge && evalChain.some(p => modelKey(p) === modelKey(judge))) {
-  throw new Error(`채점 모델(${modelKey(judge)})이 도우미 평가 체인에 있어요. JUDGE_MODEL로 다른 모델을 골라 주세요.`);
+// 채점 모델이 도우미 평가자와 같으면 태그맞음이 후해질 수 있다. 다른 무료 모델이 없을 때만 --judge-overlap-ok로 허용하고 결과에 적는다
+const judgeOverlap = !!judge && evalChain.some(p => modelKey(p) === modelKey(judge));
+if (judgeOverlap && !has('--judge-overlap-ok')) {
+  throw new Error(`채점 모델(${modelKey(judge)})이 도우미 평가 체인에 있어요. JUDGE_MODEL로 다른 모델을 고르거나, 알고 쓰려면 --judge-overlap-ok.`);
 }
+if (judgeOverlap) console.log(`※ 채점 모델이 도우미 평가 체인에 있어요(${modelKey(judge)}). 태그맞음·익숙함이 후하게 나올 수 있어요.`);
 console.log(`생성 체인(에이전트 순서): ${chain.map(modelKey).join(' → ')} · 도우미 평가 체인(쓴 제공자는 뒤로): ${evalChain.map(modelKey).join(' → ')}${judge ? ` · 채점: ${modelKey(judge)}` : ''}`);
 console.log(`관심사 ${interests.join(', ')} · 호출 상한 ${maxCalls}(캐시 제외) · 분당 ${rpm}회 · expectTag 문장 ${items.length}개(대체 임베더)`);
 const methods = only ? [only] : ['helper', 'oneshot'];
-const meta = { chain: chain.map(modelKey), evalChain: evalChain.map(modelKey), judge: judge ? modelKey(judge) : null, embedder: 'fallback-ngram(대체 임베더, 실제 모델 아님)', maxCalls, helperLimits: HELPER_LIMITS };
+const meta = { chain: chain.map(modelKey), evalChain: evalChain.map(modelKey), judgeOverlap, judge: judge ? modelKey(judge) : null, embedder: 'fallback-ngram(대체 임베더, 실제 모델 아님)', maxCalls, helperLimits: HELPER_LIMITS };
 
 for (const name of interests) {
   for (const method of methods) {
@@ -275,7 +279,7 @@ for (const name of interests) {
     }
     rows.push(row);
     save(meta);
-    console.log('  ' + (row.metrics ? rowLine(row) : `오류 ${row.error}`));
+    console.log('  ' + (row.metrics ? rowLine(row) : `오류 ${row.error}`) + (row.judgeError ? ` · 채점 오류 ${row.judgeError}` : ''));
   }
 }
 
