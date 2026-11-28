@@ -1,7 +1,7 @@
 // 서비스 워커: 저장소 병합 → 임베딩 → 그래프 검색 → LLM 비유 생성
 import { getAdminConfig, getSettings, saveSettings, resolveProvider } from './lib/config.js';
 import { complete, PROVIDERS } from './lib/providers.js';
-import { buildChain, completeWithFallback } from './lib/fallback.js';
+import { buildChain, completeWithFallback, reorderChain } from './lib/fallback.js';
 import { mergeGraphs, embedItems, sha1, COMMON_INTERESTS, DEFAULT_INTEREST, commonInterest } from './lib/graph.js';
 import { loadCommonGraph, loadBlocklist, getUserStore, validateOverlay, normalizeOverlay } from './lib/stores.js';
 import { retrieve, topTags, feedbackAdjust, retrievalFor } from './lib/retrieval.js';
@@ -458,8 +458,9 @@ const str = (v, n) => String(v ?? '').slice(0, n);
 // 하루 상한은 이어 묻기·교정 진단이 같은 agentCalls를 센다
 async function agentDeps(graph) {
   const [settings, admin, provider] = await Promise.all([getSettings(), getAdminConfig(), resolveProvider()]);
-  const chain = buildChain(provider, admin, settings);
-  const state = { answered: provider, fallbacks: [] };
+  // 에이전트는 JSON 액션 형식을 잘 지키는 순서로(T-222, admin agent.providerOrder). 체인 항목끼리 자리만 바꾼다
+  const chain = reorderChain(buildChain(provider, admin, settings), admin.agent?.providerOrder);
+  const state = { answered: chain[0] || provider, fallbacks: [] };
   const ask = async (system, user, opts) => {
     const r = await completeWithFallback(chain, system, user, opts, { cooldowns, cooldown: admin.cooldown });
     state.answered = r.provider;

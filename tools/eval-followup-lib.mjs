@@ -2,7 +2,7 @@
 // 실행은 tools/eval-followup.mjs. 에이전트는 확장과 같은 runFollowup(agent-tools.js)을 그대로 돈다.
 import { parseJSONLoose } from '../extension/lib/providers.js';
 import { parseAction } from '../extension/lib/agent.js';
-import { runFollowup, FOLLOWUP_TOOL_NAMES } from '../extension/lib/agent-tools.js';
+import { runFollowup, FOLLOWUP_TOOL_NAMES, FOLLOWUP_PROMPT_VERSION } from '../extension/lib/agent-tools.js';
 import { retrieve, retrievalFor } from '../extension/lib/retrieval.js';
 import { REJECTED_TEXT } from '../extension/lib/analogy-server.js';
 import { GROUNDING_REJECTED_TEXT } from '../extension/lib/grounding.js';
@@ -73,6 +73,13 @@ export function checkResponse(text, graph) {
   return { parsed: true, final: false, tool: act.name, toolOk, argsOk };
 }
 
+// 형식이 틀린 응답(JSON으로 안 읽힘·도구 이름·인자 틀림)은 원문 앞부분을 남긴다(T-222, 원인 진단용. 키는 응답에 없다)
+export const SAMPLE_MAX = 240;
+export function withSample(check, text) {
+  const bad = !check.parsed || check.toolOk === false || check.argsOk === false;
+  return bad ? { ...check, sample: String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, SAMPLE_MAX) } : check;
+}
+
 /**
  * 이어 묻기 한 문항. ask를 감싸 응답 원문을 모두 남긴다(형식 점검, 걸러지기 전 최종 답 채점용).
  * 돌려주는 값: 결과 행 { id, question, prev, candidateIds, answer, evidence, rejected, stopText, rawFinal, foundIds,
@@ -94,24 +101,27 @@ export async function runFollowupCase({ item, graph, prev, candidateIds, ask, se
       answer: r.answer, evidence: r.evidence, rejected: r.rejected, stopText: r.stopText,
       rawFinal: r.debug.stop ? null : lastFinal?.final || null,
       foundIds: idsFromLabels(graph, r.found),
-      responses: texts.map(t => checkResponse(t, graph)),
+      responses: texts.map(t => withSample(checkResponse(t, graph), t)),
       calls: r.debug.calls, steps: r.debug.steps, stop: r.debug.stop, trace: r.debug.trace,
       ...(r.debug.grounding ? { grounding: r.debug.grounding } : {}),
       ms: now() - t0
     };
   } catch (e) {
-    return { ...base, error: String(e?.message || e).slice(0, 200), responses: texts.map(t => checkResponse(t, graph)), calls: texts.length, ms: now() - t0 };
+    return { ...base, error: String(e?.message || e).slice(0, 200), responses: texts.map(t => withSample(checkResponse(t, graph), t)), calls: texts.length, ms: now() - t0 };
   }
 }
 
 // ── 채점 ──
+// 채점 기준 판(T-222: "없음"·억지 비유 기준 강화). 바꾸면 올린다(캐시 키에 들어간다)
+export const JUDGE_VERSION = 'T-222';
 const JUDGE_SYSTEM = [
   '너는 비유 앱의 "이어 묻기" 답을 채점하는 심사자다. 사용자가 방금 본 게임 비유에 대해 이어서 물었고, 다른 모델이 답했다. 엄격하게 채점한다.',
   '- grounded: 답에 쓴 게임 사실이 아래 "볼 수 있던 개념의 사실" 안에 있으면 true. 목록에 없는 수치·이름·규칙·설정을 지어냈으면 false. 맞는 개념이 없다고만 답했으면 true.',
-  '- helpful (1~5): 질문에 맞게 답했는가. 5 = 질문에 정확히 답해 납득됨, 3 = 관련은 있으나 질문을 비켜 감, 1 = 엉뚱하거나 쓸모없음. 정말 맞는 개념이 없을 때 없다고 짧게 말한 답은 4~5, 맞는 개념이 있는데 없다고 하거나 억지로 끼워 맞춘 답은 1~2.',
+  '- forced: 답이 게임 개념에 빗댔는데 문장과의 공통점이 억지면 true. 억지란 공통점이 두루뭉술하거나("정해진 조건을 맞춘다", "과정이다", "특별한 장소", "꾸준히 해야 한다", "일정이 있다") 낱말만 겹치고, 문장의 핵심 구조(무엇이 무엇을 제한·증폭·교환·조건으로 거는지)와 사실이 구체적으로 맞지 않는 것이다. 날짜·장소 안내, 사물·동물의 성질 묘사, 생활 수칙, 단순한 행동 문장에 게임 비유를 붙였으면 거의 항상 억지다. 개념 없이 없다고 답했거나 구조가 구체적으로 맞으면 false.',
+  '- helpful (1~5): 질문에 맞게 답했는가. 5 = 질문에 정확히 답해 납득됨, 3 = 관련은 있으나 질문을 비켜 감, 1 = 엉뚱하거나 쓸모없음. forced가 true인 답은 아무리 매끄러워도 1~2. 정말 맞는 개념이 없을 때 없다고 짧게 말한 답은 4~5, 볼 수 있던 개념 중 구조가 구체적으로 맞는 것이 있는데 없다고 한 답은 2.',
   '- haeyo: 모든 문장이 해요체(~요)로 끝나면 true. ~습니다·~다·반말이 있으면 false.',
-  '- reason: 이유를 한국어 한두 문장으로. grounded가 false면 지어낸 부분을 짚는다.',
-  '반드시 JSON 하나만 출력한다: {"grounded": true|false, "helpful": 1-5, "haeyo": true|false, "reason": "..."}'
+  '- reason: 이유를 한국어 한두 문장으로. grounded가 false면 지어낸 부분을, forced가 true면 어디가 억지인지 짚는다.',
+  '반드시 JSON 하나만 출력한다: {"grounded": true|false, "forced": true|false, "helpful": 1-5, "haeyo": true|false, "reason": "..."}'
 ].join('\n');
 
 const factLines = facts => (facts || []).map(f => `  - ${f}`).join('\n') || '  (사실 없음)';
@@ -132,18 +142,18 @@ export function buildFollowupJudgePrompt(row, graph) {
     `채점할 답: ${f.answer || ''}`,
     `답이 댄 근거 개념: ${f.nodeId || '없음'}${f.usedFact ? ` / 인용한 사실: ${f.usedFact}` : ''}`,
     '',
-    'JSON {"grounded", "helpful", "haeyo", "reason"} 하나로 답해 줘.'
+    'JSON {"grounded", "forced", "helpful", "haeyo", "reason"} 하나로 답해 줘.'
   ].join('\n');
   return { system: JUDGE_SYSTEM, user };
 }
 
-// 채점 응답 → { grounded, helpful, haeyo, reason } | null
+// 채점 응답 → { grounded, forced, helpful, haeyo, reason } | null. forced는 T-222부터(없으면 null, 예전 캐시와 호환)
 export function parseFollowupJudge(text) {
   const j = parseJSONLoose(text);
   if (!j || typeof j !== 'object') return null;
   if (typeof j.grounded !== 'boolean' || typeof j.haeyo !== 'boolean') return null;
   if (!Number.isInteger(j.helpful) || j.helpful < 1 || j.helpful > 5) return null;
-  return { grounded: j.grounded, helpful: j.helpful, haeyo: j.haeyo, reason: typeof j.reason === 'string' ? j.reason : '' };
+  return { grounded: j.grounded, forced: typeof j.forced === 'boolean' ? j.forced : null, helpful: j.helpful, haeyo: j.haeyo, reason: typeof j.reason === 'string' ? j.reason : '' };
 }
 
 // ── 코드로 재는 지표(채점 모델 없이) ──
@@ -197,6 +207,9 @@ export function summarizeFollowup(rows) {
     judged: judged.length,
     groundedRate: judged.length ? judged.filter(r => r.judge.grounded).length / judged.length : null,
     helpfulAvg: avg(judged.map(r => r.judge.helpful)),
+    // 억지 비유(채점): forced를 준 채점만 센다. 보인 답 기준도 따로(숨긴 답은 사용자가 못 본다)
+    forced: { yes: judged.filter(r => r.judge.forced === true).length, n: judged.filter(r => typeof r.judge.forced === 'boolean').length },
+    forcedShown: judged.filter(r => r.judge.forced === true && r.score?.shown).length,
     haeyoRate: judged.length ? judged.filter(r => r.judge.haeyo).length / judged.length : null,
     format: {
       responses: responses.length,
@@ -225,7 +238,7 @@ export function summaryLines(s) {
   return [
     `문항 ${s.n} · 최종 답 ${s.finals} · 보임 ${s.shown} · 숨김(규칙 1 ${s.hiddenRule1}, 근거 ${s.hiddenGrounding}, 기타 ${s.hiddenOther}) · 멈춤 ${stops}${s.errors ? ` · 오류 ${s.errors}` : ''}`,
     `기대 지킴: 개념 ${frac(s.expect.node)} · 없음 ${frac(s.expect.none)} · 아무거나 ${frac(s.expect.any)} · 기대 노드 적중 ${frac(s.hit)} · 다른 비유가 다른 개념 ${frac(s.notPrev)}`,
-    `채점 ${s.judged} · 근거 준수 ${pc(s.groundedRate)} · 도움됨 평균 ${f2(s.helpfulAvg)} · 해요체(채점) ${pc(s.haeyoRate)} · 해요체(코드, 보인 답) ${frac(s.haeyoCode)}`,
+    `채점 ${s.judged} · 근거 준수 ${pc(s.groundedRate)} · 도움됨 평균 ${f2(s.helpfulAvg)} · 억지 비유 ${s.forced.n ? `${s.forced.yes}/${s.forced.n}(보인 답 ${s.forcedShown})` : '—'} · 해요체(채점) ${pc(s.haeyoRate)} · 해요체(코드, 보인 답) ${frac(s.haeyoCode)}`,
     `형식: 응답 ${s.format.responses} 중 JSON 액션 ${s.format.parsed} · 도구 이름 ${s.format.toolOk}/${s.format.actions} · 인자 ${s.format.argsOk}/${s.format.actions}`,
     `호출 평균 ${f1(s.callsAvg)}(최대 ${s.callsMax ?? '—'}) · 단계 평균 ${f1(s.stepsAvg)} · 지연 중앙 ${s.msMedian ?? '—'}ms · p90 ${s.msP90 ?? '—'}ms`
   ];
@@ -233,15 +246,15 @@ export function summaryLines(s) {
 
 // EVAL_LOG 표 한 줄(생성 평가 줄과 같은 칸)
 export function followupLogRow(s, { date, gen = [], judge = '—', embedder = '—' }) {
-  const metrics = `근거 준수 ${pc(s.groundedRate)}(${s.judged}) · 도움됨 ${f2(s.helpfulAvg)} · 해요체 ${pc(s.haeyoRate)} · 기대 지킴 개념 ${frac(s.expect.node)}·없음 ${frac(s.expect.none)}·아무거나 ${frac(s.expect.any)} · 숨김 규칙 1 ${s.hiddenRule1}·근거 ${s.hiddenGrounding}`;
+  const metrics = `보인 답 ${s.shown}/${s.n} · 근거 준수 ${pc(s.groundedRate)}(${s.judged}) · 도움됨 ${f2(s.helpfulAvg)}${s.forced.n ? ` · 억지 ${s.forced.yes}/${s.forced.n}` : ''} · 해요체 ${pc(s.haeyoRate)} · 기대 지킴 개념 ${frac(s.expect.node)}·없음 ${frac(s.expect.none)}·아무거나 ${frac(s.expect.any)} · 숨김 규칙 1 ${s.hiddenRule1}·근거 ${s.hiddenGrounding}`;
   const memo = `T-218 이어 묻기 평가. 생성 ${gen.join(', ') || '—'} → 채점 ${judge}. 호출 평균 ${f1(s.callsAvg)}·단계 ${f1(s.stepsAvg)}·지연 중앙 ${s.msMedian ?? '—'}ms, 형식 ${s.format.parsed}/${s.format.responses}`;
   return `| ${date} | ${embedder} | 이어 묻기 ${s.n} | admin.retrieval | — | — | — | — | ${metrics}. ${memo} |`;
 }
 
 // 캐시 키
 export const hoverKey = (gen, embedder, sentence) => `hover|${gen}|${embedder}|${sentence}`;
-export const agentKey = (gen, embedder, item) => `agent|${gen}|${embedder}|${item.id}|${item.sentence}|${item.question}`;
-export const judgeKey = (judge, row) => `judge|${judge}|${row.id}|${JSON.stringify(row.rawFinal)}|${(row.foundIds || []).join(',')}`;
+export const agentKey = (gen, embedder, item) => `agent|${FOLLOWUP_PROMPT_VERSION}|${gen}|${embedder}|${item.id}|${item.sentence}|${item.question}`;
+export const judgeKey = (judge, row) => `judge|${JUDGE_VERSION}|${judge}|${row.id}|${JSON.stringify(row.rawFinal)}|${(row.foundIds || []).join(',')}`;
 
 // 채점 모델은 생성과 다른 계열이어야 한다. 계열 = 제공자 id(같은 회사 모델끼리 후하게 채점하는 것을 막는다)
 export const familyOf = p => p.id ?? p.provider;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PROVIDERS, complete, retryPolicy } from '../../extension/lib/providers.js';
+import { PROVIDERS, complete, retryPolicy, parseJSONLoose, firstJSONObject, isToolUseFailed } from '../../extension/lib/providers.js';
 
 const gemini = { id: 'gemini', def: PROVIDERS.gemini, model: 'm', apiKey: 'k', baseUrl: PROVIDERS.gemini.baseUrl };
 const ok = { candidates: [{ content: { parts: [{ text: 'thought', thought: true }, { text: '답' }] } }] };
@@ -194,4 +194,56 @@ test('NVIDIA: 생각(thinking)을 끄는 chat_template_kwargs 를 보낸다 (켜
   const bodies = mockFetch(t, [[200, chat('답')]]);
   assert.equal(await complete(nvidia, 's', 'u'), '답');
   assert.deepEqual(bodies[0].chat_template_kwargs, { enable_thinking: false });
+});
+
+// ── T-222: 이어 묻기 에이전트(JSON 액션)용 ──
+test('Groq: jsonObject를 청하면(에이전트) response_format json_object, 호버(json만)·스트리밍·다른 제공자는 안 보낸다', async t => {
+  const bodies = mockFetch(t, [[200, chat('{}')], [200, chat('{}')], [200, chat('{}')]]);
+  await complete(groq, 's', 'u', { json: true, jsonObject: true });
+  await complete(groq, 's', 'u', { json: true });
+  const nvidia = { id: 'nvidia', def: PROVIDERS.nvidia, model: 'm', apiKey: 'k', baseUrl: PROVIDERS.nvidia.baseUrl };
+  await complete(nvidia, 's', 'u', { json: true, jsonObject: true });
+  assert.deepEqual(bodies[0].response_format, { type: 'json_object' });
+  assert.equal(bodies[1].response_format, undefined);
+  assert.equal(bodies[2].response_format, undefined, '등록부에 jsonObject가 없는 제공자');
+});
+
+test('openai-compat: content 없이 tool_calls로 오면 JSON 액션 글자로 바꾼다(arguments가 글자여도)', async t => {
+  mockFetch(t, [[200, { choices: [{ message: { content: '', tool_calls: [{ type: 'function', function: { name: 'get_node_facts', arguments: '{"nodeId":"cube"}' } }] } }] }]]);
+  assert.equal(await complete(groq, 's', 'u', { json: true }), '{"action":"get_node_facts","args":{"nodeId":"cube"}}');
+});
+
+test('openai-compat: 400 tool_use_failed에 원래 생성(failed_generation)이 있으면 그 글을 답으로(다시 보내지 않음)', async t => {
+  const err = { error: { message: 'Tool choice is none, but model called a tool', code: 'tool_use_failed', failed_generation: '{"name":"get_node_facts","arguments":{"nodeId":"cube"}}' } };
+  const bodies = mockFetch(t, [[400, err]]);
+  assert.equal(await complete(groq, 's', 'u', { json: true }), err.error.failed_generation);
+  assert.equal(bodies.length, 1);
+});
+
+test('openai-compat: 원래 생성 없는 모델 출력 400이면 JSON 객체 모드를 끄고 한 번만 다시, 또 실패하면 modelOutput으로 던진다', async t => {
+  const err = { error: { message: "Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details.", type: 'invalid_request_error' } };
+  const bodies = mockFetch(t, [[400, err], [200, chat('{"final":{"answer":"a"}}')], [400, err], [400, err]]);
+  assert.equal(await complete(groq, 's', 'u', { json: true, jsonObject: true }), '{"final":{"answer":"a"}}');
+  assert.deepEqual(bodies[0].response_format, { type: 'json_object' });
+  assert.equal(bodies[1].response_format, undefined, '다시 보낼 때는 끈다');
+  await assert.rejects(complete(groq, 's', 'u', { json: true, jsonObject: true }), e => e.status === 400 && e.modelOutput === true);
+  assert.equal(bodies.length, 4, '두 번째 호출도 한 번만 다시');
+});
+
+test('isToolUseFailed: 모델 출력 400만(키 오류 400은 아님)', () => {
+  assert.equal(isToolUseFailed({ status: 400, message: '400 Tool choice is none, but model called a tool' }), true);
+  assert.equal(isToolUseFailed({ status: 400, message: '400 bad', body: '{"error":{"code":"json_validate_failed"}}' }), true);
+  assert.equal(isToolUseFailed({ status: 400, message: "400 Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details." }), true, 'Groq JSON 객체 모드 검증 실패(2026-11-28 Actions 스모크 원문)');
+  assert.equal(isToolUseFailed({ status: 400, message: '400 API key not valid.' }), false);
+  assert.equal(isToolUseFailed({ status: 429, message: 'called a tool' }), false);
+});
+
+test('parseJSONLoose: 객체 둘을 이어 붙였으면 앞의 것, 문자열 속 중괄호는 세지 않는다', () => {
+  assert.deepEqual(parseJSONLoose('{"a":"x}"}\n{"b":2}'), { a: 'x}' });
+  assert.deepEqual(parseJSONLoose('생각: {나쁨} 그래서 {"a":1} 끝 }'), { a: 1 });
+  assert.deepEqual(parseJSONLoose('{"a":{"b":"\\"}"}}'), { a: { b: '"}' } });
+  assert.equal(parseJSONLoose('{깨짐'), null);
+  assert.equal(firstJSONObject('없음'), null);
+  // 예전 동작은 그대로
+  assert.deepEqual(parseJSONLoose('```json\n{"a":1}\n```'), { a: 1 });
 });

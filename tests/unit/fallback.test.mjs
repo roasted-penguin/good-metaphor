@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildChain, completeWithFallback, isDailyLimit, cooldownMsFor } from '../../extension/lib/fallback.js';
+import { buildChain, completeWithFallback, isDailyLimit, cooldownMsFor, reorderChain } from '../../extension/lib/fallback.js';
 import { providerFor } from '../../extension/lib/config.js';
 import { retryPolicy } from '../../extension/lib/providers.js';
 
@@ -106,6 +106,17 @@ test('503·네트워크 오류도 다음 순서로 (쿨다운은 남기지 않�
   const r = await completeWithFallback(chain, 's', 'u', {}, { cooldowns: cd, cooldown: admin.cooldown, now: () => 0 });
   assert.equal(label(r.provider), 'gemini/gemini-3.8-flash');
   assert.deepEqual(cd.peek(), {});
+});
+
+test('모델이 고유 함수 호출을 내 거절된 400(tool_use_failed, 원래 생성 없음)은 다음 순서로, 키 오류 400은 그대로(T-222)', async t => {
+  mockFetch(t, (model, url) => model === 'openai/gpt-oss-120b'
+    ? [400, { error: { message: 'Tool choice is none, but model called a tool', code: 'tool_use_failed' } }] : ok(model, url));
+  const cd = memCooldowns();
+  const chain = buildChain(providerFor('groq', 'openai/gpt-oss-120b', admin, settings), admin, settings);
+  const r = await completeWithFallback(chain, 's', 'u', { json: true }, { cooldowns: cd, cooldown: admin.cooldown, now: () => 0 });
+  assert.equal(label(r.provider), 'gemini/gemini-3.8-flash');
+  assert.deepEqual(cd.peek(), {}, '쿨다운 없음');
+  assert.match(r.fallbacks[0].reason, /called a tool/);
 });
 
 test('키 오류(401)는 체인을 타지 않고 그대로 던진다', async t => {
@@ -350,4 +361,31 @@ test('deadline: 순서마다 시간 제한은 남은 시간으로 줄어든다(�
   const t0 = Date.now();
   await assert.rejects(completeWithFallback(chain, 's', 'u', { timeoutMs: 90_000, deadline: Date.now() + 80 }, { cooldowns: memCooldowns(), cooldown: admin.cooldown }));
   assert.ok(Date.now() - t0 < 2000, `${Date.now() - t0}ms`);
+});
+
+test('reorderChain(에이전트 순서, T-222): 목록에 있는 항목끼리만 자리를 바꾸고, 없는 항목·로컬은 제자리, 길이 그대로', () => {
+  const P = (id, model = 'm', local = false) => ({ id, model, def: { local } });
+  const chain = [P('groq'), P('gemini'), P('nvidia'), P('ollama', 'g', true)];
+  const ids = c => c.map(p => p.id);
+  assert.deepEqual(ids(reorderChain(chain, ['gemini', 'nvidia', 'groq'])), ['gemini', 'nvidia', 'groq', 'ollama']);
+  // 사용자가 고른 다른 제공자(목록에 없음)는 맨 앞 그대로
+  assert.deepEqual(ids(reorderChain([P('openai'), ...chain], ['gemini', 'nvidia', 'groq'])), ['openai', 'gemini', 'nvidia', 'groq', 'ollama']);
+  // 로컬을 목록 앞에 둬도 움직이지 않는다(규칙 8), 체인에 없는 id는 무시. 움직일 항목이 하나면 제자리
+  assert.deepEqual(ids(reorderChain(chain, ['ollama', 'anthropic', 'nvidia'])), ['groq', 'gemini', 'nvidia', 'ollama']);
+  assert.deepEqual(ids(reorderChain(chain, ['ollama', 'nvidia', 'groq'])), ['nvidia', 'gemini', 'groq', 'ollama']);
+  // 순위가 더 붙어도(규칙 7) 같은 규칙, 같은 제공자 여러 모델은 원래 순서
+  const long = [P('groq', 'a'), P('gemini', 'x'), P('groq', 'b'), P('nvidia'), P('custom'), P('ollama', 'g', true)];
+  assert.deepEqual(reorderChain(long, ['nvidia', 'groq']).map(p => `${p.id}/${p.model}`), ['nvidia/m', 'gemini/x', 'groq/a', 'groq/b', 'custom/m', 'ollama/g']);
+  // 비었거나 배열이 아니면 그대로(같은 배열)
+  assert.equal(reorderChain(chain, []), chain);
+  assert.equal(reorderChain(chain, undefined), chain);
+});
+
+test('admin.json agent.providerOrder: fallbackChain에 있는 제공자 id만, 로컬은 넣지 않는다', async () => {
+  const fs = await import('node:fs');
+  const a = JSON.parse(fs.readFileSync(new URL('../../extension/config/admin.json', import.meta.url)));
+  const order = a.agent?.providerOrder || [];
+  const inChain = new Set(a.fallbackChain.map(e => e.provider));
+  for (const id of order) assert.ok(inChain.has(id), id);
+  assert.ok(!order.includes('ollama'));
 });

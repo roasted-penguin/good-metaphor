@@ -1,7 +1,7 @@
 // 이어 묻기 에이전트 도구·프롬프트·최종 답 검사(T-216, ADR 0017 에이전트 1)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nodeFacts, nodesByTag, makeFollowupTools, buildFollowupPrompt, finalizeAnswer, runFollowup, cleanQuestion, FOLLOWUP_QUESTIONS, FOLLOWUP_TOOL_NAMES } from '../../extension/lib/agent-tools.js';
+import { nodeFacts, nodesByTag, makeFollowupTools, buildFollowupPrompt, finalizeAnswer, runFollowup, cleanQuestion, followupProblems, FOLLOWUP_QUESTIONS, FOLLOWUP_TOOL_NAMES, FOLLOWUP_MAX_CORRECTIONS } from '../../extension/lib/agent-tools.js';
 import { AGENT_STOP_TEXT, AGENT_CAP_TEXT } from '../../extension/lib/agent.js';
 import { REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
 import { GROUNDING_REJECTED_TEXT } from '../../extension/lib/grounding.js';
@@ -160,7 +160,8 @@ test('runFollowup "왜 비슷해요?": get_node_facts → final, 근거 칩, tra
   assert.equal(r.stopText, null);
   assert.equal(calls.length, 2);
   assert.equal(r.debug.calls, 2);
-  assert.deepEqual(r.debug.trace.map(t => t.type), ['action', 'final']);
+  assert.deepEqual(r.debug.trace.map(t => t.type), ['action', 'final', 'verify']);
+  assert.equal(r.debug.corrections, 0);
   assert.ok(calls[0].user.includes('id=cube'), '그래프에 있는 후보만 싣는다');
   assert.ok(!calls[0].user.includes('id=ghost'), '그래프에 없는 후보 id는 버린다');
 });
@@ -202,6 +203,82 @@ test('runFollowup: 상한·반복·체인 소진이면 "여기까지 했어요" 
   assert.equal(cap.capped, true);
   assert.equal(cap.stopText, AGENT_CAP_TEXT);
   assert.equal(none.calls.length, 0);
+});
+
+// ── T-222: 사실 읽기 강제·한 번 되묻기 ──
+test('runFollowup: 사실을 읽지 않고 개념을 대면 그 facts를 실어 한 번 되묻고, 고친 답을 보인다(T-222)', async () => {
+  const { ask, calls } = scripted([
+    { final: { answer: '실패하면 손해예요.', nodeId: 'starforce', usedFact: '스타포스는 위험하다' } },
+    { final: { answer: '실패하면 손해를 보는 점이 같아요.', nodeId: 'starforce', usedFact: SF.facts[2] } }
+  ]);
+  const r = await runFollowup({ ...BASE, question: '왜 비슷해요?', ask });
+  assert.equal(r.answer, '실패하면 손해를 보는 점이 같아요.');
+  assert.equal(r.evidence.nodeId, 'starforce');
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].user.includes('[검증 실패]'), '되묻기 문구');
+  assert.ok(calls[1].user.includes(JSON.stringify(SF.facts)), 'facts를 글자 그대로 싣는다');
+  assert.equal(r.debug.corrections, 1);
+  const v = r.debug.trace.filter(t => t.type === 'verify');
+  assert.deepEqual(v.map(t => t.ok), [false, true]);
+  assert.match(v[0].reason, /unread/);
+});
+
+test('runFollowup: 되묻기는 한 번뿐, 또 틀리면 finalizeAnswer가 숨긴다(규칙 1·근거 검사 그대로)', async () => {
+  assert.equal(FOLLOWUP_MAX_CORRECTIONS, 1);
+  const bad = { final: { answer: '스타포스는 확률이 37%예요.', nodeId: 'starforce', usedFact: SF.facts[0] } };
+  const { ask, calls } = scripted([bad, bad, bad]);
+  const r = await runFollowup({ ...BASE, question: '왜요?', ask });
+  assert.equal(calls.length, 2);
+  assert.equal(r.answer, '');
+  assert.equal(r.rejected, GROUNDING_REJECTED_TEXT);
+  // 후보 밖 개념도 한 번 되묻고, 그대로면 규칙 1로 숨긴다
+  const out = scripted([{ final: { answer: '레벨업과 같아요.', nodeId: 'level_exp', usedFact: '' } }]);
+  const r1 = await runFollowup({ ...BASE, candidateIds: ['starforce'], question: '왜요?', ask: out.ask });
+  assert.equal(out.calls.length, 2);
+  assert.ok(out.calls[1].user.includes('level_exp'));
+  assert.equal(r1.rejected, REJECTED_TEXT);
+});
+
+test('runFollowup: 도구로 facts를 읽은 개념이면 되묻지 않는다(검색 결과의 facts도 읽은 것)', async () => {
+  const sym = GRAPH.nodes.find(n => n.id === 'arcane_symbol');
+  const searchGraph = async () => [{ id: 'arcane_symbol', label: sym.label, score: 0.4 }];
+  const { ask, calls } = scripted([
+    { action: 'search_graph', args: { text: 'x', exclude: ['starforce'] } },
+    { final: { answer: '꾸준히 쌓아야 성장하는 점이 같아요.', nodeId: 'arcane_symbol', usedFact: sym.facts[2] } }
+  ]);
+  const r = await runFollowup({ ...BASE, question: '다른 비유는요?', ask, searchGraph });
+  assert.equal(calls.length, 2);
+  assert.equal(r.debug.corrections, 0);
+  assert.equal(r.evidence.nodeId, 'arcane_symbol');
+});
+
+test('runFollowup: 남은 차례가 없으면 되묻지 않고 그대로 판정한다', async () => {
+  const { ask, calls } = scripted([{ final: { answer: '실패하면 손해예요.', nodeId: 'starforce', usedFact: SF.facts[2] } }]);
+  const r = await runFollowup({ ...BASE, question: '왜요?', ask, maxCalls: 1 });
+  assert.equal(calls.length, 1);
+  assert.equal(r.answer, '실패하면 손해예요.', '사실이 맞으면 읽지 않았어도 보인다(근거 검사는 통과)');
+  assert.equal(r.debug.corrections, 0);
+});
+
+test('followupProblems: 개념 없는 답의 usedFact·숫자, 끝맺음, 문제없으면 null', () => {
+  const base = { graph: GRAPH, allowed: new Set(['starforce']), factsRead: new Set(['starforce']), ...PAYLOAD };
+  assert.equal(followupProblems({ ...base, final: { answer: '맞는 개념이 없어요.', nodeId: null, usedFact: '' } }), null);
+  assert.equal(followupProblems({ ...base, final: { answer: '같아요.', nodeId: 'starforce', usedFact: SF.facts[0] } }), null);
+  assert.deepEqual(followupProblems({ ...base, final: { answer: '없어요.', nodeId: null, usedFact: SF.facts[0] } }).reasons, ['fact-without-node']);
+  assert.deepEqual(followupProblems({ ...base, final: { answer: '세 번 하면 돼요.', nodeId: null, usedFact: '' } }).reasons, ['number-outside']);
+  assert.deepEqual(followupProblems({ ...base, final: { answer: '같은 구조입니다.', nodeId: 'starforce', usedFact: SF.facts[0] } }).reasons, ['ending']);
+  const nofact = followupProblems({ ...base, final: { answer: '같아요.', nodeId: 'starforce', usedFact: '' } });
+  assert.deepEqual(nofact.reasons, ['no-fact']);
+  assert.deepEqual(nofact.read, ['starforce']);
+  assert.equal(followupProblems({ ...base, final: { answer: '' } }), null, '빈 답은 형식 문구로');
+});
+
+test('buildFollowupPrompt: 사실 읽기 먼저·글자 그대로·"없음" 기준과 예시(T-222)', () => {
+  const { system } = buildFollowupPrompt({ domain: '메이플스토리', sentence: 's', question: 'q' });
+  assert.match(system, /facts를 도구로 읽는다/);
+  assert.match(system, /글자 그대로 복사/);
+  assert.match(system, /없음인 예/);
+  assert.match(system, /함수 호출 기능은 쓰지 않는다/);
 });
 
 test('말풍선 칩 문구(content.js FU_Q)가 FOLLOWUP_QUESTIONS와 같다', async () => {
