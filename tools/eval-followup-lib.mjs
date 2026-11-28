@@ -73,6 +73,14 @@ export function checkResponse(text, graph) {
   return { parsed: true, final: false, tool: act.name, toolOk, argsOk };
 }
 
+// 첫 final 전에 맞는 도구(셋 모두 facts를 돌려준다)를 불렀는가(T-224: 되묻기에 기대지 않고 스스로 facts를 읽었나).
+// responses: checkResponse 결과 배열
+export function readFactsFirst(responses = []) {
+  const firstFinal = responses.findIndex(x => x.final);
+  const before = firstFinal < 0 ? responses : responses.slice(0, firstFinal);
+  return before.some(x => x.parsed && !x.final && x.toolOk === true);
+}
+
 // 형식이 틀린 응답(JSON으로 안 읽힘·도구 이름·인자 틀림)은 원문 앞부분을 남긴다(T-222, 원인 진단용. 키는 응답에 없다)
 export const SAMPLE_MAX = 240;
 export function withSample(check, text) {
@@ -204,6 +212,8 @@ export function summarizeFollowup(rows) {
     hit: { ok: sc.filter(s => s.hit === true).length, n: sc.filter(s => s.hit != null).length },
     notPrev: { ok: sc.filter(s => s.notPrevOk === true).length, n: sc.filter(s => s.notPrevOk != null).length },
     haeyoCode: { ok: sc.filter(s => s.haeyoCode === true).length, n: sc.filter(s => s.haeyoCode != null).length },
+    // 스스로 facts 읽음(T-224): 개념·아무거나 기대 문항 중 오류 없는 것. 없음 기대는 도구 없이 답해도 맞다
+    selfRead: { ok: ok.filter(r => r.expect !== 'none' && readFactsFirst(r.responses)).length, n: ok.filter(r => r.expect !== 'none').length },
     judged: judged.length,
     groundedRate: judged.length ? judged.filter(r => r.judge.grounded).length / judged.length : null,
     helpfulAvg: avg(judged.map(r => r.judge.helpful)),
@@ -239,7 +249,7 @@ export function summaryLines(s) {
     `문항 ${s.n} · 최종 답 ${s.finals} · 보임 ${s.shown} · 숨김(규칙 1 ${s.hiddenRule1}, 근거 ${s.hiddenGrounding}, 기타 ${s.hiddenOther}) · 멈춤 ${stops}${s.errors ? ` · 오류 ${s.errors}` : ''}`,
     `기대 지킴: 개념 ${frac(s.expect.node)} · 없음 ${frac(s.expect.none)} · 아무거나 ${frac(s.expect.any)} · 기대 노드 적중 ${frac(s.hit)} · 다른 비유가 다른 개념 ${frac(s.notPrev)}`,
     `채점 ${s.judged} · 근거 준수 ${pc(s.groundedRate)} · 도움됨 평균 ${f2(s.helpfulAvg)} · 억지 비유 ${s.forced.n ? `${s.forced.yes}/${s.forced.n}(보인 답 ${s.forcedShown})` : '—'} · 해요체(채점) ${pc(s.haeyoRate)} · 해요체(코드, 보인 답) ${frac(s.haeyoCode)}`,
-    `형식: 응답 ${s.format.responses} 중 JSON 액션 ${s.format.parsed} · 도구 이름 ${s.format.toolOk}/${s.format.actions} · 인자 ${s.format.argsOk}/${s.format.actions}`,
+    `형식: 응답 ${s.format.responses} 중 JSON 액션 ${s.format.parsed} · 도구 이름 ${s.format.toolOk}/${s.format.actions} · 인자 ${s.format.argsOk}/${s.format.actions}${s.selfRead ? ` · 스스로 facts 읽음 ${frac(s.selfRead)}` : ''}`,
     `호출 평균 ${f1(s.callsAvg)}(최대 ${s.callsMax ?? '—'}) · 단계 평균 ${f1(s.stepsAvg)} · 지연 중앙 ${s.msMedian ?? '—'}ms · p90 ${s.msP90 ?? '—'}ms`
   ];
 }

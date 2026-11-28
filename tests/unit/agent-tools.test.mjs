@@ -1,7 +1,7 @@
 // 이어 묻기 에이전트 도구·프롬프트·최종 답 검사(T-216, ADR 0017 에이전트 1)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nodeFacts, nodesByTag, makeFollowupTools, buildFollowupPrompt, finalizeAnswer, runFollowup, cleanQuestion, followupProblems, FOLLOWUP_QUESTIONS, FOLLOWUP_TOOL_NAMES, FOLLOWUP_MAX_CORRECTIONS } from '../../extension/lib/agent-tools.js';
+import { nodeFacts, nodesByTag, makeFollowupTools, buildFollowupPrompt, finalizeAnswer, runFollowup, cleanQuestion, followupProblems, FOLLOWUP_QUESTIONS, FOLLOWUP_TOOL_NAMES, FOLLOWUP_MAX_CORRECTIONS, asksOther } from '../../extension/lib/agent-tools.js';
 import { AGENT_STOP_TEXT, AGENT_CAP_TEXT } from '../../extension/lib/agent.js';
 import { REJECTED_TEXT } from '../../extension/lib/analogy-server.js';
 import { GROUNDING_REJECTED_TEXT } from '../../extension/lib/grounding.js';
@@ -77,7 +77,7 @@ test('buildFollowupPrompt: 호버와 같은 범위(제목·앞 문장·문장·�
   assert.match(user, /질문: 왜 비슷해요\?/);
   assert.match(user, /id=starforce/);
   assert.match(user, /prob_upgrade/);
-  assert.ok(!/facts/.test(user), '후보 사실은 도구로 읽는다(프롬프트에 싣지 않음)');
+  assert.ok(!SF.facts.some(f => user.includes(f)), '후보 사실은 도구로 읽는다(프롬프트에 싣지 않음, T-224부터 순서 안내에 facts라는 낱말은 있다)');
 });
 
 test('finalizeAnswer: 허용 목록 안 노드 + 맞는 usedFact는 통과, 근거 정보', () => {
@@ -285,4 +285,85 @@ test('말풍선 칩 문구(content.js FU_Q)가 FOLLOWUP_QUESTIONS와 같다', as
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../../extension/content.js', import.meta.url), 'utf8');
   for (const [k, q] of Object.entries(FOLLOWUP_QUESTIONS)) assert.ok(src.includes(`${k}: '${q}'`), `${k}: '${q}'`);
+});
+
+// ── T-224: 되묻기 뒤 끝맺음은 호버(T-122)와 같이 보이고 표시만 ──
+test('runFollowup: 되묻기 뒤에도 ~습니다로 끝나면 글을 고치지 않고 그대로 보이며 debug.ending에 표시한다(T-224, 호버와 같은 모양)', async () => {
+  const formal = { final: { answer: '실패하면 손해를 보는 점이 같습니다.', nodeId: 'starforce', usedFact: SF.facts[2] } };
+  const { ask, calls } = scripted([formal, formal]);
+  const r = await runFollowup({ ...BASE, question: '왜 비슷해요?', ask });
+  assert.equal(calls.length, 2, '끝맺음 문제로 한 번만 되묻는다');
+  assert.ok(calls[1].user.includes('해요체'));
+  assert.equal(r.answer, formal.final.answer, '뜻을 바꿀 수 있는 결정적 고치기는 하지 않는다');
+  assert.equal(r.rejected, null);
+  assert.deepEqual(r.debug.ending, { ok: false, retried: true, issues: [{ field: 'answer', style: 'formal' }] });
+});
+
+test('runFollowup debug.ending: 되묻기로 고쳐지면 ok, 문제없으면 retried=false, 다른 이유로 되물었으면 retried=false(T-224)', async () => {
+  const fixed = scripted([
+    { final: { answer: '같은 구조입니다.', nodeId: 'starforce', usedFact: SF.facts[2] } },
+    { final: { answer: '같은 구조예요.', nodeId: 'starforce', usedFact: SF.facts[2] } }
+  ]);
+  const r1 = await runFollowup({ ...BASE, question: '왜요?', ask: fixed.ask });
+  assert.equal(r1.answer, '같은 구조예요.');
+  assert.deepEqual(r1.debug.ending, { ok: true, retried: true, issues: [] });
+
+  const clean = scripted([
+    { action: 'get_node_facts', args: { nodeId: 'starforce' } },
+    { final: { answer: '같은 구조예요.', nodeId: 'starforce', usedFact: SF.facts[2] } }
+  ]);
+  const r2 = await runFollowup({ ...BASE, question: '왜요?', ask: clean.ask });
+  assert.deepEqual(r2.debug.ending, { ok: true, retried: false, issues: [] });
+
+  // 첫 답은 사실을 안 읽은 해요체, 고친 답이 합쇼체 → 끝맺음으로는 되묻지 않았으므로 retried=false, 그대로 보인다
+  const other = scripted([
+    { final: { answer: '같아요.', nodeId: 'starforce', usedFact: '없는 사실' } },
+    { final: { answer: '같은 구조입니다.', nodeId: 'starforce', usedFact: SF.facts[2] } }
+  ]);
+  const r3 = await runFollowup({ ...BASE, question: '왜요?', ask: other.ask });
+  assert.equal(r3.answer, '같은 구조입니다.');
+  assert.deepEqual(r3.debug.ending, { ok: false, retried: false, issues: [{ field: 'answer', style: 'formal' }] });
+
+  // 숨긴 답·멈춤에는 ending을 싣지 않는다
+  const hidden = scripted([{ final: { answer: '레벨업입니다.', nodeId: 'level_exp', usedFact: '' } }]);
+  const r4 = await runFollowup({ ...BASE, candidateIds: ['starforce'], question: '왜요?', ask: hidden.ask });
+  assert.equal(r4.answer, '');
+  assert.equal(r4.debug.ending, undefined);
+});
+
+// ── T-224: Groq가 스스로 facts를 읽게 하는 첫 차례 안내 ──
+test('buildFollowupPrompt: 첫 차례는 facts 읽기 도구 호출이라는 안내와 실제 근거 id로 쓴 예시를 사용자 글 끝에 싣는다(T-224)', () => {
+  const { user } = buildFollowupPrompt({ domain: '메이플스토리', sentence: 's', question: '왜 비슷해요?', prev: PREV, candidates: [{ id: 'cube', label: '큐브' }] });
+  const tail = user.slice(user.lastIndexOf('질문:'));
+  assert.match(tail, /\[순서\]/);
+  assert.ok(tail.includes('{"action": "get_node_facts", "args": {"nodeId": "starforce"}}'), '방금 근거 개념 id로 예시');
+  // 근거가 없으면 첫 후보 id, 후보도 없으면 search_graph 예시
+  const c = buildFollowupPrompt({ domain: 'd', sentence: 's', question: 'q', candidates: [{ id: 'cube', label: '큐브' }] }).user;
+  assert.ok(c.includes('"nodeId": "cube"'));
+  const n = buildFollowupPrompt({ domain: 'd', sentence: 's', question: 'q' }).user;
+  assert.ok(n.includes('"action": "search_graph"'));
+  // "다른 비유"면 방금 근거를 읽게 하지 않고 exclude에 넣은 검색을 예시로
+  for (const q of [FOLLOWUP_QUESTIONS.other, '다른 개념도 있어요?']) {
+    const o = buildFollowupPrompt({ domain: 'd', sentence: 's', question: q, prev: PREV, candidates: [{ id: 'cube', label: '큐브' }] }).user;
+    assert.ok(o.includes('"action": "search_graph", "args": {"text": "<문장의 핵심 구조>", "exclude": ["starforce"]}'), q);
+    assert.ok(!o.includes('"get_node_facts", "args": {"nodeId": "starforce"}'), q);
+  }
+  assert.equal(asksOther('왜 비슷해요?'), false);
+});
+
+test('runFollowup "다른 비유는요?": 방금 근거 개념으로 다시 답하면 한 번 되묻는다(T-224)', async () => {
+  const { ask, calls } = scripted([
+    { action: 'get_node_facts', args: { nodeId: 'starforce' } },
+    { final: { answer: '실패하면 손해를 보는 점이 같아요.', nodeId: 'starforce', usedFact: SF.facts[2] } },
+    { final: { answer: '이 문장에는 맞는 다른 개념이 없어요.', nodeId: null, usedFact: '' } }
+  ]);
+  const r = await runFollowup({ ...BASE, question: '다른 비유는요?', ask });
+  assert.equal(calls.length, 3);
+  assert.match(r.debug.trace.find(t => t.type === 'verify' && !t.ok).reason, /same-as-prev/);
+  assert.equal(r.evidence, null);
+  // "왜 비슷해요?"는 같은 개념이 맞다
+  const base = { graph: GRAPH, allowed: new Set(['starforce']), factsRead: new Set(['starforce']), ...PAYLOAD, prevNodeId: 'starforce' };
+  const f = { answer: '같아요.', nodeId: 'starforce', usedFact: SF.facts[0] };
+  assert.equal(followupProblems({ ...base, final: f, question: '왜 비슷해요?' }), null);
+  assert.deepEqual(followupProblems({ ...base, final: f, question: '다른 비유는요?' }).reasons, ['same-as-prev']);
 });

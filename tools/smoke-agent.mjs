@@ -3,7 +3,7 @@
 // 형식을 어겨도 확장은 한 번 다시 묻고 "여기까지 했어요"로 멈출 뿐이라 스모크 실패로 세지 않는다(--precise-judge처럼 보고만).
 // smoke-providers.mjs가 --agent(또는 AGENT_SMOKE=true)일 때 부른다. 키 값은 다루지 않는다(호출은 부르는 쪽 ask).
 // 호버 결과(prev)는 LLM 없이 고정한다: 후보는 대체 임베더 검색 + 근거 개념, 비유 글은 고정 문구.
-import { runFollowupCase } from './eval-followup-lib.mjs';
+import { runFollowupCase, readFactsFirst } from './eval-followup-lib.mjs';
 import { withRo } from '../extension/lib/prompt.js';
 
 // prevNodeId: 방금 보인 근거 개념(고정). null이면 "비유 없음"을 본 뒤 묻는 경우
@@ -46,6 +46,9 @@ export async function checkAgentTask(ask, task, { graph, searchGraph, blocklist 
     toolOk: acts.filter(x => x.toolOk).length,
     argsOk: acts.filter(x => x.argsOk).length,
     usedTool: acts.length > 0,
+    // 첫 final 전에 스스로 facts를 읽었나(T-224). 되묻기가 facts를 실어 줘서 고친 답은 세지 않는다
+    selfRead: readFactsFirst(rs),
+    expectTool: task.expectTool !== false,
     final: !!row.rawFinal,
     finalOk: finals.length > 0 && finals.at(-1).finalOk === true,
     shown: !!row.answer,
@@ -66,6 +69,7 @@ export function summarizeAgent(rows) {
     n: rows.length, errors: rows.length - ok.length,
     responses: sum('responses'), parsed: sum('parsed'), actions: sum('actions'), toolOk: sum('toolOk'), argsOk: sum('argsOk'),
     finals: ok.filter(r => r.final && r.finalOk).length, shown: ok.filter(r => r.shown).length,
+    selfRead: { ok: ok.filter(r => r.expectTool && r.selfRead).length, n: ok.filter(r => r.expectTool).length },
     stops: ok.filter(r => r.stop).map(r => `${r.id}:${r.stop}`),
     stepsAvg: ok.length ? sum('steps') / ok.length : null,
     callsAvg: ok.length ? sum('calls') / ok.length : null,
@@ -84,5 +88,5 @@ export function agentRowLine(r) {
 
 export function agentSummaryLine(label, s) {
   const f1 = v => (v == null ? '—' : v.toFixed(1));
-  return `${label}: 과제 ${s.n}${s.errors ? `(호출 실패 ${s.errors})` : ''} · JSON ${s.parsed}/${s.responses} · 도구 이름 ${s.toolOk}/${s.actions} · 인자 ${s.argsOk}/${s.actions} · 최종 답 ${s.finals}/${s.n - s.errors} · 보임 ${s.shown} · 단계 평균 ${f1(s.stepsAvg)} · 호출 평균 ${f1(s.callsAvg)} · 중앙 ${s.msMedian ?? '—'}ms${s.stops.length ? ` · 멈춤 ${s.stops.join(', ')}` : ''}`;
+  return `${label}: 과제 ${s.n}${s.errors ? `(호출 실패 ${s.errors})` : ''} · JSON ${s.parsed}/${s.responses} · 도구 이름 ${s.toolOk}/${s.actions} · 인자 ${s.argsOk}/${s.actions} · 최종 답 ${s.finals}/${s.n - s.errors} · 보임 ${s.shown}${s.selfRead ? ` · 스스로 facts 읽음 ${s.selfRead.ok}/${s.selfRead.n}` : ''} · 단계 평균 ${f1(s.stepsAvg)} · 호출 평균 ${f1(s.callsAvg)} · 중앙 ${s.msMedian ?? '—'}ms${s.stops.length ? ` · 멈춤 ${s.stops.join(', ')}` : ''}`;
 }

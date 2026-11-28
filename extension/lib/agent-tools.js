@@ -14,7 +14,7 @@ export const FOLLOWUP_TOOL_NAMES = ['get_node_facts', 'search_graph', 'search_by
 export const QUESTION_MAX = 200;
 export const FORMAT_REJECTED_TEXT = '답을 읽지 못했어요.';
 // 프롬프트·검사 규칙 판(평가 캐시 키에 넣는다. 프롬프트나 다시 묻기 규칙을 바꾸면 올린다)
-export const FOLLOWUP_PROMPT_VERSION = 'T-222.1';
+export const FOLLOWUP_PROMPT_VERSION = 'T-224.2';
 const TAG_LIMIT = 5;
 const SEARCH_LIMIT = 3;
 
@@ -87,6 +87,24 @@ export function makeFollowupTools({ graph, searchGraph, seen, factsRead = new Se
   };
 }
 
+// 사용자 글 끝의 순서 안내(T-224). Groq gpt-oss는 시스템 규칙만으로는 도구를 부르지 않고 후보 이름만 보고 final을 냈다.
+// 실제 id로 쓴 첫 행동 예시를 마지막 줄에 둔다. 다음 차례에도 같은 글이 앞에 붙으므로 "지금 몇 번째"라는 말은 쓰지 않는다
+// "다른 비유"면 방금 근거 개념을 읽게 하지 않고 exclude에 넣은 검색을 예시로 든다(T-224 첫 측정: 근거 개념 예시를 따라
+// 그 facts를 먼저 읽고 같은 개념으로 다시 답한 일이 있었다)
+export const asksOther = q => q === FOLLOWUP_QUESTIONS.other || /다른\s*(비유|개념|예)/.test(String(q ?? ''));
+function firstStepNote(prev = {}, candidates = [], question = '') {
+  const prevId = prev.evidence?.nodeId || null;
+  const search = ex => `{"action": "search_graph", "args": {"text": "<문장의 핵심 구조>", "exclude": ${JSON.stringify(ex)}}}`;
+  const id = prevId || candidates[0]?.id || null;
+  const example = asksOther(question) ? search(prevId ? [prevId] : [])
+    : id ? `{"action": "get_node_facts", "args": {"nodeId": "${id}"}}` : search([]);
+  return [
+    '[순서] 1) facts를 읽는 도구 호출 → 2) 그 facts로 final. 개념으로 답하려면 [지금까지]에 그 개념의 facts가 나오기 전에는 final을 내지 않는다.',
+    `facts를 아직 읽지 않았다면 이번 답은 이런 모양이다: ${example}`,
+    '맞는 개념이 없다고 판단할 때만 도구 없이 바로 final(nodeId null)을 낸다.'
+  ].join('\n');
+}
+
 // 시스템·사용자 프롬프트. 후보 사실은 싣지 않는다(get_node_facts로 읽는다).
 // T-222: 사실 읽기 먼저·usedFact 글자 그대로·"맞는 개념 없음" 기준과 예시를 더했다. 예시는 관심사와 상관없는 구조로 쓴다(식당 관심사도 같은 프롬프트)
 export function buildFollowupPrompt({ domain, sentence, word, context, pageTitle, question, prev = {}, candidates = [], maxSteps = AGENT_MAX_STEPS }) {
@@ -128,7 +146,9 @@ export function buildFollowupPrompt({ domain, sentence, word, context, pageTitle
     cand.length ? '후보 개념:' : '',
     ...cand,
     '',
-    `질문: ${question}`
+    `질문: ${question}`,
+    '',
+    firstStepNote(prev, candidates, question)
   ].filter(s => s !== '').join('\n');
   return { system, user };
 }
@@ -175,7 +195,7 @@ const factsJSON = node => JSON.stringify(node?.facts || []);
  * 숨기는 검사(finalizeAnswer: 규칙 1·근거 검사·금칙어)는 그대로이고, 이것은 그 앞의 교정 문구일 뿐이다.
  * - read: 피드백에 사실을 실어 보낸 노드 id(부르는 쪽이 factsRead에 넣는다)
  */
-export function followupProblems({ final, graph, allowed, factsRead, sentence, context }) {
+export function followupProblems({ final, graph, allowed, factsRead, sentence, context, question = '', prevNodeId = null }) {
   const text = typeof final?.answer === 'string' ? final.answer.trim() : '';
   if (!text) return null; // 형식 문제는 finalizeAnswer 문구로
   const nodeId = typeof final.nodeId === 'string' && final.nodeId ? final.nodeId : null;
@@ -209,6 +229,11 @@ export function followupProblems({ final, graph, allowed, factsRead, sentence, c
     }
     const g = checkGrounding({ analogy: text, usedFact: '', facts: [], sentence, context });
     if (!g.ok) { reasons.push(g.reason); notes.push('개념 없이 답하면 숫자는 원문 문장에 있는 것만 써요.'); }
+  }
+  // "다른 비유"인데 방금 근거 개념으로 다시 답함(T-224, 프롬프트 규칙 5)
+  if (nodeId && prevNodeId && nodeId === prevNodeId && asksOther(question)) {
+    reasons.push('same-as-prev');
+    notes.push(`"다른 비유"를 물었는데 방금 근거 개념 id=${nodeId}로 다시 답했어요. 다른 개념의 facts로 답하거나, 맞는 다른 개념이 없으면 nodeId는 null로 없다고 답해요.`);
   }
   if (impoliteEnding(text) !== null) { reasons.push('ending'); notes.push('answer의 모든 문장을 해요체(~요)로 끝내요.'); }
   if (!reasons.length) return null;
@@ -251,12 +276,14 @@ export async function runFollowup({ graph, payload, question, prev = {}, candida
   const { system, user } = buildFollowupPrompt({ domain: graph.domain, ...payload, question, prev, candidates, maxSteps });
   // 검증기(T-222): 고칠 수 있는 문제가 있으면 한 번만 되묻는다. 두 번째 final은 그대로 finalizeAnswer가 판정한다(숨김 포함)
   let corrections = 0;
+  let endingAsked = false;
   const verify = async (final, { stepsLeft = 1, callsLeft = 1 } = {}) => {
     // 되물을 차례가 없으면 그대로 판정한다(되묻다 상한에 닿아 답을 잃지 않게)
     if (corrections >= FOLLOWUP_MAX_CORRECTIONS || stepsLeft < 1 || callsLeft < 1) return { ok: true };
-    const p = followupProblems({ final, graph, allowed: new Set([...allowed, ...seen]), factsRead, sentence: payload.sentence, context: payload.context });
+    const p = followupProblems({ final, graph, allowed: new Set([...allowed, ...seen]), factsRead, sentence: payload.sentence, context: payload.context, question, prevNodeId: prev.evidence?.nodeId || null });
     if (!p) return { ok: true };
     corrections++;
+    if (p.reasons.includes('ending')) endingAsked = true;
     for (const id of p.read) { factsRead.add(id); seen.add(id); }
     return { ok: false, reason: p.reasons.join(','), feedback: p.feedback };
   };
@@ -274,5 +301,11 @@ export async function runFollowup({ graph, payload, question, prev = {}, candida
   const f = finalizeAnswer({ final: run.final, graph, allowed, sentence: payload.sentence, context: payload.context, blocklist });
   if (f.grounding) debug.grounding = f.grounding;
   if (f.blocked) debug.blocked = f.blocked;
+  // 끝맺음(T-224): 되묻기 뒤에도 ~습니다·~다면 호버(T-122)처럼 글은 그대로 보이고 표시만 한다.
+  // 끝맺음만 바꾸는 결정적 고치기는 뜻을 바꿀 수 있어 하지 않는다. 모양은 호버 debug.ending과 같다
+  if (f.answer) {
+    const style = impoliteEnding(f.answer);
+    debug.ending = { ok: !style, retried: endingAsked, issues: style ? [{ field: 'answer', style }] : [] };
+  }
   return { answer: f.answer, evidence: f.evidence, rejected: f.rejected, stopText: null, capped: false, found, debug };
 }
