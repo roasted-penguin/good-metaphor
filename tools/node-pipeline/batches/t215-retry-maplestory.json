@@ -1,0 +1,276 @@
+{
+  "interest": "maplestory",
+  "note": "T-215 재도전: 여유 악화로 빠진 5개를 구조 먼저로 고친 두 가지 글(A·B). 혼자 넣은 결과로 고른다",
+  "results": [
+    {
+      "batch": 34,
+      "status": "warn",
+      "node": {
+        "id": "multi_kill",
+        "label": "멀티킬",
+        "facts": [
+          "한 번에 처치한 몬스터 수가 많을수록 보너스 경험치가 커지는 구조라, 몬스터를 모아 한꺼번에 잡는 쪽이 같은 시간에 더 많은 경험치를 번다.",
+          "한 번의 공격으로 여러 마리를 동시에 처치하면 처치 수에 따라 추가 경험치가 붙는데, 이를 멀티킬이라 한다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/453",
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 효율을 높임"
+        }
+      ]
+    },
+    {
+      "batch": 34,
+      "status": "warn",
+      "node": {
+        "id": "one_kill_cut",
+        "label": "원킬컷과 원젠",
+        "aliases": [
+          "원킬컷",
+          "원젠"
+        ],
+        "facts": [
+          "몬스터를 스킬 한 번에 잡지 못하면 같은 맵에서도 사냥 속도가 크게 떨어져서, 한 번에 잡는 데 필요한 최소 공격력인 원킬컷을 맞추는 것이 사냥 효율의 기준이 된다.",
+          "원킬컷을 넘겨 맵의 몬스터를 다시 나타나기 전에 모두 잡아 내면 원젠이라 하며, 그 맵에서 시간당 잡을 수 있는 최대치다."
+        ],
+        "tags": [
+          "threshold_req",
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/19056"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 효율을 정함"
+        }
+      ]
+    },
+    {
+      "batch": 34,
+      "status": "warn",
+      "node": {
+        "id": "bind_skill",
+        "label": "바인드",
+        "facts": [
+          "보스를 묶어 두는 바인드는 재사용 대기시간이 길어서, 묶인 짧은 시간에 가장 강한 스킬을 몰아 쓰는 극딜 타이밍을 바인드에 맞춘다.",
+          "한 번 풀린 보스는 한동안 다시 묶이지 않으므로, 파티에서는 바인드 거는 순서를 파티원끼리 나눠 맡는다."
+        ],
+        "tags": [
+          "cooldown",
+          "role_division"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2300/348247"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "skill_cooldown",
+          "rel": "극딜 타이밍을 맞춤"
+        }
+      ]
+    },
+    {
+      "batch": 34,
+      "status": "warn",
+      "node": {
+        "id": "budget_gear",
+        "label": "흙템(가성비 장비)",
+        "facts": [
+          "강화 단계가 높을수록 한 단계 올리는 비용은 급격히 커지는데 늘어나는 성능은 비슷해서, 상위 장비를 낮은 단계까지만 강화해 쓰는 흙템이 가성비가 좋다.",
+          "흙템은 완성 수준 장비보다 훨씬 싼 값으로 최소한의 성능을 챙긴 장비를 가리킨다."
+        ],
+        "tags": [
+          "diminishing_returns"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/40365"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "starforce",
+          "rel": "강화 단계를 어디서 멈출지 정함"
+        }
+      ]
+    },
+    {
+      "batch": 34,
+      "status": "warn",
+      "node": {
+        "id": "alt_character_leveling",
+        "label": "부캐 육성(유니온·링크 작)",
+        "facts": [
+          "본캐 하나만 키우기 어려워지면, 다른 캐릭터를 유니온 등급이나 링크 스킬 단계를 채울 만큼만 키워 그 효과를 본캐가 나눠 받는다.",
+          "이렇게 부캐를 키우는 일을 흔히 작이라 부르며, 부캐가 늘어날수록 본캐 능력치가 조금씩 오른다."
+        ],
+        "tags": [
+          "shared_bonus"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/48124"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "union_link",
+          "rel": "유니온과 링크 스킬을 채움"
+        }
+      ]
+    },
+    {
+      "batch": 35,
+      "status": "warn",
+      "node": {
+        "id": "multi_kill_bonus",
+        "label": "멀티킬 보너스",
+        "facts": [
+          "같은 시간을 사냥해도 한 번의 공격에 여러 마리를 잡을수록 보너스 경험치가 늘어, 몬스터를 모아 잡는 사냥 방식이 시간당 경험치가 높다.",
+          "동시에 처치한 수가 정해진 수 이상이면 화면에 멀티킬이 표시되고 그 수에 맞는 추가 경험치를 준다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://maplestory.nexon.com/guide/n23gameinformation/articles/453",
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%8B%9C%EC%8A%A4%ED%85%9C"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 효율을 높임"
+        }
+      ]
+    },
+    {
+      "batch": 35,
+      "status": "warn",
+      "node": {
+        "id": "one_kill_cut_hunt",
+        "label": "원킬컷",
+        "aliases": [
+          "원킬컷",
+          "원젠"
+        ],
+        "facts": [
+          "사냥터마다 몬스터 체력이 달라서, 스킬 한 번에 잡을 수 있는 최소 스펙인 원킬컷을 넘긴 사냥터에서 사냥해야 시간당 경험치가 높다.",
+          "원킬컷을 넘기면 맵의 몬스터를 다시 나타나기 전에 모두 잡는 원젠도 노릴 수 있다."
+        ],
+        "tags": [
+          "efficiency_metric"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/19056"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "hunting",
+          "rel": "사냥 효율을 정함"
+        }
+      ]
+    },
+    {
+      "batch": 35,
+      "status": "warn",
+      "node": {
+        "id": "bind_skill_cd",
+        "label": "바인드 스킬",
+        "facts": [
+          "바인드는 보스를 잠시 움직이지 못하게 하는 스킬로, 한 번 쓰면 오래 기다려야 다시 쓸 수 있다.",
+          "그래서 묶인 동안 가장 강한 스킬을 몰아 쓰고, 여러 명이 있으면 바인드가 겹치지 않게 순서를 정한다."
+        ],
+        "tags": [
+          "cooldown"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2300/348247"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "skill_cooldown",
+          "rel": "극딜 타이밍을 맞춤"
+        }
+      ]
+    },
+    {
+      "batch": 35,
+      "status": "warn",
+      "node": {
+        "id": "budget_gear_low",
+        "label": "흙템",
+        "facts": [
+          "결과 편차가 적은 낮은 단계에서 강화를 멈추면, 완성 수준까지 올린 장비보다 훨씬 싼 값으로 성능 대부분을 얻을 수 있다.",
+          "이렇게 최소한으로 강화한 상위 장비를 흙템이라 부르며, 높은 단계까지 올린 하위 장비보다 가성비가 좋을 때가 많다."
+        ],
+        "tags": [
+          "diminishing_returns"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/40365"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "starforce",
+          "rel": "강화 단계를 어디서 멈출지 정함"
+        }
+      ]
+    },
+    {
+      "batch": 35,
+      "status": "warn",
+      "node": {
+        "id": "alt_character_jak",
+        "label": "부캐 작",
+        "facts": [
+          "부캐를 일정 레벨까지 키우면 유니온 공격대와 링크 스킬을 통해 그 성장이 본캐 능력치 보너스로 이어진다.",
+          "그래서 본캐를 직접 키우기 어려워진 뒤에는 여러 부캐를 유니온·링크 기준 레벨까지만 키우는 작으로 성장한다."
+        ],
+        "tags": [
+          "shared_bonus"
+        ],
+        "sources": [
+          "https://namu.wiki/w/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC/%EC%9A%A9%EC%96%B4",
+          "https://www.inven.co.kr/board/maple/2304/48124"
+        ],
+        "sourceKind": "community"
+      },
+      "edges": [
+        {
+          "to": "union_link",
+          "rel": "유니온과 링크 스킬을 채움"
+        }
+      ]
+    }
+  ]
+}
